@@ -1,0 +1,45 @@
+[gd_scene load_steps=4 format=3 uid="uid://d3j586poo6ba6"]
+
+[ext_resource type="Script" uid="uid://btcq8a4nyv48y" path="res://scripts/game.gd" id="1_80nbo"]
+[ext_resource type="PackedScene" uid="uid://bve4to1ebobje" path="res://card.tscn" id="2_e2o6t"]
+[ext_resource type="PackedScene" uid="uid://dwb3h78qgftnt" path="res://board.tscn" id="3_feb5d"]
+
+[node name="Game" type="Node3D"]
+script = ExtResource("1_80nbo")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(-0.999991, 0.00195713, -0.00370244, -0.00194968, 0.564865, 0.825181, 0.00370637, 0.825181, -0.564857, -0.017, 3.95233, -3.32198)
+fov = 50.0
+size = 0.650597
+near = 0.23
+
+[node name="Card" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -8.74228e-08, -1, 0, -8.74228e-08, 7.64274e-15, -1, -0.0356859, 0.0464036, -0.714712)
+id = 66
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.000506119, 1, 0, -1, 0.000506119, 0, 0.705063, 0.0661947)
+metadata/_edit_lock_ = true
+
+[node name="Board" parent="." instance=ExtResource("3_feb5d")]
+metadata/_edit_lock_ = true
+
+[node name="Card2" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -8.74228e-08, -1, 0, -8.74228e-08, 7.64274e-15, -1, 0.415768, 0.0464036, 1.40344)
+id = 66
+
+[node name="Card3" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -8.74228e-08, -1, 0, -8.74228e-08, 7.64274e-15, -1, 0.887685, 0.0464036, -1.41512)
+id = 66
+
+[node name="Card4" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -8.74228e-08, -1, 0, -8.74228e-08, 7.64274e-15, -1, -0.507916, 0.0464036, 0.496322)
+id = 66
+
+[node name="Card5" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -8.74228e-08, -1, 0, -8.74228e-08, 7.64274e-15, -1, -0.997088, 0.0464036, 0.496322)
+id = 66
+
+[node name="CardCamera" parent="." instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, -8.74228e-08, -8.74228e-08, -1.22178e-07, -0.806981, -0.590578, -1.89186e-08, 0.590578, -0.806981, 0.0452143, 1.26213, -2.55967)
+id = 66

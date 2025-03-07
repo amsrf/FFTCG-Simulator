@@ -1,0 +1,21 @@
+[gd_scene load_steps=5 format=3 uid="uid://bve4to1ebobje"]
+
+[ext_resource type="Script" uid="uid://j6anprsyi5n4" path="res://scripts/card.gd" id="1_kikvd"]
+[ext_resource type="ArrayMesh" uid="uid://bdcovemwy66vb" path="res://cardmeshv.obj" id="2_rjlel"]
+[ext_resource type="Script" uid="uid://cq47mf7nn5ycm" path="res://card_area_3d.gd" id="3_q5obu"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_rjlel"]
+size = Vector3(0.411, 0.00460754, 0.595)
+
+[node name="Card" type="Node3D"]
+script = ExtResource("1_kikvd")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = ExtResource("2_rjlel")
+
+[node name="CardArea3d" type="Area3D" parent="."]
+script = ExtResource("3_q5obu")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CardArea3d"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00876236, -0.00130133, 0.00500488)
+shape = SubResource("BoxShape3D_rjlel")
