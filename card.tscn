@@ -13,9 +13,12 @@ script = ExtResource("1_kikvd")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = ExtResource("2_rjlel")
 
-[node name="CardArea3d" type="Area3D" parent="."]
+[node name="CardArea3D" type="Area3D" parent="."]
 script = ExtResource("3_q5obu")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="CardArea3d"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CardArea3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00876236, -0.00130133, 0.00500488)
 shape = SubResource("BoxShape3D_rjlel")
+
+[connection signal="card_grabbed" from="CardArea3D" to="." method="_on_card_area_3d_card_grabbed"]
+[connection signal="card_released" from="CardArea3D" to="." method="_on_card_area_3d_card_released"]

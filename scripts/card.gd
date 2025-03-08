@@ -11,7 +11,7 @@ func initialize(card_id: int):
 	id = card_id
 	load_card_data()
 	assign_card_texture()
-
+	
 func load_card_data():
 	var card_data = CardDatabase.card_database[id]
 
@@ -38,6 +38,3 @@ func assign_card_texture():
 	else:
 		print("Failed to load texture for card: ", code)
 		
-
-var is_dragging: bool = false
-var drag_offset: Vector3
