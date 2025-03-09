@@ -1,11 +1,13 @@
 extends Area3D
 
+@onready var tween: Tween = create_tween()
 var is_dragging = false
 var offset = Vector3.ZERO
 var camera: Camera3D
 var parent
 signal card_released(card)
 signal card_grabbed(card)
+
 
 func _ready():
 	input_event.connect(_on_input_event)
@@ -23,6 +25,7 @@ func _on_input_event(_camera, event, _position, _normal, _shape_idx):
 			get_viewport().set_input_as_handled()
 			
 
+	
 func dragging(event):
 	if( not parent.get_parent() is Hand ):
 		return

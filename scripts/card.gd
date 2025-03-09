@@ -3,6 +3,9 @@ extends Node3D
 class_name Card
 
 @export var id: int = 0  # Make this editable in the Inspector
+# Scale factor when hovered
+# Original scale of the card
+var original_scale: Vector3
 var code: String
 var power: int
 var cost: int
@@ -32,9 +35,19 @@ func assign_card_texture():
 		var material = StandardMaterial3D.new()
 		material.albedo_texture = texture
 		if has_node("MeshInstance3D"):  # Check if the node exists
-			$MeshInstance3D.material_override = material
+			$MeshInstance3D.set_surface_override_material(0, material)
 		else:
 			print("No MeshInstance3D for card class.")
 	else:
 		print("Failed to load texture for card: ", code)
 		
+
+
+func _on_card_area_3d_mouse_entered():
+	var tween = create_tween()
+	#tween.tween_property(self, "scale", Vector3(1.5, 1.5, 1.5), 0.2)
+
+
+func _on_card_area_3d_mouse_exited():
+	var tween = create_tween()  # Stop any ongoing tweens
+	#tween.tween_property(self, "scale", Vector3(1,1,1), 0.2)

@@ -2,13 +2,12 @@ extends Node3D
 class_name Hand
 # The list of cards in the hand
 var cards = []
-var cards_positions = []  # Array of Vector3 positions
 var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
 var hand_center = GlobalVariables.get_hand_center();
 var hand_rotation = GlobalVariables.get_hand_rotation();
 var start_x;
-var grabbed_card_index;
+var grabbed_card_index = 0;
 
 # Function to add a card to the hand
 
@@ -25,8 +24,20 @@ func add_card(card):
 		area.connect("card_grabbed", Callable(self, "_on_card_grabbed"))
 	if area.has_signal("card_released"):
 		area.connect("card_released", Callable(self, "_on_card_released"))
-	cards_positions.append(card.position)
-	add_child(card)
+	# Store the card's global transform before reparenting
+	var card_global_transform = card.global_transform
+	
+	# Reparent the card to the Hand
+	if card.get_parent():
+		card.reparent(self,false)
+	else:
+		add_child(card)
+	
+	# Reset the card's global transform to match the Hand's coordinate system
+	card.position = Vector3.ZERO
+	card.rotation = Vector3.ZERO
+	card.scale = Vector3.ONE
+	
 	update_card_positions()
 
 # Function to remove a card from the hand
@@ -45,7 +56,10 @@ func update_card_positions():
 	for i in range(cards.size()):
 		var x_offset = start_x + i * (card_width + card_spacing)
 		animate_card(cards[i], Vector3(x_offset, 0, 0)) # Position relative to the Hand
-		
+	for card in cards:
+		print(card.position)
+func last_card_position():
+	return start_x + (card_width + card_spacing)*cards.size()	
 		
 func find_index(card):
 	var total_width = calculate_total_width()

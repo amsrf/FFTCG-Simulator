@@ -1,8 +1,11 @@
-[gd_scene load_steps=5 format=3 uid="uid://bve4to1ebobje"]
+[gd_scene load_steps=6 format=3 uid="uid://bve4to1ebobje"]
 
 [ext_resource type="Script" uid="uid://j6anprsyi5n4" path="res://scripts/card.gd" id="1_kikvd"]
-[ext_resource type="ArrayMesh" uid="uid://bdcovemwy66vb" path="res://cardmeshv.obj" id="2_rjlel"]
+[ext_resource type="ArrayMesh" uid="uid://cp5irkbawh148" path="res://card3.obj" id="2_q5obu"]
 [ext_resource type="Script" uid="uid://cq47mf7nn5ycm" path="res://card_area_3d.gd" id="3_q5obu"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q5obu"]
+albedo_color = Color(0, 0, 0, 1)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_rjlel"]
 size = Vector3(0.411, 0.00460754, 0.595)
@@ -11,7 +14,8 @@ size = Vector3(0.411, 0.00460754, 0.595)
 script = ExtResource("1_kikvd")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = ExtResource("2_rjlel")
+mesh = ExtResource("2_q5obu")
+surface_material_override/2 = SubResource("StandardMaterial3D_q5obu")
 
 [node name="CardArea3D" type="Area3D" parent="."]
 script = ExtResource("3_q5obu")
@@ -22,3 +26,5 @@ shape = SubResource("BoxShape3D_rjlel")
 
 [connection signal="card_grabbed" from="CardArea3D" to="." method="_on_card_area_3d_card_grabbed"]
 [connection signal="card_released" from="CardArea3D" to="." method="_on_card_area_3d_card_released"]
+[connection signal="mouse_entered" from="CardArea3D" to="." method="_on_card_area_3d_mouse_entered"]
+[connection signal="mouse_exited" from="CardArea3D" to="." method="_on_card_area_3d_mouse_exited"]
