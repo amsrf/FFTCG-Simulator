@@ -1,0 +1,14 @@
+{
+	"31":{
+		"when_enter_field":[
+			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
+			{"name":"tap", "author":"target"}
+		]
+	},
+	"32":{
+		"when_enter_field":[
+			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
+			{"name":"add_status_effect", "author":"target", "argument":["unbreakable", 1]}
+		]
+	}
+}

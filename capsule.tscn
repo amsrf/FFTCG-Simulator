@@ -1,0 +1,21 @@
+[gd_scene load_steps=4 format=3 uid="uid://e2ha4mscw6yh"]
+
+[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="1_2mnhe"]
+[ext_resource type="Script" uid="uid://bm4b3jjjjvmni" path="res://sub_viewport.gd" id="1_uxsg3"]
+[ext_resource type="PackedScene" uid="uid://c4ybihom8oq6p" path="res://Blender/capsule_gx_f.glb" id="3_vsqmq"]
+
+[node name="CapsuleButton" type="Node3D"]
+
+[node name="SubViewport" type="SubViewport" parent="."]
+size = Vector2i(470, 36)
+script = ExtResource("1_uxsg3")
+
+[node name="Label" type="Label" parent="SubViewport"]
+offset_right = 40.0
+offset_bottom = 23.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = ExtResource("1_2mnhe")
+theme_override_font_sizes/font_size = 32
+text = "Confirm"
+
+[node name="capsule_gx_f" parent="." instance=ExtResource("3_vsqmq")]

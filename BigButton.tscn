@@ -1,0 +1,74 @@
+[gd_scene load_steps=8 format=3 uid="uid://b1c3wp5s154jm"]
+
+[ext_resource type="Script" uid="uid://b6lwget8hox34" path="res://big_button.gd" id="1_4x2oi"]
+[ext_resource type="ArrayMesh" uid="uid://brjn2kfljs0kw" path="res://Blender/Plane_Button.obj" id="1_83jre"]
+[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="3_l3dj6"]
+[ext_resource type="Script" uid="uid://bcfrm61q2cmrl" path="res://area_3d.gd" id="4_l3dj6"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_4x2oi"]
+size = Vector3(0.685329, 0.191818, 0.243698)
+
+[sub_resource type="QuadMesh" id="QuadMesh_fdtpu"]
+size = Vector2(2.048, 2.048)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u568e"]
+albedo_color = Color(0.52549, 0, 0.223529, 1)
+roughness = 0.4
+
+[node name="BigButton" type="Node3D"]
+script = ExtResource("1_4x2oi")
+
+[node name="Area3D" type="Area3D" parent="."]
+script = ExtResource("4_l3dj6")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00168419, 0.0274887, -0.000113934)
+shape = SubResource("BoxShape3D_4x2oi")
+
+[node name="ButtonTextViewport" type="SubViewport" parent="."]
+msaa_2d = 2
+msaa_3d = 2
+size = Vector2i(2048, 2048)
+
+[node name="Control" type="Control" parent="ButtonTextViewport"]
+texture_filter = 1
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="ButtonTextViewport/Control"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+use_top_left = true
+
+[node name="Label" type="Label" parent="ButtonTextViewport/Control/CenterContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("3_l3dj6")
+theme_override_font_sizes/font_size = 128
+text = "Play"
+
+[node name="TextDisplay" type="MeshInstance3D" parent="."]
+transform = Transform3D(-1, 8.74228e-08, 3.82137e-15, 0, -4.37114e-08, 1, 8.74228e-08, 1, 4.37114e-08, 0, 0.02, 0)
+mesh = SubResource("QuadMesh_fdtpu")
+
+[node name="SpotLight3D" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.0270667, 0.999634, 0, -0.999634, 0.0270667, -0.392535, 0.605964, 0.122427)
+spot_range = 1.279
+spot_attenuation = 0.95
+spot_angle = 89.99
+spot_angle_attenuation = 0.0980732
+
+[node name="Background" type="Node3D" parent="."]
+transform = Transform3D(0.15, 0, 0, 0, -0.15, 1.31134e-08, 0, -1.31134e-08, -0.15, 0, 0.119266, 0)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Background"]
+transform = Transform3D(1, 0, 0, 0, -1, 8.74227e-08, 0, -8.74227e-08, -1, 0, 0.849433, -7.42597e-08)
+mesh = ExtResource("1_83jre")
+skeleton = NodePath("../..")
+surface_material_override/0 = SubResource("StandardMaterial3D_u568e")

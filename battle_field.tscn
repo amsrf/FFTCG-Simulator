@@ -1,0 +1,39 @@
+[gd_scene load_steps=5 format=3 uid="uid://bdiadu82f7cwg"]
+
+[ext_resource type="Script" uid="uid://u86aqtgr2bbi" path="res://battle_field.gd" id="1_jgmvv"]
+[ext_resource type="PackedScene" uid="uid://bve4to1ebobje" path="res://card.tscn" id="2_brqjc"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7jktm"]
+albedo_color = Color(0.431373, 0.431373, 1, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ryrav"]
+material = SubResource("StandardMaterial3D_7jktm")
+size = Vector2(8, 4)
+
+[node name="Field" type="Node3D"]
+script = ExtResource("1_jgmvv")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_ryrav")
+
+[node name="FrontrowCard" parent="." instance=ExtResource("2_brqjc")]
+transform = Transform3D(1.2, -1.81195e-07, -1.81195e-07, -1.81195e-07, -1.2, 6.09864e-21, -1.81195e-07, 2.73597e-14, -1.2, 0, 0.5, -0.641989)
+visible = false
+id = 66
+
+[node name="BackrowCard" parent="." instance=ExtResource("2_brqjc")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0.5, -1.49599)
+visible = false
+id = 66
+
+[node name="OpponentFrontrowCard" parent="." instance=ExtResource("2_brqjc")]
+transform = Transform3D(-1.2, 0, 1.04907e-07, 0, 1.2, 0, -1.04907e-07, 0, -1.2, 0, 0.5, 0.201241)
+visible = false
+id = 66
+
+[node name="OpponentBackrowCard" parent="." instance=ExtResource("2_brqjc")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0.5, 1.03035)
+visible = false
+id = 66
+
+[connection signal="child_entered_tree" from="." to="." method="_on_child_entered_tree"]

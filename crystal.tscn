@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3 uid="uid://cbeh0x1xk6ty6"]
+
+[ext_resource type="ArrayMesh" uid="uid://d0bu4u5ajn7pe" path="res://Blender/crystal_0.obj" id="1_200vn"]
+[ext_resource type="Script" uid="uid://y3pqky6rc4vq" path="res://crystal.gd" id="1_kxb6e"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gxs1y"]
+transparency = 2
+alpha_scissor_threshold = 0.44
+alpha_antialiasing_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.74, 0.0592, 0.320173, 1)
+metallic = 0.3
+metallic_specular = 0.77
+roughness = 0.25
+emission = Color(0.843137, 0.580392, 0.580392, 1)
+emission_energy_multiplier = 0.6
+normal_scale = -0.98
+refraction_enabled = true
+
+[node name="Crystal" type="Node3D"]
+script = ExtResource("1_kxb6e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.0043412, -9.03025e-10, -0.0246202, -0.0246202, -1.07618e-09, -0.0043412, -9.03025e-10, 0.025, -1.07618e-09, 0, 0, 0)
+mesh = ExtResource("1_200vn")
+surface_material_override/0 = SubResource("StandardMaterial3D_gxs1y")

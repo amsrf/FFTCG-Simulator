@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://v00ikds8vvpl"]
+
+[sub_resource type="PrismMesh" id="PrismMesh_3hr3o"]
+size = Vector3(0.3, 0.15, 0.01)
+
+[node name="Target" type="MeshInstance3D"]
+mesh = SubResource("PrismMesh_3hr3o")

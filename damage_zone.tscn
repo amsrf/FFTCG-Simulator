@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3 uid="uid://bh8f5mddl0cbx"]
+
+[ext_resource type="Script" uid="uid://bivhtm7trdqn4" path="res://damage_zone.gd" id="1_llpyx"]
+
+[sub_resource type="Curve3D" id="Curve3D_7sc4i"]
+
+[node name="DamageZone" type="Node3D"]
+script = ExtResource("1_llpyx")
+
+[node name="Path3D" type="Path3D" parent="."]
+curve = SubResource("Curve3D_7sc4i")
+
+[node name="PathFollow3D" type="PathFollow3D" parent="Path3D"]

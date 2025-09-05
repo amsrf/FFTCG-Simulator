@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://bydqqfvrdrldu"]
+
+[ext_resource type="Script" uid="uid://bm4l146pg1wfq" path="res://scripts/graveyard.gd" id="1_2jwxh"]
+
+[node name="Graveyard" type="Node3D"]
+transform = Transform3D(-1.2, 0, -1.04907e-07, 0, 1.2, 0, 1.04907e-07, 0, -1.2, 0, 0, 0)
+script = ExtResource("1_2jwxh")

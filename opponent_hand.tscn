@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3 uid="uid://bapc4rokyh1tr"]
+
+[ext_resource type="Script" uid="uid://c10kiwbfyf08i" path="res://opponent_hand.gd" id="1_vpbhp"]
+[ext_resource type="PackedScene" uid="uid://bve4to1ebobje" path="res://card.tscn" id="2_4pknl"]
+
+[sub_resource type="Curve3D" id="Curve3D_iotsf"]
+
+[node name="OpponentHand" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 0, 0)
+script = ExtResource("1_vpbhp")
+
+[node name="Card" parent="." instance=ExtResource("2_4pknl")]
+visible = false
+
+[node name="Path3D" type="Path3D" parent="."]
+curve = SubResource("Curve3D_iotsf")
+
+[node name="PathFollow3D" type="PathFollow3D" parent="Path3D"]

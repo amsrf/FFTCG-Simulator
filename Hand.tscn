@@ -1,6 +1,13 @@
-[gd_scene load_steps=2 format=3 uid="uid://b3pt0xsaj0d38"]
+[gd_scene load_steps=3 format=3 uid="uid://b3pt0xsaj0d38"]
 
-[ext_resource type="Script" uid="uid://bl1wt3x3gr3he" path="res://hand.gd" id="1_wk3ks"]
+[ext_resource type="Script" uid="uid://bl1wt3x3gr3he" path="res://scripts/hand.gd" id="1_wk3ks"]
+
+[sub_resource type="Curve3D" id="Curve3D_wk3ks"]
 
 [node name="Hand" type="Node3D"]
 script = ExtResource("1_wk3ks")
+
+[node name="Path3D" type="Path3D" parent="."]
+curve = SubResource("Curve3D_wk3ks")
+
+[node name="PathFollow3D" type="PathFollow3D" parent="Path3D"]

@@ -2,12 +2,26 @@
 extends Node
 
 # Private variables
-var _hand_center = Vector3(0, 1.25, -2.55)
-var _zoom_card_position = Vector3(-0.7,3.1,-2.6)
-var _deck_position = Vector3(2.7,0,-1.85)
+var _hand_center = Vector3(0, 2, -2.9)
 var _card_width = 0.429
-var _card_spacing = 0.020
+var _card_spacing = -0.15
 var _hand_rotation = Vector3(36, -180, 0)
+var focus_card_id = null
+enum Player_Mode { FREE, PAYING_COST, BLOCKED, TARGET , NO_PRIORITY, INSTANT_SPEED_RESPONSE}
+var player_mode: Player_Mode = Player_Mode.FREE
+var priority = true
+
+signal focus_card(id)
+
+# Setters (optional, if you want to allow modification)
+func set_player_mode(value : Player_Mode):
+	player_mode = value
+	
+func get_player_mode():
+	return player_mode
+	
+func get_priority():
+	return priority
 
 # Getters
 func get_hand_center():

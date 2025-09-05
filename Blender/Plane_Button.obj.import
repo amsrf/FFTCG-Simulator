@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://brjn2kfljs0kw"
+path="res://.godot/imported/Plane_Button.obj-a11ff7608003c07641f4cabaf8d8eb5f.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Plane_Button.obj-a11ff7608003c07641f4cabaf8d8eb5f.mesh"]
+
+source_file="res://Blender/Plane_Button.obj"
+dest_files=["res://.godot/imported/Plane_Button.obj-a11ff7608003c07641f4cabaf8d8eb5f.mesh", "res://.godot/imported/Plane_Button.obj-a11ff7608003c07641f4cabaf8d8eb5f.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
