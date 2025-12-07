@@ -48,9 +48,7 @@ func handle_released():
 	# Check if the card is inside the rectangle
 	if (card_position.x >= x_min && card_position.x <= x_max &&
 		card_position.z >= z_min && card_position.z <= z_max && card.can_be_played()):
-		hand.remove_card(card)
-		hand.emit_signal('charge_start', card)
-		hand.assistant.set_charging(card.get_cost())
+		hand.charge(card)
 	else:
 		hand.move_element(hand.cards,card.index,new_index)
 		card.index = new_index

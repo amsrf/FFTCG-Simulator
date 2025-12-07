@@ -1,5 +1,5 @@
 extends Node3D
-
+class_name BigButton
 # In your main script or in _ready() of your Node3D
 func _ready():
 	# Create quad for text display
@@ -15,4 +15,9 @@ func _ready():
 
 func set_on_press_callback(callback: Callable):
 	$Area3D.set_on_press_callback(callback)
+
+
+func set_text(text):
+	var label: Label = $ButtonTextViewport/Control/CenterContainer/Label
+	label.text = text
 	

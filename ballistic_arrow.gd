@@ -1,5 +1,5 @@
 extends Node3D
-
+class_name BallisticArrow
 # Exported parameters for easy tuning in the editor
 @export var max_height: float = 1.0
 @export var sphere_count: int = 20
@@ -15,18 +15,19 @@ var arrow
 # Internal variables
 var spheres: Array[MeshInstance3D] = []
 var is_active: bool = false
+var locked: bool = false
 
-func _process(delta):
+func _process(_delta):
 	if is_aiming:  # Your aiming condition
-		
-		var target_pos = get_mouse_target_position() 
-		set_target_position(start_pos, target_pos)
+		if not locked:
+			var target_pos = get_mouse_target_position() 
+			set_target_position(start_pos, target_pos)
 	else:
 		hide_arc()
 
 func get_mouse_target_position() -> Vector3:
 	var mouse_pos = get_viewport().get_mouse_position()
-	var camera = get_viewport().get_camera_3d()
+	var camerax = get_viewport().get_camera_3d()
 	
 	# Define your game board plane (adjust these values to match your board)
 	var plane_origin = Vector3(0, 0, 0)  # Point on the plane
@@ -36,8 +37,8 @@ func get_mouse_target_position() -> Vector3:
 	var plane = Plane(plane_normal, plane_origin.dot(plane_normal))
 	
 	# Get mouse ray
-	var from = camera.project_ray_origin(mouse_pos)
-	var dir = camera.project_ray_normal(mouse_pos)
+	var from = camerax.project_ray_origin(mouse_pos)
+	var dir = camerax.project_ray_normal(mouse_pos)
 	
 	# Find intersection with plane
 	var intersection = plane.intersects_ray(from, dir)
@@ -88,9 +89,6 @@ func update_arc(start: Vector3, end: Vector3):
 	
 	show_arc()
 	
-	var horizontal_vec = end - start
-	var direction = horizontal_vec.normalized()
-	
 	# Calculate dynamic height based on distance (optional)
 	var dynamic_height = min(max_height, distance * 0.5)
 	
@@ -133,10 +131,15 @@ func hide_arc():
 		is_active = false
 		for sphere in spheres:
 			sphere.visible = false
-
+			
+func lock_arc(pos:Vector3):
+	set_target_position(start_pos,pos)
+	locked = true
+func unlock_arc():
+	locked = false
 # Call this from your player script when target moves
-func set_target_position(start_pos: Vector3, target_pos: Vector3):
-	update_arc(start_pos, target_pos)
+func set_target_position(starting_position: Vector3, target_pos: Vector3):
+	update_arc(starting_position, target_pos)
 	
 func set_is_aiming(value: bool, source: Vector3 = Vector3.ZERO):
 	is_aiming = value

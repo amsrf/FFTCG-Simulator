@@ -9,7 +9,7 @@ func _on_card_area_3d_mouse_entered():
 		return
 	scale = Vector3(1.5,1.5,1.5)
 	position.y += 0.1
-	position.z =  -get_parent().position.z - 0.4
+	position.z =  -get_parent().position.z - 0.525
 	rotation = -get_parent().rotation
 
 

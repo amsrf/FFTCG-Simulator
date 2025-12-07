@@ -9,7 +9,6 @@ var card_width = GlobalVariables.get_card_width();
 var card_spacing = -0.3
 var start_x;
 var grabbed_card_index = 0;
-signal charge_start
 @onready var field: Field = get_parent().get_node("Field")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
 

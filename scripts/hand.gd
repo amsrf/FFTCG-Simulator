@@ -133,11 +133,10 @@ func remove_card(card):
 	cards.remove_at(card.index)
 	
 						
-'''func charge():
-	assistant.charge(CARD_CHARGE)
-	
-func discharge():
-	assistant.discharge(CARD_CHARGE)'''
+func charge(card):
+	remove_card(card)
+	charge_start.emit(card)
+	assistant.set_charging(card.get_cost())
 	
 func send_selected_cards_to_graveyard():
 	var remaining_cards = cards.filter(

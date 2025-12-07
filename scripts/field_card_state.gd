@@ -29,7 +29,7 @@ func handle_grabbed():
 				card.show_actions()
 		GlobalVariables.Player_Mode.TARGET:
 			print('on target signal emmited')
-			card.emit_signal('on_target',card)
+			card.signal_target()
 		
 func handle_released():
 	pass

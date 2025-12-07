@@ -11,9 +11,8 @@ config_version=5
 [application]
 
 config/name="FF"
-run/main_scene="uid://d3j586poo6ba6"
+run/main_scene="res://game.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
-config/icon="res://icon.svg"
 
 [autoload]
 
@@ -22,6 +21,8 @@ GlobalVariables="*res://scripts/GlobalVariables.gd"
 
 [display]
 
+window/size/viewport_width=1920
+window/size/viewport_height=1080
 window/stretch/mode="viewport"
 
 [input]

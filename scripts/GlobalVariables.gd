@@ -4,10 +4,11 @@ extends Node
 # Private variables
 var _hand_center = Vector3(0, 2, -2.9)
 var _card_width = 0.429
+var _card_height = 0.6
 var _card_spacing = -0.15
 var _hand_rotation = Vector3(36, -180, 0)
 var focus_card_id = null
-enum Player_Mode { FREE, PAYING_COST, BLOCKED, TARGET , NO_PRIORITY, INSTANT_SPEED_RESPONSE}
+enum Player_Mode { FREE, PAYING_COST, ATTACKING, BLOCKED, TARGET , NO_PRIORITY, INSTANT_SPEED_RESPONSE}
 var player_mode: Player_Mode = Player_Mode.FREE
 var priority = true
 

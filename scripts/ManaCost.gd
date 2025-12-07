@@ -3,6 +3,8 @@ extends RefCounted
 
 var cost: Dictionary
 
+
+# 火 = fire
 func _init(火=0, 風=0, 土=0, 水=0, 雷=0, 闇=0, 光=0, 氷=0, neutral=0):
 	cost = {
 		'火': 火, '風': 風, '土': 土, '水': 水, 

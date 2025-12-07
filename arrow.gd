@@ -4,7 +4,7 @@ func point_y_axis_to(target: Vector3):
 	var direction = (target - global_transform.origin).normalized()
 
 	# Step 1: Extract scale from original basis
-	var scale = Vector3(
+	var base_scale = Vector3(
 		global_transform.basis.x.length(),
 		global_transform.basis.y.length(),
 		global_transform.basis.z.length()
@@ -20,9 +20,9 @@ func point_y_axis_to(target: Vector3):
 	forward = right.cross(up).normalized()
 
 	var new_basis = Basis()
-	new_basis.x = right * scale.x
-	new_basis.y = up * scale.y
-	new_basis.z = forward * scale.z
+	new_basis.x = right * base_scale.x
+	new_basis.y = up * base_scale.y
+	new_basis.z = forward * base_scale.z
 
 	# Step 3: Assign new basis while preserving origin
 	global_transform = Transform3D(new_basis, global_transform.origin)

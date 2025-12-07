@@ -1,6 +1,6 @@
 extends Node3D
 
-class_name Card
+class_name CardInField
 const CRYSTAL_SCENE_PATH = "res://crystal.tscn"
 @export var id: int = 0  # Make this editable in the Inspector
 var string_id: String = '0'
@@ -33,9 +33,6 @@ var mat: ShaderMaterial
 @export var power_array = []
 @export var card_effects : Dictionary
 
-@onready var hand_mesh: MeshInstance3D = $HandMesh
-@onready var field_mesh: MeshInstance3D = $FieldMesh
-
 var offset = Vector3.ZERO
 var camera: Camera3D
 var action_buttons = []
@@ -66,7 +63,7 @@ func initialize(card_id: int, card_controller: String):
 	string_id = str(card_id)
 	controller = card_controller
 	load_card_data()
-	load_card_effects()
+	loard_card_effects()
 	assign_card_texture()
 		
 func load_card_data():
@@ -85,134 +82,40 @@ func load_card_data():
 		print("Card with ID '%s' not found in database." % id)
 		
 
-func load_card_effects():
+func loard_card_effects():
 	if string_id in CardDatabase.card_effects:
 		card_effects = CardDatabase.card_effects[string_id]
 		
 	
 func assign_card_texture():
 	var texture_path = "res://assets/cards/%s.jpg" % code
-	var full_texture = load(texture_path)
-	if not full_texture:
+	var texture = load(texture_path)
+	if not texture:
 		push_error("Failed to load texture for card: %s" % code)
 		return
 
 	var shader = load("res://shaders/card.gdshader")
 	mat = ShaderMaterial.new()
 	mat.shader = shader
-	mat.set_shader_parameter("texture_albedo", full_texture)
+	mat.set_shader_parameter("texture_albedo", texture)
+	mat.set_shader_parameter("cutoff", 0.875)
 	mat.set_shader_parameter("effect_enabled", false)
-	
-	
-	$HandMesh.set_surface_override_material(0, mat)
-	$FieldMesh.set_surface_override_material(0, mat)
 
-		
-func _process(_delta):
-	if is_dragging:
-		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			is_dragging = false
-		else:
-			# Update object position to mouse position
-			emit_signal("card_dragged", self)
-			global_transform.origin = _get_mouse_3d_position_on_card_plane() + offset
-			
-
-		
-func _get_mouse_3d_position_on_card_plane() -> Vector3:
-	# Get mouse position
-	var mouse_pos = get_viewport().get_mouse_position()
+	$MeshInstance3D.set_surface_override_material(0, mat)
 	
-	# Create a ray from camera through mouse position
-	var ray_origin = camera.project_ray_origin(mouse_pos)
-	var ray_normal = camera.project_ray_normal(mouse_pos)
-	
-	# Define the card's plane using its normal and a point on the plane
-	var card_global_transform = global_transform
-	var card_normal = card_global_transform.basis.y  # Assuming the card's "up" vector defines the plane normal
-	var card_center = card_global_transform.origin  # A point on the card's plane
-	
-	# Create a plane using the card's normal and a point on the plane
-	var card_plane = Plane(card_normal, card_center)
-	
-	# Calculate intersection of the ray with the card's plane
-	var intersection = card_plane.intersects_ray(ray_origin, ray_normal)
-	
-	if intersection:
-		return intersection
-	else:
-		# Fallback: Return the card's current position if no intersection is found
-		return card_center
-
-
 	
 func scale_card(target_scale: Vector3):
 	# Use a Tween for smooth scaling
 	var tween = create_tween()
 	tween.tween_property(self, "transform:basis", Basis().scaled(target_scale), 0.05) 
-
-
-# Called when the node enters the scene tree or is reparented
-func _notification(what):
-	if what == NOTIFICATION_PARENTED:
-		_update_state()  # Re-check parent when moved
 		
 func _updateUI():
 	showPower()
-
-func _applyAurasOnField(field:Field):
-	if 'aura' in card_effects:
-		for aura in card_effects['aura']:
-			field.add_aura(aura, self.get_instance_id())
-			
-func _receiveAurasFromField(field:Field):
-	field.add_all_auras_to_card(self)
-	
-func _executeAuraEffects():
-	var field: Field = get_parent()
-	_applyAurasOnField(field)
-	_receiveAurasFromField(field)
-
-'''func _updateFieldShape():
-	scale = Vector3(1.5, 1.5, 1.5)
-	if(hand_mesh):
-		hand_mesh.visible = false
-	if(field_mesh):
-		field_mesh.visible = true'''
-
-func _update_state():
-	# Assign the new state based on current parent
-	var parent = get_parent()
-	#print('state updated')
-	if parent is Hand:
-		current_state = HandCardState.new(self)
-	elif parent is Field:
-		_updateUI()
-		_executeAuraEffects()
-		current_state = FieldCardState.new(self)
-	else:
-		current_state = null
-		pass
-		
-func set_state_based_on_parent():
-	if get_parent() is Hand:
-		current_state = HandCardState.new(self)
-	elif get_parent() is Field:
-		current_state = FieldCardState.new(self)
-	else:
-		current_state = null
 			
 func _on_card_area_3d_card_grabbed(_card: Variant):
 	if current_state :
 		current_state.handle_grabbed()
-	
-func can_be_played():
-	var player_mode = GlobalVariables.get_player_mode()
-	if player_mode == GlobalVariables.Player_Mode.INSTANT_SPEED_RESPONSE:
-		return type == 'Summon'
-	if player_mode == GlobalVariables.Player_Mode.FREE:
-		return true
-	return false
+
 func show_actions():
 	if(not tapped and type == 'Forward'):
 		var card_button_scene = preload("res://card_button.tscn")
@@ -227,20 +130,6 @@ func show_actions():
 		)
 		
 		add_child(card_button)
-	if "skill" in card_effects:
-		for skill in card_effects["skill"]:
-			var card_button_scene = preload("res://card_button.tscn")
-			var card_button = card_button_scene.instantiate()
-			action_buttons.append(card_button)
-			
-			card_button.position = Vector3(0.5, 0.1, -0.25)
-			card_button.rotation_degrees = Vector3(0, 180, 0)
-			card_button.set_text("Skill")
-			card_button.set_on_press_callback(func(): 
-				hide_actions()
-			)
-			
-			add_child(card_button)
 
 func is_on_field():
 	return get_parent() is Field
@@ -258,6 +147,7 @@ func showPower():
 		mat.set_shader_parameter("effect_enabled", true)
 	else:
 		powerLife.visible = false
+		mat.set_shader_parameter("effect_enabled", false)
 		
 func tap():
 	tapped = true
@@ -322,18 +212,7 @@ func _on_card_area_3d_card_released(_card: Variant) -> void:
 		
 func set_valid_target(value: bool):
 	is_valid_target = value
-
-func does_card_match_target(target_dict: Dictionary) -> bool:
-	if target_dict.has("type") and type != target_dict["type"]:
-		return false
-	
-	if target_dict.has("controller") and controller != target_dict["controller"]:
-		return false
 		
-	if target_dict.has("element") and element != target_dict["element"]:
-		return false
-		
-	return true
 	
 func set_target(value):
 	is_target = value

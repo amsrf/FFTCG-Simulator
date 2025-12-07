@@ -9,7 +9,6 @@ var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
 var start_x;
 var grabbed_card_index = 0;
-signal charge_start
 @onready var graveyard: Node = get_parent().get_node("Graveyards").get_node("Graveyard")
 @onready var stack: Node = get_parent().get_node("Stack")
 @onready var field: Field = get_parent().get_node("Field")

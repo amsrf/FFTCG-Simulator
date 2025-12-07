@@ -6,11 +6,6 @@ extends Node3D
 func _ready() -> void:
 	pass # Replace with function body.
 
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
-	pass
-
 func add_card(card:Card):
 	if(card.controller == 'player'):
 		player_graveyard.add_card(card)

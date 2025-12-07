@@ -7,7 +7,6 @@ var card_spacing = -0.2
 var player_mode = GlobalVariables.get_player_mode();
 var start_x;
 var casting_card: Card;
-@onready var parser = Parser.new()
 @onready var field: Node = get_parent().get_node("Field")
 
 
@@ -47,8 +46,7 @@ func add_card_to_tree(card):
 	
 func cast_card():
 	if(casting_card.type == 'Summon'):
-		var instructions = parser.get_summon_instructions(casting_card.text)
-		casting_card.emit_signal("execute_instructions",instructions,casting_card)
+		pass
 	else:
 		cards.pop_back()
 		field.play_card(casting_card)

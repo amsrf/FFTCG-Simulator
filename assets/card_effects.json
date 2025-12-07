@@ -1,4 +1,22 @@
 {
+	"3":{
+		"skill": [
+			{"cost": {"火": 1, "neutral":1}, "tap":true, "instructions":[
+				{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
+				{"name":"add_status_effect", "author":"target", "argument":["block_disabled", 1]}
+			]}
+		]
+	},
+	"6":{
+		"when_attack": [
+			{"name":"power_change", "author":"card", "argument":[4000,1]}
+		]
+	},
+	"30":{
+		"aura":[
+			{"targets":{"type":"Forward", "controller":"player", "element":"火"},"method":"power_change", "value":1000}
+		]
+	},
 	"31":{
 		"when_enter_field":[
 			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
@@ -10,5 +28,6 @@
 			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
 			{"name":"add_status_effect", "author":"target", "argument":["unbreakable", 1]}
 		]
-	}
+	},
+	
 }
