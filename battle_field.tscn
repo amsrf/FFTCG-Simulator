@@ -17,7 +17,7 @@ script = ExtResource("1_jgmvv")
 mesh = SubResource("PlaneMesh_ryrav")
 
 [node name="FrontrowCard" parent="." instance=ExtResource("2_brqjc")]
-transform = Transform3D(1.2, -1.81195e-07, -1.81195e-07, -1.81195e-07, -1.2, 6.09864e-21, -1.81195e-07, 2.73597e-14, -1.2, 0, 0.5, -0.641989)
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 0, 0.5, -0.641989)
 visible = false
 id = 66
 

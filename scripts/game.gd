@@ -4,8 +4,8 @@ extends Node3D
 @onready var opponent_deck = $OpponentDeck
 @onready var hand = $Hand
 @onready var opponent_hand = $OpponentHand
-@onready var field = $Field
-@onready var stack = $Stack
+@onready var field: Field = $Field
+@onready var stack : Stack = $Stack
 @onready var graveyard = $Graveyards
 @onready var opponent_front_row_card = $Field/OpponentFrontrowCard
 @onready var opponent_damage_zone = $OpponentDamageZone
@@ -13,7 +13,6 @@ extends Node3D
 @onready var assistant: Assistant = $Assistant
 @onready var card_scene = preload("res://Card.tscn")
 @onready var turn_owner = 1
-@onready var priority = true
 
 
 var _current_instructions: Array[Instruction]
@@ -21,6 +20,8 @@ var _current_source_card: Card
 var _current_attacker_card: Card
 var _current_blocker_card: Card
 var _targets = []
+
+
 
 func _ready():
 	for i in range(5):
@@ -70,6 +71,8 @@ func _ready():
 		field.play_card(card, false, false)
 		if card_data.tapped:
 			card.tap()
+	_enter_phase(GlobalVariables.Phase.FIRST_MAIN_PHASE)
+	phase_index = 2
 
 func _input(event):
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_D:
@@ -96,10 +99,9 @@ func create_card(id, controller):
 		card.on_target.connect(_on_target_selected)
 	return card
 
-func _execute_instructions(instructions: Array[Instruction], source_card: Card = null) -> void:
+func _execute_instructions(instructions: Array[Instruction]) -> void:
 	# Concatenate arrays (new instructions go in front)
 	_current_instructions = instructions + _current_instructions
-	_current_source_card = source_card
 	_process_next_instruction()
 	if(_current_instructions.is_empty()):
 		_clean_instruction_stack()
@@ -112,18 +114,13 @@ func _clean_instruction_stack():
 
 func _process_next_instruction() -> void:
 	if _current_instructions.is_empty():
-		print('empty instructions')
+		#print('empty instructions')
 		return
 	
-	print(_current_instructions, 'current instrucitons')
+	#print(_current_instructions, 'current instrucitons')
 	var instruction = _current_instructions.pop_front()
 	var executor = _resolve_executor(instruction.executor, _current_source_card)
-	print(executor,instruction.action)
-	if(instruction.action == 'pass_priority'):
-		var opponent_instructions = await executor.callv(instruction.action, [])
-		_current_instructions.append_array(opponent_instructions)
-		_process_next_instruction()
-		return
+	print(executor,instruction.action, 'AmandaXXX')
 	if executor.has_method(instruction.action):
 		var args = []
 		if instruction.value != null:
@@ -131,10 +128,9 @@ func _process_next_instruction() -> void:
 				args = instruction.value
 			else:
 				args.append(instruction.value)
-		print(executor,instruction.action, args)
+		#print(executor,instruction.action, args)
 		executor.callv(instruction.action, args)
-		if(instruction.action != 'request_target'):
-			_process_next_instruction()
+		_process_next_instruction()
 
 func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 	match executor_key:
@@ -193,7 +189,6 @@ func TEST_blocker():
 	var blocker: Card = front_cards[0] if front_cards.size() > 0 else null
 	if(blocker != null):
 		blocker.declare_blocker()
-		print(blocker.card_name, 'blocker')
 func _await_player_response():
 	await get_tree().create_timer(1.0).timeout
 	return null
@@ -203,7 +198,6 @@ func cause_damage():
 	opponent_damage_zone.draw(card)
 	
 func cause_attacking_damage():
-	print(_current_blocker_card,'blockerrrrr')
 	if _current_blocker_card == null:
 		cause_damage()
 
@@ -220,14 +214,147 @@ func clash_cards(card1:Card,card2:Card):
 	if card1.is_on_field() and card2.is_on_field():
 		card1.suffer_damage(card2.power)
 		card2.suffer_damage(card1.power)
-		print(card2.power,card2.life,card1.power,card1.life)
 		enforce_game_state_rules()
 	pass
 func clash_attacker_blocker():
-	clash_cards(_current_attacker_card,_current_blocker_card)
+	clash_cards(field.attacker_card,_current_blocker_card)
 	
-func nothing():
-	pass
+	
+
+var phases = [
+	GlobalVariables.Phase.ACTIVE_PHASE,           # 2.1 0
+	GlobalVariables.Phase.DRAW_PHASE,             # 2.2   1
+	GlobalVariables.Phase.FIRST_MAIN_PHASE,       # 2.3 2 
+	GlobalVariables.Phase.ATTACK_PREPARATION_STEP,   # 2.5 3
+	GlobalVariables.Phase.ATTACK_DECLARATION_STEP,   # 2.6 4
+	GlobalVariables.Phase.BLOCKER_DECLARATION_STEP,  # 2.7 5
+	GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP,    # 2.8 6
+	GlobalVariables.Phase.SECOND_MAIN_PHASE,       # 2.10 7
+	GlobalVariables.Phase.END_PHASE                # 2.11 8
+]
+var phase_index = 0
+
+
+func next_phase():
+	# Finish current phase
+	# Move to next phase
+	if(phases[phase_index] == GlobalVariables.Phase.ATTACK_DECLARATION_STEP):
+		if(field.attacker_card):
+			phase_index = 5
+		else:
+			phase_index = 7
+		_enter_phase(phases[phase_index])
+		return
+		
+	if(phases[phase_index] == GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP):
+		phase_index = 3
+		_enter_phase(phases[phase_index])
+		return
+	
+	phase_index += 1
+	if phase_index >= phases.size():
+		phase_index = 0
+		# Switch turn player here
+		print("Turn completed")
+	
+	# Enter new phase
+	_enter_phase(phases[phase_index])
+
+func _enter_phase(phase_enum: GlobalVariables.Phase):
+	print("Entering: ", phase_enum) # This will print the integer value
+	GlobalVariables.set_phase(phase_enum)
+	$PhaseText.text = phase_to_string(phase_enum)
+	field.phase = phase_enum
+	
+	match phase_enum:
+		GlobalVariables.Phase.ACTIVE_PHASE:
+			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.NO_PRIORITY)
+			field.untap_all_cards()
+			next_phase()
+		GlobalVariables.Phase.DRAW_PHASE:
+			var card = deck.deck_cards.pop_front()
+			hand.draw(card)
+		GlobalVariables.Phase.FIRST_MAIN_PHASE:
+			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+			await priority()
+			print('PASSED PRIORITY')
+			pass
+		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
+			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.INSTANT_SPEED_TIME)
+			await priority()
+			# Signal UI to enable attacker selection
+			pass
+		GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
+			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.ATTACKING)
+			assistant.set_declare_attack_button('No Attack')
+			await assistant.advance_attack_declaration_step
+			if(field.attacker_card):
+				field.execute_card_attack()
+			await priority()
+			#await declare_attacker()
+			#await priority() #must be something different perhaps, becaus
+			# Signal UI to enable attacker selection
+			pass
+		GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
+			
+			await MOCK_opponent_pass_piority() # no blockers
+			#await declare_blocker
+			await priority()
+			pass
+		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
+			if(_current_blocker_card):
+				clash_attacker_blocker()
+			else:
+				cause_damage()
+			await priority()
+			field.reset_attacker()
+			
+		GlobalVariables.Phase.COMBAT_END_STEP:
+			pass
+		GlobalVariables.Phase.SECOND_MAIN_PHASE:
+			await priority()
+			pass
+		GlobalVariables.Phase.END_PHASE:
+			field.turn_end_reset()
+			next_phase()
+			pass
+	
+func priority():
+	#GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.INSTANT_SPEED_TIME)
+	GlobalVariables.set_priority_holder(1)
+	var beginning_stack_len = stack.stack_length()
+	assistant.show_pass_priority_button()
+	print('qqqqqqcc')
+	await assistant.pressed_pass_priority
+	print(beginning_stack_len, stack.stack_length(), 'aksakask')
+	if(stack.stack_length() > beginning_stack_len):
+		priority()
+		print('xcxcxccc')
+		return
+	print('aaaacccc')
+	GlobalVariables.set_priority_holder(2)
+	beginning_stack_len = stack.stack_length()
+	await MOCK_opponent_pass_piority()
+	print('aaaa')
+	#await assistant.opponent_passed_priority
+	if(stack.stack_length() > beginning_stack_len):
+		print('aaaaasasasas')
+		priority()
+		return
+	if(stack.stack_length() > 0):
+		stack.resolve_top_effect()
+	else:
+		next_phase()
+		pass
+	#if both pass priority go to next phase!!!
+
+func _exit_phase(phase_name: String):
+	match phase_name:
+		"End Phase":
+			pass
+
+func MOCK_opponent_pass_piority():
+	await get_tree().create_timer(0.5).timeout
 
 func enforce_game_state_rules():
 	var breakable_cards = field.get_breakable_cards()
@@ -247,3 +374,60 @@ func pop_stack():
 
 func _on_assistant_process_next_instruction() -> void:
 	_process_next_instruction()
+
+static func phase_to_string(phase):
+	match phase:
+		GlobalVariables.Phase.ACTIVE_PHASE:
+			return "ACTIVE_PHASE"
+		GlobalVariables.Phase.DRAW_PHASE:
+			return "DRAW_PHASE"
+		GlobalVariables.Phase.FIRST_MAIN_PHASE:
+			return "FIRST_MAIN_PHASE"
+		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
+			return "ATTACK_PREPARATION_STEP"
+		GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
+			return "ATTACK_DECLARATION_STEP"
+		GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
+			return "BLOCKER_DECLARATION_STEP"
+		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
+			return "DAMAGE_RESOLUTION_STEP"
+		GlobalVariables.Phase.COMBAT_END_STEP:
+			return "COMBAT_END_STEP"
+		GlobalVariables.Phase.SECOND_MAIN_PHASE:
+			return "SECOND_MAIN_PHASE"
+		GlobalVariables.Phase.END_PHASE:
+			return "END_PHASE"
+		_:
+			return "UNKNOWN_PHASE"
+	
+
+func _on_stack_execute_card_effect(card: Card) -> void:
+	var instructions = card.get_card_effect_instructions()
+	var target = card.effect_target
+	_current_source_card = card.effect_source
+	_targets = [target]
+	print(card.card_name,'Amanda vagabundinha\n', instructions)
+	_execute_instructions(instructions)
+	card.queue_free()
+	priority()
+	pass # Replace with function body.
+
+
+func _on_stack_request_priority() -> void:
+	priority()
+	pass # Replace with function body.
+
+
+func _on_assistant_pressed_next_phase() -> void:
+	next_phase()
+	pass # Replace with function body.
+
+
+func _on_field_attacker_changed() -> void:
+	
+	if(field.attacker_card != null):
+		print(field.attacker_card.card_name,'andre')
+		assistant.set_declare_attack_button('Attack')
+	else:
+		assistant.set_declare_attack_button('No Attack')
+	pass # Replace with function body.

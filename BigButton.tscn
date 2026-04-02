@@ -51,7 +51,7 @@ use_top_left = true
 layout_mode = 2
 theme_override_fonts/font = ExtResource("3_l3dj6")
 theme_override_font_sizes/font_size = 128
-text = "Play"
+text = "Confirm"
 
 [node name="TextDisplay" type="MeshInstance3D" parent="."]
 transform = Transform3D(-1, 8.74228e-08, 3.82137e-15, 0, -4.37114e-08, 1, 8.74228e-08, 1, 4.37114e-08, 0, 0.02, 0)

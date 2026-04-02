@@ -6,29 +6,47 @@ class_name Assistant
 @onready var hand: Hand = get_parent().get_node("Hand")
 @onready var confirmButton: BigButton = $ConfirmButton
 @onready var cancelButton: BigButton = $CancelButton
-
+@onready var passPhaseButton: BigButton = $PassPhaseButton
+const MANA_ZERO : Dictionary = {
+		'火': 0, '風': 0, '土': 0, '水': 0, 
+		'雷': 0, '闇': 0, '光': 0, '氷': 0, 
+		'neutral': 0
+	}
 signal charge_complete
-var charge_cost: ManaCost
-var charging : ManaCost  = ManaCost.new()
+signal charge_cancelled
+signal target_complete
+signal target_cancel
+signal pressed_pass_priority
+signal pressed_next_phase
+signal advance_attack_declaration_step
+
+var mana_acc : Dictionary = MANA_ZERO.duplicate()
+var mana_cost : Dictionary = MANA_ZERO.duplicate()
 var target_locked = false
 var charge_follow_up_state
 var onConfirm
 var onCancel
 
-var on_cost_payed;
-
-func await_mana_pay(cost: ManaCost, on_cost_payed_temp):
-	charge_cost = cost
-	on_cost_payed = on_cost_payed_temp
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)
+func _ready():
+	passPhaseButton.set_text('Next Phase')
+	passPhaseButton.set_on_press_callback(func():_pass_priority())
+	GlobalVariables.player_mode_change.connect(_on_player_mode_change)
+	pass
 	
-	
-
-func set_charging(cost: ManaCost):
-	charge_cost = cost
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)
-	
-func toggle_lock_target():
+func set_declare_attack_button(button_text:String):
+	confirmButton.visible = true
+	confirmButton.set_text(button_text)
+	confirmButton.set_on_press_callback(func():
+		advance_attack_declaration_step.emit()
+		confirmButton.visible = false
+	)
+func _on_player_mode_change(pm:GlobalVariables.Player_Mode):
+	if(pm == GlobalVariables.Player_Mode.FREE or pm == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME):
+		passPhaseButton.visible = true
+	else:
+		passPhaseButton.visible = false
+	pass
+'''func toggle_lock_target():
 	target_locked =  not target_locked
 	var diff: ManaCost = charging.sub(charge_cost)
 	if(target_locked and diff.is_fully_paid()):
@@ -36,7 +54,7 @@ func toggle_lock_target():
 		confirmButton.set_on_press_callback(
 			func():  # Lambda function
 				on_charge_complete()
-		)
+		)'''
 
 func generate_confirm_button(on_confirm: Callable) -> void:
 	confirmButton.visible = true
@@ -80,37 +98,129 @@ func hide_confirm_button():
 func hide_buttons():
 	confirmButton.visible = false
 	cancelButton.visible = false
-func charge(amount: int, type: String):
-	var mana = ManaCost.new()
-	if mana.cost.has(type):
-		mana.cost[type] = amount
-	else:
-		push_error("Invalid mana type: '%s'. Valid types are: %s" % [
-			type, 
-			mana.cost.keys()
-	])
-	charging = charging.add(mana)
-	if(charging.contains(charge_cost)):
-		if(charge_follow_up_state):
-			GlobalVariables.set_player_mode(charge_follow_up_state)
-		else:
-			confirmButton.visible = true
-			confirmButton.set_on_press_callback(
-				func():  # Lambda function
-					on_charge_complete()
-		)
-func on_charge_complete():  # Lambda function
-	charging = ManaCost.new()
-	charge_cost = ManaCost.new()
-	confirmButton.visible = false
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
-	emit_signal("charge_complete")
 	
-func discharge(mana):
-	charging -= mana
-	if( not charging.engulfs(charge_cost)):
+func charge(amount: int, type: String):
+	mana_acc[type] += amount
+	if(can_pay_cost()):
+		confirmButton.visible = true
+		
+func reset_buttons():
+	mana_acc  = MANA_ZERO.duplicate()
+	mana_cost  = MANA_ZERO.duplicate()
+	confirmButton.visible = false
+	cancelButton.visible = false
+	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+	
+func on_charge_complete():  # Lambda function
+	reset_buttons()
+	charge_complete.emit()
+	
+func on_charge_cancelled():  # Lambda function
+	reset_buttons()
+	charge_cancelled.emit()
+	
+func on_target_complete():
+	reset_buttons()
+	target_complete.emit()
+	
+func on_target_cancel():
+	confirmButton.visible = false
+	cancelButton.visible = false
+	target_cancel.emit()
+	
+func discharge(amount: int,type: String):
+	mana_acc[type] -= amount
+	if( not can_pay_cost()):
 		confirmButton.visible = false
 		
-func _on_hand_charge_start(card: Variant) -> void:
-	charge_cost = card.cost
+
+func show_pass_priority_button():
+	passPhaseButton.visible = true
+
+func _pass_priority():
+	passPhaseButton.visible = false
+	pressed_pass_priority.emit()
+	
+func show_confirm():
+	confirmButton.visible = true
+	passPhaseButton.visible = false
+	
+func show_cancel():
+	cancelButton.visible = true
+	passPhaseButton.visible = false
+
+
+func can_pay_cost() -> bool:
+	# Create a copy of accumulated mana to track usage
+	var remaining_mana = mana_acc.duplicate()
+	
+	# First, pay for specific elemental requirements
+	for element in mana_cost:
+		if element == "neutral":
+			continue  # Handle neutral separately
+			
+		# Get cost and available mana
+		var cost = mana_cost[element]
+		var available = remaining_mana.get(element, 0)
+		
+		# Check if we have enough of this specific element
+		if available < cost:
+			return false
+			
+		# Deduct the mana used
+		remaining_mana[element] = available - cost
+	
+	# Calculate neutral cost
+	var neutral_cost = mana_cost.get("neutral", 0)
+	if neutral_cost == 0:
+		return true  # No neutral cost to pay
+	
+	# Calculate total remaining elemental mana (excluding neutral)
+	var total_available_for_neutral = 0
+	for element in remaining_mana:
+		if element != "neutral":
+			total_available_for_neutral += remaining_mana[element]
+	
+	# Check if we have enough for neutral costs
+	return total_available_for_neutral >= neutral_cost
+	
+func _on_hand_charge_start(card: Card) -> void:
+	mana_cost = card.get_cost()
+	confirmButton.set_on_press_callback(func():on_charge_complete())
+	cancelButton.set_on_press_callback(func():on_charge_cancelled())
+	confirmButton.set_text("Confirm")
+	cancelButton.set_text("Cancel")
+	cancelButton.visible = true
+	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST) #perhaps only the assistant should make state changes
+
+
+func _on_hand_selected_cards_for_mana_has_changed(amount:int, element:String) -> void:
+	mana_acc[element] += amount
+	if(can_pay_cost()):
+		confirmButton.visible = true
+
+
+func _on_field_selected_cards_for_mana_has_changed(amount:int, element:String) -> void:
+	mana_acc[element] += amount
+	if(can_pay_cost()):
+		confirmButton.visible = true
+
+
+func _on_field_request_target_confirmation(_target_card:Card) -> void:
+	confirmButton.visible = true
+	cancelButton.visible = true
+	confirmButton.set_text("Confirm")
+	cancelButton.set_text("Cancel")
+	confirmButton.set_on_press_callback(func():on_target_complete())
+	cancelButton.set_on_press_callback(func():on_target_cancel())
+
+
+func _on_field_card_activated_ability(cost: Dictionary) -> void:
+	mana_cost = cost
+	confirmButton.set_on_press_callback(func():on_charge_complete())
+	cancelButton.set_on_press_callback(func():on_charge_cancelled())
+	confirmButton.set_text("Confirm")
+	cancelButton.set_text("Cancel")
+	#confirmButton.visible = true
+	cancelButton.visible = true
 	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)

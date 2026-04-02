@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3 uid="uid://dyx8g6jrqmwmr"]
+[gd_scene load_steps=23 format=3 uid="uid://dyx8g6jrqmwmr"]
 
 [ext_resource type="Script" uid="uid://btcq8a4nyv48y" path="res://scripts/game.gd" id="1_80nbo"]
 [ext_resource type="PackedScene" uid="uid://bve4to1ebobje" path="res://card.tscn" id="2_e2o6t"]
@@ -16,6 +16,7 @@
 [ext_resource type="Script" uid="uid://dwqd8m1p4ncex" path="res://graveyards.gd" id="14_7sc4i"]
 [ext_resource type="PackedScene" uid="uid://bh8f5mddl0cbx" path="res://damage_zone.tscn" id="14_215e1"]
 [ext_resource type="PackedScene" uid="uid://ja4kal3yojgu" path="res://ballistic_arrow.tscn" id="16_80cx4"]
+[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="17_e8heu"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_j5wjh"]
 
@@ -149,7 +150,7 @@ metadata/_edit_lock_ = true
 transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, 3.33584, 0.434855, -1.99823)
 
 [node name="Hand" parent="." instance=ExtResource("5_7jktm")]
-transform = Transform3D(-1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 2.83598, -2.95784)
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 2.83598, -2.95784)
 
 [node name="Card" parent="Hand" instance=ExtResource("2_e2o6t")]
 visible = false
@@ -161,6 +162,8 @@ id = 66
 
 [node name="Field" parent="." instance=ExtResource("6_vef74")]
 transform = Transform3D(1.005, 0, 0, 0, 1.005, 0, 0, 0, 1.005, 0, 0, 0)
+
+[node name="BallisticArrow" parent="Field" instance=ExtResource("16_80cx4")]
 
 [node name="FocusCard" parent="." instance=ExtResource("2_e2o6t")]
 transform = Transform3D(-4.5, 0, 6.79481e-07, 0, 4.5, 0, -6.79481e-07, 0, -4.5, 3.864, 0.54, 0)
@@ -183,6 +186,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.055, 0.327, -2)
 visible = false
 
 [node name="CancelButton" parent="Assistant" instance=ExtResource("11_mfdv2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 0.327, -2.35)
+visible = false
+
+[node name="PassPhaseButton" parent="Assistant" instance=ExtResource("11_mfdv2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 0.327, -2.35)
 visible = false
 
@@ -240,6 +247,29 @@ offset_bottom = 40.0
 
 [node name="Opponent" type="Node3D" parent="."]
 
+[node name="PhaseText" type="Label3D" parent="."]
+transform = Transform3D(-1, 8.74228e-08, -4.37114e-08, -4.37114e-08, 1.91069e-15, 1, 8.74228e-08, 1, 1.91069e-15, 2.57209, 0.624521, 2.14331)
+text = "No Phase"
+font = ExtResource("17_e8heu")
+
 [connection signal="charge_start" from="Hand" to="Stack" method="_on_hand_charge_start"]
+[connection signal="charge_start" from="Hand" to="Assistant" method="_on_hand_charge_start"]
+[connection signal="selected_cards_for_mana_has_changed" from="Hand" to="Assistant" method="_on_hand_selected_cards_for_mana_has_changed"]
+[connection signal="add_card_effect_to_stack" from="Field" to="Stack" method="_on_field_add_card_effect_to_stack"]
+[connection signal="attacker_changed" from="Field" to="." method="_on_field_attacker_changed"]
+[connection signal="card_activated_ability" from="Field" to="Assistant" method="_on_field_card_activated_ability"]
+[connection signal="request_target_confirmation" from="Field" to="Stack" method="_on_field_request_target_confirmation"]
+[connection signal="request_target_confirmation" from="Field" to="Assistant" method="_on_field_request_target_confirmation"]
+[connection signal="selected_cards_for_mana_has_changed" from="Field" to="Assistant" method="_on_field_selected_cards_for_mana_has_changed"]
+[connection signal="execute_card_effect" from="Stack" to="." method="_on_stack_execute_card_effect"]
+[connection signal="execute_card_effect" from="Stack" to="Field" method="_on_stack_execute_card_effect"]
+[connection signal="request_priority" from="Stack" to="." method="_on_stack_request_priority"]
+[connection signal="charge_cancelled" from="Assistant" to="Hand" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_cancelled" from="Assistant" to="Field" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_cancelled" from="Assistant" to="Stack" method="_on_assistant_charge_cancelled"]
 [connection signal="charge_complete" from="Assistant" to="Hand" method="_on_assistant_charge_complete"]
+[connection signal="charge_complete" from="Assistant" to="Field" method="_on_assistant_charge_complete"]
 [connection signal="charge_complete" from="Assistant" to="Stack" method="_on_assistant_charge_complete"]
+[connection signal="pressed_next_phase" from="Assistant" to="." method="_on_assistant_pressed_next_phase"]
+[connection signal="target_cancel" from="Assistant" to="Field" method="_on_assistant_target_cancel"]
+[connection signal="target_complete" from="Assistant" to="Stack" method="_on_assistant_target_complete"]

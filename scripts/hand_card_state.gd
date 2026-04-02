@@ -13,21 +13,15 @@ func handle_grabbed():
 	var instructions: Array[Instruction]
 	match player_mode:
 		GlobalVariables.Player_Mode.PAYING_COST:
-			if card.selected:
-				card.selected = false
+			var selected_cards = hand.selected_cards_for_mana_conversion
+			if selected_cards.has(card):
 				card.crystal_instance.queue_free()
-				instructions  = [
-						Instruction.new("discharge", "assistant", [2,card.element])
-					]
+				hand.remove_card_from_mana_conversion(card)
 			else:
-				card.selected = true
+				hand.add_card_to_mana_conversion(card)
 				card.crystal_instance = card.crystal_scene.instantiate()
 				card.add_child(card.crystal_instance)
 				card.crystal_instance.position = Vector3(0, 0.05, -0.35)
-				instructions  = [
-						Instruction.new("charge", "assistant", [2,card.element])
-					]
-			card.execute_instructions.emit(instructions, card)
 		_:
 			card.is_dragging = true
 			card.position +=  Vector3(0, 0.1,-0.1)

@@ -1,33 +1,57 @@
 {
 	"3":{
 		"skill": [
-			{"cost": {"火": 1, "neutral":1}, "tap":true, "instructions":[
-				{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
-				{"name":"add_status_effect", "author":"target", "argument":["block_disabled", 1]}
-			]}
+			{
+				"cost": {"火": 1, "neutral":1}, 
+				"tap":true, 
+				"instructions":[
+					{"name":"add_status_effect", "author":"target", "argument":["block_disabled", 1]}
+				],
+				"choose_target":{"is_type":"Forward"}
+			}
 		]
 	},
 	"6":{
-		"when_attack": [
-			{"name":"power_change", "author":"card", "argument":[4000,1]}
+		"when_attack": 
+			{
+				"instructions":[{"name":"power_change", "author":"card", "argument":[4000,1]}],
+				"choose_target":false
+			}
+		
+	},
+	"8":{
+		"activated_ability":[
+			{
+				"instructions":[{"name":"take_damage", "author":"target", "argument":[2000]}],
+				"tap":true,
+				"choose_target":{"is_type":"Forward", "is_cost_lower_than":3},
+				"cost": {"火": 1, "neutral":1},
+			}
 		]
 	},
 	"30":{
 		"aura":[
-			{"targets":{"type":"Forward", "controller":"player", "element":"火"},"method":"power_change", "value":1000}
+			{
+				"targets":{"type":"Forward", "controller":"player", "element":"火"},
+				"method":"power_change", 
+				"value":1000
+			}
 		]
 	},
 	"31":{
-		"when_enter_field":[
-			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
-			{"name":"tap", "author":"target"}
-		]
+		"when_enter_field":
+			{
+				"instructions":[{"name":"tap", "author":"target"}], 
+				"choose_target":{"is_type":"Forward"}
+			}
+		
 	},
 	"32":{
-		"when_enter_field":[
-			{"name":"request_target", "author":"game", "argument":[["is_type", "Forward"]]},
-			{"name":"add_status_effect", "author":"target", "argument":["unbreakable", 1]}
-		]
-	},
-	
+		"when_enter_field":
+			{
+				"instructions":[{"name":"add_status_effect", "author":"target", "argument":["unbreakable", 1]}], 
+				"choose_target":{"is_type":"Forward"}
+			}
+		
+	}
 }

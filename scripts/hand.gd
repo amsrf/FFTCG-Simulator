@@ -5,15 +5,17 @@ class_name Hand
 const CARD_CHARGE = 2
 
 var cards = []
+@export var selected_cards_for_mana_conversion: Array[Card] = []
 var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
+var charging_card
 var start_x;
 var grabbed_card_index = 0;
-signal charge_start
+signal charge_start(card:Card)
+signal selected_cards_for_mana_has_changed(amount:int, element:String)
 @onready var graveyard: Node = get_parent().get_node("Graveyards").get_node("Graveyard")
 @onready var stack: Node = get_parent().get_node("Stack")
 @onready var field: Field = get_parent().get_node("Field")
-@onready var assistant: Assistant = get_parent().get_node("Assistant")
 
 func draw(card):
 	add_card_to_tree(card)
@@ -136,27 +138,45 @@ func remove_card(card):
 func charge(card):
 	remove_card(card)
 	charge_start.emit(card)
-	assistant.set_charging(card.get_cost())
+	charging_card = card #keep reference
 	
 func send_selected_cards_to_graveyard():
-	var remaining_cards = cards.filter(
-		func(carta): 
-			if carta.selected:
-				carta.reset()
-				graveyard.add_card(carta)
-				return false
-			else:
-				return true
-			)
-	cards = remaining_cards
-		
+	cards = cards.filter(func(item): return not selected_cards_for_mana_conversion.has(item))
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+		graveyard.add_card(c)
+	selected_cards_for_mana_conversion = []
+	
+
+func add_card_to_mana_conversion(card:Card):
+	if  not selected_cards_for_mana_conversion.has(card):
+		selected_cards_for_mana_conversion.push_back(card)
+	selected_cards_for_mana_has_changed.emit(2,card.element)
+	
+func remove_card_from_mana_conversion(card:Card):
+	if selected_cards_for_mana_conversion.has(card):
+		selected_cards_for_mana_conversion.erase(card)
+	selected_cards_for_mana_has_changed.emit(-2,card.element)
+			
 func animate_card(card, target_position):
 	# Create a Tween to animate the card's movement
 	var tween = create_tween()
+	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.15)
+	tween.tween_property(card, "scale", Vector3.ONE, 0.15)
 
 
 func _on_assistant_charge_complete() -> void:
 	send_selected_cards_to_graveyard()
+	selected_cards_for_mana_conversion = []
 	update_card_positions()
 	pass # Replace with function body.
+
+
+func _on_assistant_charge_cancelled() -> void:
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	selected_cards_for_mana_conversion = []
+	if(charging_card):
+		add_card(charging_card)
+		charging_card = null

@@ -11,10 +11,12 @@ var original_scale: Vector3
 var original_position: Vector3
 var code: String
 @export var power: int
+@export var base_power: int
 @export var life: int
 var crystal_scene
 var crystal_instance
 var current_state
+@export var target_arrow: BallisticArrow 
 var mat: ShaderMaterial
 @export var tapped = false;
 @export var text = '';
@@ -32,6 +34,9 @@ var mat: ShaderMaterial
 @export var status_effects = {}
 @export var power_array = []
 @export var card_effects : Dictionary
+@export var key_word_effect: String
+@export var effect_target: Card
+@export var effect_source: Card
 
 @onready var hand_mesh: MeshInstance3D = $HandMesh
 @onready var field_mesh: MeshInstance3D = $FieldMesh
@@ -39,10 +44,16 @@ var mat: ShaderMaterial
 var offset = Vector3.ZERO
 var camera: Camera3D
 var action_buttons = []
+var tween: Tween
+var original_basis: Basis
+# DEBUG VARIABLES
+var debug_step: int = 0
+var debug_log: Array = []
+
 @onready var powerLife: Label3D =  $PowerDisplay
 signal card_dragged(card)
 signal focus_card(card)
-signal execute_instructions(instructions, card)
+signal execute_instructions(instructions)
 signal on_target(card)
 
 func create_instruction_from_json(array: Array) -> Array[Instruction]:
@@ -74,11 +85,12 @@ func load_card_data():
 	if card_data:
 		type = card_data.get('type_en','Unknown type')
 		card_name = card_data.get("name_en", "Unknown")
-		power = int(card_data.get("power", 0))
+		base_power = int(card_data.get("power", 0))
+		power = base_power
 		cost = int(card_data.get("cost", 0))
 		code = card_data.get("code", "Unknown")
 		text = card_data.get("text_en", "invalid")
-		life = power
+		life = base_power
 		element = card_data.get("element",'invalid')[0]
 		
 	else:
@@ -173,13 +185,6 @@ func _executeAuraEffects():
 	_applyAurasOnField(field)
 	_receiveAurasFromField(field)
 
-'''func _updateFieldShape():
-	scale = Vector3(1.5, 1.5, 1.5)
-	if(hand_mesh):
-		hand_mesh.visible = false
-	if(field_mesh):
-		field_mesh.visible = true'''
-
 func _update_state():
 	# Assign the new state based on current parent
 	var parent = get_parent()
@@ -208,11 +213,12 @@ func _on_card_area_3d_card_grabbed(_card: Variant):
 	
 func can_be_played():
 	var player_mode = GlobalVariables.get_player_mode()
-	if player_mode == GlobalVariables.Player_Mode.INSTANT_SPEED_RESPONSE:
+	if player_mode == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
 		return type == 'Summon'
 	if player_mode == GlobalVariables.Player_Mode.FREE:
 		return true
 	return false
+	
 func show_actions():
 	if(not tapped and type == 'Forward'):
 		var card_button_scene = preload("res://card_button.tscn")
@@ -259,61 +265,116 @@ func showPower():
 	else:
 		powerLife.visible = false
 		
+@export var tap_speed: float = 0.3
+@export var tap_angle: float = -90.0
+
 func tap():
+	if tapped: return
+	
 	tapped = true
-	rotation_degrees += Vector3(0,-90,0)
+	
+	if tween:
+		tween.kill()
+	
+	# Rotate 90° clockwise FROM CURRENT POSITION
+	tween = create_tween()
+	tween.tween_property(self, "rotation_degrees:y",
+						rotation_degrees.y - 90.0,  # -90° = clockwise
+						tap_speed)
 
 func untap():
+	if not tapped: return
+	
 	tapped = false
-	rotation_degrees -= Vector3(0,-90,0)	
+	
+	if tween:
+		tween.kill()
+	
+	# Rotate 90° counter-clockwise back
+	tween = create_tween()
+	tween.tween_property(self, "rotation_degrees:y",
+						rotation_degrees.y + 90.0,  # +90° = counter-clockwise
+						tap_speed)
+
+
+'''func _log_state(context: String):
+	var entry = {
+		"step": debug_step,
+		"context": context,
+		"time": Time.get_ticks_msec(),
+		"rotation": rotation,
+		"rotation_degrees": rotation_degrees,
+		"global_rotation": global_rotation if has_method("global_rotation") else Vector3.ZERO,
+		"transform_basis": transform.basis,
+		"scale": scale,
+		"position": position
+	}
+	debug_log.append(entry)
+	
+	print("\n[", context, "]")
+	print("  rotation: ", rotation, " (", rotation_degrees, "°)")
+	print("  scale: ", scale)
+	print("  position: ", position)
+# Call this before/after animations	'''
+	
 func suffer_damage(damage):
 	life =  max(life - damage,0)
+
+func take_damage(damage):
+	life =  max(life - damage,0)
+	
 func add_status_effect(status,duration):
 	status_effects[status] = duration
+	
+func turn_end():
+	for s in status_effects:
+		status_effects[s] -= 1
+		if(status_effects[s] == 0):
+			status_effects.erase(s)
+	for p in power_array:
+		p[1] -= 1
+		if p[1] == 0:
+			power -= p[0]
+	powerLife.changePower(power)
+	power_array.filter(func(x): return x[1] > 0)
+	life = base_power
+	
+			
 func power_change(amount,duration):
 	power_array.append([amount,duration])
 	power += amount
 	powerLife.changePower(power)
 	
-func execute_etb():
-	if 'when_enter_field' in card_effects:
-		var instructions = create_instruction_from_json(card_effects['when_enter_field'])
-		emit_signal("execute_instructions",instructions,self)
-
-func execute_attack_effect():
-	if 'when_attack' in card_effects:
-		var instructions = create_instruction_from_json(card_effects['when_attack'])
-		emit_signal("execute_instructions",instructions,self)
+func get_card_effect_instructions():#etb
+	if key_word_effect in card_effects:
+		return create_instruction_from_json(card_effects[key_word_effect]['instructions'])
+	else:
+		print("Error no keyword %s in card effects" % key_word_effect)
+func is_key_word_in_card_effect(keyword:String):
+	return keyword in card_effects
+	
+	
 		
 func declare_blocker():
 	var instructions: Array[Instruction] = [
 		Instruction.new('set_blocker','game', self),
-		#Instruction.new("pass_priority","game"),
 		Instruction.new('clash_attacker_blocker','game'),
-		
 	]
 	emit_signal("execute_instructions",instructions,self)
 
+func can_attack():
+	if(tapped):
+		return false
+	if(type != 'Forward'):
+		return false
+	return true
+		
 func attack():
-	var instructions: Array[Instruction] = [
-		#Instruction.new("request_target", "game", targeting_criteria),
-		Instruction.new('set_attacker','game', self),
-		Instruction.new("tap", "card"),
-		Instruction.new('execute_attack_effect',"card"),
-		Instruction.new("pass_priority","game"),
-		#Instruction.new("card_clash", "game"),
-		Instruction.new("cause_attacking_damage", "game")
-	]
-	emit_signal("execute_instructions",instructions,self)
+	tap()
 	
-func get_cost():
-	var mana = ManaCost.new()  # Start with all costs at 0
-	mana.cost[element] = 1
-	mana.cost["neutral"] = cost - 1
-	
-	return mana
+func get_cost() -> Dictionary:
+	return {element:1, "neutral":cost-1}
 func reset():
-	selected = false
 	crystal_instance.queue_free()
 
 func _on_card_area_3d_card_released(_card: Variant) -> void:
@@ -337,18 +398,29 @@ func does_card_match_target(target_dict: Dictionary) -> bool:
 	
 func set_target(value):
 	is_target = value
-		
+	
 func is_type(ntype:String) -> bool:
 	return self.type == ntype
 
 func is_tapped(_args: Array) -> bool:
 	return self.tapped
 	
+func set_attacker_status(is_attacking: bool):
+	if(is_attacking):
+		status_effects['attacking'] = 1
+		position.z += 0.05
+	else:
+		status_effects.erase('attacking')
+		position.z -= 0.05
+	
 func check_controller(args: Array) -> bool:
 	return self.controller == args[0]
 	
 func get_global_center():
 	return global_position + Vector3(0.2,0.3,0)
+	
+func is_effect_card():
+	return key_word_effect != null
 	
 func signal_target():
 	emit_signal('on_target',self)
