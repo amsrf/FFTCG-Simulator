@@ -5,12 +5,16 @@ class_name DamageZone
 const CARD_CHARGE = 2
 
 var cards = []
+var deck: Node = null
 var card_width = GlobalVariables.get_card_width();
 var card_spacing = -0.3
 var start_x;
 var grabbed_card_index = 0;
-@onready var field: Field = get_parent().get_node("Field")
-@onready var assistant: Assistant = get_parent().get_node("Assistant")
+@onready var field: Field = get_tree().current_scene.get_node("Field")
+@onready var assistant: Assistant = get_tree().current_scene.get_node("Assistant")
+
+func set_deck(deck_node: Node) -> void:
+	deck = deck_node
 
 func draw(card):
 	add_card_to_tree(card)

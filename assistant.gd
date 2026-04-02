@@ -110,6 +110,9 @@ func reset_buttons():
 	confirmButton.visible = false
 	cancelButton.visible = false
 	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+
+func clear_payment_accumulator():
+	mana_acc = MANA_ZERO.duplicate()
 	
 func on_charge_complete():  # Lambda function
 	reset_buttons()
@@ -124,9 +127,16 @@ func on_target_complete():
 	target_complete.emit()
 	
 func on_target_cancel():
-	confirmButton.visible = false
-	cancelButton.visible = false
 	target_cancel.emit()
+	reset_buttons()
+
+## Cancel is available as soon as targeting starts (not only after a target is chosen).
+func prepare_targeting_phase_cancel():
+	passPhaseButton.visible = false
+	confirmButton.visible = false
+	cancelButton.visible = true
+	cancelButton.set_text("Cancel")
+	cancelButton.set_on_press_callback(func(): on_target_cancel())
 	
 func discharge(amount: int,type: String):
 	mana_acc[type] -= amount
@@ -206,13 +216,16 @@ func _on_field_selected_cards_for_mana_has_changed(amount:int, element:String) -
 		confirmButton.visible = true
 
 
-func _on_field_request_target_confirmation(_target_card:Card) -> void:
+func _on_field_request_target_confirmation(_target_card: Card, allow_cancel: bool = false) -> void:
 	confirmButton.visible = true
-	cancelButton.visible = true
 	confirmButton.set_text("Confirm")
-	cancelButton.set_text("Cancel")
-	confirmButton.set_on_press_callback(func():on_target_complete())
-	cancelButton.set_on_press_callback(func():on_target_cancel())
+	confirmButton.set_on_press_callback(func(): on_target_complete())
+	cancelButton.visible = allow_cancel
+	if allow_cancel:
+		cancelButton.set_text("Cancel")
+		cancelButton.set_on_press_callback(func(): on_target_cancel())
+	else:
+		cancelButton.set_on_press_callback(func(): pass)
 
 
 func _on_field_card_activated_ability(cost: Dictionary) -> void:
@@ -221,6 +234,7 @@ func _on_field_card_activated_ability(cost: Dictionary) -> void:
 	cancelButton.set_on_press_callback(func():on_charge_cancelled())
 	confirmButton.set_text("Confirm")
 	cancelButton.set_text("Cancel")
-	#confirmButton.visible = true
 	cancelButton.visible = true
+	if can_pay_cost():
+		confirmButton.visible = true
 	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)

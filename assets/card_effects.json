@@ -53,5 +53,12 @@
 				"choose_target":{"is_type":"Forward"}
 			}
 		
+	},
+	
+	"53":{
+		"when_enter_break_from_field":
+			{
+				"instructions":[{"name":"damage_player", "author":"game"}]
+			}
 	}
 }

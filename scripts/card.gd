@@ -37,6 +37,8 @@ var mat: ShaderMaterial
 @export var key_word_effect: String
 @export var effect_target: Card
 @export var effect_source: Card
+## Index into card_effects["skill"] for stack copies activating a skill (-1 = not used).
+@export var skill_activation_index: int = -1
 
 @onready var hand_mesh: MeshInstance3D = $HandMesh
 @onready var field_mesh: MeshInstance3D = $FieldMesh
@@ -220,6 +222,7 @@ func can_be_played():
 	return false
 	
 func show_actions():
+	hide_actions()
 	if(not tapped and type == 'Forward'):
 		var card_button_scene = preload("res://card_button.tscn")
 		var card_button = card_button_scene.instantiate()
@@ -234,15 +237,21 @@ func show_actions():
 		
 		add_child(card_button)
 	if "skill" in card_effects:
+		var si := 0
 		for skill in card_effects["skill"]:
+			var idx := si
+			si += 1
 			var card_button_scene = preload("res://card_button.tscn")
 			var card_button = card_button_scene.instantiate()
 			action_buttons.append(card_button)
 			
-			card_button.position = Vector3(0.5, 0.1, -0.25)
+			card_button.position = Vector3(0.5 + 0.35 * idx, 0.1, -0.25)
 			card_button.rotation_degrees = Vector3(0, 180, 0)
 			card_button.set_text("Skill")
-			card_button.set_on_press_callback(func(): 
+			card_button.set_on_press_callback(func():
+				var f := get_parent() as Field
+				if f:
+					f.begin_skill_activation(self, idx)
 				hide_actions()
 			)
 			
@@ -345,11 +354,26 @@ func power_change(amount,duration):
 	power += amount
 	powerLife.changePower(power)
 	
-func get_card_effect_instructions():#etb
-	if key_word_effect in card_effects:
-		return create_instruction_from_json(card_effects[key_word_effect]['instructions'])
-	else:
-		print("Error no keyword %s in card effects" % key_word_effect)
+func get_card_effect_instructions() -> Array[Instruction]:
+	if key_word_effect == "skill" and skill_activation_index >= 0:
+		if not "skill" in card_effects:
+			print("Error: no skill entry for card ", id)
+			return []
+		var skills = card_effects["skill"]
+		if skill_activation_index >= skills.size():
+			return []
+		var raw = skills[skill_activation_index].get("instructions", [])
+		return create_instruction_from_json(raw)
+	if key_word_effect != "" and key_word_effect in card_effects:
+		var entry = card_effects[key_word_effect]
+		if entry is Dictionary and entry.has("instructions"):
+			return create_instruction_from_json(entry["instructions"])
+		if entry is Array and entry.size() > 0:
+			var first = entry[0]
+			if first is Dictionary and first.has("instructions"):
+				return create_instruction_from_json(first["instructions"])
+	print("Error no keyword %s in card effects" % key_word_effect)
+	return []
 func is_key_word_in_card_effect(keyword:String):
 	return keyword in card_effects
 	

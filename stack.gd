@@ -6,8 +6,14 @@ var card_width = GlobalVariables.get_card_width() * 2;
 var card_spacing = -0.2
 var player_mode = GlobalVariables.get_player_mode();
 var start_x;
-var casting_card: Card;
-@onready var field: Node = get_parent().get_node("Field")
+var casting_card: Card
+## Stack copy for skill activation. The node exists early for UI; the activation is not
+## de facto committed until commit_skill_activation_costs_if_pending runs (after final Confirm).
+var skill_activation_proxy: Card = null
+## While true, mana/hand discard and JSON tap on source are deferred until stack commit (final Confirm).
+var skill_mana_deferred_until_target_confirm: bool = false
+@onready var field: Field = get_parent().get_node("Field") as Field
+@onready var hand: Hand = get_tree().current_scene.get_node("Player/Hand") as Hand
 @onready var card_scene = preload("res://Card.tscn")
 
 signal execute_card_effect(card:Card)
@@ -71,9 +77,65 @@ func pop_stack():
 	return cards.pop_back()
 
 func _on_assistant_charge_complete() -> void:
-	if(casting_card):
+	if casting_card:
 		cast_card()
 		casting_card = null
+	elif skill_activation_proxy != null:
+		field.continue_skill_activation_after_mana(skill_activation_proxy)
+
+
+func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
+	## Physical stack object for UI (pay + target). Costs apply later at de facto stack commit.
+	if skill_activation_proxy != null:
+		return false
+	var proxy: Card = card_scene.instantiate()
+	proxy.initialize(source.id, source.controller)
+	proxy.skill_activation_index = skill_index
+	proxy.key_word_effect = "skill"
+	proxy.effect_source = source
+	skill_activation_proxy = proxy
+	skill_mana_deferred_until_target_confirm = true
+	add_created_card_to_tree(proxy)
+	update_card_positions()
+	return true
+
+func _apply_skill_source_tap_from_proxy() -> void:
+	## Part of stack commit: JSON "tap" is a cost, not tied to resolution (instructions run in game._on_stack_execute_card_effect).
+	if skill_activation_proxy == null:
+		return
+	var src: Card = skill_activation_proxy.effect_source
+	var idx: int = skill_activation_proxy.skill_activation_index
+	if src == null or not src.is_inside_tree():
+		return
+	if not "skill" in src.card_effects:
+		return
+	var skills: Array = src.card_effects["skill"]
+	if idx < 0 or idx >= skills.size():
+		return
+	var def: Dictionary = skills[idx]
+	if def.get("tap", false):
+		src.tap()
+
+## Skill stack commit: activation is legally complete (costs paid, target on proxy if required).
+## Resolution (execute instructions) happens later in resolve_top_effect -> game._on_stack_execute_card_effect.
+func commit_skill_activation_costs_if_pending() -> void:
+	if not skill_mana_deferred_until_target_confirm:
+		return
+	field.apply_deferred_skill_mana_payment()
+	hand.apply_deferred_skill_mana_payment()
+	_apply_skill_source_tap_from_proxy()
+	skill_mana_deferred_until_target_confirm = false
+
+func _clear_skill_proxy() -> void:
+	if skill_activation_proxy == null:
+		return
+	var p = skill_activation_proxy
+	skill_activation_proxy = null
+	skill_mana_deferred_until_target_confirm = false
+	cards.erase(p)
+	if is_instance_valid(p):
+		p.queue_free()
+	update_card_positions()
 
 
 func _on_hand_charge_start(card: Card) -> void:
@@ -83,8 +145,13 @@ func _on_hand_charge_start(card: Card) -> void:
 
 
 func _on_assistant_charge_cancelled() -> void:
+	if skill_activation_proxy != null:
+		_clear_skill_proxy()
+		return
+	if cards.is_empty():
+		return
 	var card = cards.pop_back()
-	if(card.is_effect_card()):
+	if card.is_effect_card():
 		card.queue_free()
 	update_card_positions()
 
@@ -105,10 +172,16 @@ func create_card(id,controller,keyword, source):
 	return card
 
 func resolve_top_effect():
+	## Stack resolution: run effect instructions only; costs were applied at commit for skills.
+	if cards.is_empty():
+		return
 	var card: Card = cards.pop_back()
+	if card == skill_activation_proxy:
+		skill_activation_proxy = null
+		skill_mana_deferred_until_target_confirm = false
 	print('Resolve ', card.card_name)
 	execute_card_effect.emit(card)
-	if(len(cards) == 0):
+	if len(cards) == 0:
 		GlobalVariables.reset_to_default_phase_player_mode()
 	
 func process_next_effect():
@@ -120,14 +193,19 @@ func process_next_effect():
 	
 
 
-func _on_field_request_target_confirmation(target_card: Card) -> void:
+func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: bool = false) -> void:
 	var effect_card: Card = cards[-1]
 	effect_card.effect_target = target_card
-	pass # Replace with function body.
 
-'''Change for REQUEST PRIORITY SIGNAL'''
 func _on_assistant_target_complete() -> void:
+	commit_skill_activation_costs_if_pending()
 	request_priority.emit()
-	# the card effect on the stack has all the information now, it has a target and instructions. Effectively
-	# if we reach this call it means the effect is completely on the stack (for real). Now we process the stack. 
-	pass # Replace with function body.
+
+func confirm_skill_without_target_then_priority() -> void:
+	commit_skill_activation_costs_if_pending()
+	request_priority.emit()
+
+func _on_assistant_target_cancel() -> void:
+	## Only activated-ability (skill) flow may abort and remove the stack copy; ETB is mandatory.
+	if skill_activation_proxy != null:
+		_clear_skill_proxy()

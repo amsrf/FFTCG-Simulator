@@ -32,7 +32,7 @@ func handle_grabbed():
 						field.set_attacker(card)
 					pass
 		GlobalVariables.Player_Mode.FREE, GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-			field.execute_activated_ability(card)
+			field.try_activate_from_field(card)
 			pass
 			
 		GlobalVariables.Player_Mode.TARGET:

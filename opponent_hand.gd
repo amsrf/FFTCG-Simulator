@@ -9,10 +9,10 @@ var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
 var start_x;
 var grabbed_card_index = 0;
-@onready var graveyard: Node = get_parent().get_node("Graveyards").get_node("Graveyard")
-@onready var stack: Node = get_parent().get_node("Stack")
-@onready var field: Field = get_parent().get_node("Field")
-@onready var assistant: Assistant = get_parent().get_node("Assistant")
+@onready var graveyard: Node = get_parent().get_node("Graveyard")
+@onready var stack: Node = get_tree().current_scene.get_node("Stack")
+@onready var field: Field = get_tree().current_scene.get_node("Field") as Field
+@onready var assistant: Assistant = get_tree().current_scene.get_node("Assistant") as Assistant
 
 func draw(card):
 	add_card_to_tree(card)

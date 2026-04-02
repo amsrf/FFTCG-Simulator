@@ -1,14 +1,17 @@
 extends Node3D
 
-@onready var deck = $Deck
-@onready var opponent_deck = $OpponentDeck
-@onready var hand = $Hand
-@onready var opponent_hand = $OpponentHand
+@onready var player: PlayerSide = $Player
+@onready var opponent: PlayerSide = $Opponent
+@onready var deck = $Player/Deck
+@onready var opponent_deck = $Opponent/Deck
+@onready var hand = $Player/Hand
+@onready var opponent_hand = $Opponent/Hand
 @onready var field: Field = $Field
 @onready var stack : Stack = $Stack
-@onready var graveyard = $Graveyards
+@onready var player_graveyard = $Player/Graveyard
+@onready var opponent_graveyard = $Opponent/Graveyard
 @onready var opponent_front_row_card = $Field/OpponentFrontrowCard
-@onready var opponent_damage_zone = $OpponentDamageZone
+@onready var opponent_damage_zone = $Opponent/DamageZone
 @onready var select_arrow: BallisticArrow  = $BallisticArrow
 @onready var assistant: Assistant = $Assistant
 @onready var card_scene = preload("res://Card.tscn")
@@ -17,6 +20,7 @@ extends Node3D
 
 var _current_instructions: Array[Instruction]
 var _current_source_card: Card
+var _current_controller: String
 var _current_attacker_card: Card
 var _current_blocker_card: Card
 var _targets = []
@@ -54,7 +58,8 @@ func _ready():
 	var my_cards = [
 		{"id": 41, "tapped": false},
 		{"id": 32, "tapped": true},
-		{"id": 31, "tapped": false}
+		{"id": 31, "tapped": false},
+		{"id": 3, "tapped": false},
 	]
 	
 	for card_data in opponent_cards:
@@ -135,11 +140,13 @@ func _process_next_instruction() -> void:
 func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 	match executor_key:
 		"card":    return source_card
-		"hand":    return $Hand
-		"deck":    return $Deck
+		"hand":    return $Player/Hand
+		"deck":    return $Player/Deck
 		"assistant": return $Assistant 
 		"field": return $Field
-		"opponent_damage_zone": return $OpponentDamageZone
+		"player": return $Player
+		"opponent": return $Opponent
+		"opponent_damage_zone": return $Opponent/DamageZone
 		"game":    return self
 		"target":  return _targets[0]
 		_:         return get_node(executor_key)
@@ -194,12 +201,26 @@ func _await_player_response():
 	return null
 
 func cause_damage():
-	var card = opponent_deck.deck_cards.pop_front()
-	opponent_damage_zone.draw(card)
+	opponent.take_damage(1)
+	
+func cause_damage_to_player(player_argument):
+	if player_argument == 'controller':
+		pass
+	
+	
 	
 func cause_attacking_damage():
 	if _current_blocker_card == null:
 		cause_damage()
+
+func take_damage_to_controller(amount: int = 1) -> void:
+	# Controller-relative damage for effects (e.g. Dark Knight death trigger).
+	if _current_source_card == null:
+		return
+	if _current_source_card.controller == "player":
+		player.take_damage(amount)
+	else:
+		opponent.take_damage(amount)
 
 func damage_forward(damage):
 	var card: Card = _targets[0]
@@ -366,11 +387,14 @@ func break_card(card:Card):
 	if not 'unbreakable' in card.status_effects:
 		card.untap()
 		field.remove_card(card)
-		graveyard.add_card(card)
+		if card.controller == "player":
+			player_graveyard.add_card(card)
+		else:
+			opponent_graveyard.add_card(card)
 
 func pop_stack():
 	var card = stack.pop_stack()
-	graveyard.add_card(card)
+	player_graveyard.add_card(card)
 
 func _on_assistant_process_next_instruction() -> void:
 	_process_next_instruction()
@@ -405,8 +429,8 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	var instructions = card.get_card_effect_instructions()
 	var target = card.effect_target
 	_current_source_card = card.effect_source
+	_current_controller = card.controller
 	_targets = [target]
-	print(card.card_name,'Amanda vagabundinha\n', instructions)
 	_execute_instructions(instructions)
 	card.queue_free()
 	priority()
@@ -415,7 +439,6 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 
 func _on_stack_request_priority() -> void:
 	priority()
-	pass # Replace with function body.
 
 
 func _on_assistant_pressed_next_phase() -> void:

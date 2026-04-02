@@ -11,9 +11,11 @@ var target_card: Card = null
 var source_card: Card = null
 var attacker_card: Card = null
 var arrow: BallisticArrow
+## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
+var targeting_allow_cancel: bool = false
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
-signal request_target_confirmation(target_card:Card)
+signal request_target_confirmation(target_card: Card, allow_cancel: bool)
 signal attacker_changed
 signal card_activated_ability(cost:Dictionary)
 @export var phase: GlobalVariables.Phase
@@ -21,6 +23,7 @@ signal card_activated_ability(cost:Dictionary)
 @onready var TargetScene = preload("res://target.tscn")
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
+@onready var stack: Stack = get_parent().get_node("Stack") as Stack
 
 class AuraValue:
 	var method: String
@@ -127,11 +130,53 @@ func execute_card_attack():
 func turn_end_reset():
 	for c in get_all_cards():
 		c.turn_end()
-func execute_activated_ability(card:Card):
-	# need to pay mana cost before
-	card_activated_ability.emit({})
-	#what do do lol
-	execute_card_effect(card, 'activated_ability')
+func try_activate_from_field(card: Card) -> void:
+	if not "skill" in card.card_effects:
+		return
+	var skills: Array = card.card_effects["skill"]
+	if skills.is_empty():
+		return
+	if skills.size() == 1:
+		begin_skill_activation(card, 0)
+	else:
+		card.show_actions()
+
+func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
+	var mode = GlobalVariables.get_player_mode()
+	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+		return
+	if card.controller != "player":
+		return
+	if card.tapped:
+		return
+	if not "skill" in card.card_effects:
+		return
+	var skills: Array = card.card_effects["skill"]
+	if skill_index < 0 or skill_index >= skills.size():
+		return
+	if not stack.add_skill_activation_proxy(card, skill_index):
+		return
+	assistant.clear_payment_accumulator()
+	var cost: Dictionary = skills[skill_index].get("cost", {})
+	card_activated_ability.emit(cost)
+
+func continue_skill_activation_after_mana(_proxy: Card) -> void:
+	if _proxy == null or _proxy.effect_source == null:
+		return
+	var src: Card = _proxy.effect_source
+	var idx: int = _proxy.skill_activation_index
+	if idx < 0 or not "skill" in src.card_effects:
+		return
+	var skills: Array = src.card_effects["skill"]
+	if idx >= skills.size():
+		return
+	var def: Dictionary = skills[idx]
+	var choose_target = def.get("choose_target", null)
+	if choose_target:
+		request_target(choose_target, src, true)
+	else:
+		GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
 	
 func execute_card_effect(card,keyword):
 	if( not card.is_key_word_in_card_effect(keyword)):
@@ -140,8 +185,8 @@ func execute_card_effect(card,keyword):
 	# Most elegant single-line solution
 	var choose_target_criteria = card.card_effects.get(keyword, {}).get('choose_target', null)
 	
-	if(choose_target_criteria):
-		request_target(choose_target_criteria,card)	
+	if choose_target_criteria:
+		request_target(choose_target_criteria, card, false)
 func TEST_get_front_cards():
 	return opponent_front_cards
 func get_all_cards() -> Array[Card]:
@@ -153,7 +198,8 @@ func untap_all_cards():
 	for card in get_all_cards_from_player():
 		card.untap()
 		
-func request_target(targeting_criteria,card:Card):
+func request_target(targeting_criteria, card: Card, allow_cancel: bool = false):
+	targeting_allow_cancel = allow_cancel
 	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
 	set_viable_targets(targeting_criteria)
 	source_card = card
@@ -161,12 +207,14 @@ func request_target(targeting_criteria,card:Card):
 	arrow = ballistic_arrow
 	add_child(ballistic_arrow)
 	ballistic_arrow.set_is_aiming(true, card.global_position)
+	if allow_cancel:
+		assistant.prepare_targeting_phase_cancel()
 	
-func set_target_card(card:Card):
-	if(target_card == null):
+func set_target_card(card: Card):
+	if target_card == null:
 		target_card = card
 		arrow.lock_arc(card.get_global_center())
-		request_target_confirmation.emit(target_card)
+		request_target_confirmation.emit(target_card, targeting_allow_cancel)
 	
 func set_viable_targets(target_criteria):
 	for card in get_all_cards():
@@ -228,6 +276,14 @@ func _on_assistant_charge_cancelled() -> void:
 
 
 func _on_assistant_charge_complete() -> void:
+	if stack.skill_mana_deferred_until_target_confirm:
+		return
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	_tap_selected_cards()
+	selected_cards_for_mana_conversion = []
+
+func apply_deferred_skill_mana_payment() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	_tap_selected_cards()
@@ -235,9 +291,18 @@ func _on_assistant_charge_complete() -> void:
 
 
 func _on_assistant_target_cancel() -> void:
+	if stack.skill_mana_deferred_until_target_confirm:
+		for c in selected_cards_for_mana_conversion:
+			c.reset()
+		selected_cards_for_mana_conversion.clear()
+	targeting_allow_cancel = false
 	target_card = null
-	arrow.unlock_arc()
-	pass # Replace with function body.
+	source_card = null
+	if arrow:
+		arrow.queue_free()
+		arrow = null
+	reset_targets()
+	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
 
 
 func _on_stack_execute_card_effect(card: Card) -> void:

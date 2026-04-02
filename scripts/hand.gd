@@ -13,9 +13,9 @@ var start_x;
 var grabbed_card_index = 0;
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
-@onready var graveyard: Node = get_parent().get_node("Graveyards").get_node("Graveyard")
-@onready var stack: Node = get_parent().get_node("Stack")
-@onready var field: Field = get_parent().get_node("Field")
+@onready var graveyard: Node = get_parent().get_node("Graveyard")
+@onready var stack: Stack = get_tree().current_scene.get_node("Stack") as Stack
+@onready var field: Field = get_tree().current_scene.get_node("Field") as Field
 
 func draw(card):
 	add_card_to_tree(card)
@@ -167,16 +167,27 @@ func animate_card(card, target_position):
 
 
 func _on_assistant_charge_complete() -> void:
+	if stack.skill_mana_deferred_until_target_confirm:
+		return
 	send_selected_cards_to_graveyard()
 	selected_cards_for_mana_conversion = []
+	charging_card = null
 	update_card_positions()
-	pass # Replace with function body.
+
+func apply_deferred_skill_mana_payment() -> void:
+	send_selected_cards_to_graveyard()
+	update_card_positions()
+
+func _on_assistant_target_cancel() -> void:
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	selected_cards_for_mana_conversion.clear()
 
 
 func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	selected_cards_for_mana_conversion = []
-	if(charging_card):
+	if charging_card and charging_card.get_parent() == stack:
 		add_card(charging_card)
-		charging_card = null
+	charging_card = null
