@@ -24,6 +24,7 @@ signal card_activated_ability(cost:Dictionary)
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
 @onready var stack: Stack = get_parent().get_node("Stack") as Stack
+@onready var hand: Hand = get_parent().get_node("Player/Hand") as Hand
 
 class AuraValue:
 	var method: String
@@ -51,12 +52,11 @@ func activate_aura_in_field(aura:AuraValue):
 	for card:Card in all_cards:
 		add_aura_to_card(aura,card)
 
-func add_aura_to_card(aura:AuraValue, card:Card):
-	if(card.does_card_match_target(aura.targets)):
-			if aura.method == 'power_change':
-				card.power_change(aura.value,null)
-			else:
-				pass
+func add_aura_to_card(aura: AuraValue, card: Card):
+	if card.does_card_match_target(aura.targets):
+		if aura.method == 'power_change':
+			# -1 = permanent modifier (does not expire at end of turn).
+			card.power_change(aura.value, -1)
 				
 func add_all_auras_to_card(card:Card):
 	for aura in _auras.values():
@@ -92,6 +92,8 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 	# Add card to appropriate array
 	var n = target_array.size()
 	target_array.append(card)
+	register_conditional_effects(card)
+	recompute_conditional_power()
 	
 	# Calculate position
 	var target_position = target_node.position
@@ -127,7 +129,10 @@ func execute_card_attack():
 	attacker_card.tap()
 	execute_card_effect(attacker_card,'when_attack')
 	
-func turn_end_reset():
+func end_phase_cleanup():
+	# End Phase cleanup: remove all damage from every card on the field and
+	# expire "until end of turn" effects. (No end-of-turn priority window
+	# exists yet, so this runs immediately on entering the End Phase.)
 	for c in get_all_cards():
 		c.turn_end()
 func try_activate_from_field(card: Card) -> void:
@@ -157,7 +162,13 @@ func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
 	if not stack.add_skill_activation_proxy(card, skill_index):
 		return
 	assistant.clear_payment_accumulator()
-	var cost: Dictionary = skills[skill_index].get("cost", {})
+	var def: Dictionary = skills[skill_index]
+	if def.get("s_cost", false):
+		# Special ability (S): first discard a card sharing a name with the
+		# source, then the regular mana payment step follows.
+		stack.begin_s_cost_selection(card, skill_index)
+		return
+	var cost: Dictionary = def.get("cost", {})
 	card_activated_ability.emit(cost)
 
 func continue_skill_activation_after_mana(_proxy: Card) -> void:
@@ -173,7 +184,7 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 	var def: Dictionary = skills[idx]
 	var choose_target = def.get("choose_target", null)
 	if choose_target:
-		request_target(choose_target, src, true)
+		request_target(choose_target, src, true, "Ability")
 	else:
 		GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
@@ -186,7 +197,7 @@ func execute_card_effect(card,keyword):
 	var choose_target_criteria = card.card_effects.get(keyword, {}).get('choose_target', null)
 	
 	if choose_target_criteria:
-		request_target(choose_target_criteria, card, false)
+		request_target(choose_target_criteria, card, false, "Ability")
 func TEST_get_front_cards():
 	return opponent_front_cards
 func get_all_cards() -> Array[Card]:
@@ -198,31 +209,43 @@ func untap_all_cards():
 	for card in get_all_cards_from_player():
 		card.untap()
 		
-func request_target(targeting_criteria, card: Card, allow_cancel: bool = false):
+func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
+	# Always start a targeting session fresh. Leftover target_card from a
+	# previous session made set_target_card() ignore clicks (stuck UI).
 	targeting_allow_cancel = allow_cancel
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
-	set_viable_targets(targeting_criteria)
+	target_card = null
 	source_card = card
+	if arrow:
+		arrow.queue_free()
+		arrow = null
+	reset_targets()
+	print("[Targeting] request_target source=%s criteria=%s" % [card.card_name, targeting_criteria])
+	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
+	set_viable_targets(targeting_criteria, card, source_kind)
 	var ballistic_arrow = ballistic_arrow_scene.instantiate()
 	arrow = ballistic_arrow
 	add_child(ballistic_arrow)
 	ballistic_arrow.set_is_aiming(true, card.global_position)
 	if allow_cancel:
 		assistant.prepare_targeting_phase_cancel()
-	
+
 func set_target_card(card: Card):
-	if target_card == null:
-		target_card = card
-		arrow.lock_arc(card.get_global_center())
-		request_target_confirmation.emit(target_card, targeting_allow_cancel)
+	# A click only counts when the candidate is a legally valid target.
+	# is_valid_target is set by set_viable_targets() (criteria + protection).
+	if not card.is_valid_target:
+		push_warning("[Targeting] %s is not a valid target" % card.card_name)
+		return
+	if target_card != null:
+		push_warning("[Targeting] target already selected (%s); ignoring click on %s" % [target_card.card_name, card.card_name])
+		return
+	target_card = card
+	print("[Targeting] target selected: ", card.card_name)
+	arrow.lock_arc(card.get_global_center())
+	request_target_confirmation.emit(target_card, targeting_allow_cancel)
 	
-func set_viable_targets(target_criteria):
+func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
 	for card in get_all_cards():
-		var is_targetable = true
-		for key in target_criteria:
-			var method_name = key
-			var method_args = [target_criteria[key]]
-			is_targetable = is_targetable and card.callv(method_name, method_args)
+		var is_targetable = _card_matches_criteria(card, target_criteria, source, source_kind)
 		card.set_valid_target(is_targetable)
 		if is_targetable:
 			# Create and position target above card
@@ -232,6 +255,23 @@ func set_viable_targets(target_criteria):
 			target.position = card.position + Vector3(0,0,0.4)
 			target.rotation_degrees = Vector3(-100,0,0)
 			target.scale = Vector3.ONE * 0.5
+
+func has_viable_target(target_criteria, source: Card = null, source_kind: String = "") -> bool:
+	# Used before casting a Summon: a targeted Summon cannot be cast unless
+	# at least one legal target exists on the field.
+	for card in get_all_cards():
+		if _card_matches_criteria(card, target_criteria, source, source_kind):
+			return true
+	return false
+
+func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Card = null, source_kind: String = "") -> bool:
+	# Legality has two parts: the effect's choose_target criteria (properties of
+	# the candidate) and the candidate's own protection against this source.
+	# source_kind overrides the source card's own kind, because ability targeting
+	# is requested with the field card, which carries no effect_kind.
+	if not card.matches_criteria(target_criteria):
+		return false
+	return card.can_be_chosen_by(source, source_kind)
 		
 func reset_targets():
 	for card in get_all_cards():
@@ -239,15 +279,72 @@ func reset_targets():
 	get_tree().call_group("target_indicators", "queue_free")
 
 func remove_card(card):
+	unregister_conditional_effects(card)
 	front_cards.erase(card)
 	back_cards.erase(card)
 	opponent_front_cards.erase(card)
 	opponent_back_cards.erase(card)
+	recompute_conditional_power()
+
+## Conditional continuous effects ("if you control X, this gains power").
+## Re-evaluated only when the field composition changes: play_card/remove_card.
+var _conditional_effects: Array[Dictionary] = []
+
+func register_conditional_effects(card: Card) -> void:
+	if "conditional_power" in card.card_effects:
+		for effect in card.card_effects["conditional_power"]:
+			_conditional_effects.append({
+				"source": card,
+				"condition": effect.get("condition", {}),
+				"value": int(effect.get("value", 0)),
+			})
+
+func unregister_conditional_effects(card: Card) -> void:
+	_conditional_effects = _conditional_effects.filter(func(e): return e["source"] != card)
+	if card.current_conditional_bonus != 0:
+		card.power -= card.current_conditional_bonus
+		card.current_conditional_bonus = 0
+		if card.power_label:
+			card.power_label.changePower(card.power)
+
+func recompute_conditional_power() -> void:
+	for effect in _conditional_effects:
+		var source: Card = effect["source"]
+		if source == null or not is_instance_valid(source) or not source.is_inside_tree():
+			continue
+		var desired: int = int(effect["value"]) if _condition_met(effect["condition"]) else 0
+		if desired != source.current_conditional_bonus:
+			source.power += desired - source.current_conditional_bonus
+			source.current_conditional_bonus = desired
+			if source.power_label:
+				source.power_label.changePower(source.power)
+
+func _condition_met(condition: Dictionary) -> bool:
+	if condition.is_empty():
+		return false
+	for card in get_all_cards():
+		if card.matches_criteria(condition):
+			return true
+	return false
 	
 func get_breakable_cards():
+	# Forwards whose accumulated damage is equal to or greater than their
+	# current power. A card at 0 power is handled separately (it is put into
+	# the Graveyard, not broken).
 	var ans = []
 	for card in (front_cards + opponent_front_cards):
-		if(card.life == 0):
+		if card.has_zero_power():
+			continue
+		if card.is_broken():
+			ans.append(card)
+	return ans
+
+func get_zero_power_cards():
+	# Forwards whose current power is 0 or less. These are put into the
+	# Graveyard without triggering break effects.
+	var ans = []
+	for card in (front_cards + opponent_front_cards):
+		if card.has_zero_power():
 			ans.append(card)
 	return ans
 
@@ -276,7 +373,7 @@ func _on_assistant_charge_cancelled() -> void:
 
 
 func _on_assistant_charge_complete() -> void:
-	if stack.skill_mana_deferred_until_target_confirm:
+	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
 		return
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
@@ -291,7 +388,7 @@ func apply_deferred_skill_mana_payment() -> void:
 
 
 func _on_assistant_target_cancel() -> void:
-	if stack.skill_mana_deferred_until_target_confirm:
+	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
 		for c in selected_cards_for_mana_conversion:
 			c.reset()
 		selected_cards_for_mana_conversion.clear()
@@ -306,9 +403,15 @@ func _on_assistant_target_cancel() -> void:
 
 
 func _on_stack_execute_card_effect(card: Card) -> void:
-	if(arrow):
+	# Targeting session is over: clear all targeting state so the next
+	# session starts fresh.
+	if arrow:
 		arrow.queue_free()
-		reset_targets()
+		arrow = null
+	target_card = null
+	source_card = null
+	targeting_allow_cancel = false
+	reset_targets()
 
 
 func _on_game_phase_change(new_phase: GlobalVariables.Phase) -> void:

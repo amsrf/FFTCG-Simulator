@@ -9,6 +9,10 @@ func _init(card_ref: Card):
 	hand = card.get_parent()
 
 func handle_grabbed():
+	# Only the player's own hand is interactive. Opponent cards use the same
+	# Hand scene but must never be draggable/selectable.
+	if card.controller != "player":
+		return
 	var player_mode = GlobalVariables.get_player_mode()
 	var instructions: Array[Instruction]
 	match player_mode:
@@ -22,14 +26,27 @@ func handle_grabbed():
 				card.crystal_instance = card.crystal_scene.instantiate()
 				card.add_child(card.crystal_instance)
 				card.crystal_instance.position = Vector3(0, 0.05, -0.35)
+		GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+			# Triggered "may" choice: only criteria-matching cards can be
+			# selected, and selecting one unselects the previous one.
+			if card.matches_criteria(hand.choose_card_criteria):
+				hand.toggle_effect_card_selection(card)
 		_:
 			card.is_dragging = true
 			card.position +=  Vector3(0, 0.1,-0.1)
 			card.rotation = Vector3.ZERO
 			card.scale = Vector3.ONE * 1.05
 			card.offset = card.global_transform.origin - card._get_mouse_3d_position_on_card_plane()
-			
+
 func handle_released():
+	if card.controller != "player":
+		return
+	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+		# Selection happens on grab; release just ends any drag state.
+		card.is_dragging = false
+		hand.update_card_positions()
+		card.scale = Vector3.ONE
+		return
 	var new_index = hand.find_index(card)
 	# Define the rectangle bounds
 	var x_min = -1.5

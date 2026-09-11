@@ -6,11 +6,12 @@ var card_effects: Dictionary
 func _ready():
 	load_card_database()
 	load_card_effects()
-	print(card_effects,'amanda')
-	print('31' in card_effects)
 	
 func load_card_effects():
 	var file_path = "res://assets/card_effects.json"
+	if not FileAccess.file_exists(file_path):
+		print("Card effects file not found.")
+		return
 	# Open the file for reading
 	var file = FileAccess.open(file_path, FileAccess.READ)
 	if file:
@@ -22,7 +23,7 @@ func load_card_effects():
 
 		if parse_result == OK:
 			card_effects = json.data
-			print("Card database loaded successfully.")
+			print("Card effects loaded successfully.")
 		else:
 			print("JSON parsing error: ", json.get_error_message(), " at line: ", json.get_error_line())
 

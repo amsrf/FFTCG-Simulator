@@ -8,7 +8,7 @@ var _card_height = 0.6
 var _card_spacing = -0.15
 var _hand_rotation = Vector3(36, -180, 0)
 var focus_card_id = null
-enum Player_Mode { FREE, PAYING_COST, ATTACKING, BLOCKED, TARGET , NO_PRIORITY, INSTANT_SPEED_TIME, PRIORITY}
+enum Player_Mode { FREE, PAYING_COST, ATTACKING, BLOCKED, TARGET , NO_PRIORITY, INSTANT_SPEED_TIME, PRIORITY, CHOOSE_CARD_IN_HAND}
 var player_mode: Player_Mode = Player_Mode.FREE
 var priority_holder : int = 0
 var phase: Phase

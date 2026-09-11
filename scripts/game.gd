@@ -24,6 +24,9 @@ var _current_controller: String
 var _current_attacker_card: Card
 var _current_blocker_card: Card
 var _targets = []
+## Re-entrancy guard: true while a priority round is running. Prevents
+## overlapping priority loops when Stack.request_priority fires mid-round.
+var _priority_lock: bool = false
 
 
 
@@ -33,6 +36,10 @@ func _ready():
 		hand.add_card(card)
 	var x = create_card(6, 'player')
 	hand.add_card(x)
+	# Debug: Aerith in hand for the Zack conditional-power test, plus a Wind
+	# mana source (Evoker) so her cost can actually be paid.
+	hand.add_card(create_card(64, 'player'))
+	hand.add_card(create_card(68, 'player'))
 	
 	
 	for i in range(5):
@@ -52,10 +59,13 @@ func _ready():
 	var opponent_cards = [
 		{"id": 41, "tapped": false},
 		{"id": 32, "tapped": true},
-		{"id": 31, "tapped": false}
+		{"id": 31, "tapped": false},
+		# Zidane 1-071L: protection test target on the opponent's field.
+		{"id": 71, "tapped": false}
 	]
 	
 	var my_cards = [
+		{"id": 12, "tapped": false},
 		{"id": 41, "tapped": false},
 		{"id": 32, "tapped": true},
 		{"id": 31, "tapped": false},
@@ -119,37 +129,61 @@ func _clean_instruction_stack():
 
 func _process_next_instruction() -> void:
 	if _current_instructions.is_empty():
-		#print('empty instructions')
+		# All instructions resolved: apply state-based actions so a card
+		# whose accumulated damage has reached its power is broken now.
+		enforce_game_state_rules()
 		return
-	
-	#print(_current_instructions, 'current instrucitons')
+
 	var instruction = _current_instructions.pop_front()
 	var executor = _resolve_executor(instruction.executor, _current_source_card)
-	print(executor,instruction.action, 'AmandaXXX')
-	if executor.has_method(instruction.action):
-		var args = []
-		if instruction.value != null:
-			if instruction.value is Array:
-				args = instruction.value
-			else:
-				args.append(instruction.value)
-		#print(executor,instruction.action, args)
-		executor.callv(instruction.action, args)
+	if executor == null:
+		push_error("Instruction failed: unknown executor '%s' for action '%s'" % [instruction.executor, instruction.action])
 		_process_next_instruction()
+		return
+	if not executor.has_method(instruction.action):
+		push_error("Instruction failed: executor '%s' has no method '%s'" % [executor, instruction.action])
+		_process_next_instruction()
+		return
+
+	var args = []
+	if instruction.value != null:
+		if instruction.value is Array:
+			args = instruction.value
+		else:
+			args.append(instruction.value)
+	executor.callv(instruction.action, args)
+	_process_next_instruction()
 
 func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 	match executor_key:
-		"card":    return source_card
-		"hand":    return $Player/Hand
-		"deck":    return $Player/Deck
-		"assistant": return $Assistant 
-		"field": return $Field
-		"player": return $Player
-		"opponent": return $Opponent
-		"opponent_damage_zone": return $Opponent/DamageZone
-		"game":    return self
-		"target":  return _targets[0]
-		_:         return get_node(executor_key)
+		"card":
+			return source_card
+		"hand":
+			return $Player/Hand
+		"deck":
+			return $Player/Deck
+		"assistant":
+			return $Assistant
+		"field":
+			return $Field
+		"player":
+			return $Player
+		"opponent":
+			return $Opponent
+		"opponent_damage_zone":
+			return $Opponent/DamageZone
+		"game":
+			return self
+		"target":
+			if _targets.is_empty() or _targets[0] == null:
+				push_error("Instruction targets no card")
+				return null
+			return _targets[0]
+		_:
+			var node: Node = get_node_or_null(executor_key)
+			if node == null:
+				push_error("Unknown executor: %s" % executor_key)
+			return node
 
 func _on_target_selected(card: Card):
 	if(card.is_valid_target):
@@ -178,7 +212,7 @@ func check_target_requirements():
 
 func request_target(targeting_criteria):
 	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
-	$Field.set_viable_targets(targeting_criteria)
+	$Field.set_viable_targets(targeting_criteria, _current_source_card)
 	select_arrow.set_is_aiming(true, _current_source_card.global_position)
 
 func finish_target():
@@ -202,6 +236,9 @@ func _await_player_response():
 
 func cause_damage():
 	opponent.take_damage(1)
+	# Triggered auto-ability: "when this card deals damage to the opponent".
+	if field.attacker_card != null:
+		stack.begin_triggered_ability(field.attacker_card, "when_cause_damage_to_player")
 	
 func cause_damage_to_player(player_argument):
 	if player_argument == 'controller':
@@ -222,9 +259,19 @@ func take_damage_to_controller(amount: int = 1) -> void:
 	else:
 		opponent.take_damage(amount)
 
+func damage_player(amount: int = 1) -> void:
+	# Damages the opponent of the effect's source controller.
+	if _current_source_card == null:
+		return
+	if _current_source_card.controller == "player":
+		opponent.take_damage(amount)
+	else:
+		player.take_damage(amount)
+
 func damage_forward(damage):
 	var card: Card = _targets[0]
 	card.suffer_damage(damage)
+	enforce_game_state_rules()
 	
 func set_attacker(card):
 	_current_attacker_card = card
@@ -257,27 +304,31 @@ var phase_index = 0
 
 
 func next_phase():
-	# Finish current phase
-	# Move to next phase
-	if(phases[phase_index] == GlobalVariables.Phase.ATTACK_DECLARATION_STEP):
-		if(field.attacker_card):
-			phase_index = 5
-		else:
-			phase_index = 7
-		_enter_phase(phases[phase_index])
-		return
-		
-	if(phases[phase_index] == GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP):
-		phase_index = 3
-		_enter_phase(phases[phase_index])
-		return
-	
+	# Advance to the next phase. Called by priority() when both players pass
+	# on an empty stack, and by phases that don't use priority.
+	match phases[phase_index]:
+		GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
+			# If no attacker was declared, skip the remaining combat steps.
+			if field.attacker_card:
+				phase_index = 5  # BLOCKER_DECLARATION_STEP
+			else:
+				phase_index = 7  # SECOND_MAIN_PHASE
+			_enter_phase(phases[phase_index])
+			return
+		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
+			# Loop back to attack preparation so the turn player can declare
+			# additional attackers (FF-style combat loop).
+			phase_index = 3  # ATTACK_PREPARATION_STEP
+			_enter_phase(phases[phase_index])
+			return
+
 	phase_index += 1
 	if phase_index >= phases.size():
 		phase_index = 0
-		# Switch turn player here
+		# TODO: set turn_owner = 3 - turn_owner once the opponent turn
+		# (untap/draw/AI) is implemented.
 		print("Turn completed")
-	
+
 	# Enter new phase
 	_enter_phase(phases[phase_index])
 
@@ -295,6 +346,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 		GlobalVariables.Phase.DRAW_PHASE:
 			var card = deck.deck_cards.pop_front()
 			hand.draw(card)
+			next_phase()
 		GlobalVariables.Phase.FIRST_MAIN_PHASE:
 			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
 			await priority()
@@ -336,38 +388,57 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			await priority()
 			pass
 		GlobalVariables.Phase.END_PHASE:
-			field.turn_end_reset()
+			# End Phase cleanup: all accumulated damage is removed and
+			# "until end of turn" effects expire.
+			# NOTE: there is no end-of-turn priority window yet, so cleanup
+			# runs immediately on entering the phase. Once end-of-turn
+			# auto-abilities exist, a priority round must run first.
+			field.end_phase_cleanup()
 			next_phase()
 			pass
 	
-func priority():
-	#GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.INSTANT_SPEED_TIME)
-	GlobalVariables.set_priority_holder(1)
-	var beginning_stack_len = stack.stack_length()
-	assistant.show_pass_priority_button()
-	print('qqqqqqcc')
-	await assistant.pressed_pass_priority
-	print(beginning_stack_len, stack.stack_length(), 'aksakask')
-	if(stack.stack_length() > beginning_stack_len):
-		priority()
-		print('xcxcxccc')
+func priority() -> void:
+	# Only one priority round may run at a time. Extra requests (e.g. from
+	# Stack.request_priority while a round is already running) are no-ops;
+	# the running loop detects the stack growth and restarts the round.
+	if _priority_lock:
 		return
-	print('aaaacccc')
-	GlobalVariables.set_priority_holder(2)
-	beginning_stack_len = stack.stack_length()
-	await MOCK_opponent_pass_piority()
-	print('aaaa')
-	#await assistant.opponent_passed_priority
-	if(stack.stack_length() > beginning_stack_len):
-		print('aaaaasasasas')
-		priority()
-		return
-	if(stack.stack_length() > 0):
-		stack.resolve_top_effect()
-	else:
-		next_phase()
-		pass
-	#if both pass priority go to next phase!!!
+	_priority_lock = true
+
+	while true:
+		# Each round, both players get priority: turn owner first. If the
+		# stack grows while someone has priority, the round restarts so the
+		# new effect can be responded to.
+		var stack_len_at_round_start: int = stack.stack_length()
+		var both_passed := true
+
+		for holder in [turn_owner, 3 - turn_owner]:
+			GlobalVariables.set_priority_holder(holder)
+			if holder == 1:
+				assistant.show_pass_priority_button()
+				await assistant.pressed_pass_priority
+			else:
+				await MOCK_opponent_pass_piority()
+
+			if stack.stack_length() > stack_len_at_round_start:
+				both_passed = false
+				break
+
+		if not both_passed:
+			continue
+
+		if stack.stack_length() > 0:
+			# Resolve the top effect. The call may await an interactive modal
+			# (e.g. Auron's "may play a Backup" choice at resolution).
+			await stack.resolve_top_effect()
+			continue
+
+		break
+
+	# Release the lock before advancing so the next phase can start its own
+	# priority round.
+	_priority_lock = false
+	next_phase()
 
 func _exit_phase(phase_name: String):
 	match phase_name:
@@ -377,20 +448,45 @@ func _exit_phase(phase_name: String):
 func MOCK_opponent_pass_piority():
 	await get_tree().create_timer(0.5).timeout
 
-func enforce_game_state_rules():
-	var breakable_cards = field.get_breakable_cards()
-	print(breakable_cards,'lala')
-	for card in breakable_cards:
+func enforce_game_state_rules() -> void:
+	# State-based actions, checked after any damage/power change.
+	# 1) Power reduced to 0 (or less): the card is put into the Graveyard.
+	#    This is NOT a break, so "when put into the Break Zone" effects do
+	#    not trigger. (Break Zone and Graveyard share a container here, but
+	#    the removal events are distinct.)
+	for card in field.get_zero_power_cards():
+		put_card_into_graveyard(card)
+	# 2) Accumulated damage greater than current power: the card is broken.
+	for card in field.get_breakable_cards():
 		break_card(card)
 
-func break_card(card:Card):
-	if not 'unbreakable' in card.status_effects:
-		card.untap()
-		field.remove_card(card)
-		if card.controller == "player":
-			player_graveyard.add_card(card)
-		else:
-			opponent_graveyard.add_card(card)
+func _send_card_to_graveyard(card: Card) -> void:
+	if card.controller == "player":
+		player_graveyard.add_card(card)
+	else:
+		opponent_graveyard.add_card(card)
+
+func put_card_into_graveyard(card: Card) -> void:
+	# Removal that is not a break (e.g. power reduced to 0). No break-zone
+	# triggers fire and the "unbreakable" status does not apply.
+	if not card.is_on_field():
+		return
+	card.untap()
+	field.remove_card(card)
+	_send_card_to_graveyard(card)
+
+func break_card(card: Card):
+	if not card.is_on_field():
+		return
+	if 'unbreakable' in card.status_effects:
+		return
+	# Trigger "when this card is put from the field into the break zone"
+	# effects before the card leaves the field.
+	if card.is_key_word_in_card_effect("when_enter_break_from_field"):
+		field.execute_card_effect(card, "when_enter_break_from_field")
+	card.untap()
+	field.remove_card(card)
+	_send_card_to_graveyard(card)
 
 func pop_stack():
 	var card = stack.pop_stack()
@@ -426,18 +522,79 @@ static func phase_to_string(phase):
 	
 
 func _on_stack_execute_card_effect(card: Card) -> void:
+	# Resolution may await an interactive modal (e.g. Auron's "may play a
+	# Backup" choice). Stack.resolve_top_effect() waits for our
+	# _mark_resolution_complete() signal at the end of this function.
 	var instructions = card.get_card_effect_instructions()
 	var target = card.effect_target
-	_current_source_card = card.effect_source
+	_current_source_card = card.effect_source if card.effect_source != null else card
 	_current_controller = card.controller
 	_targets = [target]
+
+	# Triggered "may" abilities resolve NOW: open the choose-card modal and,
+	# if the player confirms, pass the chosen hand card to may_play_for_free.
+	for instruction in instructions:
+		if instruction.action == "may_play_for_free" and instruction.value == null:
+			var chosen: Card = await _resolve_may_play_for_free(card, instruction)
+			if chosen == null:
+				instructions.erase(instruction)
+			else:
+				instruction.value = chosen
+			break
+
 	_execute_instructions(instructions)
-	card.queue_free()
-	priority()
-	pass # Replace with function body.
+
+	if card.effect_source == null:
+		# A real card cast from hand (Summon) resolves to its controller's
+		# graveyard instead of being freed.
+		if card.controller == "player":
+			player_graveyard.add_card(card)
+		else:
+			opponent_graveyard.add_card(card)
+	else:
+		# Stack copy (triggered ability / skill proxy): discard after use.
+		card.queue_free()
+
+	stack._mark_resolution_complete()
+
+func _resolve_may_play_for_free(effect_card: Card, instruction: Instruction) -> Card:
+	# Opens the choose-card-in-hand modal (Play card / Don't play card).
+	# Returns the chosen card, or null when declined / no legal card exists.
+	var criteria: Dictionary = _get_trigger_choose_card_criteria(effect_card)
+	if criteria.is_empty() or not hand.has_card_matching_criteria(criteria):
+		return null
+
+	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	hand.begin_choose_card(criteria)
+	assistant.show_choose_card_buttons()
+
+	var play: bool = await assistant.choose_card_finished
+	var chosen: Card = hand.selected_card_for_effect
+
+	hand.end_choose_card()
+	assistant.hide_buttons()
+	GlobalVariables.reset_to_default_phase_player_mode()
+	assistant.show_pass_priority_button()
+
+	if play and chosen != null:
+		return chosen
+	return null
+
+func _get_trigger_choose_card_criteria(effect_card: Card) -> Dictionary:
+	var keyword: String = effect_card.key_word_effect
+	if keyword.is_empty() or not effect_card.card_effects.has(keyword):
+		return {}
+	var entry = effect_card.card_effects[keyword]
+	if entry is Array and entry.size() > 0:
+		return entry[0].get("choose_card", {})
+	if entry is Dictionary:
+		return entry.get("choose_card", {})
+	return {}
 
 
 func _on_stack_request_priority() -> void:
+	# Guarded by _priority_lock: if a round is already running, this is a
+	# no-op and the running loop picks up the new stack item.
 	priority()
 
 
@@ -447,10 +604,7 @@ func _on_assistant_pressed_next_phase() -> void:
 
 
 func _on_field_attacker_changed() -> void:
-	
-	if(field.attacker_card != null):
-		print(field.attacker_card.card_name,'andre')
+	if field.attacker_card != null:
 		assistant.set_declare_attack_button('Attack')
 	else:
 		assistant.set_declare_attack_button('No Attack')
-	pass # Replace with function body.

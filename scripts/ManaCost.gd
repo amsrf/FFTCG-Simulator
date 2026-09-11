@@ -78,7 +78,7 @@ func contains(other: ManaCost) -> bool:
 
 # Optional: Pretty-print the cost
 func _to_string() -> String:
-	var parts := []
+	var parts: Array = []
 	for key in cost:
 		if cost[key] > 0:
 			parts.append("%d %s" % [cost[key], key])

@@ -1,4 +1,12 @@
-{
+{   
+	"1":{
+		"when_cause_damage_to_player":[
+			{
+				"instructions":[{"name":"may_play_for_free", "author":"player"}],
+				"choose_card":{"is_type":"Backup", "is_element":"Fire"}
+			}
+		]
+	},
 	"3":{
 		"skill": [
 			{
@@ -10,6 +18,13 @@
 				"choose_target":{"is_type":"Forward"}
 			}
 		]
+	},
+	"4":{
+		"when_cast":
+			{
+				"instructions":[{"name":"suffer_damage", "author":"target", "argument":[4000]}],
+				"choose_target":{"is_type":"Forward"}
+			}
 	},
 	"6":{
 		"when_attack": 
@@ -25,7 +40,30 @@
 				"instructions":[{"name":"take_damage", "author":"target", "argument":[2000]}],
 				"tap":true,
 				"choose_target":{"is_type":"Forward", "is_cost_lower_than":3},
-				"cost": {"火": 1, "neutral":1},
+				"cost": {"火": 1, "neutral":1}
+			}
+		]
+	},
+	"12":{
+		"when_enter_field":
+			{
+				"instructions":[{"name":"suffer_damage", "author":"target", "argument":[2000]}],
+				"choose_target":{"is_type":"Forward", "check_controller":"opponent"}
+			},
+		"conditional_power":[
+			{
+				"condition":{"check_controller":"player", "is_named":"Aerith"},
+				"value":2000
+			}
+		]
+	},
+	"64":{
+		"skill":[
+			{
+				"s_cost":true,
+				"tap":true,
+				"cost":{},
+				"instructions":[]
 			}
 		]
 	},
@@ -60,5 +98,12 @@
 			{
 				"instructions":[{"name":"damage_player", "author":"game"}]
 			}
+	},
+	
+	"71":{
+		"cannot_be_chosen":{
+			"sources":["Summon", "Ability"],
+			"controller":"opponent"
+		}
 	}
 }

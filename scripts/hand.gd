@@ -6,6 +6,9 @@ const CARD_CHARGE = 2
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
+## "Choose a card in hand" state (triggered "may" abilities such as Auron).
+var choose_card_criteria: Dictionary = {}
+var selected_card_for_effect: Card = null
 var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
 var charging_card
@@ -13,6 +16,7 @@ var start_x;
 var grabbed_card_index = 0;
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
+signal effect_card_selection_changed(has_selection: bool)
 @onready var graveyard: Node = get_parent().get_node("Graveyard")
 @onready var stack: Stack = get_tree().current_scene.get_node("Stack") as Stack
 @onready var field: Field = get_tree().current_scene.get_node("Field") as Field
@@ -58,9 +62,9 @@ func add_card_to_tree(card):
 	cards.append(card)
 	card.index = cards.size()-1
 	var area = card.get_node("CardArea3D")
-	if area.has_signal("card_released"):
+	if area.has_signal("card_released") and not area.card_released.is_connected(Callable(self, "_on_card_released")):
 		area.connect("card_released", Callable(self, "_on_card_released"))
-	if card.has_signal("card_dragged"):
+	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
 	# Store the card's global transform before reparenting
 	
@@ -136,9 +140,80 @@ func remove_card(card):
 	
 						
 func charge(card):
+	if card.type == 'Summon':
+		# Summons cannot be cast unless a legal target exists (when the card
+		# requires one). The card leaves the hand and is parked on the stack
+		# visually, but it only legally enters the stack after the cost is
+		# paid and the target is confirmed.
+		var criteria: Dictionary = card.get_cast_target_criteria()
+		if not criteria.is_empty() and not field.has_viable_target(criteria, card, "Summon"):
+			push_error("No viable target for %s" % card.card_name)
+			return
+		remove_card(card)
+		charging_card = card
+		charge_start.emit(card)
+		return
 	remove_card(card)
 	charge_start.emit(card)
 	charging_card = card #keep reference
+
+func finish_summon_cast(card: Card) -> void:
+	# The summon left the hand when the cast began and has been parked on
+	# the stack; committing it only clears the hand reference.
+	if charging_card == card:
+		charging_card = null
+
+func cancel_summon_cast() -> void:
+	# Return the parked summon to the hand. Nothing was paid or tapped.
+	if charging_card != null and charging_card.get_parent() == stack:
+		add_card(charging_card)
+	charging_card = null
+
+func has_card_matching_criteria(criteria: Dictionary) -> bool:
+	for card in cards:
+		if card.matches_criteria(criteria):
+			return true
+	return false
+
+func begin_choose_card(criteria: Dictionary) -> void:
+	clear_effect_card_selection()
+	choose_card_criteria = criteria
+	selected_card_for_effect = null
+
+func end_choose_card() -> void:
+	clear_effect_card_selection()
+	choose_card_criteria = {}
+	selected_card_for_effect = null
+
+func clear_effect_card_selection() -> void:
+	if selected_card_for_effect != null and selected_card_for_effect.crystal_instance != null:
+		selected_card_for_effect.crystal_instance.queue_free()
+		selected_card_for_effect.crystal_instance = null
+
+func toggle_effect_card_selection(card: Card) -> void:
+	# Single selection: picking another card unselects the previous one.
+	if selected_card_for_effect == card:
+		clear_effect_card_selection()
+		selected_card_for_effect = null
+	else:
+		clear_effect_card_selection()
+		selected_card_for_effect = card
+		if card.crystal_scene != null:
+			card.crystal_instance = card.crystal_scene.instantiate()
+			card.add_child(card.crystal_instance)
+			card.crystal_instance.position = Vector3(0, 0.05, -0.35)
+	effect_card_selection_changed.emit(selected_card_for_effect != null)
+
+func remove_card_for_free_play(card: Card) -> void:
+	# Used by "may play for free" resolution: the chosen card leaves the hand.
+	cards.erase(card)
+	update_card_positions()
+
+func discard_card(card: Card) -> void:
+	# Special ability (S) cost: the chosen card goes from hand to the break zone.
+	cards.erase(card)
+	graveyard.add_card(card)
+	update_card_positions()
 	
 func send_selected_cards_to_graveyard():
 	cards = cards.filter(func(item): return not selected_cards_for_mana_conversion.has(item))
@@ -149,6 +224,10 @@ func send_selected_cards_to_graveyard():
 	
 
 func add_card_to_mana_conversion(card:Card):
+	# A card being cast (e.g. a Summon awaiting payment) cannot be used as
+	# its own mana payment.
+	if card == charging_card:
+		return
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)
 	selected_cards_for_mana_has_changed.emit(2,card.element)
@@ -167,11 +246,13 @@ func animate_card(card, target_position):
 
 
 func _on_assistant_charge_complete() -> void:
-	if stack.skill_mana_deferred_until_target_confirm:
+	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
 		return
 	send_selected_cards_to_graveyard()
 	selected_cards_for_mana_conversion = []
-	charging_card = null
+	# A summon being cast stays referenced until targeting is resolved.
+	if stack.summon_casting_card == null:
+		charging_card = null
 	update_card_positions()
 
 func apply_deferred_skill_mana_payment() -> void:

@@ -12,7 +12,10 @@ var original_position: Vector3
 var code: String
 @export var power: int
 @export var base_power: int
-@export var life: int
+## Damage the card has accumulated this turn. The card breaks once this
+## reaches its current power; it is reset to 0 during the End Phase. (Replaces
+## the old "life" counter, which counted down from power.)
+@export var accumulated_damage: int = 0
 var crystal_scene
 var crystal_instance
 var current_state
@@ -39,6 +42,12 @@ var mat: ShaderMaterial
 @export var effect_source: Card
 ## Index into card_effects["skill"] for stack copies activating a skill (-1 = not used).
 @export var skill_activation_index: int = -1
+## "Summon" / "Ability" for stack copies; empty on real cards. Lets protection
+## rules ("cannot be chosen by opponent's Summons or abilities") identify the
+## source of a targeting effect.
+@export var effect_kind: String = ""
+## Power currently granted by conditional continuous effects (e.g. Zack/Aerith).
+var current_conditional_bonus: int = 0
 
 @onready var hand_mesh: MeshInstance3D = $HandMesh
 @onready var field_mesh: MeshInstance3D = $FieldMesh
@@ -52,7 +61,7 @@ var original_basis: Basis
 var debug_step: int = 0
 var debug_log: Array = []
 
-@onready var powerLife: Label3D =  $PowerDisplay
+@onready var power_label: Label3D =  $PowerDisplay
 signal card_dragged(card)
 signal focus_card(card)
 signal execute_instructions(instructions)
@@ -92,7 +101,7 @@ func load_card_data():
 		cost = int(card_data.get("cost", 0))
 		code = card_data.get("code", "Unknown")
 		text = card_data.get("text_en", "invalid")
-		life = base_power
+		accumulated_damage = 0
 		element = card_data.get("element",'invalid')[0]
 		
 	else:
@@ -162,7 +171,7 @@ func _get_mouse_3d_position_on_card_plane() -> Vector3:
 	
 func scale_card(target_scale: Vector3):
 	# Use a Tween for smooth scaling
-	var tween = create_tween()
+	tween = create_tween()
 	tween.tween_property(self, "transform:basis", Basis().scaled(target_scale), 0.05) 
 
 
@@ -223,19 +232,8 @@ func can_be_played():
 	
 func show_actions():
 	hide_actions()
-	if(not tapped and type == 'Forward'):
-		var card_button_scene = preload("res://card_button.tscn")
-		var card_button = card_button_scene.instantiate()
-		action_buttons.append(card_button)
-		
-		card_button.position = Vector3(0.5, 0.1, -0.25)
-		card_button.rotation_degrees = Vector3(0, 180, 0)
-		card_button.set_on_press_callback(func(): 
-			attack()
-			hide_actions()
-		)
-		
-		add_child(card_button)
+	# Only activated abilities get buttons here. Attacking is handled by the
+	# ATTACK_DECLARATION_STEP flow (FieldCardState), not by card buttons.
 	if "skill" in card_effects:
 		var si := 0
 		for skill in card_effects["skill"]:
@@ -266,13 +264,13 @@ func hide_actions():
 	action_buttons = []
 	
 func showPower():
-	if(powerLife == null):
+	if(power_label == null):
 		return
 	if(type == 'Forward'):
-		powerLife.visible = true
+		power_label.visible = true
 		mat.set_shader_parameter("effect_enabled", true)
 	else:
-		powerLife.visible = false
+		power_label.visible = false
 		
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -90.0
@@ -326,33 +324,73 @@ func untap():
 	print("  position: ", position)
 # Call this before/after animations	'''
 	
-func suffer_damage(damage):
-	life =  max(life - damage,0)
+func suffer_damage(damage: int):
+	# Damage accumulates; the card breaks once the total reaches its current
+	# power (enforced by Game.enforce_game_state_rules()).
+	accumulated_damage += damage
+	if power_label:
+		power_label.changeAccumulatedDamage(accumulated_damage)
 
-func take_damage(damage):
-	life =  max(life - damage,0)
-	
+func take_damage(damage: int):
+	# Alias kept for effect data that uses the "take_damage" instruction.
+	suffer_damage(damage)
+
+func is_broken() -> bool:
+	# Break rule: accumulated damage equal to or greater than current power.
+	return accumulated_damage >= power
+
+func has_zero_power() -> bool:
+	# Power of 0 or less is NOT a break: the card is put into the Graveyard.
+	return power <= 0
+
+func clear_damage():
+	# End Phase cleanup: all damage is removed from the card.
+	accumulated_damage = 0
+	if power_label:
+		power_label.changeAccumulatedDamage(0)
+
 func add_status_effect(status,duration):
 	status_effects[status] = duration
 	
 func turn_end():
-	for s in status_effects:
-		status_effects[s] -= 1
-		if(status_effects[s] == 0):
-			status_effects.erase(s)
+	# End Phase cleanup for this card: expire "until end of turn" status
+	# effects and temporary power modifiers, then remove all damage.
+	for s in status_effects.keys():
+		var dur = status_effects[s]
+		if dur is int:
+			dur -= 1
+			if dur <= 0:
+				status_effects.erase(s)
+			else:
+				status_effects[s] = dur
+
+	var remaining_buffs: Array = []
 	for p in power_array:
-		p[1] -= 1
-		if p[1] == 0:
-			power -= p[0]
-	powerLife.changePower(power)
-	power_array.filter(func(x): return x[1] > 0)
-	life = base_power
+		var dur = p[1]
+		if dur is int and dur > 0:
+			dur -= 1
+			if dur > 0:
+				p[1] = dur
+				remaining_buffs.append(p)
+			else:
+				power -= p[0]
+		else:
+			# Permanent modifiers (aura: duration -1 or null) never expire.
+			remaining_buffs.append(p)
+	power_array = remaining_buffs
+	if power_label:
+		power_label.changePower(power)
+	clear_damage()
 	
 			
-func power_change(amount,duration):
-	power_array.append([amount,duration])
+func power_change(amount, duration):
+	# duration < 0 (or null) means permanent (used by auras).
+	if duration == null:
+		duration = -1
+	power_array.append([amount, duration])
 	power += amount
-	powerLife.changePower(power)
+	if power_label:
+		power_label.changePower(power)
 	
 func get_card_effect_instructions() -> Array[Instruction]:
 	if key_word_effect == "skill" and skill_activation_index >= 0:
@@ -384,7 +422,7 @@ func declare_blocker():
 		Instruction.new('set_blocker','game', self),
 		Instruction.new('clash_attacker_blocker','game'),
 	]
-	emit_signal("execute_instructions",instructions,self)
+	emit_signal("execute_instructions", instructions)
 
 func can_attack():
 	if(tapped):
@@ -398,6 +436,17 @@ func attack():
 	
 func get_cost() -> Dictionary:
 	return {element:1, "neutral":cost-1}
+
+func get_cast_target_criteria() -> Dictionary:
+	# Targeting requirement for casting (Summons use "when_cast").
+	if "when_cast" in card_effects:
+		var entry = card_effects["when_cast"]
+		if entry is Dictionary and entry.has("choose_target"):
+			var criteria = entry["choose_target"]
+			if criteria is Dictionary:
+				return criteria
+	return {}
+
 func reset():
 	crystal_instance.queue_free()
 
@@ -426,7 +475,77 @@ func set_target(value):
 func is_type(ntype:String) -> bool:
 	return self.type == ntype
 
-func is_tapped(_args: Array) -> bool:
+func is_cost_lower_than(value: int) -> bool:
+	return cost < value
+
+func is_named(value: String) -> bool:
+	# Card-name condition (e.g. "if you control a card named Aerith").
+	return card_name == value
+
+const ELEMENT_NAMES = {
+	"Fire": "火",
+	"Ice": "氷",
+	"Wind": "風",
+	"Earth": "土",
+	"Lightning": "雷",
+	"Water": "水",
+	"Light": "光",
+	"Dark": "闇",
+}
+
+func is_element(value: String) -> bool:
+	# Accepts either the English element name ("Fire") or the game's
+	# single-character element code ("火").
+	if element == value:
+		return true
+	return ELEMENT_NAMES.get(value, "") == element
+
+func matches_criteria(criteria: Dictionary) -> bool:
+	# Criteria keys are method names on Card (is_type, is_element, ...).
+	for key in criteria:
+		var method_name = key
+		if not has_method(method_name):
+			push_error("Criteria method not found on Card: %s" % method_name)
+			return false
+		var method_args = [criteria[key]]
+		if not callv(method_name, method_args):
+			return false
+	return true
+
+func get_effect_kind() -> String:
+	# Targeting-source kind for protection checks: "Summon" or "Ability".
+	# Explicit effect_kind wins; otherwise derive from the card itself.
+	if effect_kind != "":
+		return effect_kind
+	if type == "Summon":
+		return "Summon"
+	if is_effect_card():
+		return "Ability"
+	return ""
+
+func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
+	# Protection rules (e.g. Zidane: "cannot be chosen by your opponent's
+	# Summons or abilities"). Unlike choose_target, these are evaluated against
+	# the SOURCE of the targeting effect, not against this card.
+	if source == null:
+		return true
+	if not card_effects.has("cannot_be_chosen"):
+		return true
+	var rule = card_effects["cannot_be_chosen"]
+	if not (rule is Dictionary):
+		return true
+	# "controller": "opponent" means the rule applies only to the other
+	# player's effects. Any other/absent value applies to every source.
+	var scope: String = str(rule.get("controller", ""))
+	if scope == "opponent" and source.controller == self.controller:
+		return true
+	var kind: String = source_kind if source_kind != "" else source.get_effect_kind()
+	var sources: Array = rule.get("sources", [])
+	if not sources.is_empty() and not (kind in sources):
+		return true
+	return false
+
+func is_tapped(_args = null) -> bool:
 	return self.tapped
 	
 func set_attacker_status(is_attacking: bool):
@@ -437,14 +556,18 @@ func set_attacker_status(is_attacking: bool):
 		status_effects.erase('attacking')
 		position.z -= 0.05
 	
-func check_controller(args: Array) -> bool:
-	return self.controller == args[0]
-	
+func check_controller(args) -> bool:
+	if args is Array:
+		return self.controller == args[0]
+	return self.controller == args
+
 func get_global_center():
 	return global_position + Vector3(0.2,0.3,0)
 	
-func is_effect_card():
-	return key_word_effect != null
+func is_effect_card() -> bool:
+	# Real cards cast from hand have an empty key_word_effect. Only stack
+	# copies (triggered abilities, skill proxies) are effect cards.
+	return key_word_effect != ""
 	
 func signal_target():
 	emit_signal('on_target',self)
