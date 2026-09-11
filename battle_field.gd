@@ -18,7 +18,10 @@ signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
 signal attacker_changed
 signal card_activated_ability(cost:Dictionary)
-@export var phase: GlobalVariables.Phase
+## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
+var phase: GlobalVariables.Phase:
+	get:
+		return get_parent().phase
 @export var selected_cards_for_mana_conversion: Array[Card] = []
 @onready var TargetScene = preload("res://target.tscn")
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
@@ -117,10 +120,10 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 	else:
 		card.position = target_position
 		card.scale = Vector3.ONE * 1.2
-		GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+		GlobalVariables.refresh_mode()
 	
 func _on_tween_finished(card: Card):
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+	GlobalVariables.refresh_mode()
 	#var instructions = card.create_instruction_from_json(card.card_effects['when_enter_field']['instructions'])
 	execute_card_effect(card,"when_enter_field")
 	#request_target_confirmation.emit()
@@ -186,7 +189,7 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 	if choose_target:
 		request_target(choose_target, src, true, "Ability")
 	else:
-		GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+		GlobalVariables.refresh_mode()
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
 	
 func execute_card_effect(card,keyword):
@@ -208,6 +211,12 @@ func get_all_cards_from_player():
 func untap_all_cards():
 	for card in get_all_cards_from_player():
 		card.untap()
+
+func untap_cards_for(controller_name: String) -> void:
+	# Active Phase untaps only the turn player's cards.
+	var cards: Array[Card] = (front_cards + back_cards) if controller_name == "player" else (opponent_front_cards + opponent_back_cards)
+	for card in cards:
+		card.untap()
 		
 func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
 	# Always start a targeting session fresh. Leftover target_card from a
@@ -220,7 +229,7 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 		arrow = null
 	reset_targets()
 	print("[Targeting] request_target source=%s criteria=%s" % [card.card_name, targeting_criteria])
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 	set_viable_targets(targeting_criteria, card, source_kind)
 	var ballistic_arrow = ballistic_arrow_scene.instantiate()
 	arrow = ballistic_arrow
@@ -399,7 +408,8 @@ func _on_assistant_target_cancel() -> void:
 		arrow.queue_free()
 		arrow = null
 	reset_targets()
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+	# NOTE: the TARGET modal is popped by Assistant.on_target_cancel() /
+	# on_target_complete(), which owns the modal it opened. Don't pop here too.
 
 
 func _on_stack_execute_card_effect(card: Card) -> void:
@@ -412,8 +422,3 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	source_card = null
 	targeting_allow_cancel = false
 	reset_targets()
-
-
-func _on_game_phase_change(new_phase: GlobalVariables.Phase) -> void:
-	phase = new_phase	
-	pass # Replace with function body.

@@ -15,13 +15,14 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="FF"
-run/main_scene="res://game.tscn"
+run/main_scene="res://main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
 CardDatabase="*res://scripts/CardDatabase.gd"
 GlobalVariables="*res://scripts/GlobalVariables.gd"
+MatchSetup="*res://scripts/match_setup.gd"
 
 [display]
 

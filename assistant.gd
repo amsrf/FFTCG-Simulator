@@ -167,25 +167,29 @@ func reset_buttons():
 	mana_acc = MANA_ZERO.duplicate()
 	mana_cost = MANA_ZERO.duplicate()
 	hide_buttons()
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
 
 func clear_payment_accumulator():
 	mana_acc = MANA_ZERO.duplicate()
 
 func on_charge_complete():
+	# Payment finished: closing the modal reveals the phase's base mode again.
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	reset_buttons()
 	charge_complete.emit()
 
 func on_charge_cancelled():
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	reset_buttons()
 	charge_cancelled.emit()
 
 func on_target_complete():
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
 	reset_buttons()
 	target_complete.emit()
 
 func on_target_cancel():
 	target_cancel.emit()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
 	reset_buttons()
 
 func _on_hand_charge_start(card: Card) -> void:
@@ -194,7 +198,7 @@ func _on_hand_charge_start(card: Card) -> void:
 		func(): on_charge_complete(),
 		func(): on_charge_cancelled(),
 		false, true)
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.PAYING_COST)
 
 func _on_field_card_activated_ability(cost: Dictionary) -> void:
 	mana_cost = cost
@@ -202,7 +206,7 @@ func _on_field_card_activated_ability(cost: Dictionary) -> void:
 		func(): on_charge_complete(),
 		func(): on_charge_cancelled(),
 		can_pay_cost(), true)
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.PAYING_COST)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.PAYING_COST)
 
 func _on_hand_selected_cards_for_mana_has_changed(amount: int, element: String) -> void:
 	mana_acc[element] += amount

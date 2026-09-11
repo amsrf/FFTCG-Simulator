@@ -27,69 +27,88 @@ var _targets = []
 ## Re-entrancy guard: true while a priority round is running. Prevents
 ## overlapping priority loops when Stack.request_priority fires mid-round.
 var _priority_lock: bool = false
+## Decision seams. The loop only calls these, so the human, the AI and (later) a
+## networked player are interchangeable. Assigned in start_match().
+var player_agent: Agent
+var opponent_agent: Agent
+## Match state. This is the single owner: `GlobalVariables` must not keep a
+## copy, and `Field.phase` just reads through to here.
+var phase: GlobalVariables.Phase
+var priority_holder: int = 0
 
 
 
 func _ready():
-	for i in range(5):
-		var card = create_card(i + 29, 'player')
-		hand.add_card(card)
-	var x = create_card(6, 'player')
-	hand.add_card(x)
-	# Debug: Aerith in hand for the Zack conditional-power test, plus a Wind
-	# mana source (Evoker) so her cost can actually be paid.
-	hand.add_card(create_card(64, 'player'))
-	hand.add_card(create_card(68, 'player'))
-	
-	
-	for i in range(5):
-		var card = create_card(i + 52, 'opponent')
-		opponent_hand.add_card(card)
+	start_match(MatchSetup.resolve_config())
 
-	var deck_cards = []
-	for i in range(50):
-		deck_cards.append(create_card(i + 1, 'player'))
-	deck.add_cards(deck_cards)
-	
-	deck_cards = []
-	for i in range(50):
-		deck_cards.append(create_card(i + 51, 'opponent'))
-	opponent_deck.add_cards(deck_cards)
-	
-	var opponent_cards = [
-		{"id": 41, "tapped": false},
-		{"id": 32, "tapped": true},
-		{"id": 31, "tapped": false},
-		# Zidane 1-071L: protection test target on the opponent's field.
-		{"id": 71, "tapped": false}
-	]
-	
-	var my_cards = [
-		{"id": 12, "tapped": false},
-		{"id": 41, "tapped": false},
-		{"id": 32, "tapped": true},
-		{"id": 31, "tapped": false},
-		{"id": 3, "tapped": false},
-	]
-	
-	for card_data in opponent_cards:
-		var card = create_card(card_data.id, 'opponent')
+func start_match(config: Dictionary) -> void:
+	# Everything a match needs comes from its config (see MatchSetup presets);
+	# the same scene serves the menu, the practice board, and future self-play.
+	priority_holder = 0
+
+	player_agent = LocalAgent.new()
+	player_agent.bind(self)
+	match str(config.get("opponent_type", "mock")):
+		"ai":
+			opponent_agent = AIAgent.new()
+		_:
+			opponent_agent = MockAgent.new()
+	opponent_agent.bind(self)
+
+	for id in config.get("player_hand", []):
+		hand.add_card(create_card(int(id), 'player'))
+	for id in config.get("opponent_hand", []):
+		opponent_hand.add_card(create_card(int(id), 'opponent'))
+
+	var player_deck_cards := []
+	for id in config.get("player_deck", []):
+		player_deck_cards.append(create_card(int(id), 'player'))
+	deck.add_cards(player_deck_cards)
+
+	var opponent_deck_cards := []
+	for id in config.get("opponent_deck", []):
+		opponent_deck_cards.append(create_card(int(id), 'opponent'))
+	opponent_deck.add_cards(opponent_deck_cards)
+
+	var opponent_field_cards: Array = config.get("opponent_field", [])
+	var player_field_cards: Array = config.get("player_field", [])
+	_place_field_cards(opponent_field_cards, true)
+	_place_field_cards(player_field_cards, false)
+
+	match str(config.get("first_phase", "first_main")):
+		"active":
+			phase_index = 0
+			_enter_phase(GlobalVariables.Phase.ACTIVE_PHASE)
+		_:
+			phase_index = 2
+			_enter_phase(GlobalVariables.Phase.FIRST_MAIN_PHASE)
+
+func controller_for(player_id: int) -> String:
+	return "player" if player_id == 1 else "opponent"
+
+func side_for(player_id: int) -> PlayerSide:
+	return player if player_id == 1 else opponent
+
+func agent_for(player_id: int) -> Agent:
+	return player_agent if player_id == 1 else opponent_agent
+
+func _place_field_cards(cards: Array, is_opponent: bool) -> void:
+	# Pre-placed board cards (practice preset). Empty for a standard match.
+	for card_data in cards:
+		var card = create_card(int(card_data.get("id", 0)), 'opponent' if is_opponent else 'player')
 		opponent_front_row_card.get_parent().add_child(card)
 		card.transform = opponent_front_row_card.transform
-		field.play_card(card, true, false)
-		if card_data.tapped:
+		field.play_card(card, is_opponent, false)
+		if card_data.get("tapped", false):
 			card.tap()
-	for card_data in my_cards:
-		var card = create_card(card_data.id, 'player')
-		opponent_front_row_card.get_parent().add_child(card)
-		card.transform = opponent_front_row_card.transform
-		field.play_card(card, false, false)
-		if card_data.tapped:
-			card.tap()
-	_enter_phase(GlobalVariables.Phase.FIRST_MAIN_PHASE)
-	phase_index = 2
 
 func _input(event):
+	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_ESCAPE:
+		# Only leave when nothing modal is mid-resolution, so we don't free the
+		# scene out from under a pending await.
+		var pm = GlobalVariables.get_player_mode()
+		if pm == GlobalVariables.Player_Mode.FREE or pm == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			MatchSetup.go_to_menu()
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_D:
 		var card = deck.deck_cards.pop_front()
 		hand.draw(card)
@@ -211,12 +230,12 @@ func check_target_requirements():
 		return true
 
 func request_target(targeting_criteria):
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.TARGET)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 	$Field.set_viable_targets(targeting_criteria, _current_source_card)
 	select_arrow.set_is_aiming(true, _current_source_card.global_position)
 
 func finish_target():
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
 	select_arrow.set_is_aiming(false)
 	$Field.reset_targets()
 	_process_next_instruction()
@@ -325,43 +344,55 @@ func next_phase():
 	phase_index += 1
 	if phase_index >= phases.size():
 		phase_index = 0
-		# TODO: set turn_owner = 3 - turn_owner once the opponent turn
-		# (untap/draw/AI) is implemented.
-		print("Turn completed")
+		# Hand the turn over. The new turn owner untaps and draws in ACTIVE/DRAW.
+		turn_owner = 3 - turn_owner
+		print("Turn completed — now P%s (%s)" % [turn_owner, controller_for(turn_owner)])
 
 	# Enter new phase
 	_enter_phase(phases[phase_index])
 
 func _enter_phase(phase_enum: GlobalVariables.Phase):
 	print("Entering: ", phase_enum) # This will print the integer value
-	GlobalVariables.set_phase(phase_enum)
-	$PhaseText.text = phase_to_string(phase_enum)
-	field.phase = phase_enum
+	# Phase is match state: Game owns it and derives the input mode's base from
+	# it, so every phase starts from its default (modals are pushed on top).
+	phase = phase_enum
+	GlobalVariables.set_base_mode(GlobalVariables.default_mode_for(phase_enum))
+	$PhaseText.text = "%s — P%s" % [phase_to_string(phase_enum), turn_owner]
 	
 	match phase_enum:
 		GlobalVariables.Phase.ACTIVE_PHASE:
-			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.NO_PRIORITY)
-			field.untap_all_cards()
+			field.untap_cards_for(controller_for(turn_owner))
 			next_phase()
 		GlobalVariables.Phase.DRAW_PHASE:
-			var card = deck.deck_cards.pop_front()
-			hand.draw(card)
+			var draw_deck = deck if turn_owner == 1 else opponent_deck
+			var draw_hand = hand if turn_owner == 1 else opponent_hand
+			if not draw_deck.deck_cards.is_empty():
+				draw_hand.draw(draw_deck.deck_cards.pop_front())
 			next_phase()
 		GlobalVariables.Phase.FIRST_MAIN_PHASE:
-			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.FREE)
 			await priority()
 			print('PASSED PRIORITY')
 			pass
 		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
-			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.INSTANT_SPEED_TIME)
 			await priority()
 			# Signal UI to enable attacker selection
 			pass
 		GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
-			GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.ATTACKING)
-			assistant.set_declare_attack_button('No Attack')
-			await assistant.advance_attack_declaration_step
-			if(field.attacker_card):
+			# Only the local human drives attacker selection through the UI; an
+			# AI/remote turn owner answers decide_attacker() instead. The mode is
+			# left at the phase default (INSTANT_SPEED_TIME) so the other
+			# player can still hold priority / respond.
+			var attacker_agent: Agent = agent_for(turn_owner)
+			var local_attack: bool = attacker_agent is LocalAgent
+			if local_attack:
+				GlobalVariables.push_modal(GlobalVariables.Player_Mode.ATTACKING)
+				assistant.set_declare_attack_button('No Attack')
+			var attacker: Card = await attacker_agent.decide_attacker(turn_owner)
+			if local_attack:
+				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.ATTACKING)
+			if attacker != null:
+				if field.attacker_card != attacker:
+					field.set_attacker(attacker)
 				field.execute_card_attack()
 			await priority()
 			#await declare_attacker()
@@ -370,8 +401,11 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			pass
 		GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
 			
-			await MOCK_opponent_pass_piority() # no blockers
-			#await declare_blocker
+			# The defender (not the turn owner) decides whether to block.
+			var defender_id: int = 3 - turn_owner
+			var blocker: Card = await agent_for(defender_id).decide_blocker(defender_id, field.attacker_card)
+			if blocker != null:
+				blocker.declare_blocker()
 			await priority()
 			pass
 		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
@@ -413,12 +447,8 @@ func priority() -> void:
 		var both_passed := true
 
 		for holder in [turn_owner, 3 - turn_owner]:
-			GlobalVariables.set_priority_holder(holder)
-			if holder == 1:
-				assistant.show_pass_priority_button()
-				await assistant.pressed_pass_priority
-			else:
-				await MOCK_opponent_pass_piority()
+			priority_holder = holder
+			await agent_for(holder).take_priority(holder)
 
 			if stack.stack_length() > stack_len_at_round_start:
 				both_passed = false
@@ -564,7 +594,7 @@ func _resolve_may_play_for_free(effect_card: Card, instruction: Instruction) -> 
 	if criteria.is_empty() or not hand.has_card_matching_criteria(criteria):
 		return null
 
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	hand.begin_choose_card(criteria)
 	assistant.show_choose_card_buttons()
 
@@ -573,7 +603,7 @@ func _resolve_may_play_for_free(effect_card: Card, instruction: Instruction) -> 
 
 	hand.end_choose_card()
 	assistant.hide_buttons()
-	GlobalVariables.reset_to_default_phase_player_mode()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	assistant.show_pass_priority_button()
 
 	if play and chosen != null:

@@ -80,7 +80,6 @@ func add_created_card_to_tree(card:Card):
 	add_child(card)
 	if(card.key_word_effect):
 		print("Adding effect to the stack")
-		#GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.INSTANT_SPEED_TIME)
 	card.global_transform = trans
 	
 func cast_card():
@@ -163,13 +162,13 @@ func begin_s_cost_selection(source: Card, skill_index: int) -> void:
 	if not hand.has_card_matching_criteria(criteria):
 		# Cannot pay the S cost: abort the whole activation.
 		_clear_skill_proxy()
-		GlobalVariables.reset_to_default_phase_player_mode()
+		GlobalVariables.refresh_mode()
 		assistant.show_pass_priority_button()
 		return
 	s_cost_active = true
 	s_cost_source = source
 	s_cost_skill_index = skill_index
-	GlobalVariables.set_player_mode(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	hand.begin_choose_card(criteria)
 	assistant.show_choose_card_buttons("Discard", "Cancel")
 
@@ -180,7 +179,7 @@ func _on_choose_card_finished(play: bool) -> void:
 	var chosen: Card = hand.selected_card_for_effect
 	hand.end_choose_card()
 	assistant.hide_buttons()
-	GlobalVariables.reset_to_default_phase_player_mode()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	assistant.show_pass_priority_button()
 
 	if not play or chosen == null:
@@ -323,7 +322,7 @@ func resolve_top_effect() -> void:
 		await resolution_complete
 	resolution_pending = false
 	if len(cards) == 0:
-		GlobalVariables.reset_to_default_phase_player_mode()
+		GlobalVariables.refresh_mode()
 	
 func process_next_effect():
 	await get_tree().create_timer(1.0).timeout

@@ -1,7 +1,7 @@
 # AGENTS.md — FF TCG Simulator (Repository Guidelines)
 
 Godot **4.7.2**, GDScript, GL Compatibility renderer. A 3D Final Fantasy TCG simulator.
-Main scene: `game.tscn`. Autoloads: `CardDatabase`, `GlobalVariables` (`scripts/GlobalVariables.gd`).
+Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `CardDatabase`, `GlobalVariables`, `MatchSetup` (`scripts/match_setup.gd`). A match is configured by `MatchSetup` before the scene change; `game.gd:_ready()` calls `start_match(MatchSetup.resolve_config())`, which falls back to the `debug` preset when `game.tscn` is run directly.
 
 ## Agent Rules (read first)
 
@@ -24,7 +24,7 @@ GODOT="/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stabl
 ```
 
 - Use the Godot **4.7.2** binary (nested inside a same-named folder under `~/Downloads`). `Godot_v4.4-stable_win64.exe` on the Desktop is the **wrong** version.
-- Success = output contains 0 `SCRIPT ERROR` / `Compile Error` lines and reaches `Entering: 2` (FIRST_MAIN_PHASE).
+- Success = 0 `SCRIPT ERROR` / `Compile Error` lines. Add `res://game.tscn` as a positional arg to boot straight into a match (uses the `debug` preset) and also expect `Entering: 2` (FIRST_MAIN_PHASE); the menu boot cannot reach it, since it waits for a button press.
 - Pre-existing harmless noise: `Condition "!is_inside_tree()" is true` spam and a `crystal.tscn` UID warning.
 - `--check-only --script <file>` is unreliable here: autoloads are absent, so it false-errors with `Identifier not found: CardDatabase / GlobalVariables`.
 
@@ -32,7 +32,10 @@ GODOT="/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stabl
 
 | Path | Responsibility |
 | --- | --- |
-| `scripts/game.gd` (root `Game`) | Phase machine (`phases`, `next_phase`, `_enter_phase`), priority loop (`priority()` + `_priority_lock`), instruction executor (`_execute_instructions` → `_process_next_instruction` → `_resolve_executor`), targeting flow, state-based actions (`enforce_game_state_rules`), controller damage. |
+| `scripts/main_menu.gd` + `main_menu.tscn` | Entry point. Builds the menu UI in code; starts a preset match via `MatchSetup.start_match()`. |
+| `scripts/match_setup.gd` (`MatchSetup` autoload) | Match config seam: presets (`standard`, `debug`), pending `config`, `start_match()` / `go_to_menu()` / `resolve_config()`. Future home of decklists, seed, opponent type. |
+| `scripts/agents/` (`Agent` + `LocalAgent` / `MockAgent` / `AIAgent`) | Decision seam for priority, attacker and blocker declarations. `Agent` is the abstract base (all methods coroutines via `_settle()`); chosen per side in `Game.start_match()`. |
+| `scripts/game.gd` (root `Game`) | Phase machine (`phases`, `next_phase`, `_enter_phase`), priority loop (`priority()` + `_priority_lock`), instruction executor (`_execute_instructions` → `_process_next_instruction` → `_resolve_executor`), targeting flow, state-based actions (`enforce_game_state_rules`), controller damage. `start_match(config)` builds the board; `agent_for()` / `controller_for()` / `side_for()` map player ids. |
 | `battle_field.gd` (`Field`) | Per-player front/back card arrays, `play_card()` + ETB, auras, conditional-power registry, targeting, break detection, `end_phase_cleanup()`. |
 | `stack.gd` (`Stack`) | Stack list + effect copies; skill/summon/S-cost flows. `resolve_top_effect()` awaits `resolution_complete`. |
 | `assistant.gd` (`Assistant`) | All modal UI via `show_modal()`; pass-priority button; mana accumulator + `can_pay_cost()`. |
@@ -48,7 +51,8 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 
 ## Rules Implemented
 
-- **Phases:** ACTIVE → DRAW → FIRST_MAIN → ATTACK_PREP → ATTACK_DECL → BLOCKER_DECL → DAMAGE_RES → (loop to ATTACK_PREP) → SECOND_MAIN → END. Opponent turn is **not** implemented (`turn_owner` never flips).
+- **Phases:** ACTIVE → DRAW → FIRST_MAIN → ATTACK_PREP → ATTACK_DECL → BLOCKER_DECL → DAMAGE_RES → (loop to ATTACK_PREP) → SECOND_MAIN → END. Turns **alternate** (`turn_owner = 3 - turn_owner` at end of turn); the turn owner untaps in ACTIVE and draws in DRAW. Both players get priority each round (turn owner first).
+- **Who acts is decided by the agent seam.** `Game.agent_for(player_id)` → `Agent` (`scripts/agents/`): `LocalAgent` (human UI), `MockAgent` (passes, never attacks/blocks), `AIAgent` (Phase 3 stub extending MockAgent). Chosen from `config["opponent_type"]`. The loop only calls `take_priority()`, `decide_attacker()`, `decide_blocker()` — targeting/mana/hand choices are still on the local UI path.
 - **Damage:** `Card.accumulated_damage` counts **up**. Break iff `accumulated_damage >= power` (equal damage breaks). `power <= 0` → put into Graveyard, which is **not** a break (no break triggers, `unbreakable` doesn't apply). End Phase cleanup resets all damage and expires "until end of turn" effects.
 - **Zones:** incoming damage → Damage Zone (cards off the deck); breaks/removals → Graveyard (= Break Zone).
 - **Effects are data-driven.** Keywords: `when_enter_field`, `when_attack`, `when_cast`, `when_cause_damage_to_player`, `when_enter_break_from_field`, `skill`, `aura`, `conditional_power`. An instruction is `{name: <action>, author: <executor>, argument}`; executors resolve in `Game._resolve_executor` (`card`, `target`, `game`, `player`, `opponent`, `field`, `hand`, `deck`, `assistant`).
@@ -66,12 +70,16 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 
 ## Gotchas
 
+- **State ownership:** match state (`phase`, `priority_holder`, `turn_owner`, `phase_index`) is owned by `Game` and must not be copied elsewhere. `Field.phase` is a read-through getter to `Game.phase`. `GlobalVariables` holds only local presentation state: hand-layout constants, the UI signals, and the input mode.
+- **Input mode is derived, never assigned.** `effective mode = top of modal stack OR base mode`. `Game._enter_phase()` calls `set_base_mode(default_mode_for(phase))`; modal flows call `push_modal(...)` / `pop_modal(...)` (`TARGET`, `PAYING_COST`, `CHOOSE_CARD_IN_HAND`, `ATTACKING`); `refresh_mode()` re-applies the layers without disturbing an open modal. There is deliberately **no `set_player_mode`** — don't reintroduce one.
+- **A modal is popped by the same layer that pushed it,** exactly once. Target cancel is driven by the `target_cancel` signal into Field *and* Stack, so only `Assistant.on_target_cancel()` / `on_target_complete()` pop `TARGET`.
 - Backups store `"power": "0"`, so zero-power/breakable scans must stay limited to `front_cards` (Forwards) — scanning all field cards deletes every Backup.
 - Opponent hand reuses `Hand.tscn`; behavior is gated by `controller`.
 - `Card.power_label` is `@onready` — null until the card enters the tree.
 - `END_PHASE` has no priority window: cleanup runs immediately, so end-of-turn auto-abilities can't resolve first yet.
 - `activated_ability` in `card_effects.json` is not wired (only `skill` is).
-- Intentionally kept dead code: `scripts/ManaCost.gd`, `Stack.process_next_effect()`, `Game.pop_stack()` / `Stack.pop_stack()`.
+- Intentionally kept dead code: `scripts/ManaCost.gd`, `Stack.process_next_effect()`, `Game.pop_stack()` / `Stack.pop_stack()`. Since Phase 2 these are also unused: `Game.MOCK_opponent_pass_piority()`, `Game.TEST_blocker()` / `pass_priority()`, `Field.untap_all_cards()`.
+- `LocalAgent.decide_attacker()` enables `Player_Mode.ATTACKING`; for a non-local turn owner the phase stays in `INSTANT_SPEED_TIME` on purpose — setting `NO_PRIORITY` there hides the pass button and deadlocks the priority loop.
 
 ## Changelog
 

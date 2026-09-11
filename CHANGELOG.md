@@ -6,6 +6,19 @@ All notable changes to the FF TCG Simulator project.
 
 ### Added
 
+#### Opponent Turns + Agent Seam (Phase 2)
+- `scripts/agents/agent.gd` (`Agent`) — decision seam: `take_priority()`, `decide_attacker()`, `decide_blocker()`. Base methods are coroutines (`_settle()`), so callers can `await` the seam uniformly for local, AI or future networked players.
+- `LocalAgent` (human: pass button + attacker clicks), `MockAgent` (passes after a delay, never attacks/blocks), `AIAgent` (Phase 3 stub extending `MockAgent`).
+- `Game.agent_for(player_id)` / `controller_for()` / `side_for()`; agents are bound in `start_match()` from `config["opponent_type"]` (`"mock"` default, `"ai"` supported).
+- `Field.untap_cards_for(controller)` — Active Phase now untaps only the turn player's cards.
+- Phase label shows the turn owner (`FIRST_MAIN_PHASE — P2`).
+
+#### Menu + Match Setup (Phase 1)
+- `main_menu.tscn` + `scripts/main_menu.gd` — entry point; UI built in code (Standard Match / Practice Board / Quit).
+- `scripts/match_setup.gd` autoload `MatchSetup` — presets (`standard`, `debug`), pending `config`, `start_match(preset, overrides)`, `go_to_menu()`, `resolve_config()`.
+- `Game.start_match(config)` — the hardcoded debug board moved out of `_ready()`; decks, hands, pre-placed field cards and the starting phase now come from config. Keys `opponent_type`, `seed` and `shuffle` are reserved for the AI/shuffle work.
+- `Esc` in a match returns to the menu (only while no modal is mid-resolution).
+
 #### Targeting Protection (Zidane 1-071L)
 - `Card.effect_kind` (`"Summon"` / `"Ability"`) set on stack copies (`stack.gd`: `_commit_summon_to_stack()`, `add_skill_activation_proxy()`, `create_card()`).
 - `Card.get_effect_kind()` — returns `effect_kind`, with a fallback derivation (`type == "Summon"` → Summon; any effect copy → Ability).
@@ -75,22 +88,29 @@ All notable changes to the FF TCG Simulator project.
 
 ### Changed
 
-- Debug setup in `scripts/game.gd`: Zack (12) is on the player's field at start; Aerith (64) and Evoker (68, Wind mana source) are in the opening hand for testing.
+- Debug setup is now the `debug` preset in `MatchSetup`: Zack (12) on the player's field; Aerith (64) and Evoker (68, Wind mana source) in the opening hand; Zidane (71) on the opponent's field for the protection test.
 - **Break rule rewritten.** A Forward breaks when its accumulated damage is equal to or greater than its current power. (An earlier revision of this change used strict "greater than", which wrongly let a Forward with damage exactly equal to its power survive — corrected to `>=`.)
 - **Power 0 is now a distinct removal event.** A Forward whose power reaches 0 or less is put into the Graveyard rather than "broken": `when_enter_break_from_field` does not trigger and `unbreakable` does not protect it. Both paths land in the existing Graveyard container (the Break Zone and Graveyard are the same zone in FF TCG), but the events are distinct.
 - **State-based actions run more often.** `enforce_game_state_rules()` is now called after effect instructions finish (`Game._process_next_instruction()`) and after `damage_forward()`, not only in a combat clash, so effect damage (e.g. Ifrit, Zack's ETB) can break a Forward.
 - **Card label text.** `power_display.gd` now shows `power/accumulated_damage` instead of `power/life`. `changeLife()` / `animate_life_change()` / `update_life_display()` renamed to `changeAccumulatedDamage()` / `animate_accumulated_damage_change()` / `update_accumulated_damage_display()`; `Card.powerLife` renamed to `Card.power_label`.
 - **End Phase cleanup.** `Field.end_phase_cleanup()` → `Card.turn_end()` removes all accumulated damage from every card on the field and expires "until end of turn" status effects / power modifiers. (Runs immediately on entering the phase; see Known Issues re: end-of-turn abilities.)
+- **Entry point.** `run/main_scene` is now `main_menu.tscn`; `game.tscn` is launched via `MatchSetup.start_match()`. Running `game.tscn` directly still works — it falls back to the `debug` preset.
+- **Turns alternate.** `next_phase()` flips `turn_owner` at end of turn; ACTIVE untaps the turn owner's cards (`Field.untap_cards_for()`) and DRAW draws for the turn owner (with an empty-deck guard). Both players get priority each round, turn owner first.
+- **Priority / attack / block go through the agent seam.** `priority()` calls `agent_for(holder).take_priority()`; ATTACK_DECLARATION asks the turn owner's agent; BLOCKER_DECLARATION asks the defender's agent. `MOCK_opponent_pass_piority()` and `TEST_blocker()` are no longer called.
+- **Non-local attack declaration keeps the phase's default `INSTANT_SPEED_TIME`** rather than forcing `NO_PRIORITY`, so the other player still gets the pass button (setting `NO_PRIORITY` hides it and hangs the priority loop).
+- **Single owner for match state (state refactor, step 1).** `Game` now owns `phase` and `priority_holder`; `GlobalVariables` keeps only the local input mode, the UI signals and the hand-layout constants, and `Field.phase` is a read-through getter to `Game.phase`. Removed `GlobalVariables.phase` / `priority_holder` / `set_phase()` / `set_priority_holder()` / `get_priority()`; replaced `phase_priority_map` with a const `PHASE_DEFAULT_MODE` + `default_mode_for()`; moved `reset_to_default_phase_player_mode()` to `Game`; deleted the unused `_on_game_phase_change()`; dropped the dead enum values `BLOCKED` and `PRIORITY`.
+- **Input mode is now derived from a modal stack (state refactor, step 2).** `player_mode = modal stack top OR base mode`, where the base comes from the current phase. Added `GlobalVariables.push_modal()` / `pop_modal()` / `refresh_mode()` / `set_base_mode()` / `has_modal()` / `modal_top()` and **deleted `set_player_mode()`** — nothing assigns the mode directly anymore. `TARGET`, `PAYING_COST`, `CHOOSE_CARD_IN_HAND` and `ATTACKING` are all pushed/popped by the flow that opens them, so closing a modal simply reveals the base again; `Game.reset_to_default_phase_player_mode()` is gone (its callers either pop their modal or call `refresh_mode()`), and `stack.gd` no longer reaches up to `get_parent()`. The redundant per-phase `set_player_mode()` lines in `_enter_phase` (ACTIVE / FIRST_MAIN / ATTACK_PREPARATION) were removed since they duplicated the phase default.
 
 ### Known Issues / Unfinished Work
 
+- **The opponent still can't play cards.** Turns alternate now, but the opponent only passes/never attacks — `take_priority()`, `decide_attacker()` and `decide_blocker()` are wired, while targeting, mana payment and hand choices are still on the local UI path. Routing those through `Agent` is what unlocks a real AI.
+- **Decks are not shuffled and there is no win condition.** `MatchSetup` carries `seed` / `shuffle` keys but neither is wired, and nothing detects a loss (7 damage or deck-out). Both are required before a real match; the seed is also needed for reproducible AI tests.
 - **Power-reduction effects do not re-check state-based actions yet.** A negative `power_change()` can drive a card to 0 power without `enforce_game_state_rules()` running immediately (it is picked up the next time instructions finish or a clash occurs). `Card` has no reference back to `Game`, so this needs a callback or a field-level check.
 - **`unbreakable` does not stop power-0 removal** — by design, since power 0 is not a break. (`card_effects.json` `"32"` is Chemist 1-032C, a 0-power Backup whose ETB grants `unbreakable` to a Forward.) Note that Backups store `"power": "0"` in the card database, so the zero-power / breakable scans deliberately look at `front_cards` only; scanning all cards would delete every Backup.
 - **End-of-turn abilities have no window before cleanup.** `END_PHASE` runs `Field.end_phase_cleanup()` immediately; there is no priority round for "at the end of the turn / until end of turn" auto-abilities to resolve first (as the real End Phase requires). Needs a priority window in `_enter_phase(END_PHASE)` once such abilities exist.
 - **Planet Protector's effect is not implemented.** Aerith's S-ability entry has an empty `instructions` array; the S + dull cost flow works, but activating all Forwards / protection from Summons and abilities is not scripted yet.
 - **`activated_ability` keyword is not wired.** Card 8 in `assets/card_effects.json` uses `activated_ability`, but the field flow only activates `"skill"`. Either rename the key to `"skill"` or extend `try_activate_from_field()`.
-- **Opponent turn switching is a TODO.** `next_phase()` prints "Turn completed" but does not flip `turn_owner`; opponent untap/draw/AI are not implemented.
-- **Legacy dead code remains:** `scripts/ManaCost.gd` (live path uses a plain Dictionary), `stack.process_next_effect()`, and `game.pop_stack()` / `stack.pop_stack()`. Kept intentionally in case they are unfinished work.
+- **Legacy dead code remains:** `scripts/ManaCost.gd` (live path uses a plain Dictionary), `stack.process_next_effect()`, and `game.pop_stack()` / `stack.pop_stack()`. Since Phase 2 these are also unused: `game.MOCK_opponent_pass_piority()`, `game.TEST_blocker()` / `pass_priority()`, `field.untap_all_cards()`. Kept intentionally in case they are unfinished work.
 - **`card_effects.json` coverage is still tiny** compared to the card database. The instruction system, choose-card system, conditional power, and S-cost data are ready for more entries.
 
 ## [Unreleased] — 2026-09-10
