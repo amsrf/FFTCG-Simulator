@@ -418,9 +418,10 @@ func is_key_word_in_card_effect(keyword:String):
 	
 		
 func declare_blocker():
+	# Only records the blocker. The clash belongs to DAMAGE_RESOLUTION — doing it
+	# here as well would apply the damage twice.
 	var instructions: Array[Instruction] = [
 		Instruction.new('set_blocker','game', self),
-		Instruction.new('clash_attacker_blocker','game'),
 	]
 	emit_signal("execute_instructions", instructions)
 
@@ -447,8 +448,23 @@ func get_cast_target_criteria() -> Dictionary:
 				return criteria
 	return {}
 
-func reset():
+## "Selected as a mana source" marker. Owned here so that every selection path —
+## the human's clicks and an agent paying a cost — produces the same marker.
+func show_mana_crystal() -> void:
+	if crystal_instance != null or crystal_scene == null:
+		return
+	crystal_instance = crystal_scene.instantiate()
+	add_child(crystal_instance)
+	crystal_instance.position = Vector3(0, 0.05, -0.35)
+
+func clear_mana_crystal() -> void:
+	if crystal_instance == null:
+		return
 	crystal_instance.queue_free()
+	crystal_instance = null
+
+func reset():
+	clear_mana_crystal()
 
 func _on_card_area_3d_card_released(_card: Variant) -> void:
 	if current_state :
@@ -554,6 +570,17 @@ func set_attacker_status(is_attacking: bool):
 		position.z += 0.05
 	else:
 		status_effects.erase('attacking')
+		position.z -= 0.05
+
+## Transient "selected as this combat's blocker" marker. Mirrors
+## set_attacker_status() but keeps its own status key, so being a blocker never
+## masquerades as being an attacker.
+func set_blocker_status(is_blocking: bool) -> void:
+	if(is_blocking):
+		status_effects['blocking'] = 1
+		position.z += 0.05
+	else:
+		status_effects.erase('blocking')
 		position.z -= 0.05
 	
 func check_controller(args) -> bool:

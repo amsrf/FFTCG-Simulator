@@ -14,7 +14,7 @@ extends Node3D
 @onready var opponent_damage_zone = $Opponent/DamageZone
 @onready var select_arrow: BallisticArrow  = $BallisticArrow
 @onready var assistant: Assistant = $Assistant
-@onready var card_scene = preload("res://Card.tscn")
+@onready var card_scene = preload("res://card.tscn")
 @onready var turn_owner = 1
 
 
@@ -34,6 +34,8 @@ var opponent_agent: Agent
 ## Match state. This is the single owner: `GlobalVariables` must not keep a
 ## copy, and `Field.phase` just reads through to here.
 var phase: GlobalVariables.Phase
+## Set when someone has won; stops the phase machine and sends us to the menu.
+var match_over: bool = false
 var priority_holder: int = 0
 
 
@@ -91,6 +93,31 @@ func side_for(player_id: int) -> PlayerSide:
 
 func agent_for(player_id: int) -> Agent:
 	return player_agent if player_id == 1 else opponent_agent
+
+func hand_for(player_id: int) -> Hand:
+	return hand if player_id == 1 else opponent_hand
+
+## Play `card` from `player_id`'s hand. The human finishes the payment by
+## clicking the payment modal; any other player pays through its agent.
+## Returns whether the cost ended up paid.
+func play_card_for(player_id: int, card: Card) -> bool:
+	var owner_hand: Hand = hand_for(player_id)
+	var agent: Agent = agent_for(player_id)
+	if owner_hand == null or card == null or agent == null:
+		return false
+	# charge() leaves the hand and emits charge_start: Stack parks the card and
+	# Assistant opens the payment modal + sets mana_cost from the card.
+	owner_hand.charge(card)
+	if agent is LocalAgent:
+		return true  # the human pays by selecting backups in the modal
+	# The human must never interact with another player's payment modal.
+	assistant.hide_buttons()
+	var paid: bool = await agent.pay_cost(player_id, assistant.mana_cost)
+	if paid:
+		assistant.on_charge_complete()
+	else:
+		assistant.on_charge_cancelled()
+	return paid
 
 func _place_field_cards(cards: Array, is_opponent: bool) -> void:
 	# Pre-placed board cards (practice preset). Empty for a standard match.
@@ -254,7 +281,9 @@ func _await_player_response():
 	return null
 
 func cause_damage():
-	opponent.take_damage(1)
+	# The DEFENDING player (whoever isn't taking the turn) takes the damage, so
+	# an opponent attack actually hurts the human.
+	side_for(3 - turn_owner).take_damage(1)
 	# Triggered auto-ability: "when this card deals damage to the opponent".
 	if field.attacker_card != null:
 		stack.begin_triggered_ability(field.attacker_card, "when_cause_damage_to_player")
@@ -266,8 +295,32 @@ func cause_damage_to_player(player_argument):
 	
 	
 func cause_attacking_damage():
-	if _current_blocker_card == null:
+	if field.blocker_card == null:
 		cause_damage()
+
+## A side took damage. Checking the threshold here means every damage source —
+## attacks and effects alike — shares one win condition.
+func _on_player_side_damaged(side: PlayerSide) -> void:
+	if match_over or not side.is_defeated():
+		return
+	# Compare against the node, like side_for(), so there is only one definition
+	# of which side is P1 (the exported `controller` must not be a second one).
+	_end_match(2 if side == player else 1)
+
+func _end_match(winner_id: int) -> void:
+	if match_over:
+		return
+	match_over = true
+	print("Match over — P%s wins" % winner_id)
+	if $PhaseText:
+		$PhaseText.text = "YOU WIN" if winner_id == 1 else "YOU LOSE"
+	assistant.hide_buttons()
+	# Let the result register, then hand control back to the menu.
+	_return_to_menu_after_delay()
+
+func _return_to_menu_after_delay() -> void:
+	await get_tree().create_timer(2.5).timeout
+	MatchSetup.go_to_menu()
 
 func take_damage_to_controller(amount: int = 1) -> void:
 	# Controller-relative damage for effects (e.g. Dark Knight death trigger).
@@ -296,7 +349,11 @@ func set_attacker(card):
 	_current_attacker_card = card
 func set_blocker(card):
 	_current_blocker_card = card
-	
+	# Persist it on the Field: _clean_instruction_stack() nulls the transient
+	# _current_blocker_card as soon as these instructions finish, which happens
+	# BEFORE DAMAGE_RESOLUTION reads it.
+	field.blocker_card = card
+
 func clash_cards(card1:Card,card2:Card):
 	if card1.is_on_field() and card2.is_on_field():
 		card1.suffer_damage(card2.power)
@@ -304,7 +361,7 @@ func clash_cards(card1:Card,card2:Card):
 		enforce_game_state_rules()
 	pass
 func clash_attacker_blocker():
-	clash_cards(field.attacker_card,_current_blocker_card)
+	clash_cards(field.attacker_card, field.blocker_card)
 	
 	
 
@@ -325,6 +382,8 @@ var phase_index = 0
 func next_phase():
 	# Advance to the next phase. Called by priority() when both players pass
 	# on an empty stack, and by phases that don't use priority.
+	if match_over:
+		return  # the match has ended — stop advancing
 	match phases[phase_index]:
 		GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
 			# If no attacker was declared, skip the remaining combat steps.
@@ -400,20 +459,35 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			# Signal UI to enable attacker selection
 			pass
 		GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
-			
-			# The defender (not the turn owner) decides whether to block.
+			# The defender (not the turn owner) decides whether to block. The mode
+			# is pushed only for the local human, mirroring ATTACKING, and only for
+			# as long as the declaration is open — so the pass button comes back
+			# for the priority round that follows.
 			var defender_id: int = 3 - turn_owner
-			var blocker: Card = await agent_for(defender_id).decide_blocker(defender_id, field.attacker_card)
+			var defender_agent: Agent = agent_for(defender_id)
+			var local_defence: bool = defender_agent is LocalAgent
+			# Start from a clean slate: the previous combat's reset_blocker() runs
+			# late, only after the phase it advanced into has finished.
+			field.reset_blocker()
+			if local_defence:
+				GlobalVariables.push_modal(GlobalVariables.Player_Mode.BLOCKING)
+				assistant.set_declare_block_button('No Block')
+			var blocker: Card = await defender_agent.decide_blocker(defender_id, field.attacker_card)
+			if local_defence:
+				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.BLOCKING)
 			if blocker != null:
 				blocker.declare_blocker()
 			await priority()
 			pass
 		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
-			if(_current_blocker_card):
+			# A blocked attack clashes instead of damaging the player. This is
+			# the ONLY clash — Card.declare_blocker() just records the blocker.
+			if field.blocker_card != null:
 				clash_attacker_blocker()
 			else:
 				cause_damage()
 			await priority()
+			field.reset_blocker()
 			field.reset_attacker()
 			
 		GlobalVariables.Phase.COMBAT_END_STEP:
@@ -634,7 +708,19 @@ func _on_assistant_pressed_next_phase() -> void:
 
 
 func _on_field_attacker_changed() -> void:
+	# The attacker also changes during the OPPONENT's turn (their attacker is
+	# recorded on the same Field), so only touch the button while the local
+	# player is the one declaring attackers — i.e. the ATTACKING modal is open.
+	if GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.ATTACKING:
+		return
 	if field.attacker_card != null:
 		assistant.set_declare_attack_button('Attack')
 	else:
 		assistant.set_declare_attack_button('No Attack')
+
+func _on_field_blocker_changed() -> void:
+	# Same guard as the attacker button: blocker_card changes for both sides, so
+	# only touch the button while the local defender's declaration is open.
+	if GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.BLOCKING:
+		return
+	assistant.set_declare_block_button('Block' if field.blocker_card != null else 'No Block')

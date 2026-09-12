@@ -1,8 +1,168 @@
 extends MockAgent
 class_name AIAgent
-## Phase 3 stub. Real heuristics (play cards, attack when profitable, block
-## when it matters) land here; until then it behaves exactly like MockAgent so
-## `config["opponent_type"] = "ai"` is safe to select.
+## Heuristics (roadmap phase 3).
+##
+## Judgement is mostly about the tap economy: an attacking Forward taps, so it
+## cannot block during the opponent's next turn. The AI therefore keeps a
+## blocker home instead of swinging with everything, and only attacks where the
+## trade is not strictly bad.
+##
+## Summons and any card whose enter-the-field effect needs a target are still
+## skipped: the target-picking path for a non-local player has not been
+## exercised, so casting a Summon could hang the turn.
 
-func _init() -> void:
-	think_time = 0.35
+func take_priority(player_id: int) -> void:
+	await game.get_tree().create_timer(think_time).timeout
+	# It also receives priority on the opponent's turn — only act on its own.
+	if player_id != game.turn_owner:
+		return
+	# Only main phases allow playing cards.
+	var phase = game.phase
+	if phase != GlobalVariables.Phase.FIRST_MAIN_PHASE and phase != GlobalVariables.Phase.SECOND_MAIN_PHASE:
+		return
+	for card in game.hand_for(player_id).cards:
+		if not _is_safe_to_play(card):
+			continue
+		if not _can_afford(card, player_id):
+			continue
+		if await game.play_card_for(player_id, card):
+			return
+
+func _is_safe_to_play(card: Card) -> bool:
+	# Summons resolve as effects and need casting + targeting plumbing.
+	if card.type == "Summon":
+		return false
+	# Skip anything whose enter-the-field effect asks for a target.
+	if card.card_effects.has("when_enter_field"):
+		var etb = card.card_effects["when_enter_field"]
+		if etb is Dictionary and etb.has("choose_target"):
+			return false
+	return true
+
+func _can_afford(card: Card, player_id: int) -> bool:
+	# Mirrors Assistant.can_pay_cost() so the AI never starts a payment it cannot
+	# finish (a cancelled payment is avoidable churn). Each untapped Backup
+	# produces 1 of its own element; element keys come from the same source as
+	# Card.get_cost(), so they match.
+	var element_cost: Dictionary = card.get_cost()
+	var mana: Dictionary = {}
+	for backup in game.field.get_back_cards_for(game.controller_for(player_id)):
+		if backup.tapped:
+			continue
+		mana[backup.element] = mana.get(backup.element, 0) + 1
+	var leftover: int = 0
+	for element in mana:
+		leftover += mana[element]
+	for element in element_cost:
+		if element == "neutral":
+			continue
+		var need: int = element_cost[element]
+		if mana.get(element, 0) < need:
+			return false
+		leftover -= need
+	return leftover >= element_cost.get("neutral", 0)
+
+func pay_cost(player_id: int, _cost: Dictionary) -> bool:
+	# Tap this player's untapped Backups until the assistant agrees the cost is
+	# covered. Field.add_card_to_mana_conversion() feeds Assistant.mana_acc, and
+	# Field._on_assistant_charge_complete() taps whatever ended up selected.
+	var controller: String = game.controller_for(player_id)
+	var field = game.field
+	var assistant = game.assistant
+	for card in field.get_back_cards_for(controller):
+		if card.tapped:
+			continue
+		field.add_card_to_mana_conversion(card)
+		if assistant.can_pay_cost():
+			return true
+	return assistant.can_pay_cost()
+
+# ------------------------------------------------------------------
+# Combat
+# ------------------------------------------------------------------
+
+## Untapped Forwards of a side: the only cards that can attack or block.
+## can_attack() is this codebase's "untapped Forward" predicate and has no
+## controller check, so it works for either side.
+func _untapped_forwards(player_id: int) -> Array[Card]:
+	var out: Array[Card] = []
+	for card in game.field.get_front_cards_for(game.controller_for(player_id)):
+		if card.can_attack():
+			out.append(card)
+	return out
+
+func _strongest(cards: Array[Card]) -> Card:
+	var best: Card = null
+	for card in cards:
+		if best == null or card.power > best.power:
+			best = card
+	return best
+
+func _best_forward_power(player_id: int) -> int:
+	var best: int = 0
+	for card in _untapped_forwards(player_id):
+		if card.power > best:
+			best = card.power
+	return best
+
+func decide_attacker(player_id: int) -> Card:
+	# The opponent's untapped Forwards are both their blockers now and their
+	# attackers next turn, so this one number drives the whole decision.
+	var defender_best: int = _best_forward_power(3 - player_id)
+	var mine: Array[Card] = _untapped_forwards(player_id)
+	if mine.is_empty():
+		return null
+
+	# Reserve one Forward to defend with. Prefer the cheapest that could still
+	# beat their best attacker; if nothing can, keep the strongest home anyway.
+	var reserved: Card = null
+	if defender_best > 0:
+		for card in mine:
+			if card.power > defender_best:
+				if reserved == null or card.power < reserved.power:
+					reserved = card
+		if reserved == null:
+			reserved = _strongest(mine)
+
+	# Attack with the strongest that does not trade down. Equal power is allowed
+	# (a mutual break is an even trade); strictly smaller would just lose the
+	# attacker for nothing, so skip those.
+	var best: Card = null
+	for card in mine:
+		if card == reserved or card.power < defender_best:
+			continue
+		if best == null or card.power > best.power:
+			best = card
+	return best
+
+func decide_blocker(player_id: int, attacker: Card) -> Card:
+	# Blocking with a strictly bigger Forward is free: the blocker takes the
+	# attacker's power as damage (less than its own) and breaks the attacker.
+	# Prefer the smallest such Forward so the larger ones stay available.
+	if attacker == null:
+		return null
+	var best: Card = null
+	for card in _untapped_forwards(player_id):
+		if card.power <= attacker.power:
+			continue
+		if best == null or card.power < best.power:
+			best = card
+	return best
+
+func choose_target(owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+	# Groundwork: pick the strongest legal target, which is a sensible default
+	# for the damage/dull style effects in the database. Not reachable yet
+	# because _is_safe_to_play() keeps the AI off cards that need a target.
+	var field = game.field
+	var chosen: Card = null
+	for card in field.get_all_cards():
+		if not card.is_valid_target:
+			continue
+		if chosen == null or card.power > chosen.power:
+			chosen = card
+	if chosen == null:
+		game.assistant.on_target_cancel()
+		return
+	print("[AIAgent] P%s chose target %s" % [owner_id, chosen.card_name])
+	field.set_target_card(chosen)
+	game.assistant.on_target_complete()

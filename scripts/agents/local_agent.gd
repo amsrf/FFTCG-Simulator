@@ -1,7 +1,7 @@
 extends Agent
 class_name LocalAgent
 ## Human playing at this machine: every decision is answered through the
-## existing UI (pass button, attacker clicks, modal buttons).
+## existing UI (pass button, card clicks, modal buttons).
 
 func take_priority(_player_id: int) -> void:
 	var assistant: Assistant = game.assistant
@@ -18,6 +18,14 @@ func decide_attacker(_player_id: int) -> Card:
 	var field: Field = game.field
 	return field.attacker_card
 
-func decide_blocker(_player_id: int, _attacker: Card) -> Card:
-	# No manual blocker UI yet; the defender simply does not block.
-	return null
+func decide_blocker(_player_id: int, attacker: Card) -> Card:
+	# The human selects a blocker by clicking their own untapped Forwards (the
+	# button label flips to "Block" once something is selected) and the button
+	# ends the declaration. Game pushes the BLOCKING mode and resets the
+	# selection before calling this, so there is nothing to set up here.
+	if attacker == null:
+		return null
+	var assistant: Assistant = game.assistant
+	await assistant.advance_blocker_declaration_step
+	var field: Field = game.field
+	return field.blocker_card

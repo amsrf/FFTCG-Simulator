@@ -10,6 +10,10 @@ var opponent_back_cards: Array[Card] = []
 var target_card: Card = null
 var source_card: Card = null
 var attacker_card: Card = null
+## The blocker declared for the current combat. Persisted on the Field because
+## Game's transient `_current_blocker_card` is cleared as soon as the blocker's
+## instructions finish, which is before DAMAGE_RESOLUTION reads it.
+var blocker_card: Card = null
 var arrow: BallisticArrow
 ## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
 var targeting_allow_cancel: bool = false
@@ -17,6 +21,7 @@ signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
 signal attacker_changed
+signal blocker_changed
 signal card_activated_ability(cost:Dictionary)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
 var phase: GlobalVariables.Phase:
@@ -68,11 +73,14 @@ func add_all_auras_to_card(card:Card):
 func add_card_to_mana_conversion(card:Card):
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)
+	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
+	card.show_mana_crystal()
 	selected_cards_for_mana_has_changed.emit(1,card.element)
 	
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
+	card.clear_mana_crystal()
 	selected_cards_for_mana_has_changed.emit(-1,card.element)
 
 
@@ -208,6 +216,14 @@ func get_all_cards() -> Array[Card]:
 func get_all_cards_from_player():
 	return front_cards + back_cards
 
+func get_front_cards_for(controller_name: String) -> Array[Card]:
+	# Forwards of one side. Agents use this for attack / block decisions.
+	return front_cards if controller_name == "player" else opponent_front_cards
+
+func get_back_cards_for(controller_name: String) -> Array[Card]:
+	# Backups of one side: the AI taps these to pay card costs.
+	return back_cards if controller_name == "player" else opponent_back_cards
+
 func untap_all_cards():
 	for card in get_all_cards_from_player():
 		card.untap()
@@ -237,6 +253,12 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	ballistic_arrow.set_is_aiming(true, card.global_position)
 	if allow_cancel:
 		assistant.prepare_targeting_phase_cancel()
+	# A non-local owner resolves targeting through its agent instead of waiting
+	# for clicks nobody will make (which would hang the turn).
+	var owner_id: int = 1 if card.controller == "player" else 2
+	var agent: Agent = get_parent().agent_for(owner_id)
+	if agent != null and not (agent is LocalAgent):
+		agent.choose_target(owner_id, card, targeting_criteria)
 
 func set_target_card(card: Card):
 	# A click only counts when the candidate is a legally valid target.
@@ -375,6 +397,28 @@ func set_attacker(card:Card):
 	attacker_changed.emit()
 func reset_attacker():
 	attacker_card = null
+
+## Select/deselect a blocker for the current combat (human input only).
+## Game.set_blocker() is what *declares* it (via the set_blocker instruction).
+func set_blocker_card(card: Card) -> void:
+	if card == null or card.controller != "player" or not card.can_attack():
+		return
+	if blocker_card == card:
+		card.set_blocker_status(false)
+		blocker_card = null
+	else:
+		if blocker_card != null and is_instance_valid(blocker_card):
+			blocker_card.set_blocker_status(false)
+		blocker_card = card
+		card.set_blocker_status(true)
+	blocker_changed.emit()
+
+func reset_blocker():
+	# The blocker may have broken in the clash, so only clear the marker while it
+	# is still a card on the field.
+	if blocker_card != null and is_instance_valid(blocker_card) and blocker_card.is_on_field():
+		blocker_card.set_blocker_status(false)
+	blocker_card = null
 func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()

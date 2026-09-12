@@ -14,18 +14,13 @@ func handle_grabbed():
 	if card.controller != "player":
 		return
 	var player_mode = GlobalVariables.get_player_mode()
-	var instructions: Array[Instruction]
 	match player_mode:
 		GlobalVariables.Player_Mode.PAYING_COST:
-			var selected_cards = hand.selected_cards_for_mana_conversion
-			if selected_cards.has(card):
-				card.crystal_instance.queue_free()
+			# The Hand owns the "selected for mana" marker (Card.show_mana_crystal).
+			if hand.selected_cards_for_mana_conversion.has(card):
 				hand.remove_card_from_mana_conversion(card)
 			else:
 				hand.add_card_to_mana_conversion(card)
-				card.crystal_instance = card.crystal_scene.instantiate()
-				card.add_child(card.crystal_instance)
-				card.crystal_instance.position = Vector3(0, 0.05, -0.35)
 		GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
 			# Triggered "may" choice: only criteria-matching cards can be
 			# selected, and selecting one unselects the previous one.

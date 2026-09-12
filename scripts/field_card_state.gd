@@ -15,15 +15,11 @@ func handle_grabbed():
 	match player_mode:
 		GlobalVariables.Player_Mode.PAYING_COST:
 			if card.type == 'Backup' and card.tapped == false and card.controller == 'player':
-				var selected_cards = field.selected_cards_for_mana_conversion
-				if selected_cards.has(card):
-					card.crystal_instance.queue_free()
+				# The Field owns the "selected for mana" marker (Card.show_mana_crystal).
+				if field.selected_cards_for_mana_conversion.has(card):
 					field.remove_card_from_mana_conversion(card)
 				else:
 					field.add_card_to_mana_conversion(card)
-					card.crystal_instance = card.crystal_scene.instantiate()
-					card.add_child(card.crystal_instance)
-					card.crystal_instance.position = Vector3(0, 0.05, -0.35)
 		GlobalVariables.Player_Mode.ATTACKING:
 			var phase = field.phase
 			match phase:
@@ -39,6 +35,12 @@ func handle_grabbed():
 			#print('on target signal emmited')
 			#card.signal_target()
 			field.set_target_card(card)
+		GlobalVariables.Player_Mode.BLOCKING:
+			# Blocking is the local player's call: any of your own untapped
+			# Forwards may block, even one that would break — the AI's "only
+			# trade up" heuristic is a policy, not a rule.
+			if card.controller == 'player' and card.can_attack():
+				field.set_blocker_card(card)
 		
 func handle_released():
 	pass

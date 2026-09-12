@@ -19,6 +19,7 @@ signal target_complete
 signal target_cancel
 signal pressed_pass_priority
 signal pressed_next_phase
+signal advance_blocker_declaration_step
 signal advance_attack_declaration_step
 signal choose_card_play
 signal choose_card_decline
@@ -60,8 +61,8 @@ func hide_buttons():
 	confirmButton.hide_button()
 	cancelButton.hide_button()
 
-func show_choose_card_buttons(confirm_text: String = "Play card", cancel_text: String = "Don't play card"):
-	show_modal(confirm_text, cancel_text,
+func show_choose_card_buttons(p_confirm_text: String = "Play card", p_cancel_text: String = "Don't play card"):
+	show_modal(p_confirm_text, p_cancel_text,
 		func():
 			choose_card_play.emit()
 			choose_card_finished.emit(true),
@@ -77,6 +78,13 @@ func set_declare_attack_button(button_text: String):
 	show_modal(button_text, "",
 		func():
 			advance_attack_declaration_step.emit()
+			confirmButton.hide_button(),
+		Callable(), true, false)
+
+func set_declare_block_button(button_text: String):
+	show_modal(button_text, "",
+		func():
+			advance_blocker_declaration_step.emit()
 			confirmButton.hide_button(),
 		Callable(), true, false)
 

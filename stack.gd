@@ -28,7 +28,7 @@ var s_cost_selected_card: Card = null
 @onready var field: Field = get_parent().get_node("Field") as Field
 @onready var hand: Hand = get_tree().current_scene.get_node("Player/Hand") as Hand
 @onready var assistant: Assistant = get_parent().get_node("Assistant") as Assistant
-@onready var card_scene = preload("res://Card.tscn")
+@onready var card_scene = preload("res://card.tscn")
 
 signal execute_card_effect(card:Card)
 signal request_priority()
@@ -38,17 +38,30 @@ signal resolution_complete
 func _ready() -> void:
 	assistant.choose_card_finished.connect(_on_choose_card_finished)
 
+## Cards to lay out: the legal stack objects plus the parked card (if any).
+## Positioning MUST go through this — using `cards` alone leaves the parked card
+## out of the row width, which offsets every card. That is why a card awaiting
+## payment used to sit visibly off-centre.
+func layout_cards() -> Array:
+	var list: Array = cards.duplicate()
+	var parked = summon_casting_card if summon_casting_card != null else casting_card
+	if parked != null:
+		list.append(parked)
+	return list
+
 func calculate_total_width():
-	return (cards.size() * card_width) + ((cards.size() - 1) * card_spacing)
+	var n: int = layout_cards().size()
+	return (n * card_width) + ((n - 1) * card_spacing)
 	
 func stack_length() -> int:
 	return len(cards)	
 func update_card_positions():
+	var list: Array = layout_cards()
 	var total_width = calculate_total_width()
 	start_x = -total_width / 2 + card_width / 2
 
-	for i in range(cards.size()):
-		var card = cards[i]
+	for i in range(list.size()):
+		var card = list[i]
 		card.index = i
 		card.rotation = Vector3.ZERO
 		animate_card(card, calculate_card_position(i)) # Position relative to the Hand
@@ -88,9 +101,10 @@ func cast_card():
 		# (game._on_stack_execute_card_effect) sends them to the graveyard.
 		casting_card.key_word_effect = "when_cast"
 	else:
-		# Forwards/Backups are played directly to the field.
-		cards.pop_back()
-		field.play_card(casting_card)
+		# Character cards go straight to the field: they are never stack objects,
+		# so nothing is popped and no stack slot is consumed. play_card() needs
+		# the side explicitly — it cannot infer it from card.controller.
+		field.play_card(casting_card, casting_card.controller != "player")
 	
 	
 func pop_stack():
@@ -103,6 +117,8 @@ func _on_assistant_charge_complete() -> void:
 	if casting_card:
 		cast_card()
 		casting_card = null
+		# The parked card left this node (played to the field): re-lay out the row.
+		update_card_positions()
 	elif skill_activation_proxy != null:
 		field.continue_skill_activation_after_mana(skill_activation_proxy)
 
@@ -254,23 +270,28 @@ func _clear_skill_proxy() -> void:
 	update_card_positions()
 
 
+## A card awaiting its cost is only PARKED on this node — a visual placeholder.
+## It is not in `cards`, so it is not legally on the stack and it has not been
+## committed/revealed yet. A character card (Forward/Backup) never enters
+## `cards` at all: once paid it goes straight to the field. Only a Summon
+## becomes a stack card, and only at _commit_summon_to_stack().
+func park_card(card: Card) -> void:
+	var trans = card.global_transform
+	card.reparent(self, false)
+	card.global_transform = trans
+	card.rotation = Vector3.ZERO
+	# update_card_positions() now includes the parked card (layout_cards()), so
+	# it already places it in the row — no separate positioning here.
+	update_card_positions()
+
 func _on_hand_charge_start(card: Card) -> void:
 	if card.type == 'Summon':
-		# Park the summon visually on the stack while it is being cast. It is
-		# NOT in the stack.cards list yet, so it is not legally on the stack
-		# until payment and target are committed.
+		# Paid for (and targeted) before it legally enters the stack.
 		summon_casting_card = card
 		summon_mana_deferred_until_target_confirm = true
-		var trans = card.global_transform
-		card.reparent(self, false)
-		card.global_transform = trans
-		card.rotation = Vector3.ZERO
-		update_card_positions()
-		animate_card(card, calculate_card_position(cards.size()))
-		return
-	casting_card = card
-	add_card_to_tree(card)
-	update_card_positions()
+	else:
+		casting_card = card
+	park_card(card)
 
 
 func _on_assistant_charge_cancelled() -> void:
@@ -280,6 +301,12 @@ func _on_assistant_charge_cancelled() -> void:
 	if summon_casting_card != null:
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
+		return
+	if casting_card != null:
+		# Only ever parked, never in `cards`. Its own Hand takes it back
+		# (Assistant.charge_cancelled → Hand._on_assistant_charge_cancelled).
+		casting_card = null
+		update_card_positions()
 		return
 	if cards.is_empty():
 		return

@@ -13,10 +13,12 @@ const MENU_SCENE := "res://main_menu.tscn"
 var config: Dictionary = {}
 
 func get_presets() -> Array:
-	return ["standard", "debug"]
+	return ["ai", "standard", "debug"]
 
 func describe_preset(preset: String) -> String:
 	match preset:
+		"ai":
+			return "Vs AI  (Practice Board - opponent plays cards and attacks)"
 		"standard":
 			return "Standard Match  (empty board - deck not shuffled yet)"
 		"debug":
@@ -25,7 +27,29 @@ func describe_preset(preset: String) -> String:
 			return preset
 
 func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
-	var cfg: Dictionary = _debug() if preset == "debug" else _standard()
+	var cfg: Dictionary
+	match preset:
+		"ai":
+			# The practice board, but with a *playable* opponent. The debug board
+			# leaves it one untapped Backup (1 mana), so it could never afford
+			# anything; here it gets three mana sources and an affordable hand.
+			cfg = _debug()
+			cfg["preset"] = "ai"
+			cfg["opponent_type"] = "ai"
+			cfg["opponent_field"] = [
+				{"id": 41, "tapped": false},
+				{"id": 31, "tapped": false},
+				{"id": 32, "tapped": false},
+				{"id": 3, "tapped": false},
+				{"id": 71, "tapped": false},
+			]
+			# Dark Knight x2 (cost 3/4), Summoner (cost 3), Hades (Summon — the
+			# AI skips it), Evoker (cost 1). None of these needs a target.
+			cfg["opponent_hand"] = [55, 54, 53, 52, 68]
+		"debug":
+			cfg = _debug()
+		_:
+			cfg = _standard()
 	for key in overrides:
 		cfg[key] = overrides[key]
 	return cfg

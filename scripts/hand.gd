@@ -230,11 +230,14 @@ func add_card_to_mana_conversion(card:Card):
 		return
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)
+	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
+	card.show_mana_crystal()
 	selected_cards_for_mana_has_changed.emit(2,card.element)
 	
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
+	card.clear_mana_crystal()
 	selected_cards_for_mana_has_changed.emit(-2,card.element)
 			
 func animate_card(card, target_position):

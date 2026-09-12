@@ -8,9 +8,12 @@ class_name Agent
 ## API and answer with game objects / ids — never reach into UI internals —
 ## so a networked client can answer the same questions over the wire.
 ##
-## Phase 2 covers priority and attack/block declaration. Targeting, mana
-## payment and hand choices still run through the local UI path; routing them
-## here is the next step (needed before an AI can actually play cards).
+## Two shapes are used:
+##   * pull  — return the answer (decide_attacker / decide_blocker / pay_cost)
+##   * drive — perform the inputs a human would have performed in the UI and let
+##             the existing signal continuation run (choose_target /
+##             choose_card_in_hand). LocalAgent does nothing for these: the human
+##             at this machine is the one clicking.
 
 var game: Node = null
 
@@ -38,3 +41,19 @@ func decide_attacker(_player_id: int) -> Card:
 func decide_blocker(_player_id: int, _attacker: Card) -> Card:
 	await _settle()
 	return null
+
+## Pay `cost` ({element: amount, "neutral": n}) for the card being played, and
+## return whether it is covered. Only used for non-local players — the human
+## pays by selecting cards in the payment modal instead.
+func pay_cost(_owner_id: int, _cost: Dictionary) -> bool:
+	await _settle()
+	return false
+
+## Pick a target for `source`. "Drive" shape: set the target and confirm, or
+## cancel. LocalAgent leaves it to the human's clicks.
+func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+	await _settle()
+
+## Pick a card from hand for a "may"/"must" choose-card effect. "Drive" shape.
+func choose_card_in_hand(_owner_id: int, _criteria: Dictionary, _required: bool) -> void:
+	await _settle()

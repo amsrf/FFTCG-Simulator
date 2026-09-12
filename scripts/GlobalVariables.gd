@@ -14,14 +14,15 @@ extends Node
 # Hand layout constants (presentation)
 var _hand_center = Vector3(0, 2, -2.9)
 var _card_width = 0.429
-var _card_height = 0.6
 var _card_spacing = -0.15
 var _hand_rotation = Vector3(36, -180, 0)
 var focus_card_id = null
 
-## What the human may do. FREE / INSTANT_SPEED_TIME / ATTACKING / NO_PRIORITY
-## describe a phase; PAYING_COST / TARGET / CHOOSE_CARD_IN_HAND are modals.
-enum Player_Mode { FREE, PAYING_COST, ATTACKING, TARGET, NO_PRIORITY, INSTANT_SPEED_TIME, CHOOSE_CARD_IN_HAND }
+## What the human may do. FREE / INSTANT_SPEED_TIME / ATTACKING / BLOCKING /
+## NO_PRIORITY describe a declaration; PAYING_COST / TARGET /
+## CHOOSE_CARD_IN_HAND are modals. BLOCKING is appended so the existing values
+## keep their numbers (nothing persists them, but renumbering buys nothing).
+enum Player_Mode { FREE, PAYING_COST, ATTACKING, TARGET, NO_PRIORITY, INSTANT_SPEED_TIME, CHOOSE_CARD_IN_HAND, BLOCKING }
 
 ## Current effective mode. Read it with get_player_mode(); it is recomputed by
 ## _refresh_mode() from the two layers below.
