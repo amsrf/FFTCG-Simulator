@@ -27,10 +27,14 @@ func _settle() -> void:
 	if tree != null:
 		await tree.process_frame
 
-## Called when this side receives priority. Return once done deciding; the
-## priority loop detects stack growth itself, so acting is optional.
-func take_priority(_player_id: int) -> void:
+## Called when this side receives priority. Returns **true if this player
+## performed an action** (played a card / activated an ability), false if they
+## passed. The loop needs to be told rather than inferring it: the rules hand
+## priority to the other player after an action, and playing a Character is an
+## action that never changes the stack.
+func take_priority(_player_id: int) -> bool:
 	await _settle()
+	return false
 
 ## Return the attacker to declare, or null to declare no attack.
 func decide_attacker(_player_id: int) -> Card:

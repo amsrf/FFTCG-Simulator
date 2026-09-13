@@ -106,8 +106,11 @@ func play_card_for(player_id: int, card: Card) -> bool:
 	if owner_hand == null or card == null or agent == null:
 		return false
 	# charge() leaves the hand and emits charge_start: Stack parks the card and
-	# Assistant opens the payment modal + sets mana_cost from the card.
-	owner_hand.charge(card)
+	# Assistant opens the payment modal + sets mana_cost from the card. It
+	# returns false when the play is illegal (a Character off-turn, or with a
+	# non-empty stack) — nothing was charged, so there is nothing to pay.
+	if not owner_hand.charge(card):
+		return false
 	if agent is LocalAgent:
 		return true  # the human pays by selecting backups in the modal
 	# The human must never interact with another player's payment modal.
@@ -234,7 +237,7 @@ func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 func _on_target_selected(card: Card):
 	if(card.is_valid_target):
 		_targets.append(card)
-		select_arrow.lock_arc(card.get_global_center())
+		select_arrow.lock_arc(card.get_global_face_centre())
 		var cancelTarget = func():
 			_targets = []
 			select_arrow.unlock_arc()
@@ -259,7 +262,7 @@ func check_target_requirements():
 func request_target(targeting_criteria):
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 	$Field.set_viable_targets(targeting_criteria, _current_source_card)
-	select_arrow.set_is_aiming(true, _current_source_card.global_position)
+	select_arrow.set_is_aiming_from_card(true, _current_source_card)
 
 func finish_target():
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
@@ -505,38 +508,55 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			next_phase()
 			pass
 	
+## Emitted when the LOCAL player's priority window ends. `acted` is true when
+## they performed an action; the rules hand priority to the opponent at that
+## point, so it must not be treated as a pass.
+signal priority_window_ended(acted: bool)
+
+## The human pressed pass (`pressed_pass_priority` comes from the Assistant).
+func _on_priority_passed() -> void:
+	priority_window_ended.emit(false)
+
+## Called by the action choke points in `Stack` (a card was played, an ability
+## activated). When an *agent* acts nobody is awaiting this signal — the agent
+## reports the action through its `take_priority()` return value instead.
+func note_action_taken() -> void:
+	priority_window_ended.emit(true)
+
 func priority() -> void:
-	# Only one priority round may run at a time. Extra requests (e.g. from
-	# Stack.request_priority while a round is already running) are no-ops;
-	# the running loop detects the stack growth and restarts the round.
+	# One round of priority at a time. Extra requests (e.g. Stack.request_priority
+	# while a round is running) are no-ops; the running loop picks up the change.
 	if _priority_lock:
 		return
 	_priority_lock = true
 
+	# Priority model (FF TCG): the turn player receives priority first in a phase
+	# or step. A player with priority either performs an action — which hands
+	# priority to the OTHER player — or passes. The game only moves on when both
+	# players pass consecutively with no action in between: with a non-empty
+	# stack the top item resolves (after which the TURN player has priority
+	# again); with an empty stack the next phase/step begins.
+	var holder: int = turn_owner
+	var passed_since_action: bool = false
 	while true:
-		# Each round, both players get priority: turn owner first. If the
-		# stack grows while someone has priority, the round restarts so the
-		# new effect can be responded to.
-		var stack_len_at_round_start: int = stack.stack_length()
-		var both_passed := true
-
-		for holder in [turn_owner, 3 - turn_owner]:
-			priority_holder = holder
-			await agent_for(holder).take_priority(holder)
-
-			if stack.stack_length() > stack_len_at_round_start:
-				both_passed = false
-				break
-
-		if not both_passed:
+		priority_holder = holder
+		var acted: bool = await agent_for(holder).take_priority(holder)
+		if acted:
+			passed_since_action = false
+			holder = 3 - holder
 			continue
-
+		if not passed_since_action:
+			# First pass of this round: the other player gets their chance.
+			passed_since_action = true
+			holder = 3 - holder
+			continue
 		if stack.stack_length() > 0:
-			# Resolve the top effect. The call may await an interactive modal
-			# (e.g. Auron's "may play a Backup" choice at resolution).
+			# Both passed with something waiting: resolve the top. The call may
+			# await an interactive modal (e.g. Auron's "may play a Backup").
 			await stack.resolve_top_effect()
+			passed_since_action = false
+			holder = turn_owner
 			continue
-
 		break
 
 	# Release the lock before advancing so the next phase can start its own

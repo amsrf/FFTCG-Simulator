@@ -82,6 +82,7 @@ func create_instruction_from_json(array: Array) -> Array[Instruction]:
 func _ready():
 	camera = get_viewport().get_camera_3d()
 	crystal_scene = load(CRYSTAL_SCENE_PATH)
+	_build_target_border()
 	
 func initialize(card_id: int, card_controller: String):
 	id = card_id
@@ -113,6 +114,30 @@ func load_card_effects():
 		card_effects = CardDatabase.card_effects[string_id]
 		
 	
+## False while the card is face-down. `mat` (the art material) is kept so that
+## revealing restores the SAME instance — rebuilding it would drop the shader's
+## `effect_enabled` highlight state.
+var revealed: bool = true
+var _card_back_material: StandardMaterial3D = null
+
+## Show the card's art, or a plain back for a card whose identity is not public
+## knowledge yet (a card parked while its cost is being paid). There is no back
+## art asset, so the "back" is a flat dark material.
+func set_revealed(is_revealed: bool) -> void:
+	if revealed == is_revealed:
+		return
+	revealed = is_revealed
+	var surface_material: Material = mat if is_revealed else _get_card_back_material()
+	$HandMesh.set_surface_override_material(0, surface_material)
+	$FieldMesh.set_surface_override_material(0, surface_material)
+
+func _get_card_back_material() -> StandardMaterial3D:
+	if _card_back_material == null:
+		_card_back_material = StandardMaterial3D.new()
+		_card_back_material.albedo_color = Color(0.10, 0.11, 0.16)
+		_card_back_material.roughness = 0.85
+	return _card_back_material
+
 func assign_card_texture():
 	var texture_path = "res://assets/cards/%s.jpg" % code
 	var full_texture = load(texture_path)
@@ -227,6 +252,14 @@ func can_be_played():
 	if player_mode == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
 		return type == 'Summon'
 	if player_mode == GlobalVariables.Player_Mode.FREE:
+		# Summons are always playable; a Character is only legal for the turn
+		# player and only with an empty stack. Card keeps no game reference, so
+		# ask the Hand it is in (its parent while in hand).
+		if type == 'Summon':
+			return true
+		var owner_hand = get_parent()
+		if owner_hand != null and owner_hand.has_method("can_play_character"):
+			return owner_hand.can_play_character(self)
 		return true
 	return false
 	
@@ -271,6 +304,67 @@ func showPower():
 		mat.set_shader_parameter("effect_enabled", true)
 	else:
 		power_label.visible = false
+
+## The power/damage readout is field-only information: a card in hand, deck,
+## stack, damage zone or graveyard must never wear it.
+func hide_power_display() -> void:
+	if power_label != null:
+		power_label.visible = false
+
+## Where a card currently lives. Its whole presentation (scale, rotation baseline,
+## which UI is shown) is derived from this, so there is ONE place deciding how a
+## card looks — instead of every zone transition leaving the previous zone's
+## transform, scale and readout on the card.
+enum Zone { NONE, DECK, HAND, FIELD, STACK, GRAVEYARD, DAMAGE }
+
+## Cards read correctly in this project when turned a half turn about Y relative
+## to the identity frame. The Hand, Stack, Graveyard, Deck and FocusCard scene
+## nodes all supply that themselves with a flipped basis (-1 on X and Z), so their
+## cards keep a zero local rotation. **The Field does not** — it is a plain
+## identity node — which is why Field.play_card() used to inherit the half turn
+## implicitly by preserving the card's global transform, and why zeroing the
+## rotation put every field card upside down.
+const READABLE_ROTATION := Vector3(0, PI, 0)
+
+## Per-zone look. `rotation` is the card's LOCAL baseline for that zone (see
+## READABLE_ROTATION: it depends on whether the container node is flipped).
+## `power_ui` is the field readout (Forward power + accumulated damage). A zone's
+## layout code may still add rotation on top of this baseline — the hand fan adds
+## its per-card tilt — but it starts from here.
+const ZONE_PRESENTATION := {
+	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.DECK:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.HAND:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
+	Zone.STACK:     {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.GRAVEYARD: {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	# TODO: the damage-zone node is identity like the Field, so by this rule it
+	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
+	# the OPPONENT's damage zone is authored with a +90 deg frame instead.
+	Zone.DAMAGE:    {"scale": 1.2, "rotation": Vector3.ZERO,      "power_ui": false},
+}
+
+var current_zone: Zone = Zone.NONE
+
+## The ONE entry point for a zone change. Call it as soon as the card has been
+## reparented and BEFORE the destination lays it out: it normalises rotation and
+## scale, drops every transient marker (drag, target glow, mana crystal) and shows
+## or hides the field readout. Positions stay the zone's own business.
+func enter_zone(zone: Zone) -> void:
+	current_zone = zone
+	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
+	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
+	# unflipped container, so its cards must carry the half turn themselves.
+	rotation = presentation["rotation"]
+	scale = Vector3.ONE * float(presentation["scale"])
+	is_dragging = false
+	is_valid_target = false
+	set_highlight(false)
+	reset()  # drops the mana-crystal marker
+	if bool(presentation["power_ui"]):
+		showPower()
+	else:
+		hide_power_display()
 		
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -90.0
@@ -470,8 +564,154 @@ func _on_card_area_3d_card_released(_card: Variant) -> void:
 	if current_state :
 		current_state.handle_released()
 		
+## Glow ring marking a card the game is asking the player to choose or target.
+## ALL of the look lives in shaders/target_border_material.tres — open it in the
+## editor to tune colours, thickness and pulse from the Inspector. Card itself
+## only supplies `card_size` (read from the mesh) and drives `intensity`.
+const TARGET_BORDER_MATERIAL := preload("res://shaders/target_border_material.tres")
+var target_border: MeshInstance3D = null
+var _border_material: ShaderMaterial = null
+var _border_tween: Tween = null
+var _highlight_on: bool = false
+
 func set_valid_target(value: bool):
 	is_valid_target = value
+	# The glow is the player-facing half of "this card may be chosen".
+	set_highlight(value)
+
+## The card the player has actually PICKED (the current target, or the card chosen
+## for an effect): the same ring in a different colour, so the orange one obviously
+## means "this one" while the blue ones are merely legal.
+const SELECTED_BORDER_COLOR := Color(1.0, 0.45, 0.05)
+const SELECTED_GLOW_COLOR := Color(0.95, 0.32, 0.0)
+## The material's own colours, captured when it is built so deselecting restores
+## them. Safe because every card owns its own duplicate of the material.
+var _border_color_base: Color = Color.WHITE
+var _glow_color_base: Color = Color.WHITE
+var _selected_highlight_on: bool = false
+
+func set_selected_highlight(enabled: bool) -> void:
+	if enabled == _selected_highlight_on:
+		return
+	_selected_highlight_on = enabled
+	if target_border == null:
+		_build_target_border()
+	if _border_material == null:
+		return
+	_border_material.set_shader_parameter("border_color", SELECTED_BORDER_COLOR if enabled else _border_color_base)
+	_border_material.set_shader_parameter("glow_color", SELECTED_GLOW_COLOR if enabled else _glow_color_base)
+
+## Show/hide the selectable/targetable glow. Fades so the cue does not pop, and
+## is cheap to call repeatedly: Hand.refresh_highlights() runs on every layout,
+## so an unchanged request must not restart the tween.
+func set_highlight(enabled: bool) -> void:
+	if target_border == null:
+		_build_target_border()
+	if target_border == null:
+		return
+	if enabled == _highlight_on:
+		return
+	_highlight_on = enabled
+	if not is_inside_tree():
+		_border_material.set_shader_parameter("intensity", 1.0 if enabled else 0.0)
+		target_border.visible = enabled
+		return
+	if _border_tween != null and _border_tween.is_valid():
+		_border_tween.kill()
+	_border_tween = create_tween()
+	if enabled:
+		target_border.visible = true
+	_border_tween.tween_method(_set_border_intensity, _border_intensity(), 1.0 if enabled else 0.0, 0.12)
+	if not enabled:
+		_border_tween.tween_callback(func(): target_border.visible = false)
+
+func _border_intensity() -> float:
+	return float(_border_material.get_shader_parameter("intensity"))
+
+func _set_border_intensity(value: float) -> void:
+	_border_material.set_shader_parameter("intensity", value)
+
+## Built in code rather than authored in card.tscn so the quad can be sized from
+## the card mesh's own AABB: the ring then lands on whatever silhouette the art
+## has, and nothing in the scene tree has to be kept in sync by hand.
+##
+## The quad must COVER the whole glow, and the quad's edge is what crops it if it
+## does not: the ring is drawn outside the card (half-extent = card_size/2 +
+## margin). So the margin is DERIVED here from the material's own ring/spill widths
+## instead of being tuned by hand — raise `border_width` or `glow_width` and the
+## quad grows with it. The floors only exist so a failed parameter lookup (which
+## returns null, i.e. 0.0) cannot collapse the quad onto the card and crop the ring.
+const BORDER_MARGIN_MIN := 0.05
+
+## Reported once per run so the numbers the shader is actually using are visible in
+## the output — the quickest way to tell whether a .tres tweak is reaching it.
+static var _border_look_reported: bool = false
+
+func _report_target_border_look(size: Vector2, margin: float) -> void:
+	if _border_look_reported:
+		return
+	_border_look_reported = true
+	print("[TargetBorder] card=%s quad=%s border_width=%.3f border_color=%s glow_width=%.3f glow_color=%s" % [
+		size,
+		size + Vector2.ONE * margin * 2.0,
+		float(_border_material.get_shader_parameter("border_width")),
+		str(_border_material.get_shader_parameter("border_color")),
+		float(_border_material.get_shader_parameter("glow_width")),
+		str(_border_material.get_shader_parameter("glow_color")),
+	])
+
+func _build_target_border() -> void:
+	if target_border != null:
+		return
+	var size: Vector2 = _card_face_size()
+	# The look lives in target_border_material.tres so it can be tuned in the
+	# Inspector; duplicated so every card owns its own fade.
+	_border_material = TARGET_BORDER_MATERIAL.duplicate()
+	_border_material.set_shader_parameter("card_size", size)
+	_border_material.set_shader_parameter("intensity", 0.0)
+	# Remember the stock colours so set_selected_highlight() can put them back.
+	var border_color: Variant = _border_material.get_shader_parameter("border_color")
+	if border_color is Color:
+		_border_color_base = border_color
+	var glow_color: Variant = _border_material.get_shader_parameter("glow_color")
+	if glow_color is Color:
+		_glow_color_base = glow_color
+	# Size the quad from the ring + spill, and write the result back so the shader
+	# and the geometry can never disagree about where the glow ends.
+	var border_width: float = maxf(float(_border_material.get_shader_parameter("border_width")), 0.005)
+	var glow_width: float = maxf(float(_border_material.get_shader_parameter("glow_width")), 0.0)
+	# 3x the spill width is roughly where its exponential has decayed to ~5%.
+	var margin: float = maxf(border_width + glow_width * 3.0 + 0.01, BORDER_MARGIN_MIN)
+	_border_material.set_shader_parameter("margin", margin)
+	_report_target_border_look(size, margin)
+	var plane := PlaneMesh.new()
+	# PlaneMesh lies in the XZ plane with normal +Y — the same plane the card mesh
+	# uses (card.tres AABB), so it needs no rotation.
+	plane.size = size + Vector2.ONE * margin * 2.0
+	target_border = MeshInstance3D.new()
+	target_border.name = "TargetBorder"
+	target_border.mesh = plane
+	target_border.material_override = _border_material
+	# A hair above the face (the card quad sits at y ~ 0) so they never z-fight;
+	# the shader draws nothing inside the silhouette either way.
+	target_border.position = Vector3(0, 0.002, 0)
+	target_border.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	target_border.visible = false
+	# Parented to the visible mesh, NOT to the Card: the hand's hover animation
+	# moves and scales HandMesh without touching the Card, so a sibling border
+	# would be left behind. As a child it follows the lift and scales with the
+	# card, which is what keeps the ring hugging the edge.
+	var border_parent: Node3D = hand_mesh if hand_mesh != null else self
+	border_parent.add_child(target_border)
+
+## Card face size in metres. The mesh is a flat quad in XZ (0.429 x 0.6), so the
+## AABB's x is the width and its z the height.
+func _card_face_size() -> Vector2:
+	if hand_mesh != null and hand_mesh.mesh != null:
+		var aabb: AABB = hand_mesh.mesh.get_aabb()
+		if aabb.size.x > 0.0 and aabb.size.z > 0.0:
+			return Vector2(aabb.size.x, aabb.size.z)
+	return Vector2(0.429, 0.6)
 
 func does_card_match_target(target_dict: Dictionary) -> bool:
 	if target_dict.has("type") and type != target_dict["type"]:
@@ -590,7 +830,30 @@ func check_controller(args) -> bool:
 
 func get_global_center():
 	return global_position + Vector3(0.2,0.3,0)
-	
+
+## True centre of the card's FACE in world space. The card mesh is centred on its own
+## origin, so this is simply the position. (get_global_center() above adds a fixed
+## (0.2, 0.3, 0) offset and is NOT the centre; it is left alone because other callers
+## depend on its behaviour, but anything that must land exactly on the middle of the
+## card — the targeting arc's destination — uses this.)
+func get_global_face_centre() -> Vector3:
+	return global_position
+
+## Mid-point of the edge the player sees as the card's TOP, in world space. The
+## targeting arc leaves from here rather than from the middle of the card.
+func get_global_top_centre() -> Vector3:
+	var half_height: float = _card_face_size().y * 0.5 * global_transform.basis.z.length()
+	var axis: Vector3 = global_transform.basis.z.normalized()
+	var edge_a: Vector3 = global_position + axis * half_height
+	var edge_b: Vector3 = global_position - axis * half_height
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return edge_a
+	# Viewport y grows downwards, so the smaller projection is the edge that reads as
+	# the top. Testing the two candidate edges keeps this right whatever the card's own
+	# rotation or fan tilt happens to be.
+	return edge_a if cam.unproject_position(edge_a).y <= cam.unproject_position(edge_b).y else edge_b
+
 func is_effect_card() -> bool:
 	# Real cards cast from hand have an empty key_word_effect. Only stack
 	# copies (triggered abilities, skill proxies) are effect cards.

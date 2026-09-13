@@ -3,10 +3,15 @@ class_name LocalAgent
 ## Human playing at this machine: every decision is answered through the
 ## existing UI (pass button, card clicks, modal buttons).
 
-func take_priority(_player_id: int) -> void:
+func take_priority(_player_id: int) -> bool:
+	# The human's priority window ends two ways: they press pass, or they
+	# perform an action — the rules hand priority to the opponent the moment an
+	# action is performed. Both routes end at Game.priority_window_ended, which
+	# carries which of the two happened.
 	var assistant: Assistant = game.assistant
 	assistant.show_pass_priority_button()
-	await assistant.pressed_pass_priority
+	var acted: bool = await game.priority_window_ended
+	return acted
 
 func decide_attacker(_player_id: int) -> Card:
 	# The human selects an attacker by clicking cards; the (Attack / No Attack)

@@ -65,6 +65,8 @@ func add_card_to_tree(card):
 	
 	
 func add_card(card):
+	# Damage-zone cards are laid flat and must not show the field readout.
+	card.enter_zone(Card.Zone.DAMAGE)
 	add_card_to_tree(card)
 	update_card_positions()
 

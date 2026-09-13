@@ -7,32 +7,44 @@ class_name AIAgent
 ## blocker home instead of swinging with everything, and only attacks where the
 ## trade is not strictly bad.
 ##
-## Summons and any card whose enter-the-field effect needs a target are still
-## skipped: the target-picking path for a non-local player has not been
-## exercised, so casting a Summon could hang the turn.
+## Summons are cast now (targets go through choose_target()), but a card whose
+## enter-the-field effect needs a target is still skipped: ETB targeting runs
+## while the card resolves, and a miss there is not recoverable yet.
 
-func take_priority(player_id: int) -> void:
+func take_priority(player_id: int) -> bool:
 	await game.get_tree().create_timer(think_time).timeout
 	# It also receives priority on the opponent's turn — only act on its own.
 	if player_id != game.turn_owner:
-		return
+		return false
 	# Only main phases allow playing cards.
 	var phase = game.phase
 	if phase != GlobalVariables.Phase.FIRST_MAIN_PHASE and phase != GlobalVariables.Phase.SECOND_MAIN_PHASE:
-		return
+		return false
 	for card in game.hand_for(player_id).cards:
 		if not _is_safe_to_play(card):
 			continue
 		if not _can_afford(card, player_id):
 			continue
 		if await game.play_card_for(player_id, card):
-			return
+			return true  # an action: priority moves to the opponent
+	return false
 
 func _is_safe_to_play(card: Card) -> bool:
-	# Summons resolve as effects and need casting + targeting plumbing.
+	# Summons are cast now: the card is parked while the cost is paid, then the
+	# target is chosen through Agent.choose_target() (Field.request_target
+	# delegates to it for a non-local owner). Only cast one when a legal target
+	# actually exists, otherwise the targeting session opens with nothing valid.
 	if card.type == "Summon":
+		var criteria: Dictionary = card.get_cast_target_criteria()
+		if criteria.is_empty():
+			return true
+		return game.field.has_viable_target(criteria, card, "Summon")
+	# Characters may only be played by the turn player with an EMPTY stack.
+	# Hand.charge() enforces it, but the AI should not even begin the attempt.
+	if game.stack.stack_length() > 0:
 		return false
-	# Skip anything whose enter-the-field effect asks for a target.
+	# Skip anything whose enter-the-field effect asks for a target: ETB targeting
+	# runs while the card resolves, and a miss there is not recoverable yet.
 	if card.card_effects.has("when_enter_field"):
 		var etb = card.card_effects["when_enter_field"]
 		if etb is Dictionary and etb.has("choose_target"):
@@ -62,16 +74,27 @@ func _can_afford(card: Card, player_id: int) -> bool:
 		leftover -= need
 	return leftover >= element_cost.get("neutral", 0)
 
-func pay_cost(player_id: int, _cost: Dictionary) -> bool:
+func pay_cost(player_id: int, cost: Dictionary) -> bool:
 	# Tap this player's untapped Backups until the assistant agrees the cost is
 	# covered. Field.add_card_to_mana_conversion() feeds Assistant.mana_acc, and
 	# Field._on_assistant_charge_complete() taps whatever ended up selected.
+	#
+	# Element-matching Backups go first: any Backup can also pay generic
+	# "neutral" cost, so spending an off-element one early would starve a later
+	# play (the AI gets to spend its mana once per turn).
 	var controller: String = game.controller_for(player_id)
 	var field = game.field
 	var assistant = game.assistant
+	var matching: Array = []
+	var rest: Array = []
 	for card in field.get_back_cards_for(controller):
 		if card.tapped:
 			continue
+		if cost.has(card.element):
+			matching.append(card)
+		else:
+			rest.append(card)
+	for card in matching + rest:
 		field.add_card_to_mana_conversion(card)
 		if assistant.can_pay_cost():
 			return true

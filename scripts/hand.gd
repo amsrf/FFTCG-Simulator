@@ -52,7 +52,9 @@ func draw(card):
 	# Animate the card along the path
 	tween.tween_property(path_follow, "progress_ratio", 1.0, 1.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	tween.parallel().tween_property(card, "scale", Vector3(1, 1, 1), 1.3)
-	tween.parallel().tween_property(card, "rotation_degrees", Vector3.ZERO, 0.7)
+	# Land on the FAN tilt, not on zero: every hand card has a rotation now, so
+	# tweening to zero left a freshly drawn card lying flat in a fanned hand.
+	tween.parallel().tween_property(card, "rotation_degrees", Vector3(0, rad_to_deg(fan_angle_for(card.index)), 0), 0.7)
 	
 	# Reparent the card back to its original parent after the animation
 	tween.tween_callback(card.reparent.bind(self))
@@ -75,6 +77,10 @@ func add_card_to_tree(card):
 	else:
 		add_child(card)
 	card.global_transform = trans
+	# A hand card is plain and flat; the fan tilt is added by the layout, so it
+	# departs from this baseline (and a card arriving from the stack or from a
+	# cancelled charge drops whatever it was wearing).
+	card.enter_zone(Card.Zone.HAND)
 	
 	
 func add_card(card):
@@ -87,8 +93,8 @@ func calculate_total_width():
 
 # Function to update the positions of the cards in the hand
 func update_card_positions(ignore = -1):
-	var total_width = calculate_total_width()
-	start_x = -total_width / 2 + card_width / 2
+	# Kept for last_card_position(); the fan below centres on the card index.
+	start_x = -calculate_total_width() / 2 + card_width / 2
 
 	for i in range(cards.size()):
 		if(i == ignore):
@@ -97,18 +103,47 @@ func update_card_positions(ignore = -1):
 		if(card.is_dragging):
 			continue
 		card.index = i
-		card.rotation = Vector3.ZERO
+		# Tilt with the arc, so the hand reads as a fan instead of a straight row.
+		card.rotation = Vector3(0.0, fan_angle_for(i), 0.0)
 		animate_card(card, calculate_card_position(i)) # Position relative to the Hand
+	# Idempotent and cheap: keeps the selectable glow correct after draws and
+	# every other layout change, not just on mode changes.
+	refresh_highlights()
 		
 		
 func last_card_position():
 	return start_x + (card_width + card_spacing)*cards.size()
 	
 	
+## Hand fan geometry: cards are spread along a shallow arc (like a hand of cards
+## held in one hand) rather than in a straight row. The chord between neighbours
+## stays `card_width + card_spacing`, so a bigger radius only flattens the arc.
+const FAN_RADIUS := 2.4
+## Height step per card. This MUST stay bigger than the glow quad's offset above
+## the card face (2 mm, see Card._build_target_border()): otherwise the prompt
+## glow of a card BEHIND shines through the card lying in front of it.
+const CARD_STACK_HEIGHT := 0.008
+
+## Arc angle of a card in the fan, in radians. NOTE the sign: this is the angle of
+## the card's TILT (rotation.y), so left cards lean left and right cards lean
+## right — a hand fan radiates OUTWARD from the pivot. calculate_card_position()
+## negates it, because a card's up axis is its local -Z, so its arc position and
+## its tilt run opposite ways. Flip only one of the two and the fan looks closed.
+func fan_angle_for(i: int) -> float:
+	var t: float = i - (cards.size() - 1) / 2.0
+	return -t * (card_width + card_spacing) / FAN_RADIUS
+
 func calculate_card_position(i):
-	var x_offset = start_x + i * (card_width + card_spacing)
-	var y_offset = (i)*0.001
-	return Vector3(x_offset, y_offset, 0)
+	# Negated on purpose: see the sign note on fan_angle_for().
+	var angle: float = -fan_angle_for(i)
+	# x along the chord, z from the arc's sagitta: the middle card of the fan sits
+	# closest to the player and the outer ones fall away.
+	var x_offset: float = FAN_RADIUS * sin(angle)
+	var z_offset: float = FAN_RADIUS * (1.0 - cos(angle))
+	# Height stagger: separates overlapping cards, and keeps each glow behind the
+	# card in front of it (see CARD_STACK_HEIGHT).
+	var y_offset: float = i * CARD_STACK_HEIGHT
+	return Vector3(x_offset, y_offset, z_offset)
 	
 	
 func find_index(card):
@@ -139,23 +174,45 @@ func remove_card(card):
 	cards.remove_at(card.index)
 	
 						
-func charge(card):
+## Returns false when the card cannot legally be played right now (nothing is
+## charged and it stays in the hand).
+func charge(card) -> bool:
 	if card.type == 'Summon':
-		# Summons cannot be cast unless a legal target exists (when the card
+		# Summons can be cast with a stack on it — they are the instant-speed
+		# plays. They cannot be cast unless a legal target exists (when the card
 		# requires one). The card leaves the hand and is parked on the stack
 		# visually, but it only legally enters the stack after the cost is
 		# paid and the target is confirmed.
 		var criteria: Dictionary = card.get_cast_target_criteria()
 		if not criteria.is_empty() and not field.has_viable_target(criteria, card, "Summon"):
 			push_error("No viable target for %s" % card.card_name)
-			return
+			return false
 		remove_card(card)
 		charging_card = card
 		charge_start.emit(card)
-		return
+		return true
+	# Characters are the slow plays: only the turn player may play one, and only
+	# while the stack is empty. This is enforced here so it holds for the human
+	# and for an agent alike.
+	if not can_play_character(card):
+		push_warning("[Rules] %s cannot be played now: turn player only, empty stack required" % card.card_name)
+		return false
 	remove_card(card)
 	charge_start.emit(card)
 	charging_card = card #keep reference
+	return true
+
+## A Character card is legal only for the turn player and only with an empty
+## stack. (A non-turn player playing a Character needs Back Attack, which is not
+## implemented.)
+func can_play_character(card: Card) -> bool:
+	if stack.stack_length() > 0:
+		return false
+	return card.controller == active_controller()
+
+## Controller name of the side whose turn it is.
+func active_controller() -> String:
+	return "player" if stack.get_parent().turn_owner == 1 else "opponent"
 
 func finish_summon_cast(card: Card) -> void:
 	# The summon left the hand when the cast began and has been parked on
@@ -175,20 +232,52 @@ func has_card_matching_criteria(criteria: Dictionary) -> bool:
 			return true
 	return false
 
+func _ready() -> void:
+	# Highlighting is owned here: the input mode says what is selectable right
+	# now, so recomputing on every mode change cannot leave a stale glow behind.
+	GlobalVariables.player_mode_change.connect(_on_player_mode_change)
+
+func _on_player_mode_change(_pm: GlobalVariables.Player_Mode) -> void:
+	refresh_highlights()
+
+## Recompute the "selectable" glow for every card in hand from the current mode.
+## One owner, derived state — no flow can leave a ring stuck on.
+func refresh_highlights() -> void:
+	var mode: GlobalVariables.Player_Mode = GlobalVariables.get_player_mode()
+	for card in cards:
+		if card.controller != "player":
+			card.set_highlight(false)
+			continue
+		match mode:
+			GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+				# The ONLY hand glow: the game is asking the player to choose a
+				# card, so mark exactly the cards that satisfy the criteria (all
+				# Fire Backups for Auron's trigger, for instance).
+				card.set_highlight(not choose_card_criteria.is_empty() and card.matches_criteria(choose_card_criteria))
+			_:
+				# Everything else — a normal main phase included — stays dark. A
+				# playable card is not a card the game is asking you to pick.
+				card.set_highlight(false)
+
 func begin_choose_card(criteria: Dictionary) -> void:
 	clear_effect_card_selection()
 	choose_card_criteria = criteria
 	selected_card_for_effect = null
+	refresh_highlights()
 
 func end_choose_card() -> void:
 	clear_effect_card_selection()
 	choose_card_criteria = {}
 	selected_card_for_effect = null
+	refresh_highlights()
 
 func clear_effect_card_selection() -> void:
-	if selected_card_for_effect != null and selected_card_for_effect.crystal_instance != null:
-		selected_card_for_effect.crystal_instance.queue_free()
-		selected_card_for_effect.crystal_instance = null
+	if selected_card_for_effect != null:
+		# Drop the orange "this is the one" ring with the selection.
+		selected_card_for_effect.set_selected_highlight(false)
+		if selected_card_for_effect.crystal_instance != null:
+			selected_card_for_effect.crystal_instance.queue_free()
+			selected_card_for_effect.crystal_instance = null
 
 func toggle_effect_card_selection(card: Card) -> void:
 	# Single selection: picking another card unselects the previous one.
@@ -198,6 +287,8 @@ func toggle_effect_card_selection(card: Card) -> void:
 	else:
 		clear_effect_card_selection()
 		selected_card_for_effect = card
+		# Orange = "this is the card you picked", blue = the other legal choices.
+		card.set_selected_highlight(true)
 		if card.crystal_scene != null:
 			card.crystal_instance = card.crystal_scene.instantiate()
 			card.add_child(card.crystal_instance)

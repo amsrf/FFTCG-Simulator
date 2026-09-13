@@ -6,8 +6,9 @@ class_name MockAgent
 
 var think_time: float = 0.5
 
-func take_priority(_player_id: int) -> void:
+func take_priority(_player_id: int) -> bool:
 	await game.get_tree().create_timer(think_time).timeout
+	return false  # always passes
 
 func decide_attacker(_player_id: int) -> Card:
 	return null

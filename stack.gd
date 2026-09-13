@@ -96,6 +96,8 @@ func add_created_card_to_tree(card:Card):
 	card.global_transform = trans
 	
 func cast_card():
+	# It is being played, so it is public now, whichever branch runs.
+	reveal_parked(casting_card)
 	if casting_card.type == 'Summon':
 		# Summons stay on the stack and resolve as effects. Resolution
 		# (game._on_stack_execute_card_effect) sends them to the graveyard.
@@ -105,6 +107,9 @@ func cast_card():
 		# so nothing is popped and no stack slot is consumed. play_card() needs
 		# the side explicitly — it cannot infer it from card.controller.
 		field.play_card(casting_card, casting_card.controller != "player")
+		# Playing a Character is a priority action even though the stack never
+		# changed: priority must move to the opponent.
+		get_parent().note_action_taken()
 	
 	
 func pop_stack():
@@ -133,25 +138,38 @@ func _continue_summon_after_mana(card: Card) -> void:
 		return
 	field.request_target(criteria, card, true, "Summon")
 
+## The Hand that owns `card`. The `hand` member above is the LOCAL player's
+## hand, which is the wrong one for an opponent's card now that agents can cast
+## Summons too: committing through the wrong hand would leave a stale
+## `charging_card` there, which can later pull the card back off the stack.
+func _owner_hand(card: Card) -> Hand:
+	return get_parent().hand_for(1 if card.controller == "player" else 2)
+
 func _commit_summon_to_stack() -> void:
 	if summon_casting_card == null:
 		return
+	var card: Card = summon_casting_card
+	var owner_hand: Hand = _owner_hand(card)
 	# Target is confirmed: finalize mana payment now (discard hand mana,
 	# tap backup mana), then put the summon on the stack.
 	field.apply_deferred_skill_mana_payment()
-	hand.apply_deferred_skill_mana_payment()
+	owner_hand.apply_deferred_skill_mana_payment()
+	# It is entering the stack from here on, so it becomes public.
+	reveal_parked(card)
 	summon_mana_deferred_until_target_confirm = false
-
-	var card: Card = summon_casting_card
 	summon_casting_card = null
 	card.key_word_effect = "when_cast"
 	card.effect_kind = "Summon"
-	hand.finish_summon_cast(card)
+	owner_hand.finish_summon_cast(card)
 	# The card is already parked on the stack node; now it legally enters
 	# the stack list and resolves as a normal stack object.
 	cards.append(card)
 	card.index = cards.size() - 1
 	update_card_positions()
+	# Casting a Summon is a priority action: it is on the stack now, so priority
+	# moves to the opponent. (Emitting in the Agent's case is harmless — no one
+	# is awaiting the signal; the agent reports through take_priority().)
+	get_parent().note_action_taken()
 
 
 func begin_triggered_ability(source: Card, keyword: String) -> void:
@@ -221,6 +239,8 @@ func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
 	skill_mana_deferred_until_target_confirm = true
 	add_created_card_to_tree(proxy)
 	update_card_positions()
+	# Activating an ability is a priority action.
+	get_parent().note_action_taken()
 	return true
 
 func _apply_skill_source_tap_from_proxy() -> void:
@@ -271,18 +291,29 @@ func _clear_skill_proxy() -> void:
 
 
 ## A card awaiting its cost is only PARKED on this node — a visual placeholder.
-## It is not in `cards`, so it is not legally on the stack and it has not been
-## committed/revealed yet. A character card (Forward/Backup) never enters
-## `cards` at all: once paid it goes straight to the field. Only a Summon
-## becomes a stack card, and only at _commit_summon_to_stack().
+## It is not in `cards`, so it is not legally on the stack, and it is not public
+## knowledge yet: only its owner sees which card it is. A character card
+## (Forward/Backup) never enters `cards` at all: once paid it goes straight to
+## the field. Only a Summon becomes a stack card, and only at
+## _commit_summon_to_stack().
 func park_card(card: Card) -> void:
 	var trans = card.global_transform
 	card.reparent(self, false)
 	card.global_transform = trans
-	card.rotation = Vector3.ZERO
+	# Parked cards are flat and plain: no hand tilt and no field readout.
+	card.enter_zone(Card.Zone.STACK)
+	# Face-down for anyone but the owning player. Every exit from this node must
+	# call reveal_parked().
+	card.set_revealed(card.controller == "player")
 	# update_card_positions() now includes the parked card (layout_cards()), so
 	# it already places it in the row — no separate positioning here.
 	update_card_positions()
+
+## A parked card is leaving this node (committed to the stack, played to the
+## field, or handed back to its owner), so it becomes public again.
+func reveal_parked(card: Card) -> void:
+	if card != null:
+		card.set_revealed(true)
 
 func _on_hand_charge_start(card: Card) -> void:
 	if card.type == 'Summon':
@@ -299,10 +330,13 @@ func _on_assistant_charge_cancelled() -> void:
 		_clear_skill_proxy()
 		return
 	if summon_casting_card != null:
+		# It goes back to its owner's hand, so it must be face-up again.
+		reveal_parked(summon_casting_card)
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
 		return
 	if casting_card != null:
+		reveal_parked(casting_card)
 		# Only ever parked, never in `cards`. Its own Hand takes it back
 		# (Assistant.charge_cancelled → Hand._on_assistant_charge_cancelled).
 		casting_card = null
@@ -386,6 +420,9 @@ func _on_assistant_target_cancel() -> void:
 	elif summon_casting_card != null:
 		# Payment was deferred and is now refunded: nothing is discarded or
 		# tapped, and the summon returns to hand without entering the stack.
+		var cancelled: Card = summon_casting_card
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
-		hand.cancel_summon_cast()
+		# It is going back to its owner's hand, so reveal it again.
+		reveal_parked(cancelled)
+		_owner_hand(cancelled).cancel_summon_cast()

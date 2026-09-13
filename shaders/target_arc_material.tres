@@ -1,0 +1,38 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/target_arc.gdshader" id="1_arc"]
+
+; The targeting arrow's LOOK. Open this in the editor and every uniform gets a slider
+; or colour picker — tune the beam here, not in code.
+;
+; BallisticArrow duplicates this material twice at runtime:
+;   * the shaft copy keeps these values, minus edge_stub handling described below;
+;   * the head copy is given thin_width == thick_width == edge_stub and a high
+;     core_ratio, so the arrowhead keeps its real baked geometry (the shader must not
+;     widen it) and reads as a solid glowing shape rather than a soft blob.
+; So changing the widths here moves the head's size as well: the CPU sizes the head
+; from thick_width.
+;
+; edge_stub must match BallisticArrow.edge_stub — it is how the unit-width mesh keeps
+; non-degenerate triangles before the vertex shader applies the real width.
+;
+; render_priority 100 keeps the arrow drawing over the card prompt glow (priority 0) and
+; over anything else in the scene; depth testing is off as well, so no card can hide the
+; arrow pointing at it. BallisticArrow.arc_height is the belt to this braces: it lifts the
+; ribbon clear of the board so it is not co-planar with the card faces either.
+[resource]
+render_priority = 100
+shader = ExtResource("1_arc")
+shader_parameter/thin_width = 0.018
+shader_parameter/thick_width = 0.075
+shader_parameter/grow_start = 0.35
+shader_parameter/grow_end = 0.75
+shader_parameter/edge_stub = 0.001
+shader_parameter/glow_color = Color(0.1, 0.42, 1, 1)
+shader_parameter/core_color = Color(0.78, 0.93, 1, 1)
+shader_parameter/core_ratio = 0.32
+shader_parameter/halo_falloff = 0.5
+shader_parameter/intensity = 1.15
+shader_parameter/flow_speed = 0.55
+shader_parameter/flow_scale = 4.0
+shader_parameter/flow_strength = 0.3

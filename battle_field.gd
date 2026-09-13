@@ -28,7 +28,6 @@ var phase: GlobalVariables.Phase:
 	get:
 		return get_parent().phase
 @export var selected_cards_for_mana_conversion: Array[Card] = []
-@onready var TargetScene = preload("res://target.tscn")
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
 @onready var stack: Stack = get_parent().get_node("Stack") as Stack
@@ -113,12 +112,20 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 	else:
 		target_position += ((n+1)/2) * Vector3(0.8, 0, 0)
 	
+	# The card is entering the field: normalise its look first (rotation, scale and
+	# the power/damage readout). Without this a card played from hand keeps the
+	# hand's fan tilt, because the reparent above deliberately preserves the whole
+	# global transform so the travel animation starts where the card was.
+	card.enter_zone(Card.Zone.FIELD)
+
 	if animate:
 		var tween = create_tween().set_ease(Tween.EASE_OUT)
 		tween.set_parallel(true)
 		tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)
 		tween.set_trans(Tween.TRANS_BACK)
-		tween.tween_property(card, "scale", Vector3.ONE*1.4, 0.5)
+		# Same 1.2 as enter_zone: the pop must not leave the card at a different
+		# size than a play that skipped the animation.
+		tween.tween_property(card, "scale", Vector3.ONE*1.2, 0.5)
 		tween.set_parallel(false)
 		tween.tween_property(card, "position", target_position + Vector3(0, 2, 0), 0.6).set_delay(0.2)
 		tween.tween_property(card, "position", target_position, 0.4)
@@ -127,7 +134,6 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 		tween.finished.connect(_on_tween_finished.bind(card))
 	else:
 		card.position = target_position
-		card.scale = Vector3.ONE * 1.2
 		GlobalVariables.refresh_mode()
 	
 func _on_tween_finished(card: Card):
@@ -195,7 +201,12 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 	var def: Dictionary = skills[idx]
 	var choose_target = def.get("choose_target", null)
 	if choose_target:
-		request_target(choose_target, src, true, "Ability")
+		# The arc starts from the PROXY in the stack, not from the card on the field:
+		# that is the object the player is actually resolving, and it is where the
+		# arrow should appear to come from. The proxy carries the same controller, and
+		# source_kind below is what the protection rules read, so targeting behaviour
+		# is unchanged.
+		request_target(choose_target, _proxy, true, "Ability")
 	else:
 		GlobalVariables.refresh_mode()
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
@@ -207,8 +218,27 @@ func execute_card_effect(card,keyword):
 	# Most elegant single-line solution
 	var choose_target_criteria = card.card_effects.get(keyword, {}).get('choose_target', null)
 	
+	# The effect RESOLVES as a card in the stack — Stack.create_card() makes that copy in
+	# response to the signal above, synchronously, so it is already there. That copy is the
+	# object the player is resolving, so the targeting arc must originate from IT and not
+	# from the card sitting on the field.
+	var stack_card: Card = _stack_effect_card_for(card)
 	if choose_target_criteria:
-		request_target(choose_target_criteria, card, false, "Ability")
+		request_target(choose_target_criteria, stack_card if stack_card != null else card, false, "Ability")
+
+## The stack's copy of the effect triggered by `source`, if it exists yet.
+func _stack_effect_card_for(source: Card) -> Card:
+	var game: Node = get_parent()
+	if game == null:
+		return null
+	var s: Variant = game.get("stack")
+	if s == null or s.cards == null:
+		return null
+	var found: Card = null
+	for c in s.cards:
+		if c.effect_source == source:
+			found = c
+	return found
 func TEST_get_front_cards():
 	return opponent_front_cards
 func get_all_cards() -> Array[Card]:
@@ -250,7 +280,7 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	var ballistic_arrow = ballistic_arrow_scene.instantiate()
 	arrow = ballistic_arrow
 	add_child(ballistic_arrow)
-	ballistic_arrow.set_is_aiming(true, card.global_position)
+	ballistic_arrow.set_is_aiming_from_card(true, card)
 	if allow_cancel:
 		assistant.prepare_targeting_phase_cancel()
 	# A non-local owner resolves targeting through its agent instead of waiting
@@ -266,26 +296,24 @@ func set_target_card(card: Card):
 	if not card.is_valid_target:
 		push_warning("[Targeting] %s is not a valid target" % card.card_name)
 		return
-	if target_card != null:
-		push_warning("[Targeting] target already selected (%s); ignoring click on %s" % [target_card.card_name, card.card_name])
-		return
+	# Clicking another valid target MOVES the selection — and the orange ring with
+	# it — rather than being ignored, so the player can change their mind.
+	if target_card != null and is_instance_valid(target_card):
+		target_card.set_selected_highlight(false)
 	target_card = card
+	card.set_selected_highlight(true)
 	print("[Targeting] target selected: ", card.card_name)
-	arrow.lock_arc(card.get_global_center())
+	arrow.lock_arc(card.get_global_face_centre())
 	request_target_confirmation.emit(target_card, targeting_allow_cancel)
 	
 func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
 	for card in get_all_cards():
 		var is_targetable = _card_matches_criteria(card, target_criteria, source, source_kind)
+		# A fresh session starts with nothing selected: clear any orange left over.
+		card.set_selected_highlight(false)
+		# The prompt glow IS the indicator — no separate marker is spawned on top of
+		# each candidate.
 		card.set_valid_target(is_targetable)
-		if is_targetable:
-			# Create and position target above card
-			var target: Node3D = TargetScene.instantiate()
-			target.add_to_group("target_indicators")
-			self.add_child(target)  # Assuming you have a Target scene/class
-			target.position = card.position + Vector3(0,0,0.4)
-			target.rotation_degrees = Vector3(-100,0,0)
-			target.scale = Vector3.ONE * 0.5
 
 func has_viable_target(target_criteria, source: Card = null, source_kind: String = "") -> bool:
 	# Used before casting a Summon: a targeted Summon cannot be cast unless
@@ -306,8 +334,8 @@ func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Car
 		
 func reset_targets():
 	for card in get_all_cards():
-		card.is_valid_target = false
-	get_tree().call_group("target_indicators", "queue_free")
+		# Through the setter, so the "targetable" glow clears with the flag.
+		card.set_valid_target(false)
 
 func remove_card(card):
 	unregister_conditional_effects(card)

@@ -1,0 +1,47 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/target_border.gdshader" id="1_border"]
+
+; The card prompt glow. THIS FILE IS THE LOOK: open it in the editor and every
+; uniform shows up in the Inspector with a slider or colour picker, so the ring
+; can be tuned without touching code. Card._build_target_border() duplicates it
+; (one copy per card, so each card can fade independently, and so a SELECTED card
+; can swap its colours for the orange set in Card.set_selected_highlight()) and
+; overrides only `card_size` and `margin` (derived from the widths below).
+;
+; CSS analogy:
+;   border_width / border_color / border_alpha -> the ring (border-width,
+;                                                 border-color, inner opacity)
+;   border_alpha_far                          -> opacity at the ring's OUTER edge,
+;                                                i.e. how transparent it gets with
+;                                                distance (0.8 = 20% transparent)
+;   glow_width / glow_color / glow_alpha      -> box-shadow blur/colour
+;
+; So to make the ring thicker, raise `border_width` (metres, measured outward from
+; the card's edge) — nothing else needs touching, and the quad that carries the
+; shader is resized from it automatically.
+;
+; The pulse: `pulse_speed` 4.5 is a ~1.4 s cycle. `pulse_amount` is the brightness
+; depth (1.0 = the ring fades out completely at the trough) and `pulse_width` the
+; width swell (0.18 = +/-18% of border_width; it can go past 1.0 for a big swell).
+[resource]
+render_priority = 0
+shader = ExtResource("1_border")
+shader_parameter/card_size = Vector2(0.429, 0.6)
+shader_parameter/margin = 0.2
+shader_parameter/corner_radius = 0.02
+shader_parameter/border_width = 0.025
+shader_parameter/border_feather = 0.01
+shader_parameter/border_color = Color(0.15, 0.45, 1, 1)
+shader_parameter/border_alpha = 1.0
+shader_parameter/border_alpha_far = 0.8
+shader_parameter/border_gain = 1.5
+shader_parameter/glow_width = 0.07
+shader_parameter/glow_color = Color(0.08, 0.26, 1, 1)
+shader_parameter/glow_alpha = 0.5
+shader_parameter/edge_softness = 0.0012
+shader_parameter/intensity = 0.0
+shader_parameter/pulse_speed = 4.5
+shader_parameter/pulse_amount = 0.25
+shader_parameter/pulse_width = 0.18
+shader_parameter/top_bias = 0.0

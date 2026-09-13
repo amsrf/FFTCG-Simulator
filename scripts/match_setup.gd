@@ -20,7 +20,7 @@ func describe_preset(preset: String) -> String:
 		"ai":
 			return "Vs AI  (Practice Board - opponent plays cards and attacks)"
 		"standard":
-			return "Standard Match  (empty board - deck not shuffled yet)"
+			return "Standard Match  (empty board - seeded shuffled decks)"
 		"debug":
 			return "Practice Board  (pre-placed cards for card testing)"
 		_:
@@ -37,15 +37,19 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			cfg["preset"] = "ai"
 			cfg["opponent_type"] = "ai"
 			cfg["opponent_field"] = [
-				{"id": 41, "tapped": false},
-				{"id": 31, "tapped": false},
-				{"id": 32, "tapped": false},
-				{"id": 3, "tapped": false},
-				{"id": 71, "tapped": false},
+				{"id": 41, "tapped": false},   # Squall (Forward 6000)
+				{"id": 31, "tapped": false},   # Chemist (ice Backup)
+				{"id": 32, "tapped": false},   # Chemist (ice Backup)
+				{"id": 32, "tapped": false},   # Chemist (ice) — mana for a 2nd play
+				{"id": 3, "tapped": false},    # Red Mage (fire Backup)
+				{"id": 71, "tapped": false},   # Zidane (Forward 3000)
 			]
-			# Dark Knight x2 (cost 3/4), Summoner (cost 3), Hades (Summon — the
-			# AI skips it), Evoker (cost 1). None of these needs a target.
-			cfg["opponent_hand"] = [55, 54, 53, 52, 68]
+			# Ifrit first (Summon, fire, cost 1) so the AI casts a Summon and
+			# picks a target, and still has ice mana left for a Forward; then
+			# Dark Knight x2 (cost 3/4), Summoner (cost 3), Hades (Summon,
+			# cost 5 — deliberately unaffordable, to prove the AI declines it
+			# instead of starting a payment it cannot finish).
+			cfg["opponent_hand"] = [4, 55, 53, 54, 52]
 		"debug":
 			cfg = _debug()
 		_:
@@ -68,18 +72,22 @@ func resolve_config() -> Dictionary:
 		return _debug()
 	return config
 
-## Standard match scaffold: opening hand from the top of each deck, no
-## pre-placed cards, turn starts at the Active Phase. Shuffling and real
-## decklists are not wired yet (see "shuffle" / "opponent_type" keys).
+## Standard match scaffold: shuffled decks, opening hand from the top of each,
+## no pre-placed cards, turn starts at the Active Phase. The decklist itself is
+## still fixed (1-50 vs 51-100); real deckbuilding is a later step.
 func _standard() -> Dictionary:
-	var player_deck: Array = range(1, 51)
-	var opponent_deck: Array = range(51, 101)
+	# Shuffle BEFORE slicing the opening hand, so the hand really is the top of
+	# the shuffled deck. The seed lands in the config, so passing it back in
+	# (overrides = {"seed": N}) reproduces the match exactly.
+	var deck_seed: int = _pick_seed(0)
+	var player_deck: Array = _shuffled(range(1, 51), deck_seed)
+	var opponent_deck: Array = _shuffled(range(51, 101), deck_seed + 1)
 	return {
 		"preset": "standard",
 		"opponent_type": "mock",
 		"starting_player": 1,
-		"seed": 0,
-		"shuffle": false,
+		"seed": deck_seed,
+		"shuffle": true,
 		"player_hand": player_deck.slice(0, 5),
 		"opponent_hand": opponent_deck.slice(0, 5),
 		"player_deck": player_deck.slice(5),
@@ -88,6 +96,29 @@ func _standard() -> Dictionary:
 		"opponent_field": [],
 		"first_phase": "first_main",
 	}
+
+## Seed 0 means "none chosen": pick one and record it, so the printed value can
+## be passed back in to replay the same match.
+func _pick_seed(seed_value: int) -> int:
+	if seed_value != 0:
+		return seed_value
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return rng.randi_range(1, 999999)
+
+## Fisher-Yates with a dedicated RNG. Array.shuffle() would use the global RNG,
+## which cannot be reproduced from the config.
+func _shuffled(cards: Array, seed_value: int) -> Array:
+	var out: Array = cards.duplicate()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	for i in range(out.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp = out[i]
+		out[i] = out[j]
+		out[j] = tmp
+	print("[MatchSetup] shuffled %d cards (seed %d)" % [out.size(), seed_value])
+	return out
 
 ## Practice board: the original hardcoded debug setup.
 func _debug() -> Dictionary:
