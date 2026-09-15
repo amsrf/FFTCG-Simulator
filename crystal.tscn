@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://cbeh0x1xk6ty6"]
 
-[ext_resource type="ArrayMesh" uid="uid://d0bu4u5ajn7pe" path="res://Blender/crystal_0.obj" id="1_200vn"]
+[ext_resource type="ArrayMesh" path="res://Blender/crystal_0.obj" id="1_200vn"]
 [ext_resource type="Script" uid="uid://y3pqky6rc4vq" path="res://crystal.gd" id="1_kxb6e"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gxs1y"]

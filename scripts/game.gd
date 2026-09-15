@@ -38,6 +38,10 @@ var phase: GlobalVariables.Phase
 var match_over: bool = false
 var priority_holder: int = 0
 
+## How long an opponent's chosen blocker is shown before the damage step. The pick is drawn
+## as soon as it is made; this only paces it so a human can actually read the link.
+@export var block_announce_time: float = 1.2
+
 
 
 func _ready():
@@ -474,11 +478,22 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			field.reset_blocker()
 			if local_defence:
 				GlobalVariables.push_modal(GlobalVariables.Player_Mode.BLOCKING)
+				# Blue ring on everything that could block, because the game is asking the
+				# human to choose one. Clicking turns it orange and draws the arc.
+				field.set_blockable(controller_for(defender_id), true)
 				assistant.set_declare_block_button('No Block')
 			var blocker: Card = await defender_agent.decide_blocker(defender_id, field.attacker_card)
 			if local_defence:
 				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.BLOCKING)
+				field.set_blockable(controller_for(defender_id), false)
 			if blocker != null:
+				if not local_defence:
+					# The human is watching the opponent declare. Show the link for their
+					# pick and hold it long enough to be read: the choice happens before the
+					# damage step, and without this the block stays invisible until it
+					# resolves. No blue ring here — that cue means "your choice".
+					field.show_block_arc(blocker)
+					await get_tree().create_timer(block_announce_time).timeout
 				blocker.declare_blocker()
 			await priority()
 			pass

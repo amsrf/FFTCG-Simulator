@@ -26,7 +26,7 @@ var s_cost_source: Card = null
 var s_cost_skill_index: int = -1
 var s_cost_selected_card: Card = null
 @onready var field: Field = get_parent().get_node("Field") as Field
-@onready var hand: Hand = get_tree().current_scene.get_node("Player/Hand") as Hand
+@onready var hand: Hand = get_parent().get_node("Player/Hand") as Hand
 @onready var assistant: Assistant = get_parent().get_node("Assistant") as Assistant
 @onready var card_scene = preload("res://card.tscn")
 
@@ -54,22 +54,142 @@ func calculate_total_width():
 	return (n * card_width) + ((n - 1) * card_spacing)
 	
 func stack_length() -> int:
-	return len(cards)	
+	return len(cards)
+
+## The stack hangs to the LEFT, like a hand: the TOP of the stack (the last card put there,
+## `cards.back()`) is the leftmost card and each earlier card steps to the right of it.
+## `_slot_for()` is the only place that knows this, so the arc, the tilt and the stacking height
+## can never disagree about which end is which.
+func _slot_for(i: int) -> int:
+	return layout_cards().size() - 1 - i
+
+## Shallow arc and per-card tilt, mirroring the hand: a plain row collapsed into one unreadable
+## overlap as soon as a third card arrived.
+const FAN_RADIUS := 3.0
+## How much of the card pitch each neighbour advances along the arc. Below 1.0 the fan is TIGHTER
+## than the old row was — a stack should read as one group, not as a spread-out row.
+const FAN_TIGHTNESS := 0.5
+## Height between neighbours, so the card in front is visibly in front.
+const FAN_HEIGHT_STEP := 0.006
+## Extra height for the card the player has selected. It has to clear FAN_HEIGHT_STEP times the
+## number of cards, or a selected card at the back would still sit behind the front of the fan.
+const FAN_RAISE := 0.06
+## The review link's arrow, kept separate from the live targeting arrow and the block arc so the
+## three can never re-aim or hide each other.
+const LINK_ARROW_SCENE := preload("res://ballistic_arrow.tscn")
+
+## Tilt/arc angle for a SLOT (0 = leftmost). Same shape as the hand's fan.
+func fan_angle_for(slot: int) -> float:
+	var n: int = layout_cards().size()
+	var t: float = slot - (n - 1) / 2.0
+	return -t * (card_width + card_spacing) * FAN_TIGHTNESS / FAN_RADIUS
+
+## ----- reviewing the stack's targets ---------------------------------------------------------
+## Every card in the stack keeps the target it was given (`Card.effect_target`), so the stack can
+## re-draw any of those links on demand. That is the only way to see what an older ability was
+## pointed at once a newer one has been put on top.
+##
+## The card on display is the one the mouse is OVER, and otherwise the TOP of the stack. Hovering
+## is transient, so leaving a card restores the top with no "clicked elsewhere?" rule to remember.
+var hovered_card: Card = null
+
+func displayed_card() -> Card:
+	if hovered_card != null and is_instance_valid(hovered_card) and cards.has(hovered_card):
+		return hovered_card
+	return cards.back() if not cards.is_empty() else null
+
+func set_hovered(card: Card, entered: bool) -> void:
+	if entered:
+		hovered_card = card
+	elif hovered_card == card:
+		hovered_card = null
+	refresh_target_display()
+
+## Draw — or clear — the link for `displayed_card()`. DISPLAY ONLY: it opens no session and
+## changes no game state; it exists so the player can look at what is already on the stack.
+func refresh_target_display() -> void:
+	# Never draw over a live targeting session. While one is open the arrow and the rings belong
+	# to the choice being made, and a review link would fight them.
+	var mode = GlobalVariables.get_player_mode()
+	if mode == GlobalVariables.Player_Mode.TARGET \
+			or mode == GlobalVariables.Player_Mode.PAYING_COST \
+			or mode == GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+		return
+	var card: Card = displayed_card()
+	var target: Card = card.effect_target if card != null else null
+	var field = get_parent().get("field")
+	if field == null:
+		return
+	if target == null or not is_instance_valid(target):
+		_clear_target_display()
+		return
+	# The FIELD draws it, not the stack: BallisticArrow's points are LOCAL, and the stack node is
+	# flipped and lifted, so an arrow parented here and given global points lands wherever that
+	# transform carries it ("arrows in random places").
+	field.show_review_link(card, target)
+	# NOTE: the link draws the ARROW ONLY — it deliberately does NOT paint the target's aura.
+	# The aura already has an owner (the live pick, and the reveal that holds until the stack
+	# resolves). An earlier version painted it here too, and because "clear only what I lit" is
+	# indistinguishable when both writers light the SAME card, the review link stole the reveal's
+	# ring and then cleared it. The arrowhead lands exactly on the target, so the link needs no
+	# second signal to be readable.
+	# If a hover aura is wanted later, the right change is to make the aura DERIVED in one place
+	# that decides which card is marked and why — not to add a third writer of the same flags.
+
+func _clear_target_display() -> void:
+	var field = get_parent().get("field")
+	if field != null:
+		field.hide_review_link()
+
+## Hide the review arrow before a live session opens: it draws the same arrow shape, and the
+## session is about to draw its own from the same card. Done deterministically at the START of the
+## session so "there is only ever one arrow on screen" does not depend on who refreshes first.
+func release_target_display() -> void:
+	hovered_card = null
+	_clear_target_display()
+
+## Which card the player is looking at. null means "the top of the stack"; see select_card().
+var selected_card: Card = null
+
+func selected_or_top() -> Card:
+	if selected_card != null and is_instance_valid(selected_card) and cards.has(selected_card):
+		return selected_card
+	return cards.back() if not cards.is_empty() else null
+
+## Clicking a card in the fan raises it, and makes it the card whose targeting is displayed.
+func select_card(card: Card) -> void:
+	if card == null or not cards.has(card):
+		return
+	selected_card = card
+	update_card_positions()
+
+## Back to the top of the stack — what any click outside the stack does.
+func select_top() -> void:
+	selected_card = null
+	update_card_positions()
+
 func update_card_positions():
 	var list: Array = layout_cards()
-	var total_width = calculate_total_width()
-	start_x = -total_width / 2 + card_width / 2
-
 	for i in range(list.size()):
 		var card = list[i]
 		card.index = i
-		card.rotation = Vector3.ZERO
-		animate_card(card, calculate_card_position(i)) # Position relative to the Hand
+		animate_card(card, calculate_card_position(i))
+	# The stack just changed, so what is on display may have too: the default display is the TOP
+	# of the stack, and after an add or a resolve that is a different card.
+	refresh_target_display()
 		
-func calculate_card_position(i):
-	var x_offset = start_x + i * (card_width + card_spacing)
-	var y_offset = (i)*0.001
-	return Vector3(x_offset, y_offset, 0)
+func calculate_card_position(i: int) -> Vector3:
+	var card = layout_cards()[i]
+	var slot: int = _slot_for(i)
+	var angle: float = -fan_angle_for(slot)
+	var x_offset: float = FAN_RADIUS * sin(angle)
+	var z_offset: float = FAN_RADIUS * (1.0 - cos(angle))
+	# `i` counts the other way to `slot`, so the top of the stack ends up in FRONT as well as on
+	# the left: the higher the index, the higher the card.
+	var y_offset: float = i * FAN_HEIGHT_STEP
+	if selected_card != null and card == selected_card:
+		y_offset += FAN_RAISE
+	return Vector3(x_offset, y_offset, z_offset)
 	
 func animate_card(card, target_position):
 	# Create a Tween to animate the card's movement
@@ -77,8 +197,11 @@ func animate_card(card, target_position):
 	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.3)
 	tween.tween_property(card, "scale", Vector3.ONE*1.4, 0.3)
+	# The fan tilt is tweened too, so a card added to the stack rotates into place rather than
+	# snapping straight and then leaning.
+	tween.tween_property(card, "rotation", Vector3(0.0, fan_angle_for(_slot_for(card.index)), 0.0), 0.3)
 	
-	
+
 func add_card_to_tree(card):
 	cards.append(card)
 	card.index = cards.size()-1
@@ -383,6 +506,9 @@ func resolve_top_effect() -> void:
 		await resolution_complete
 	resolution_pending = false
 	if len(cards) == 0:
+		# The stack is done, so any "the opponent chose this" reveal is spent. Clearing it
+		# here — rather than never — is what stops the red ring from outliving the effect.
+		field.clear_targeted_highlights()
 		GlobalVariables.refresh_mode()
 	
 func process_next_effect():

@@ -18,8 +18,10 @@ signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal effect_card_selection_changed(has_selection: bool)
 @onready var graveyard: Node = get_parent().get_node("Graveyard")
-@onready var stack: Stack = get_tree().current_scene.get_node("Stack") as Stack
-@onready var field: Field = get_tree().current_scene.get_node("Field") as Field
+# Relative, not get_tree().current_scene — see damage_zone.gd. This also resolves the same
+# way for Opponent/Hand, which shares this script.
+@onready var stack: Stack = get_node("../../Stack") as Stack
+@onready var field: Field = get_node("../../Field") as Field
 
 func draw(card):
 	add_card_to_tree(card)
@@ -246,18 +248,18 @@ func refresh_highlights() -> void:
 	var mode: GlobalVariables.Player_Mode = GlobalVariables.get_player_mode()
 	for card in cards:
 		if card.controller != "player":
-			card.set_highlight(false)
+			card.set_prompt_glow(false)
 			continue
 		match mode:
 			GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
 				# The ONLY hand glow: the game is asking the player to choose a
 				# card, so mark exactly the cards that satisfy the criteria (all
 				# Fire Backups for Auron's trigger, for instance).
-				card.set_highlight(not choose_card_criteria.is_empty() and card.matches_criteria(choose_card_criteria))
+				card.set_prompt_glow(not choose_card_criteria.is_empty() and card.matches_criteria(choose_card_criteria))
 			_:
 				# Everything else — a normal main phase included — stays dark. A
 				# playable card is not a card the game is asking you to pick.
-				card.set_highlight(false)
+				card.set_prompt_glow(false)
 
 func begin_choose_card(criteria: Dictionary) -> void:
 	clear_effect_card_selection()

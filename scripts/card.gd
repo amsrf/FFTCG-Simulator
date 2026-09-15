@@ -221,6 +221,11 @@ func _executeAuraEffects():
 	_applyAurasOnField(field)
 	_receiveAurasFromField(field)
 
+## Loaded by PATH rather than by its `class_name`: a newly added global class is only registered
+## in Godot's class cache by the editor, so a headless run would fail to parse this file with
+## `Identifier "StackCardState" not declared` until the project is opened once.
+const STACK_CARD_STATE := preload("res://scripts/stack_card_state.gd")
+
 func _update_state():
 	# Assign the new state based on current parent
 	var parent = get_parent()
@@ -231,6 +236,10 @@ func _update_state():
 		_updateUI()
 		_executeAuraEffects()
 		current_state = FieldCardState.new(self)
+	elif parent is Stack:
+		# A stack card IS clickable — it selects itself so its own targeting is displayed —
+		# but it is not played by anyone, so this is its only interaction.
+		current_state = STACK_CARD_STATE.new(self)
 	else:
 		current_state = null
 		pass
@@ -240,12 +249,27 @@ func set_state_based_on_parent():
 		current_state = HandCardState.new(self)
 	elif get_parent() is Field:
 		current_state = FieldCardState.new(self)
+	elif get_parent() is Stack:
+		current_state = STACK_CARD_STATE.new(self)
 	else:
 		current_state = null
 			
 func _on_card_area_3d_card_grabbed(_card: Variant):
 	if current_state :
 		current_state.handle_grabbed()
+
+## Hover on the card's own area. The hand's LIFT is driven separately by HandMesh
+## (mesh_instance_3d.gd); these handlers exist so a zone can react to the pointer being over a
+## card. Only the stack needs it: hovering a stack card puts THAT card's targeting on display.
+func _on_card_area_3d_mouse_entered():
+	var stack: Stack = get_parent() as Stack
+	if stack != null:
+		stack.set_hovered(self, true)
+
+func _on_card_area_3d_mouse_exited():
+	var stack: Stack = get_parent() as Stack
+	if stack != null:
+		stack.set_hovered(self, false)
 	
 func can_be_played():
 	var player_mode = GlobalVariables.get_player_mode()
@@ -359,7 +383,14 @@ func enter_zone(zone: Zone) -> void:
 	scale = Vector3.ONE * float(presentation["scale"])
 	is_dragging = false
 	is_valid_target = false
-	set_highlight(false)
+	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked
+	# this", "they picked this", and "you may activate this". Leaving any of them set would
+	# carry the ring into the next zone — a red or a green one into the graveyard.
+	_prompt_glow = false
+	_selected_highlight_on = false
+	_targeted_highlight_on = false
+	_available_highlight_on = false
+	_refresh_target_ring()
 	reset()  # drops the mana-crystal marker
 	if bool(presentation["power_ui"]):
 		showPower()
@@ -574,32 +605,109 @@ var _border_material: ShaderMaterial = null
 var _border_tween: Tween = null
 var _highlight_on: bool = false
 
-func set_valid_target(value: bool):
+## `glow` exists because legality and visibility are not the same thing. `is_valid_target`
+## gates the local player's clicks and is what an agent looks for; the blue ring means "the
+## game is asking YOU". When the OPPONENT is the one choosing, the flag must still be set
+## (their agent needs it) but the ring is suppressed — we show only the card they actually
+## pick, in red.
+func set_valid_target(value: bool, glow: bool = true):
 	is_valid_target = value
-	# The glow is the player-facing half of "this card may be chosen".
-	set_highlight(value)
+	set_prompt_glow(value and glow)
 
 ## The card the player has actually PICKED (the current target, or the card chosen
 ## for an effect): the same ring in a different colour, so the orange one obviously
 ## means "this one" while the blue ones are merely legal.
 const SELECTED_BORDER_COLOR := Color(1.0, 0.45, 0.05)
 const SELECTED_GLOW_COLOR := Color(0.95, 0.32, 0.0)
+## The card the OPPONENT has chosen. Their legal options are not our business, so this is
+## the only cue we get about an incoming effect while it is still on the stack — drawn in
+## red, alongside their targeting arc.
+const TARGETED_BORDER_COLOR := Color(0.95, 0.12, 0.12)
+const TARGETED_GLOW_COLOR := Color(0.85, 0.03, 0.03)
+## A card whose effect YOU can activate right now: an untapped Backup with a "skill", in a
+## moment where acting is allowed. Green means "this is available", not "this is being chosen"
+## — it goes dark the instant a targeting or payment modal takes the moment away.
+const AVAILABLE_BORDER_COLOR := Color(0.15, 0.95, 0.3)
+const AVAILABLE_GLOW_COLOR := Color(0.04, 0.7, 0.12)
 ## The material's own colours, captured when it is built so deselecting restores
 ## them. Safe because every card owns its own duplicate of the material.
 var _border_color_base: Color = Color.WHITE
 var _glow_color_base: Color = Color.WHITE
+## ONE ring, FOUR meanings. Colour and visibility are derived from these flags together by
+## _refresh_target_ring() rather than written to the material by each setter in turn: with
+## several independent writers the last one to run decided the colour, and a setter that only
+## recoloured left the ring dark (it has to be LIT as well — see set_highlight).
+var _prompt_glow: bool = false
 var _selected_highlight_on: bool = false
+var _targeted_highlight_on: bool = false
+var _available_highlight_on: bool = false
+
+## "The game is asking YOU to pick this" (blue) — the same meaning in the hand and on the field.
+func set_prompt_glow(enabled: bool) -> void:
+	_prompt_glow = enabled
+	_refresh_target_ring()
 
 func set_selected_highlight(enabled: bool) -> void:
 	if enabled == _selected_highlight_on:
 		return
 	_selected_highlight_on = enabled
+	_refresh_target_ring()
+
+## Mirror of set_selected_highlight() for the opponent's choice: red is "they picked this".
+func set_targeted_highlight(enabled: bool) -> void:
+	if enabled == _targeted_highlight_on:
+		return
+	_targeted_highlight_on = enabled
+	_refresh_target_ring()
+
+## "You could activate this card's effect right now" (see Field.can_activate_now).
+func set_available_highlight(enabled: bool) -> void:
+	if enabled == _available_highlight_on:
+		return
+	_available_highlight_on = enabled
+	_refresh_target_ring()
+
+## The material's stock widths, captured when the ring is built (see _build_target_border).
+var _border_width_base: float = 0.025
+var _glow_width_base: float = 0.07
+## How wide the green availability ring is drawn, as a fraction of the others. It is a STANDING
+## cue — it can sit on several cards for a whole turn — while blue/orange/red are momentary, so
+## it is drawn thinner to stay subordinate to them.
+const AVAILABLE_WIDTH_SCALE := 0.5
+
+## The single owner of the ring's appearance: LIT if any meaning is on, and coloured by
+## priority — orange (my pick) over red (their pick) over green (available) over blue (merely
+## legal). Lighting it is not optional: a ring that is coloured but not lit shows nothing on
+## screen, which is how the red reveal once shipped invisible.
+func _refresh_target_ring() -> void:
+	var lit: bool = _prompt_glow or _selected_highlight_on or _targeted_highlight_on or _available_highlight_on
+	if target_border == null and not lit:
+		# Nothing built and nothing wanted: do not build a ring just to switch it off.
+		_highlight_on = false
+		return
 	if target_border == null:
 		_build_target_border()
 	if _border_material == null:
 		return
-	_border_material.set_shader_parameter("border_color", SELECTED_BORDER_COLOR if enabled else _border_color_base)
-	_border_material.set_shader_parameter("glow_color", SELECTED_GLOW_COLOR if enabled else _glow_color_base)
+	# Width before colour. Only the green scales, and every other state restores the stock
+	# width, so switching between states is exact rather than accumulating.
+	var width_scale: float = AVAILABLE_WIDTH_SCALE if _available_highlight_on else 1.0
+	_border_material.set_shader_parameter("border_width", _border_width_base * width_scale)
+	_border_material.set_shader_parameter("glow_width", _glow_width_base * width_scale)
+	var color: Color = _border_color_base
+	var glow: Color = _glow_color_base
+	if _available_highlight_on:
+		color = AVAILABLE_BORDER_COLOR
+		glow = AVAILABLE_GLOW_COLOR
+	if _targeted_highlight_on:
+		color = TARGETED_BORDER_COLOR
+		glow = TARGETED_GLOW_COLOR
+	if _selected_highlight_on:
+		color = SELECTED_BORDER_COLOR
+		glow = SELECTED_GLOW_COLOR
+	_border_material.set_shader_parameter("border_color", color)
+	_border_material.set_shader_parameter("glow_color", glow)
+	set_highlight(lit)
 
 ## Show/hide the selectable/targetable glow. Fades so the cue does not pop, and
 ## is cheap to call repeatedly: Hand.refresh_highlights() runs on every layout,
@@ -676,10 +784,14 @@ func _build_target_border() -> void:
 	var glow_color: Variant = _border_material.get_shader_parameter("glow_color")
 	if glow_color is Color:
 		_glow_color_base = glow_color
+	# ...and the stock WIDTHS, so a state can be drawn thinner (the green availability ring is
+	# half width) without losing the look the material was tuned to.
+	_border_width_base = maxf(float(_border_material.get_shader_parameter("border_width")), 0.005)
+	_glow_width_base = maxf(float(_border_material.get_shader_parameter("glow_width")), 0.0)
 	# Size the quad from the ring + spill, and write the result back so the shader
 	# and the geometry can never disagree about where the glow ends.
-	var border_width: float = maxf(float(_border_material.get_shader_parameter("border_width")), 0.005)
-	var glow_width: float = maxf(float(_border_material.get_shader_parameter("glow_width")), 0.0)
+	var border_width: float = _border_width_base
+	var glow_width: float = _glow_width_base
 	# 3x the spill width is roughly where its exponential has decayed to ~5%.
 	var margin: float = maxf(border_width + glow_width * 3.0 + 0.01, BORDER_MARGIN_MIN)
 	_border_material.set_shader_parameter("margin", margin)

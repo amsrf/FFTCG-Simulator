@@ -10,24 +10,45 @@
 [ext_resource type="Script" uid="uid://gexxd2cdhlpo" path="res://focus_card.gd" id="9_iotsf"]
 [ext_resource type="Script" uid="uid://eur8blk8gur4" path="res://stack.gd" id="9_vef74"]
 [ext_resource type="Script" uid="uid://b8jjysxi0lj74" path="res://assistant.gd" id="10_hve3p"]
-[ext_resource type="PackedScene" uid="uid://b1c3wp5s154jm" path="res://BigButton.tscn" id="11_mfdv2"]
+; The gem button has replaced BigButton for ConfirmButton / CancelButton / PassPhaseButton. GDScript
+; loads GemButton.tscn by path here (it has no uid yet — Godot assigns one when the editor next
+; saves). Every node path BigButton.tscn had still exists in it, which tests/button_probe.tscn
+; asserts, so the three saved instance overrides below still resolve. To revert: point this line
+; back at res://BigButton.tscn (uid://b1c3wp5s154jm) and nothing else needs to change.
+[ext_resource type="PackedScene" path="res://GemButton.tscn" id="11_mfdv2"]
 [ext_resource type="PackedScene" uid="uid://dmhmh6wr3wejy" path="res://card_button.tscn" id="13_lc2xo"]
 [ext_resource type="PackedScene" uid="uid://bh8f5mddl0cbx" path="res://damage_zone.tscn" id="14_215e1"]
 [ext_resource type="PackedScene" uid="uid://ja4kal3yojgu" path="res://ballistic_arrow.tscn" id="16_80cx4"]
 [ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="17_e8heu"]
 [ext_resource type="Script" uid="uid://de1gjjtkht72i" path="res://scripts/player_side.gd" id="18_playerside"]
 
-[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_j5wjh"]
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_j5wjh"]
+; A STUDIO sky, not a landscape: bright overhead, mid horizon, dark ground. Metal shows the
+; environment rather than its own colour, so this gradient is what draws the reference's bright
+; top rim and dark lower band. This used to be a PanoramaSkyMaterial with NO panorama assigned,
+; which reflects pure black — that is why chrome looked dead no matter how the material was
+; tuned, and no material value could ever have fixed it.
+sky_top_color = Color(0.92, 0.95, 1, 1)
+sky_horizon_color = Color(0.62, 0.66, 0.72, 1)
+sky_curve = 0.2
+sky_energy_multiplier = 1.0
+ground_horizon_color = Color(0.16, 0.17, 0.19, 1)
+ground_bottom_color = Color(0.02, 0.022, 0.028, 1)
+ground_curve = 0.05
+ground_energy_multiplier = 1.0
 
 [sub_resource type="Sky" id="Sky_vef74"]
-sky_material = SubResource("PanoramaSkyMaterial_j5wjh")
+sky_material = SubResource("ProceduralSkyMaterial_j5wjh")
 
 [sub_resource type="Environment" id="Environment_j5wjh"]
 background_mode = 2
 sky = SubResource("Sky_vef74")
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
-ambient_light_sky_contribution = 0.0
+; Was 0.0, which threw the sky's contribution to ambient light away entirely — the other half of
+; why nothing read as reflective. 0.6 keeps the board close to its current brightness while
+; letting the sky light it; lower ambient_light_energy if the scene ends up too bright.
+ambient_light_sky_contribution = 0.6
 ambient_light_energy = 0.3
 reflected_light_source = 2
 ssr_fade_in = 0.0274516

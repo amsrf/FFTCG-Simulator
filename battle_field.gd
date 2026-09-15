@@ -15,6 +15,10 @@ var attacker_card: Card = null
 ## instructions finish, which is before DAMAGE_RESOLUTION reads it.
 var blocker_card: Card = null
 var arrow: BallisticArrow
+## A SEPARATE arrow for the combat's block link. The targeting arrow above belongs to a
+## targeting session and follows the mouse; sharing one instance would let either one
+## re-aim or hide the other.
+var block_arrow: BallisticArrow = null
 ## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
 var targeting_allow_cancel: bool = false
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
@@ -163,15 +167,59 @@ func try_activate_from_field(card: Card) -> void:
 	else:
 		card.show_actions()
 
-func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
+## True while the LOCAL player holds the window. Holding a card you *could* activate is not the
+## same as being allowed to activate it: while the OPPONENT holds priority the input mode is
+## still FREE/INSTANT_SPEED_TIME, so the mode alone cannot answer this question. A finished
+## match is not a window either.
+func has_priority() -> bool:
+	var game: Node = get_parent()
+	if game == null:
+		return false
+	if bool(game.get("match_over")):
+		return false
+	return int(game.get("priority_holder")) == 1
+
+## The authoritative "this card's effect can be activated right now" gate: your card, YOUR
+## WINDOW, untapped, with an activatable skill, in a moment where acting is allowed (FREE or
+## INSTANT_SPEED_TIME — no targeting, payment or declaration modal open).
+##
+## begin_skill_activation() uses this as its precondition AND the green availability ring is
+## driven from it, so the cue and the action can never disagree. Any condition added here
+## therefore tightens both at once.
+func can_activate_now(card: Card) -> bool:
+	if card == null or card.controller != "player":
+		return false
+	if not has_priority():
+		return false
 	var mode = GlobalVariables.get_player_mode()
 	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-		return
-	if card.controller != "player":
-		return
+		return false
 	if card.tapped:
-		return
+		return false
 	if not "skill" in card.card_effects:
+		return false
+	return not (card.card_effects["skill"] as Array).is_empty()
+
+## Green ring: "you may activate this right now" — your cards only, and gone the moment a modal
+## takes the moment away. It is DERIVED state with many causes (the input mode, a card's tapped
+## state, which cards are on the field), so it is POLLED rather than hooked to one trigger; the
+## card setters are guarded, so an unchanged card costs a bool comparison.
+const AVAILABILITY_POLL := 0.15
+var _availability_timer: float = 0.0
+
+func _process(delta: float) -> void:
+	_availability_timer += delta
+	if _availability_timer < AVAILABILITY_POLL:
+		return
+	_availability_timer = 0.0
+	refresh_available_effects()
+
+func refresh_available_effects() -> void:
+	for card in get_all_cards():
+		card.set_available_highlight(can_activate_now(card))
+
+func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
+	if not can_activate_now(card):
 		return
 	var skills: Array = card.card_effects["skill"]
 	if skill_index < 0 or skill_index >= skills.size():
@@ -274,6 +322,11 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 		arrow.queue_free()
 		arrow = null
 	reset_targets()
+	# The stack's review link draws the same arrow shape and paints the same aura, so it has to
+	# let go of both before this session claims them.
+	var stack_node = get_parent().get("stack")
+	if stack_node != null:
+		stack_node.release_target_display()
 	print("[Targeting] request_target source=%s criteria=%s" % [card.card_name, targeting_criteria])
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 	set_viable_targets(targeting_criteria, card, source_kind)
@@ -296,24 +349,38 @@ func set_target_card(card: Card):
 	if not card.is_valid_target:
 		push_warning("[Targeting] %s is not a valid target" % card.card_name)
 		return
-	# Clicking another valid target MOVES the selection — and the orange ring with
-	# it — rather than being ignored, so the player can change their mind.
+	# Blue and orange are the LOCAL player's vocabulary: "legal" and "you picked this".
+	# When the opponent is the one choosing, the picked card is shown in RED instead —
+	# along with their arc, so an incoming effect is readable while it is on the stack.
+	var local_chooser: bool = source_card == null or source_card.controller == "player"
+	# Clicking another valid target MOVES the selection — and the ring with it — rather
+	# than being ignored, so either player can change their mind.
 	if target_card != null and is_instance_valid(target_card):
 		target_card.set_selected_highlight(false)
+		target_card.set_targeted_highlight(false)
 	target_card = card
-	card.set_selected_highlight(true)
+	if local_chooser:
+		card.set_selected_highlight(true)
+	else:
+		card.set_targeted_highlight(true)
 	print("[Targeting] target selected: ", card.card_name)
 	arrow.lock_arc(card.get_global_face_centre())
 	request_target_confirmation.emit(target_card, targeting_allow_cancel)
 	
 func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
+	# The blue ring means "the game is asking YOU". When the OPPONENT is the one choosing,
+	# their legal options are not our business. The flag still goes on — their agent selects
+	# by it — but the glow stays off, so the only thing we see is the card they pick, which
+	# set_target_card() marks red.
+	var glow: bool = source == null or source.controller == "player"
 	for card in get_all_cards():
 		var is_targetable = _card_matches_criteria(card, target_criteria, source, source_kind)
-		# A fresh session starts with nothing selected: clear any orange left over.
+		# A fresh session starts with nothing picked: clear any leftover ring.
 		card.set_selected_highlight(false)
+		card.set_targeted_highlight(false)
 		# The prompt glow IS the indicator — no separate marker is spawned on top of
 		# each candidate.
-		card.set_valid_target(is_targetable)
+		card.set_valid_target(is_targetable, glow)
 
 func has_viable_target(target_criteria, source: Card = null, source_kind: String = "") -> bool:
 	# Used before casting a Summon: a targeted Summon cannot be cast unless
@@ -333,9 +400,23 @@ func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Car
 	return card.can_be_chosen_by(source, source_kind)
 		
 func reset_targets():
+	# Every meaning a targeting session can leave behind: the blue prompt, the ORANGE pick, and
+	# the opponent's red reveal. The orange is the one that leaked — it was set on the click and
+	# only ever cleared by the *next* session starting, so an ability that resolved and was not
+	# followed by another targeting left its target glowing orange for the rest of the match.
 	for card in get_all_cards():
 		# Through the setter, so the "targetable" glow clears with the flag.
 		card.set_valid_target(false)
+		card.set_selected_highlight(false)
+		# ...and the opponent's red ring with it.
+		card.set_targeted_highlight(false)
+
+## Drop only the red "the opponent chose this" rings, leaving the selection state alone.
+## Called when the stack has fully resolved — the reveal is spent — rather than never, which
+## would leave the ring to outlive the effect.
+func clear_targeted_highlights() -> void:
+	for card in get_all_cards():
+		card.set_targeted_highlight(false)
 
 func remove_card(card):
 	unregister_conditional_effects(card)
@@ -433,20 +514,103 @@ func set_blocker_card(card: Card) -> void:
 		return
 	if blocker_card == card:
 		card.set_blocker_status(false)
+		card.set_selected_highlight(false)
 		blocker_card = null
+		hide_block_arc()
 	else:
 		if blocker_card != null and is_instance_valid(blocker_card):
 			blocker_card.set_blocker_status(false)
+			blocker_card.set_selected_highlight(false)
 		blocker_card = card
 		card.set_blocker_status(true)
+		# Same vocabulary as targeting: blue = legal, orange = the one you picked. So a
+		# reselect before committing simply moves the orange and the arc.
+		card.set_selected_highlight(true)
+		show_block_arc(card)
 	blocker_changed.emit()
+
+## Mark every card that could legally block for `controller` with the prompt glow.
+##
+## Only ever called for the LOCAL defender: the ring means "the game is asking YOU to
+## choose". An opponent's declaration shows the arc alone, because that cue is not a
+## question addressed to the human.
+func set_blockable(controller: String, enabled: bool) -> void:
+	for card in get_all_cards():
+		if card.controller != controller:
+			continue
+		card.set_valid_target(enabled and can_block(card))
+
+## The block predicate: an untapped Forward. Deliberately the same rule the click gate
+## applies in field_card_state.gd, so everything that glows is also clickable.
+func can_block(card: Card) -> bool:
+	return card != null and card.can_attack()
+
+## The review link: the arc that shows what a card IN THE STACK was pointed at, re-drawn on
+## demand as the player moves over the stack (see Stack.refresh_target_display).
+##
+## It is drawn by the FIELD, not by the stack, because `BallisticArrow` treats the points it is
+## handed as LOCAL coordinates. The stack node is flipped and sits above the board, so an arrow
+## parented to it and given global points lands wherever that transform carries it — which is
+## exactly what "arrows in random places" was. The Field's frame is identity, as it is for the
+## other two arrows, so global points are correct here.
+var review_arrow: BallisticArrow = null
+
+func show_review_link(source: Card, target: Card) -> void:
+	if source == null or target == null:
+		hide_review_link()
+		return
+	if not is_instance_valid(source) or not is_instance_valid(target):
+		hide_review_link()
+		return
+	if review_arrow == null or not is_instance_valid(review_arrow):
+		review_arrow = ballistic_arrow_scene.instantiate()
+		add_child(review_arrow)
+	# Same convention as the live targeting arrow — from the source's top edge to the target's
+	# centre — so a link being reviewed looks exactly like the one that was drawn.
+	review_arrow.set_is_aiming(true, source.get_global_top_centre())
+	review_arrow.lock_arc(target.get_global_face_centre())
+
+func hide_review_link() -> void:
+	if review_arrow != null and is_instance_valid(review_arrow):
+		review_arrow.set_is_aiming(false)
+
+## The link from the blocker to the attacker, drawn CENTRE to CENTRE.
+##
+## Static by design: both cards are already on the field and neither moves while the
+## declaration is open, so this aims once and locks. That is the opposite of the targeting
+## arrow, which follows the mouse and a card that may still be tweening into the stack.
+func show_block_arc(blocker: Card) -> void:
+	if blocker == null or attacker_card == null:
+		hide_block_arc()
+		return
+	if block_arrow == null or not is_instance_valid(block_arrow):
+		block_arrow = ballistic_arrow_scene.instantiate()
+		add_child(block_arrow)
+		# Adjacent cards are the common case for a block, and the default floor exists to
+		# stop a dot being drawn for a near-zero targeting drag.
+		block_arrow.min_distance = 0.15
+		# A block joins the two battle rows, so its chord runs up the screen. Bowing along
+		# screen-up would put the arch along the chord (a 1.54 m path for an 0.85 m span);
+		# perpendicular instead makes it a sideways link. Kept shallow — this is a link
+		# between two cards, not a shot.
+		block_arrow.bow_perpendicular = true
+		block_arrow.peak_ratio = 0.22
+	block_arrow.set_is_aiming(true, blocker.get_global_face_centre())
+	block_arrow.lock_arc(attacker_card.get_global_face_centre())
+
+func hide_block_arc() -> void:
+	if block_arrow != null and is_instance_valid(block_arrow):
+		block_arrow.set_is_aiming(false)
 
 func reset_blocker():
 	# The blocker may have broken in the clash, so only clear the marker while it
 	# is still a card on the field.
-	if blocker_card != null and is_instance_valid(blocker_card) and blocker_card.is_on_field():
-		blocker_card.set_blocker_status(false)
+	if blocker_card != null and is_instance_valid(blocker_card):
+		if blocker_card.is_on_field():
+			blocker_card.set_blocker_status(false)
+		blocker_card.set_selected_highlight(false)
 	blocker_card = null
+	hide_block_arc()
 func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()

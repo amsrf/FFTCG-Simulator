@@ -1,0 +1,91 @@
+[gd_scene load_steps=9 format=3]
+
+; The gem button: BigButton's structure and interaction, with the generated capsule model
+; (Blender/gem_button.glb) in place of the flat plate.
+;
+; The node names MATCH BigButton.tscn deliberately. game.tscn instances this scene three times as
+; ConfirmButton / CancelButton / PassPhaseButton and overrides their transforms, and a saved
+; instance override resolves by node PATH — so the names have to line up for the swap to be one
+; line in game.tscn. `Model` is the only addition.
+;
+; The gem/stone is a SHADER (shaders/gem_button.gdshader via gem_button_stone.tres) rather than the
+; glb's own material, because the glb cannot carry the gradient/emission/fresnel fake that stands in
+; for translucency under gl_compatibility.
+
+[ext_resource type="Script" path="res://scripts/gem_button.gd" id="1_gem"]
+[ext_resource type="Script" uid="uid://bcfrm61q2cmrl" path="res://area_3d.gd" id="2_area"]
+[ext_resource type="PackedScene" uid="uid://4kuychs6qgjw" path="res://Blender/gem_button.glb" id="3_model"]
+[ext_resource type="Script" path="res://scripts/gem_button_model.gd" id="4_model_script"]
+[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="5_font"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_gem"]
+size = Vector3(0.69, 0.2, 0.24)
+
+; The placeholder under Background needs a REAL mesh with at least one surface. With no mesh at all,
+; BigButton's `get_surface_override_material(0)` fails its index check and prints an error every
+; time a button is created. One invisible 1 mm plane avoids that, and leaving its override unset
+; keeps BigButton's albedo tween away from the shared metal resource.
+[sub_resource type="PlaneMesh" id="PlaneMesh_placeholder"]
+size = Vector2(0.001, 0.001)
+
+[sub_resource type="QuadMesh" id="QuadMesh_text"]
+size = Vector2(2.048, 2.048)
+
+[node name="GemButton" type="Node3D"]
+script = ExtResource("1_gem")
+
+[node name="Area3D" type="Area3D" parent="."]
+script = ExtResource("2_area")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+shape = SubResource("BoxShape3D_gem")
+
+[node name="ButtonTextViewport" type="SubViewport" parent="."]
+msaa_2d = 2
+msaa_3d = 2
+size = Vector2i(2048, 2048)
+
+[node name="Control" type="Control" parent="ButtonTextViewport"]
+texture_filter = 1
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="ButtonTextViewport/Control"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+use_top_left = true
+
+[node name="Label" type="Label" parent="ButtonTextViewport/Control/CenterContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 128
+text = "Confirm"
+
+; Copied from BigButton verbatim: y = 0.02 above the button's origin, which the model is offset so
+; its face also sits at. Keeping the same number keeps the text looking like the existing buttons.
+[node name="TextDisplay" type="MeshInstance3D" parent="."]
+transform = Transform3D(-1, 8.74228e-08, 3.82137e-15, 0, -4.37114e-08, 1, 8.74228e-08, 1, 4.37114e-08, 0, 0.02, 0)
+mesh = SubResource("QuadMesh_text")
+
+; The model is 3.50 units wide (Blender), so 0.1957 scales it onto the 0.685 m footprint the old
+; button used — a near-exact size AND aspect match, since it was built at the reference's 3.5:1.
+; The y offset of -0.17 * 0.1957 lifts the plate's top face onto y = 0, where the text quad expects
+; the surface to be.
+[node name="Background" type="Node3D" parent="."]
+transform = Transform3D(0.1957, 0, 0, 0, 0.1957, 0, 0, 0, 0.1957, 0, -0.03327, 0)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Background"]
+mesh = SubResource("PlaneMesh_placeholder")
+visible = false
+
+[node name="Model" type="Node3D" parent="Background"]
+script = ExtResource("4_model_script")
+
+[node name="Capsule" parent="Background/Model" instance=ExtResource("3_model")]

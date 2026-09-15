@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/arrow_probe.gd" id="1_probe"]
+
+[node name="ArrowProbe" type="Node3D"]
+script = ExtResource("1_probe")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(-1, 8.60946e-08, -1.51808e-08, 0, 0.173648, 0.984808, 8.74228e-08, 0.984808, -0.173648, 0, 4.346, -0.86)
+current = true
+fov = 60.0

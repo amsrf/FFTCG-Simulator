@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/gem_button.gdshader" id="1_stone"]
+
+; The stone of a gem button. Tune it in the Inspector — every knob is a shader parameter, so the
+; material preview updates live. `emission_strength = 0.0` turns it into the reference's grey,
+; unlit/disabled variant without touching anything else.
+[resource]
+shader = ExtResource("1_stone")
+shader_parameter/emission_strength = 1.1
+shader_parameter/roughness_value = 0.12
+shader_parameter/sheen = 0.85

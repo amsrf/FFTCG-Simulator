@@ -70,6 +70,16 @@ const EDGE_STUB := 0.001
 ## vertical — but it is the escape hatch for the one degenerate case: when the two cards
 ## are exactly collinear with the screen's up axis, a pure arch collapses onto a line.
 @export var lean: float = 0.0
+## Bow PERPENDICULAR to the chord, instead of along the screen's up axis.
+##
+## The default (screen-up) gives the classic camera-facing hop, and it is right whenever the
+## two cards are roughly level on screen: the chord is horizontal, so screen-up is already
+## perpendicular to it. It breaks for a link between the two battle rows — a block — whose
+## chord runs straight up the screen. Bowing along the chord makes the arch run along it and
+## read as a long loop instead of a bow (measured: 1.54 m of path for an 0.85 m span, with a
+## peak of 0.00x). This mode rotates the bow with the chord, so a same-row link still gets
+## the classic hop and a cross-row link gets a sideways one.
+@export var bow_perpendicular: bool = false
 ## How far above the board the whole arrow sits, in metres. The ribbon is built in the
 ## board plane — the same height as the card faces — and a co-planar additive ribbon is
 ## at the mercy of draw order, so parts of it can end up behind a card. A few centimetres
@@ -103,6 +113,9 @@ var is_aiming: bool = false
 var start_pos: Vector3 = Vector3.ZERO
 var is_active: bool = false
 var locked: bool = false
+## Where a locked arc points. Remembered so the ribbon can be rebuilt when its ORIGIN moves
+## — a locked destination does not mean a frozen start (see _process).
+var locked_target: Vector3 = Vector3.ZERO
 
 @onready var line: MeshInstance3D = $Line
 var _shaft_material: ShaderMaterial = null
@@ -134,10 +147,20 @@ func _process(_delta: float) -> void:
 		return
 	# Re-read the origin from the source card when we have one, so the arrow stays
 	# attached to it while it moves. See set_is_aiming_from_card().
+	var origin_moved: bool = false
 	if _source_card != null and is_instance_valid(_source_card):
-		start_pos = _source_card.get_global_top_centre()
+		var fresh: Vector3 = _source_card.get_global_top_centre()
+		origin_moved = fresh.distance_to(start_pos) > 0.001
+		start_pos = fresh
 	if not locked:
 		update_arc(start_pos, get_mouse_target_position())
+	elif origin_moved:
+		# A locked arc has a fixed DESTINATION, but its origin can still be moving. The AI
+		# picks a target a frame or two after casting, while the Summon is still tweening
+		# out of its owner's hand, and without this rebuild the ribbon stays drawn from
+		# wherever the card happened to be at that instant — measured x of -0.73 instead of
+		# the -4.52 it settles at. Stops rebuilding as soon as the card stops moving.
+		update_arc(start_pos, locked_target)
 
 ## Where the mouse is pointing on the board plane (the table's surface).
 func get_mouse_target_position() -> Vector3:
@@ -174,6 +197,7 @@ func hide_arc() -> void:
 		line.visible = false
 
 func lock_arc(pos: Vector3) -> void:
+	locked_target = pos
 	update_arc(start_pos, pos)
 	locked = true
 
@@ -320,9 +344,10 @@ func _peak_ratio_for(from: Vector3, to: Vector3, up: Vector3, span: float) -> fl
 ## controls also keep the control polygon convex, which is what guarantees no inflection.
 func _sample_curve(from: Vector3, to: Vector3) -> PackedVector3Array:
 	var span: float = from.distance_to(to)
-	var up: Vector3 = _screen_up()
+	var up: Vector3 = _bow_axis(from, to)
 	# Not `peak_ratio` directly: _peak_ratio_for() trims it when the arch would overshoot
-	# past the top of the window.
+	# past the top of the window. With a perpendicular bow the apex does not move up the
+	# screen at all, which that function detects and leaves the ratio alone.
 	var handle: float = _peak_ratio_for(from, to, up, span) / 0.75
 
 	var curve := Curve3D.new()
@@ -345,8 +370,32 @@ func _sample_curve(from: Vector3, to: Vector3) -> PackedVector3Array:
 ## inflection points in the screen plane (an inflection is precisely what an S-shaped
 ## wiggle is). It also reports the arch's height, so the number `peak_ratio` is supposed
 ## to produce can be checked against what is actually on screen.
+## The direction the arch bulges in.
+##
+## The default is the screen's up axis — the classic camera-facing hop, right whenever the
+## two cards are roughly level on screen. With `bow_perpendicular` the bow is instead kept
+## perpendicular to the chord AS SEEN ON SCREEN: take the chord's screen direction (its
+## components along the camera's right and up axes), rotate it a quarter turn, and flip it so
+## it still bulges away from the board rather than across it. A same-row chord therefore
+## still hops up the screen, while a cross-row chord — a block between the two rows — bows
+## sideways instead of running along itself.
+func _bow_axis(from: Vector3, to: Vector3) -> Vector3:
+	var up: Vector3 = _screen_up()
+	if not bow_perpendicular:
+		return up
+	var right: Vector3 = _screen_right()
+	var chord: Vector3 = to - from
+	var bow: Vector3 = right * (-chord.dot(up)) + up * chord.dot(right)
+	if bow.length() < 0.0001:
+		return up
+	bow = bow.normalized()
+	return -bow if bow.dot(up) < 0.0 else bow
+
 func _check_shape(points: PackedVector3Array) -> void:
-	var apexes: int = _count_direction_changes(points, _screen_up())
+	var bow: Vector3 = _screen_up()
+	if points.size() >= 2:
+		bow = _bow_axis(points[0], points[points.size() - 1])
+	var apexes: int = _count_direction_changes(points, bow)
 	var inflections: int = _count_inflections(points)
 	var peak: float = _peak_over_chord(points)
 	if apexes == 1 and inflections == 0:
@@ -358,7 +407,7 @@ func _check_shape(points: PackedVector3Array) -> void:
 	var state: int = apexes * 100 + inflections
 	if state != _shape_warning_state:
 		_shape_warning_state = state
-		push_warning("[BallisticArrow] curve shape is wrong: %d apex(es) along screen-up (want 1), %d inflection(s) (want 0), peak %.2fx. Ease `peak_ratio` or raise `lean`." % [apexes, inflections, peak])
+		push_warning("[BallisticArrow] curve shape is wrong: %d apex(es) along the bow axis (want 1), %d inflection(s) (want 0), peak %.2fx. Ease `peak_ratio`, or set `bow_perpendicular` for a cross-row link." % [apexes, inflections, peak])
 
 ## The arch's height above the straight line joining the two ends, as a fraction of that
 ## line's length — the number `peak_ratio` is meant to produce.

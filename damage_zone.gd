@@ -10,8 +10,12 @@ var card_width = GlobalVariables.get_card_width();
 var card_spacing = -0.3
 var start_x;
 var grabbed_card_index = 0;
-@onready var field: Field = get_tree().current_scene.get_node("Field")
-@onready var assistant: Assistant = get_tree().current_scene.get_node("Assistant")
+# Relative on purpose. `get_tree().current_scene` is only set to the game when the game IS
+# the top-level scene, so it silently yields null for anything that instantiates it
+# elsewhere (the headless probe, a future self-play or preview). Walking the tree works
+# wherever the scene is mounted.
+@onready var field: Field = get_node("../../Field")
+@onready var assistant: Assistant = get_node("../../Assistant")
 
 func set_deck(deck_node: Node) -> void:
 	deck = deck_node
