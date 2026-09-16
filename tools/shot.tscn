@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3]
+
+; Screenshot harness — see tools/shot.gd. Runs a scene WITH RENDERING and saves a PNG, so a change can
+; be looked at instead of described. Do not pass --headless: there would be nothing to draw with.
+;
+;   godot --resolution 1280x720 res://tools/shot.tscn --quit-after 300 -- \
+;       --scene res://crystal_cost.tscn --cost "fire:1,neutral:1" --studio 0 --out tools/shots/cost.png
+
+[ext_resource type="Script" path="res://tools/shot.gd" id="1_shot"]
+
+[node name="Shot" type="Node"]
+script = ExtResource("1_shot")

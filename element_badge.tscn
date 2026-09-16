@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+; One element badge: a quad carrying shaders/element_badge.gdshader, driven by scripts/element_badge.gd.
+; Set `element` to "fire".."dark" (or "火".."闇") and it draws that element's circular badge.
+;
+; Deliberately one badge, not a row: the crystal cost display repeats this, and the row's layout
+; (icons, the numbers, "Pay") is a separate concern that comes after the icons themselves.
+
+[ext_resource type="Script" path="res://scripts/element_badge.gd" id="1_badge"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_badge"]
+size = Vector2(0.22, 0.22)
+
+[node name="ElementBadge" type="Node3D"]
+script = ExtResource("1_badge")
+
+[node name="Quad" type="MeshInstance3D" parent="."]
+mesh = SubResource("QuadMesh_badge")

@@ -14,3 +14,7 @@ export_presets.cfg
 .DS_Store
 thumbs.db
 *.tmp
+
+# Screenshot harness output (from tools/shot.gd). Regenerable diagnostics, kept out so a run's PNGs cannot
+# quietly pile up in history. The TOOLS are committed; only their output is ignored.
+tools/shots/

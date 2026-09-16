@@ -42,9 +42,14 @@ import os
 # ---------------------------------------------------------------------------------------------
 WIDTH = 3.5            # capsule width (the reference is ~3.5:1)
 HEIGHT = 1.0           # capsule height — for a stadium this is also the end-cap diameter
-THICK = 0.34           # plate thickness
-BEVEL = 0.10           # rim round-over radius; the pocket's top edge is where it starts
-POCKET_DEPTH = 0.15    # how deep the stone sits below the rim
+# THIN, because thickness is what the player actually sees as "the lateral wall". At 0.34 the plate
+# was a third as tall as its face, and from the match camera (11 degrees off vertical) that wall
+# projected as a visible dark band along the bottom edge of the button. 0.20 halves what shows.
+# BEVEL must stay below THICK/2 or the round-over pokes through the underside, and POCKET_DEPTH
+# below THICK/2 leaves the web under the stone: floor at 0.10 - 0.12 = -0.02, underside at -0.10.
+THICK = 0.20           # plate thickness
+BEVEL = 0.075          # rim round-over radius; the pocket's top edge is where it starts
+POCKET_DEPTH = 0.12    # how deep the stone sits below the rim
 STONE_GAP = 0.012      # clearance between the stone and the pocket wall
 DOME_CLEARANCE = 0.02  # how far the dome's apex stays below the rim's top
 OUTLINE_SEGMENTS = 96  # samples around the whole outline, shared by every ring
@@ -141,24 +146,53 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 scene.unit_settings.system = 'METRIC'
 
+# ELONGATED AND SHORTER: 4.60 wide (was 4.20, and 3.50 two steps back) by 0.88 tall (was 1.00), so the
+# pill reads longer and the label gets more air. The CAPSULE is what grows — END_BAND stays put — so
+# the gem comes out longer with it (1.369 -> 1.527 m) while the metal band at each end holds at 0.133 m.
+#
+# WIDTH and HEIGHT are re-bound HERE rather than edited at the top of the file because planar_uvs() is
+# called further down and normalises u by WIDTH: the shaders measure their horizontal falloff from
+# UV.x, so a stale WIDTH would rescale that distance along with the geometry. At scale 0.392 the
+# button becomes 1.803 x 0.345 m.
+WIDTH = 4.6
+HEIGHT = 0.88
 hw, hh = WIDTH * 0.5, HEIGHT * 0.5
 top_z = THICK * 0.5
 bot_z = -THICK * 0.5
 floor_z = top_z - POCKET_DEPTH
-in_hw, in_hh = hw - BEVEL, hh - BEVEL          # the pocket's half-extents
+# The pocket is inset FURTHER along X than along Z, so the metal reads as a WIDER band at the ends of
+# the capsule than along its top and bottom edges: 0.34 * 0.392 = 0.133 m at each end, against 0.081 m
+# two steps back. How long the GEM is follows from this and from the capsule's width.
+# The height inset is not set here; the rim block below takes it from RIM_RISE, which is what fixes the
+# stone's z extent — and therefore the shader's `face_span`.
+END_BAND = 0.34
+in_hw, in_hh = hw - END_BAND, hh - BEVEL       # the pocket's half-extents
 
 # --- the frame: a bezel with a pocket ----------------------------------------------------------
 # Walked as one closed surface: pocket floor -> pocket wall -> rim round-over -> outer wall ->
 # bottom. The first ring is capped (the pocket floor) and the last is capped (the bottom).
+# THE RIM IS ONE CONTINUOUS CONVEX CURVE — a half-ellipse running from the pocket's top edge, out past
+# the widest point, and back in to the underside. It used to be three pieces: a flat top band, a
+# quarter-round, and a VERTICAL OUTER WALL. Those meet at hard edges, and a vertical wall seen from a
+# camera near the vertical reads as a near-black outline that follows the capsule — so the frame
+# looked like several separate PLANES with a dark ring around the outside, instead of the single
+# smooth ring the reference shows. With the arc the surface turns smoothly from facing up, through
+# facing outward, to facing down: one face, whose only shading comes from the lighting.
+# END_BAND is the horizontal radius (how wide the metal reads) and RIM_RISE the vertical one.
+RIM_RISE = THICK * 0.5           # the plate's half-thickness
+RIM_SEGMENTS = 14                # enough segments that the shading across the curve is smooth
+in_hh = hh - RIM_RISE            # NOTE: this widens the height inset from BEVEL, which changes the
+                                 # stone's z extent — and therefore the shader's `face_span`, which
+                                 # tests/button_probe.tscn asserts against this mesh.
+
 frame_rings = [
     ring(in_hw, in_hh, floor_z),
     ring(in_hw, in_hh, top_z),                 # up the pocket wall to the rim's top edge
 ]
-for i in range(1, ARC_SEGMENTS + 1):
-    t = (math.pi * 0.5) * i / ARC_SEGMENTS
-    out = BEVEL * math.sin(t)                  # outward offset along the true normal: exact
-    frame_rings.append(ring(in_hw + out, in_hh + out, top_z - BEVEL * (1.0 - math.cos(t))))
-frame_rings.append(ring(hw, hh, bot_z))        # outer wall straight down
+for i in range(1, RIM_SEGMENTS + 1):
+    a = math.pi * i / RIM_SEGMENTS             # 0..180 degrees: crest -> outermost -> underside
+    frame_rings.append(ring(in_hw + END_BAND * math.sin(a), in_hh + RIM_RISE * math.sin(a),
+                            top_z - RIM_RISE * (1.0 - math.cos(a))))
 frame = build("Frame", frame_rings)
 
 # --- the stone: a dome set in the pocket -------------------------------------------------------
@@ -308,17 +342,30 @@ scene.camera = cam
 # ---------------------------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------------------------
+# ONLY the button. The studio cards, lights and camera live in this same scene because they are what
+# renders the previews — but an earlier version exported with use_selection=False and shipped all of
+# them: the glb contained two 5.2-unit emissive planes, which the game would have drawn floating
+# across the board, and which made the button measure 2.04 m across instead of 0.39. Selecting the
+# two meshes explicitly is what keeps the asset to the asset.
+BUTTON_OBJECTS = ("Frame", "Stone")
+
 def export_glb(path):
     """The exporter's kwargs have moved between versions; try the full set and fall back to the
     minimal one rather than failing the build over an argument name."""
+    for ob in bpy.context.scene.objects:
+        ob.select_set(ob.name in BUTTON_OBJECTS)
+    frame.select_set(True)
+    bpy.context.view_layer.objects.active = frame
     full = dict(filepath=path, export_format='GLB', export_apply=True, export_normals=True,
-                export_texcoords=True, export_yup=True, export_materials='EXPORT')
+                export_texcoords=True, export_yup=True, export_materials='EXPORT',
+                use_selection=True)
     try:
         bpy.ops.export_scene.gltf(**full)
         return "full kwargs"
     except TypeError as exc:
         print("[build_gem_button] full export kwargs rejected (%s); retrying minimal" % exc)
-        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True)
+        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True,
+                                  use_selection=True)
         return "minimal kwargs"
 
 

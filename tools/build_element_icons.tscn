@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+; Headless asset builder — see tools/build_element_icons.gd for what it does and why.
+; Run: godot --headless res://tools/build_element_icons.tscn
+
+[ext_resource type="Script" path="res://tools/build_element_icons.gd" id="1_build"]
+
+[node name="BuildElementIcons" type="Node"]
+script = ExtResource("1_build")

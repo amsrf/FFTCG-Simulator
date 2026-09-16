@@ -10,11 +10,6 @@
 [ext_resource type="Script" uid="uid://gexxd2cdhlpo" path="res://focus_card.gd" id="9_iotsf"]
 [ext_resource type="Script" uid="uid://eur8blk8gur4" path="res://stack.gd" id="9_vef74"]
 [ext_resource type="Script" uid="uid://b8jjysxi0lj74" path="res://assistant.gd" id="10_hve3p"]
-; The gem button has replaced BigButton for ConfirmButton / CancelButton / PassPhaseButton. GDScript
-; loads GemButton.tscn by path here (it has no uid yet — Godot assigns one when the editor next
-; saves). Every node path BigButton.tscn had still exists in it, which tests/button_probe.tscn
-; asserts, so the three saved instance overrides below still resolve. To revert: point this line
-; back at res://BigButton.tscn (uid://b1c3wp5s154jm) and nothing else needs to change.
 [ext_resource type="PackedScene" path="res://GemButton.tscn" id="11_mfdv2"]
 [ext_resource type="PackedScene" uid="uid://dmhmh6wr3wejy" path="res://card_button.tscn" id="13_lc2xo"]
 [ext_resource type="PackedScene" uid="uid://bh8f5mddl0cbx" path="res://damage_zone.tscn" id="14_215e1"]
@@ -23,19 +18,12 @@
 [ext_resource type="Script" uid="uid://de1gjjtkht72i" path="res://scripts/player_side.gd" id="18_playerside"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_j5wjh"]
-; A STUDIO sky, not a landscape: bright overhead, mid horizon, dark ground. Metal shows the
-; environment rather than its own colour, so this gradient is what draws the reference's bright
-; top rim and dark lower band. This used to be a PanoramaSkyMaterial with NO panorama assigned,
-; which reflects pure black — that is why chrome looked dead no matter how the material was
-; tuned, and no material value could ever have fixed it.
 sky_top_color = Color(0.92, 0.95, 1, 1)
 sky_horizon_color = Color(0.62, 0.66, 0.72, 1)
 sky_curve = 0.2
-sky_energy_multiplier = 1.0
-ground_horizon_color = Color(0.16, 0.17, 0.19, 1)
-ground_bottom_color = Color(0.02, 0.022, 0.028, 1)
-ground_curve = 0.05
-ground_energy_multiplier = 1.0
+ground_bottom_color = Color(0.1, 0.11, 0.13, 1)
+ground_horizon_color = Color(0.3, 0.32, 0.36, 1)
+ground_curve = 0.12
 
 [sub_resource type="Sky" id="Sky_vef74"]
 sky_material = SubResource("ProceduralSkyMaterial_j5wjh")
@@ -45,9 +33,6 @@ background_mode = 2
 sky = SubResource("Sky_vef74")
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
-; Was 0.0, which threw the sky's contribution to ambient light away entirely — the other half of
-; why nothing read as reflective. 0.6 keeps the board close to its current brightness while
-; letting the sky light it; lower ambient_light_energy if the scene ends up too bright.
 ambient_light_sky_contribution = 0.6
 ambient_light_energy = 0.3
 reflected_light_source = 2
@@ -226,16 +211,36 @@ id = 66
 [node name="Assistant" type="Node3D" parent="." unique_id=8862097]
 script = ExtResource("10_hve3p")
 
-[node name="ConfirmButton" parent="Assistant" unique_id=1145933718 instance=ExtResource("11_mfdv2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.055, 0.327, -2)
+; THE BUTTON RACK — the single owner of where the match buttons sit. The three buttons are its
+; children and carry only their SLOT offset, which buys two things:
+;   * Confirm and PassPhase are the same slot BY CONSTRUCTION (both at the rack's origin, so neither
+;     even needs a transform line), which is the layout rule: the pass button takes Confirm's place
+;     and Cancel's slot is left empty;
+;   * moving the rack moves all three, so the shared position is one transform instead of three.
+; Before this, x was written into all three children by hand and they drifted apart the first time one
+; of them was edited on its own — which is exactly what happened.
+; x = -3.8: screen-right is world -x (the camera's basis.x is (-1, 0, 0)) and the camera is ORTHOGONAL
+; with a vertical extent of 5.766 m on a 1920x1080 viewport, so the visible width is 10.25 m. At -3.8
+; the 1.801 m button spans 78-96% of the width — a ~4% margin at the right edge.
+; Cancel keeps its own slot 0.42 along -z, where the button measures 0.345, leaving a 7.5 cm gap —
+; tight enough that the two read as one pair rather than two separate buttons.
+;
+; STAGGERED ENTRY. Cancel carries slide_in_delay = 0.1, so when a modal opens the second button starts
+; its slide a tenth of a second after the first instead of both moving at once. It is an instance
+; override (the knob is declared in scripts/gem_button.gd), so Confirm and PassPhase stay at 0 and the
+; stagger lives with the button that has a partner. Set it to 0 here for simultaneous arrival.
+[node name="ButtonRack" type="Node3D" parent="Assistant"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.327, -2)
+
+[node name="ConfirmButton" parent="Assistant/ButtonRack" unique_id=1145933718 instance=ExtResource("11_mfdv2")]
 visible = false
 
-[node name="CancelButton" parent="Assistant" unique_id=1289540422 instance=ExtResource("11_mfdv2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 0.327, -2.35)
+[node name="CancelButton" parent="Assistant/ButtonRack" unique_id=1289540422 instance=ExtResource("11_mfdv2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.42)
+slide_in_delay = 0.1
 visible = false
 
-[node name="PassPhaseButton" parent="Assistant" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.05, 0.327, -2.35)
+[node name="PassPhaseButton" parent="Assistant/ButtonRack" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
 visible = false
 
 [node name="CardButton" parent="." unique_id=867711801 instance=ExtResource("13_lc2xo")]

@@ -8,6 +8,12 @@
 ; instance override resolves by node PATH — so the names have to line up for the swap to be one
 ; line in game.tscn. `Model` is the only addition.
 ;
+; SIZE. The model is 4.60 x 0.88 units (Blender), so at the Background scale of 0.392 the button is
+; 1.803 x 0.345 m — elongated on request (longer and shorter than the previous 1.646 x 0.392). The
+; proportions come from the generator, not from scaling here: scaling non-uniformly would stretch the
+; rounded end caps into ellipses. scripts/gem_button.gd reads this scale and the meshes' own bounds,
+; so the text fit follows the size automatically.
+;
 ; The gem/stone is a SHADER (shaders/gem_button.gdshader via gem_button_stone.tres) rather than the
 ; glb's own material, because the glb cannot carry the gradient/emission/fresnel fake that stands in
 ; for translucency under gl_compatibility.
@@ -18,8 +24,10 @@
 [ext_resource type="Script" path="res://scripts/gem_button_model.gd" id="4_model_script"]
 [ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="5_font"]
 
+; x = width, y = the click depth around the plate, z = the face height. Sized to match the model at
+; the scale below; tests/button_probe.tscn fails if the two drift apart.
 [sub_resource type="BoxShape3D" id="BoxShape3D_gem"]
-size = Vector3(0.69, 0.2, 0.24)
+size = Vector3(1.803, 0.25, 0.345)
 
 ; The placeholder under Background needs a REAL mesh with at least one surface. With no mesh at all,
 ; BigButton's `get_surface_override_material(0)` fails its index check and prints an error every
@@ -40,13 +48,18 @@ script = ExtResource("2_area")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
 shape = SubResource("BoxShape3D_gem")
 
+; NO msaa_2d: the GLES3 (Compatibility) backend does not implement 2D MSAA, so asking for it printed
+; "2D MSAA is not yet supported for GLES3" on every button. 3D MSAA is supported and stays on.
+; Note BigButton._ready() sets this viewport to its own VIEWPORT_SIZE (1024) at runtime, which is
+; ample: the quad is only ~1.8 m across on screen, so the text texture is minified, not stretched.
 [node name="ButtonTextViewport" type="SubViewport" parent="."]
-msaa_2d = 2
 msaa_3d = 2
 size = Vector2i(2048, 2048)
 
+; texture_filter 1 is NEAREST, which is what made the glyphs look jagged rather than crisp: the font
+; atlas was being sampled without filtering. 2 is LINEAR.
 [node name="Control" type="Control" parent="ButtonTextViewport"]
-texture_filter = 1
+texture_filter = 2
 layout_mode = 3
 anchors_preset = 8
 anchor_left = 0.5
@@ -62,24 +75,32 @@ offset_right = 40.0
 offset_bottom = 40.0
 use_top_left = true
 
+; The font size here is only a starting point: gem_button.gd re-fits it in _ready() against the
+; button's real face (BigButton only fitted when set_text() was called, so scene-authored text kept
+; whatever size the scene said — 128 — and overflowed). A longer label shrinks rather than spilling.
+; GEM_BASE_FONT_SIZE in the script is the value that actually matters; this mirrors it.
 [node name="Label" type="Label" parent="ButtonTextViewport/Control/CenterContainer"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("5_font")
-theme_override_font_sizes/font_size = 128
+theme_override_font_sizes/font_size = 76
 text = "Confirm"
 
-; Copied from BigButton verbatim: y = 0.02 above the button's origin, which the model is offset so
-; its face also sits at. Keeping the same number keeps the text looking like the existing buttons.
+; The quad is centred on the face in x and z, and lifted just clear of it in y (0.012) so it cannot
+; z-fight with the plate. It used to sit at 0.075 — because the rim was assumed to be above the face
+; and because Background's offset was still the one for the OLD 0.34-thick plate. The camera is 11
+; degrees off vertical, so floating the text 0.10 above the face shifted it up ~4% of the button's
+; height: that is what made it look off-centre vertically.
 [node name="TextDisplay" type="MeshInstance3D" parent="."]
-transform = Transform3D(-1, 8.74228e-08, 3.82137e-15, 0, -4.37114e-08, 1, 8.74228e-08, 1, 4.37114e-08, 0, 0.02, 0)
+transform = Transform3D(-1, 8.74228e-08, 3.82137e-15, 0, -4.37114e-08, 1, 8.74228e-08, 1, 4.37114e-08, 0, 0.012, 0)
 mesh = SubResource("QuadMesh_text")
 
-; The model is 3.50 units wide (Blender), so 0.1957 scales it onto the 0.685 m footprint the old
-; button used — a near-exact size AND aspect match, since it was built at the reference's 3.5:1.
-; The y offset of -0.17 * 0.1957 lifts the plate's top face onto y = 0, where the text quad expects
-; the surface to be.
+; 0.392 is the uniform scale, and -0.10 * 0.392 puts the plate's TOP FACE on y = 0 — the contract the
+; text quad and the whole button depend on. 0.10 is half the THICKNESS (0.20), not related to the face
+; height, so shortening the capsule from 1.00 to 0.88 did not move this. It used to be -0.17 * 0.392,
+; the value for the old 0.34-thick plate, which sank the button 0.027 m once the plate was thinned.
+; gem_button.gd exposes face_height() and tests/button_probe.tscn asserts it lands on 0.
 [node name="Background" type="Node3D" parent="."]
-transform = Transform3D(0.1957, 0, 0, 0, 0.1957, 0, 0, 0, 0.1957, 0, -0.03327, 0)
+transform = Transform3D(0.392, 0, 0, 0, 0.392, 0, 0, 0, 0.392, 0, -0.0392, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Background"]
 mesh = SubResource("PlaneMesh_placeholder")

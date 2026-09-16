@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3]
+
+; The crystal cost readout: "Pay" + one badge per elemental point + a numeral badge for the neutral
+; part. Give scripts/crystal_cost.gd a cost Dictionary ({'火': 1, 'neutral': 1}) and it lays the row out.
+;
+; It faces the camera on its own, so it can be dropped above a player's head without any extra wiring;
+; where it is anchored is a separate concern, and comes with the rest of the cost HUD.
+
+[ext_resource type="Script" path="res://scripts/crystal_cost.gd" id="1_cost"]
+
+[node name="CrystalCost" type="Node3D"]
+script = ExtResource("1_cost")

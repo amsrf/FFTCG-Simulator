@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+; Checks the element badge plumbing — see tests/element_badge_probe.gd.
+; Run: godot --headless res://tests/element_badge_probe.tscn
+
+[ext_resource type="Script" path="res://tests/element_badge_probe.gd" id="1_probe"]
+
+[node name="ElementBadgeProbe" type="Node"]
+script = ExtResource("1_probe")

@@ -1,12 +1,30 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" format=3 uid="uid://b6uv7t8x8gtk7"]
 
-[ext_resource type="Shader" path="res://shaders/gem_button.gdshader" id="1_stone"]
+[ext_resource type="Shader" uid="uid://bcoodlfry56pi" path="res://shaders/gem_button.gdshader" id="1_stone"]
 
-; The stone of a gem button. Tune it in the Inspector — every knob is a shader parameter, so the
-; material preview updates live. `emission_strength = 0.0` turns it into the reference's grey,
-; unlit/disabled variant without touching anything else.
 [resource]
+render_priority = 0
 shader = ExtResource("1_stone")
-shader_parameter/emission_strength = 1.1
-shader_parameter/roughness_value = 0.12
-shader_parameter/sheen = 0.85
+shader_parameter/face_span = 0.656
+shader_parameter/stone_top = Color(0.88, 1, 0.97, 1)
+shader_parameter/stone_upper = Color(0.26, 0.78, 0.72, 1)
+shader_parameter/stone_mid = Color(0.055, 0.5, 0.45, 1)
+shader_parameter/stone_deep = Color(0.005, 0.105, 0.09, 1)
+shader_parameter/rim_color = Color(0.01, 0.16, 0.14, 1)
+shader_parameter/crown_stop = 0.25
+shader_parameter/mid_stop = 0.45
+shader_parameter/side_spread = 1.9
+shader_parameter/vertical_spread = 1.0
+shader_parameter/saturation = 1.35
+shader_parameter/top_line = 0.03
+shader_parameter/line_boost = 0.5
+shader_parameter/facet_strength = 0.3
+shader_parameter/facet_freq = 7.0
+shader_parameter/facet_dir = Vector2(0.85, 1)
+shader_parameter/edge_glow = 0.3
+shader_parameter/grey_mix = 0.0
+shader_parameter/emission_strength = 1.0
+shader_parameter/roughness_value = 0.1
+shader_parameter/sheen = 0.35
+shader_parameter/rim_strength = 0.5
+shader_parameter/ambient_occlusion = 0.55

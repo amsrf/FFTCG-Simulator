@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+; Bakes numerals 0..99 into assets/elements/num_*.png — see tools/build_digit_textures.gd.
+; Runs WINDOWED (it must render to read the drawn text back), then quits itself.
+;   godot res://tools/build_digit_textures.tscn --quit-after 3000
+
+[ext_resource type="Script" path="res://tools/build_digit_textures.gd" id="1_digits"]
+
+[node name="BuildDigitTextures" type="Node"]
+script = ExtResource("1_digits")

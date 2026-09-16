@@ -1,13 +1,42 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
 
-; The metal frame of a gem button. This is the value that matters most and the one the glb got
-; wrong: the export carried `metallicFactor = 0.465, roughnessFactor = 0.5`, which renders as
-; grey plastic. Polished steel is a full metal at low roughness — it has almost no diffuse
-; response and shows the environment instead, which is why the scene needs a sky to reflect
-; before any of this can look right. Base tone is a cool silver (a faint blue cast), matching
-; the reference's chrome.
+; The frame's material. ShaderMaterial rather than StandardMaterial3D — see
+; shaders/gem_button_frame.gdshader for why: a flat mirror reflects one direction, so flat metal
+; under a smooth sky is uniform, and uniform reads as plastic. The ramp is the fix.
+;
+; The ramp is driven by the mesh's own +Z (up on screen), NOT by UV.y: the glTF exporter flips V
+; relative to Blender, so a UV-based ramp rendered upside down. face_span is the model-space height
+; one full ramp covers — the frame spans the capsule's whole height, so it is 0.88, matching the
+; generator's HEIGHT.
+;
+; THE FALLOFF IS VERTICAL, AND ITS DARK END IS HELD AT THE VERY BOTTOM. ramp_curve 2.6 means the ramp
+; spends most of its descent in the upper range — at half-way down it is only ~17% of the way to the
+; bottom colour — so brightness holds and the black arrives late. vertical_spread is exactly 1.0 so a
+; full ramp is reached AT the bottom and not before it; a higher value saturates early and puts the
+; black above the bottom edge.
+;
+; side_spread is deliberately LOW (0.6) so the ends of the capsule stay lit while the bottom darkens:
+; the frame spans the whole width, so a large side spread would drag the ends down with it — which is
+; what made them look like separate black planes before the rim became one continuous curve.
+;
+; lift_strength is only 0.05. It exists to stop the darkest part being PURE black, nothing more.
+;
+; These values ARE the look. Every one is a knob: open this in the Inspector and tune with the
+; preview scene (GemButtonPreview.tscn, F6) in view.
+
+[ext_resource type="Shader" path="res://shaders/gem_button_frame.gdshader" id="1_frame"]
+
 [resource]
-albedo_color = Color(0.78, 0.8, 0.84, 1)
-metallic = 1.0
-metallic_specular = 0.5
-roughness = 0.12
+shader = ExtResource("1_frame")
+shader_parameter/face_span = 0.88
+shader_parameter/metalness = 1.0
+shader_parameter/metal_top = Color(0.9, 0.93, 0.98, 1)
+shader_parameter/metal_bottom = Color(0.045, 0.05, 0.062, 1)
+shader_parameter/ramp_curve = 2.6
+shader_parameter/side_spread = 0.6
+shader_parameter/vertical_spread = 1.0
+shader_parameter/roughness_top = 0.06
+shader_parameter/roughness_bottom = 0.34
+shader_parameter/lift_color = Color(0.3, 0.32, 0.38, 1)
+shader_parameter/lift_strength = 0.05
+shader_parameter/edge_boost = 0.18
