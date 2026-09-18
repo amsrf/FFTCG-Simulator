@@ -18,6 +18,32 @@ The session ended on presentation and tooling: the targeting cue became a **CSS-
 - **`remove_child()` before `queue_free()` when rebuilding children.** `queue_free()` is deferred to the end of the frame, so the old nodes still answer `get_children()` — which is how a rebuilt cost row ended up holding two sets of badges. Removing from the tree has to be immediate; freeing can wait.
 - **A setter only runs when something ASSIGNS the property.** "Pay" was sized from the badge size inside a setter, which felt self-maintaining and did nothing at all: nothing ever assigned it, so the old default stayed in force and the word towered over the icons it introduced. If one value must track another, assign it explicitly at construction, or assert the relationship in a probe.
 
+### The Mana Crystals (2026-09-18)
+
+The payment row now draws its cost as **mana crystals** instead of icon badges: one crystal per point, red for a
+fire requirement and white for a wild "any colour" slot, and each lights up **when it is paid**, in the colour that
+paid it — a white wild crystal paid by a red source turns red and shines. Verified in the running game, not
+inferred: at a `{火:1, neutral:1}` cost with two fire sources selected, the shot prints both crystals as
+`paid_by='火' lit=true`. The row uses `Blender/neo_crystal3.glb` — chosen because it is built as two surfaces, a
+body plus black edge geometry — and the shader is applied to **surface 0 only**, with
+`set_surface_override_material()`, so surface 1's edges stay exactly as exported.
+
+Three things this cost, all worth not repeating:
+
+- **The outline belongs in the model, not in the engine.** Four rewrites went into faking a black edge in Godot —
+  an inverted hull, a fresnel rim, a `fwidth` crease detector, a flat-normal mesh rebuild — and the answer turned
+  out to be a second surface in the Blender file. A fresnel cannot outline a faceted solid at all: a flat face's
+  normal never goes grazing, so the rim term stays constant across the face and never reaches the edge. And the
+  hull route tears at sharp tips, because the exporter splits them into one vertex per face.
+- **Adding light to a lit surface cannot make a strong glow.** This trap caught four different things in one day —
+  the gem button's metal, the element badges' whites, the crystals' paid shine, and finally the ice crystal, which
+  at `emission_energy = 1.7` clipped all three of its channels and stopped being cyan. A genuinely strong glow
+  needs **bloom**, which adds light *around* the surface. That is now configured in `game.tscn` … and **silently
+  ignored**: the project renders with `gl_compatibility`, which does not implement Environment glow at all. That
+  was settled by rendering, not by reading docs. The Compatibility-safe alternative is an additive halo sprite.
+- **`grow_amount` is in MODEL units, not metres** — so it scales with the node. A plausible-looking 0.02 on a
+  3.81-unit model later drawn at 0.26 m comes out at 0.17 px, i.e. invisible. The value that works here is ~0.12.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.

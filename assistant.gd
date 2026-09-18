@@ -19,13 +19,18 @@ const COST_READOUT := preload("res://crystal_cost.tscn")
 ## frame is irrelevant. +z is up the screen (the hand sits at the bottom, nearest the camera) and +y
 ## lifts it clear of the cards. Screen-up is 0.985 of +z and 0.174 of +y at this camera angle, so z does
 ## nearly all the work; measured against a shot, this lands it just above the hand's cards.
-@export var cost_readout_offset: Vector3 = Vector3(0.0, 0.25, 0.55)
-## Icon size in metres, matched to the SOURCE ART: the icons in references/icons.png are about 26 px across,
-## and at this camera's 187 px per metre that is 0.14 m — so they are drawn at roughly their native pixel
-## size rather than upscaled, which is what made the earlier 0.40 m version read as oversized. The label is
-## sized from this as well (see the setter) so the word can never end up bigger than the icons it
-## introduces. Sized with a setter so changing one number keeps the two in proportion.
-@export var cost_readout_badge_size_m: float = 0.14:
+## Moved DOWN as the crystals grew and back UP as they shrank again: a crystal's origin is its BASE, so a height
+## change moves the tip, not the base. At 0.26 m its top tip was touching the card above it, and the render checks
+## said the row then sat much closer to the board than to the hand — this is the centred position for this size.
+@export var cost_readout_offset: Vector3 = Vector3(0.0, 0.17, 0.38)
+## The crystal's height in metres. Not "the source art's pixel size" any more: the badge row this replaced drew
+## 26 px icons at 0.14 m so they would not be upscaled, but a crystal is a 3D object whose facets have to stay
+## legible at gameplay distance. It has been 0.14 -> 0.26 -> 0.34 -> 0.42 and is back at 0.26 — about 49 px tall at
+## this camera's 187 px per metre.
+##
+## The label is sized from this as well (see the setter), so the word can never end up bigger than the crystals
+## it introduces. The property name is a leftover from the badge row it replaced.
+@export var cost_readout_badge_size_m: float = 0.26:
 	set(value):
 		cost_readout_badge_size_m = value
 		if cost_readout == null:
@@ -216,12 +221,17 @@ func _hide_cost_readout() -> void:
 	if cost_readout != null:
 		cost_readout.visible = false
 
-## Rebuilds the row from what is STILL owed. Called whenever the amount selected changes, so the row
-## shrinks as crystals are chosen rather than sitting there showing the full cost.
+## Rebuilds the row. Called whenever the selection changes, so the crystals light up as they are paid.
+##
+## It passes the FULL cost and the breakdown, not what is left: the row shows the whole cost with the paid
+## crystals lit, so a player can see both what they are paying and how far along they are. The old badge row was
+## driven by remaining_cost() alone, which meant it shrank as crystals were chosen and the cost itself became
+## invisible.
 func _refresh_cost_readout() -> void:
 	if cost_readout == null:
 		return
-	cost_readout.cost = remaining_cost()
+	cost_readout.cost = mana_cost
+	cost_readout.paid = payment_breakdown()
 
 # ------------------------------------------------------------------
 # Payment flow
@@ -310,28 +320,71 @@ func _on_field_request_target_confirmation(_target_card: Card, allow_cancel: boo
 # Mana payment checking
 # ------------------------------------------------------------------
 
-## What is STILL owed, given the crystals chosen so far. Elemental requirements are met first and
-## whatever is left over then pays the neutral part — the same order, and therefore the same answer,
-## as the payment check below. Keys come back exactly as they went in (an element may be spelled "火"
-## or ["火"] depending on where the cost came from), and crystal_cost.tscn accepts both.
+## One entry per POINT of the cost, in the order the crystal row draws them: the elemental points first, then
+## the wild ones. Each entry names the element that paid that point, or "" while it is still owed.
+##
+## This is the richer form of remaining_cost(): it keeps the whole cost, so a row can show the paid and the
+## unpaid side by side instead of only what is left. An elemental point can only be paid by its own element; a
+## wild point can be paid by anything, so it absorbs the surplus. Element keys may be spelled "火" or ["火"]
+## depending on where the cost came from, which is why they all go through key_to_element().
+func payment_breakdown() -> Array:
+	var slots: Array = []
+	for element in mana_cost:
+		var name: String = ElementBadge.key_to_element(element)
+		if name == "neutral" or name.is_empty():
+			continue
+		for _i in range(int(mana_cost[element])):
+			slots.append({"element": name, "paid_by": ""})
+	for _i in range(int(mana_cost.get("neutral", 0))):
+		slots.append({"element": "", "paid_by": ""})
+
+	# Pass 1: match each element to its own points.
+	var pool: Dictionary = {}
+	for element in mana_acc:
+		var name: String = ElementBadge.key_to_element(element)
+		pool[name] = int(pool.get(name, 0)) + int(mana_acc[element])
+	for slot in slots:
+		var name: String = str(slot["element"])
+		if name.is_empty():
+			continue
+		if int(pool.get(name, 0)) > 0:
+			pool[name] = int(pool[name]) - 1
+			slot["paid_by"] = name
+
+	# Pass 2: the surplus pays the wild points, sorted so the row does not reshuffle between frames. "neutral"
+	# is deliberately NOT part of the surplus — that is the rule remaining_cost() has always applied, and this
+	# function has to reproduce it exactly.
+	var spare: Array = []
+	var names: Array = pool.keys()
+	names.sort()
+	for name in names:
+		if str(name) == "neutral":
+			continue
+		for _i in range(int(pool[name])):
+			spare.append(str(name))
+	var next: int = 0
+	for slot in slots:
+		if not str(slot["paid_by"]).is_empty():
+			continue
+		if next >= spare.size():
+			break
+		slot["paid_by"] = spare[next]
+		next += 1
+	return slots
+
+## What is STILL owed, given the crystals chosen so far. DERIVED from the breakdown above, so the crystal row
+## and the Confirm button cannot disagree about the same selection — they used to be two copies of this
+## arithmetic. Element names come back canonical ("fire"), not as they were spelled on the way in.
 func remaining_cost() -> Dictionary:
 	var left: Dictionary = {}
-	var pool: Dictionary = mana_acc.duplicate()
-	for element in mana_cost:
-		if element == "neutral":
+	for slot in payment_breakdown():
+		if not str(slot["paid_by"]).is_empty():
 			continue
-		var need: int = int(mana_cost[element])
-		var have: int = int(pool.get(element, 0))
-		pool[element] = maxi(0, have - need)
-		if need > have:
-			left[element] = need - have
-	var neutral: int = int(mana_cost.get("neutral", 0))
-	var spare: int = 0
-	for element in pool:
-		if element != "neutral":
-			spare += int(pool[element])
-	if neutral > spare:
-		left["neutral"] = neutral - spare
+		var name: String = str(slot["element"])
+		if name.is_empty():
+			left["neutral"] = int(left.get("neutral", 0)) + 1
+		else:
+			left[name] = int(left.get(name, 0)) + 1
 	return left
 
 func can_pay_cost() -> bool:

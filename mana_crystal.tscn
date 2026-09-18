@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+
+; One mana crystal for the payment row — see scripts/mana_crystal.gd.
+;
+; The model is Blender/neo_crystal3.glb, a hexagonal crystal with TWO SURFACES:
+;   * surface 0 -> Material.001, base colour unset (defaults to white). THIS is where the shader will go.
+;   * surface 1 -> Material.003, flat black, and twice the vertex count of surface 0 — the outline geometry,
+;     authored in Blender rather than faked with an inverted hull or an edge-detecting shader.
+;
+; No material_override, no second material, no mesh rebuilding: the crystal renders in the materials it was
+; exported with, which is the whole point of this round. Everything in the script is positioning and state.
+;
+; The ext_resource carries no uid on purpose: a hand-written uid that does not match the file's own is worse than
+; none at all, because it can resolve to a different resource. Godot fills this in on its next save.
+
+[ext_resource type="PackedScene" path="res://Blender/neo_crystal3.glb" id="1_model"]
+[ext_resource type="Script" path="res://scripts/mana_crystal.gd" id="1_script"]
+
+[node name="ManaCrystal" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Model" parent="." instance=ExtResource("1_model")]

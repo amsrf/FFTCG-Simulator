@@ -38,6 +38,25 @@ ambient_light_energy = 0.3
 reflected_light_source = 2
 ssr_fade_in = 0.0274516
 ssr_fade_out = 168.897
+; GLOW, so that a paid mana crystal can actually look like it is emitting light.
+;
+; This is the whole reason it is here: emission on a lit material adds light ON TOP of the surface, so turning it
+; up far enough to read as a glow clips a bright colour's channels and destroys its hue — ice went pure white at
+; 1.7. Bloom adds light AROUND the surface instead and leaves the surface's own pixels alone, which is the only way
+; to get a strong glow without losing the colour.
+;
+; glow_hdr_threshold just under 1 on purpose: it is what stops the whole board glowing. Only pixels brighter than
+; this bleed, so only the brightest highlights and the paid crystals do.
+;
+; UNVERIFIED UNDER THIS RENDERER. The project runs gl_compatibility, which supports a subset of Environment
+; features, and bloom needs an HDR buffer that the Compatibility renderer may not provide. If nothing changes,
+; that is why — and the settings are harmless in that case.
+glow_enabled = true
+glow_intensity = 0.8
+glow_strength = 1.0
+glow_bloom = 0.15
+glow_hdr_threshold = 0.9
+glow_blend_mode = 0
 
 [sub_resource type="GDScript" id="GDScript_e8heu"]
 script/source = "extends Node3D

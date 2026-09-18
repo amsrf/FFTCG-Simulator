@@ -84,18 +84,26 @@ func _ready() -> void:
 				# State what the readout actually contains, rather than inferring it from pixels. A
 				# screenshot is good for placement and colour, but a numeral can be lost in a downscaled
 				# view — so "is it built but not drawn" and "was it never built" have to be told apart here.
+				# Optionally pay part of the cost, so the row can be seen with crystals LIT and not only owed:
+				# --charge "fire:1" is one fire source selected. This is the state that matters most — a white
+				# crystal turning red and shining — and without input it cannot be reached at all.
+				if _args.has("charge"):
+					for bits in str(_args["charge"]).split(",", false):
+						var pair: PackedStringArray = bits.split(":")
+						if pair.size() >= 2:
+							assistant.call("charge", int(pair[1].strip_edges()), pair[0].strip_edges())
 				var readout: Node = assistant.get("cost_readout")
 				if readout != null:
-					print("[Shot] readout visible=%s, %d child(ren)"
-						% [readout.visible, readout.get_child_count()])
-					for b in readout.get_children():
-						var numeral: Node = b.get_node_or_null("Numeral")
-						print("[Shot]   badge element='%s' number=%s | Numeral=%s text='%s' pixel_size=%.5f visible=%s"
-							% [str(b.get("element")), str(b.get("number")),
-							   "yes" if numeral != null else "NO",
-							   str(numeral.text) if numeral != null else "",
-							   float(numeral.pixel_size) if numeral != null else 0.0,
-							   str(numeral.visible) if numeral != null else "-"])
+					print("[Shot] readout visible=%s" % readout.visible)
+					for c in readout.get_children():
+						# Duck-typed, not `is ManaCrystal`: a new class_name is not in Godot's global class
+						# cache until the editor rescans it, so naming the class here can fail headlessly even
+						# though the script itself loads fine.
+						if not c.has_method("colour_now"):
+							continue
+						print("[Shot]   crystal for='%s' paid_by='%s' lit=%s colour=%s"
+							% [str(c.get("element")), str(c.get("paid_element")),
+							   str(c.get("lit")), str(c.call("colour_now"))])
 	else:
 		await _build_subject()
 

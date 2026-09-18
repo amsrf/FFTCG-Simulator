@@ -1,0 +1,58 @@
+[gd_scene load_steps=3 format=3]
+
+; A preview of the five states a mana crystal can be in, left to right. Open it directly, or shoot it with
+; tools/shot.gd to look at it without launching the game:
+;
+;   godot res://tools/shot.tscn --quit-after 300 -- --scene res://ManaCrystalPreview.tscn --studio 0 \
+;       --out tools/shots/crystal_preview.png
+;
+; The crystal body uses a TOON StandardMaterial3D, which means it is shaded by real lights — so unlike the
+; earlier unshaded versions, this scene NEEDS a light or the crystals come out black. The pair below stands in
+; for the board's key light.
+;
+; 1. fire, NOT paid      — a red crystal, dull. This is a cost of "1 fire".
+; 2. wild, NOT paid      — white, dull. This is a cost of "1 any colour".
+; 3. wild, paid by fire  — turns RED and shines. The case the whole display exists for: what was white becomes
+;                          the colour that paid for it.
+; 4. wild, paid by ice   — turns CYAN and shines. Same crystal, different payer.
+; 5. fire, paid          — red, shining. An elemental crystal can only be paid by its own element, so its colour
+;                          never changes; only its shine does.
+
+[ext_resource type="PackedScene" path="res://mana_crystal.tscn" id="1_crystal"]
+
+[node name="ManaCrystalPreview" type="Node3D"]
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7, -0.7, 0, 0.7, 0.7, 0, 2.5, 3)
+light_energy = 1.2
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 1, 2)
+light_energy = 0.35
+light_color = Color(0.8, 0.85, 1, 1)
+
+[node name="1_fire_owed" parent="." instance=ExtResource("1_crystal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.44, 0, 0)
+element = "fire"
+
+[node name="2_wild_owed" parent="." instance=ExtResource("1_crystal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.22, 0, 0)
+element = "any"
+
+[node name="3_wild_paid_fire" parent="." instance=ExtResource("1_crystal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+element = "any"
+paid_element = "fire"
+lit = true
+
+[node name="4_wild_paid_ice" parent="." instance=ExtResource("1_crystal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, 0, 0)
+element = "any"
+paid_element = "ice"
+lit = true
+
+[node name="5_fire_paid" parent="." instance=ExtResource("1_crystal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44, 0, 0)
+element = "fire"
+paid_element = "fire"
+lit = true
