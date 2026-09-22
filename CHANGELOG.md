@@ -44,6 +44,48 @@ Three things this cost, all worth not repeating:
 - **`grow_amount` is in MODEL units, not metres** — so it scales with the node. A plausible-looking 0.02 on a
   3.81-unit model later drawn at 0.26 m comes out at 0.17 px, i.e. invisible. The value that works here is ~0.12.
 
+### Mana Crystals: the Paid State, and Three Rules Bugs (2026-09-18, continued)
+
+**The paid cue that survived: the crystal's own faces glow, pulse, and speed up.** Turning is the part that covers
+the case brightness cannot — a white crystal on a light board has no headroom to get brighter.
+
+Two glowing effects were built and thrown away, and both are worth as much as the one that worked:
+- **The cards' selection ring** — a rounded RECTANGLE on a billboard quad. Its top edge kept landing inside the
+  faceted crystal, so only the bottom and lower sides ever showed, **at any margin**: 0.12 m of clearance changed
+  nothing, which is what ruled out sizing. A rectangle is not the shape it outlines.
+- **A Fresnel shell** — a copy of the mesh scaled 8% and lit additively. Its own runtime print proved it was built,
+  visible, lit, orange, two surfaces, right scale, parented to the mesh — and it still drew nothing. Unresolved
+  and deleted.
+
+**Rotation is speeds only.** 18 °/s unpaid, 150 °/s paid, 0.10 s ramp between. The angle is only ever ADVANCED,
+never assigned, so no state change can move a crystal except by turning it. An earlier version settled unpaid
+crystals onto the nearest symmetric pose — writing the angle toward a target — and as the angle crossed a 60°
+boundary mid-spin-down the target flipped and the crystal lurched.
+
+**Three bugs, each leaving a rule behind:**
+
+- **Surplus mana could pay an elemental point.** `payment_breakdown()` Pass 1 matches each elemental point to its
+  own element; Pass 2 gives the leftover to the wild points but only skipped points that were ALREADY paid, so a
+  still-owed fire point was fair game — a cost of one fire and one wild was payable with a single blue card, whose
+  two blue mana covered the wild point and then slid into the fire one. Because `remaining_cost()` and
+  `can_pay_cost()` (and therefore the Confirm button) are **derived** from that list, one missing guard produced
+  three symptoms. Verified by the row's own output: two blue sources leave the fire crystal `lit=false`; two red
+  light both.
+- **An ability's tap was applied at stack commit, not at activation**, so during the mana step the source was
+  still untapped and could pay for its own ability — the Red Mage's skill bought with the Red Mage. It now taps in
+  `begin_skill_activation()` as the modal opens, and `Stack._clear_skill_proxy()` refunds it — but only while the
+  activation is still pending, so a committed ability stays tapped.
+- **The row rebuilt its crystals on every payment change.** `_rebuild()` removes and frees every crystal and
+  instantiates new ones, so each began at angle 0. Reported as a crystal "snapping from rotating to a completely
+  different position" when a source was deselected: two causes, one symptom, neither in the rotation code. The
+  cost still rebuilds; the payment now only adjusts the crystals already on screen.
+
+**A measurement lesson, twice over.** A hexagon repeats every 60°, so "does it look rotated?" is meaningless at
+round timings — 26 °/s for 2.5 s is exactly 60°, and the supposedly-rotated frame was pixel-identical to the
+unrotated one. Separately, `--frames` in the shot harness counts engine frames while the harness runs uncapped, so
+a "0.5 second" shot was a few milliseconds. Both nearly had working features reported as broken. Sample mid-facet,
+and print the number.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.

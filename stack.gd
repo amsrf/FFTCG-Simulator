@@ -398,6 +398,13 @@ func commit_skill_activation_costs_if_pending() -> void:
 	skill_mana_deferred_until_target_confirm = false
 
 func _clear_skill_proxy() -> void:
+	# WAS THIS ACTIVATION STILL PENDING? If so its cost never committed, and the tap that
+	# begin_skill_activation() applied has to be refunded — otherwise a cancelled ability leaves the card tapped and
+	# silently spent for the rest of the turn.
+	#
+	# `skill_mana_deferred_until_target_confirm` is exactly that flag: set when the proxy is created, cleared by
+	# commit_skill_activation_costs_if_pending(). So it is still true here only when the player backed out.
+	var was_pending: bool = skill_mana_deferred_until_target_confirm
 	s_cost_active = false
 	s_cost_source = null
 	s_cost_skill_index = -1
@@ -407,6 +414,10 @@ func _clear_skill_proxy() -> void:
 	var p = skill_activation_proxy
 	skill_activation_proxy = null
 	skill_mana_deferred_until_target_confirm = false
+	if was_pending:
+		var src: Card = p.effect_source
+		if src != null and is_instance_valid(src) and src.tapped:
+			src.untap()
 	cards.erase(p)
 	if is_instance_valid(p):
 		p.queue_free()

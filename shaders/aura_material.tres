@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+; The aura's default look. Every value here is a starting point, not a decision: CrystalAura overrides them per
+; instance from its @export variables, so the Inspector is where these get tuned, not this file.
+;
+; The default hue is a cool blue/purple. The mana crystals override it with the same orange the game uses for a
+; selected card, so a paid crystal wears the colour the player already associates with "chosen".
+
+[ext_resource type="Shader" path="res://shaders/aura.gdshader" id="1_aura"]
+
+[resource]
+shader = ExtResource("1_aura")
+shader_parameter/aura_color = Color(0.62, 0.45, 1, 1)
+shader_parameter/rim_power = 3.0
+shader_parameter/intensity = 2.0
+shader_parameter/pulse_speed = 2.0
+shader_parameter/pulse_amount = 0.15

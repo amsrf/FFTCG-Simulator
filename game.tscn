@@ -38,21 +38,23 @@ ambient_light_energy = 0.3
 reflected_light_source = 2
 ssr_fade_in = 0.0274516
 ssr_fade_out = 168.897
-; GLOW, so that a paid mana crystal can actually look like it is emitting light.
+; GLOW (bloom) — CONFIGURED, BUT THIS RENDERER IGNORES IT.
 ;
-; This is the whole reason it is here: emission on a lit material adds light ON TOP of the surface, so turning it
-; up far enough to read as a glow clips a bright colour's channels and destroys its hue — ice went pure white at
-; 1.7. Bloom adds light AROUND the surface instead and leaves the surface's own pixels alone, which is the only way
-; to get a strong glow without losing the colour.
+; The project runs gl_compatibility, which does not implement Environment glow at all. That is not a guess: it was
+; tested by rendering the game with glow enabled and looking at the result, which was "hard, crisp edges with zero
+; light spill into the surrounding board — exactly the expected behaviour for the Compatibility renderer". The
+; values below are therefore inert. They are kept because they are correct, cost nothing, and would start working
+; the day the project moves to Forward+.
 ;
-; glow_hdr_threshold just under 1 on purpose: it is what stops the whole board glowing. Only pixels brighter than
-; this bleed, so only the brightest highlights and the paid crystals do.
+; This matters for the crystals, and is why their paid state is an ADDITIVE SHELL (shaders/aura.gdshader) rather
+; than an emissive material waiting for bloom: additive geometry glows by being bright, so it needs no post-process.
+; The other lesson in this block still stands — emission is ADDED ON TOP of a lit surface, so pushing it far enough
+; to read as a glow clips a bright colour's channels and destroys its hue (the ice crystal went pure white at 1.7).
 ;
-; UNVERIFIED UNDER THIS RENDERER. The project runs gl_compatibility, which supports a subset of Environment
-; features, and bloom needs an HDR buffer that the Compatibility renderer may not provide. If nothing changes,
-; that is why — and the settings are harmless in that case.
+; glow_hdr_threshold sits just under 1 on purpose: it is what would stop the whole board blooming, so only the
+; brightest highlights and the paid crystals would bleed.
 glow_enabled = true
-glow_intensity = 0.8
+glow_intensity = 1.2
 glow_strength = 1.0
 glow_bloom = 0.15
 glow_hdr_threshold = 0.9

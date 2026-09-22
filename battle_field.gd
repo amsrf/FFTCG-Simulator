@@ -228,6 +228,19 @@ func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
 		return
 	assistant.clear_payment_accumulator()
 	var def: Dictionary = skills[skill_index]
+	# TAP THE SOURCE NOW, BEFORE THE MANA STEP. Tapping is part of the ability's cost, so it belongs at the moment
+	# of activation rather than at stack commit.
+	#
+	# It used to be applied by Stack._apply_skill_source_tap_from_proxy(), reached only from
+	# commit_skill_activation_costs_if_pending() — which runs AFTER the mana has been chosen. So for the whole
+	# payment step the source was still untapped and could be selected as mana for its own ability: paying the Red
+	# Mage's skill with the Red Mage. Tapping it here removes it from the pool by the same rule that already keeps
+	# every other tapped Backup out of it.
+	#
+	# Stack._clear_skill_proxy() undoes this when the player backs out, so the tap is only really spent once the
+	# activation commits.
+	if def.get("tap", false) and not card.tapped:
+		card.tap()
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
 		# source, then the regular mana payment step follows.

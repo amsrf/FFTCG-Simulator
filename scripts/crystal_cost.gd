@@ -2,18 +2,20 @@ extends Node3D
 class_name CrystalCost
 ## The mana payment row: ONE CRYSTAL PER POINT of the cost.
 ##
-## A cost of {'火': 1, 'neutral': 3} draws one RED crystal and three WHITE ones. Each crystal then LIGHTS as it
-## is paid, in the colour of whatever paid it — so a white crystal paid by a fire source turns red and shines,
-## while an elemental crystal can only be paid by its own element, which means it never changes colour and only
-## its shine comes on.
-##
-## The row shows the WHOLE cost and stays put while you pay; the lit crystals are the progress. It replaced a
-## badge row that showed only what was still owed, so that row shrank as crystals were chosen and a player could
-## never see what the cost had been.
+## A cost of {'火': 1, 'neutral': 3} draws one RED crystal and three WHITE ones. Each crystal then LIGHTS and SPINS
+## as it is paid. The row shows the WHOLE cost and stays put while you pay; the lit, spinning crystals are the
+## progress. It replaced a badge row that showed only what was still owed, so that row shrank as crystals were
+## chosen and a player could never see what the cost had been.
 ##
 ## `cost` is the Dictionary Card.get_cost() produces, including its habit of keying elements by a one-element
 ## Array (["火"]) rather than a String, so both spellings are accepted. `paid` is Assistant.payment_breakdown():
 ## one entry per point in row order, each naming the element that paid that point or "" while it is still owed.
+##
+## COST REBUILDS. PAYMENT DOES NOT. That distinction is the fix for a real bug: this row used to rebuild on every
+## change, and rebuilding destroys and reinstantiates every crystal, so each one restarted at its default rotation.
+## Selecting a mana source and then changing your mind made the crystal visibly SNAP from spinning to a completely
+## different pose. The cost is fixed for the whole payment, while the paid state changes on every click — so the
+## cost still rebuilds, and the payment only adjusts the crystals that are already here.
 ##
 ## The row faces the camera for the same reason the badges did: it floats above a player's head, and the board
 ## camera is only ~11 degrees off vertical, so a fixed row would be almost edge-on.
@@ -53,17 +55,18 @@ const WILD := "neutral"
 		label_height_m = value
 		_rebuild()
 
-## The FULL cost: {'火': 1, 'neutral': 3}.
+## The FULL cost: {'火': 1, 'neutral': 3}. Fixed for the whole payment, so this is allowed to rebuild.
 @export var cost: Dictionary = {}:
 	set(value):
 		cost = value
 		_rebuild()
 
-## One entry per point, in row order, from Assistant.payment_breakdown().
+## One entry per point, in row order, from Assistant.payment_breakdown(). Changes on every selection, so this must
+## NOT rebuild — see the class note.
 @export var paid: Array = []:
 	set(value):
 		paid = value
-		_rebuild()
+		_apply_paid()
 
 var _label: Label3D = null
 
@@ -88,6 +91,24 @@ func crystals() -> Array:
 		if c.has_method("colour_now"):
 			out.append(c)
 	return out
+
+## Applies the payment to the crystals ALREADY ON SCREEN, without touching the tree.
+##
+## This is the one that runs while a player picks and unpicks mana sources, and it is deliberately limited to the
+## two properties that describe payment. The crystal's `element` — what it is asking for — belongs to the cost and
+## never changes here, and nothing is created, destroyed or repositioned. So a crystal that is mid-spin simply
+## changes speed, which is what makes the transitions readable instead of jarring.
+func _apply_paid() -> void:
+	if not is_inside_tree():
+		return
+	var shown: Array = crystals()
+	for i in range(shown.size()):
+		var crystal: Node3D = shown[i]
+		var payer: String = ""
+		if i < paid.size() and paid[i] is Dictionary:
+			payer = str((paid[i] as Dictionary).get("paid_by", ""))
+		crystal.paid_element = payer
+		crystal.lit = not payer.is_empty()
 
 ## Lays the row out along local +x — which, once the row faces the camera, is screen-right — and centres the
 ## whole thing on this node's origin.
@@ -148,15 +169,11 @@ func _rebuild() -> void:
 		add_child(crystal)
 		crystal.height_m = crystal_height_m
 		crystal.element = str(slots[i])
-		# Fill in only what has been paid SO FAR: the breakdown is as long as the points that have been paid,
-		# which is nothing at the moment the modal opens.
-		if i < paid.size() and paid[i] is Dictionary:
-			var payer: String = str((paid[i] as Dictionary).get("paid_by", ""))
-			if not payer.is_empty():
-				crystal.paid_element = payer
-				crystal.lit = true
 		crystal.position = Vector3(x + width * 0.5, 0.0, 0.0)
 		x += width + gap_m
+	# Payment is applied through the same path the setters use, so there is exactly one definition of what "paid"
+	# means for a crystal — and the freshly built row shows any payment that already exists when it appears.
+	_apply_paid()
 
 func _make_label() -> void:
 	if _label != null:

@@ -364,6 +364,18 @@ func payment_breakdown() -> Array:
 			spare.append(str(name))
 	var next: int = 0
 	for slot in slots:
+		# AN ELEMENTAL POINT CANNOT BE PAID BY SPARE.
+		#
+		# Without this guard the loop also falls through to the still-owed ELEMENTAL points, and surplus of any
+		# colour fills them — which is how a cost of one fire and one wild was payable with a single blue card: its
+		# two blue mana covered the wild point and then slid into the fire point. Pass 1 above states that an
+		# elemental point needs its own element; this is the other half of that rule.
+		#
+		# It matters beyond this loop, because remaining_cost() — and therefore can_pay_cost(), and therefore the
+		# Confirm button — are all DERIVED from the list this builds. One missing guard here turned the button's
+		# check off as well.
+		if not str(slot["element"]).is_empty():
+			continue
 		if not str(slot["paid_by"]).is_empty():
 			continue
 		if next >= spare.size():
