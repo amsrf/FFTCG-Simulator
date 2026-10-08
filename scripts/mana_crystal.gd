@@ -182,6 +182,26 @@ func slot_width_m() -> float:
 	return _slot_width
 
 ## Applies the body shader to SURFACE 0 only, and sets how the crystal looks right now.
+## Bursts this crystal into shards around its current pose, and hides it.
+##
+## The shards take the MESH's whole transform — fit scale, spin and all — so they assemble exactly where the crystal
+## was, with no arithmetic. See CrystalShards for why the burst is deliberately weak.
+##
+## The crystal is HIDDEN rather than freed: the row owns its lifetime and takes it down with everything else when
+## the payment modal closes, which happens the same frame.
+func shatter(world_parent: Node) -> void:
+	if world_parent == null or _spin_node == null:
+		return
+	var shards: Node3D = preload("res://scripts/crystal_shards.gd").new()
+	# ADD FIRST: `burst()` takes the crystal's GLOBAL transform, and that needs a parent to be global to.
+	#
+	# Everything else — placing, sizing, the tint, the velocities — happens inside that one call, deliberately not
+	# in `_ready()`, which runs inside this `add_child()` and would therefore see an identity transform and no colour.
+	# The pieces are centred and share the crystal's bounds, so handing over this transform both places and sizes them.
+	world_parent.add_child(shards)
+	shards.call("burst", _spin_node.global_transform, colour_now())
+	_spin_node.visible = false
+
 ## Surface 1 is the model's black edge geometry and is deliberately left alone — overriding the whole material
 ## rather than one surface would wipe those edges out.
 func _apply() -> void:

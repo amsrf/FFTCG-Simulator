@@ -86,6 +86,53 @@ unrotated one. Separately, `--frames` in the shot harness counts engine frames w
 a "0.5 second" shot was a few milliseconds. Both nearly had working features reported as broken. Sample mid-facet,
 and print the number.
 
+### The Crystal Shatter (2026-10-08)
+
+Paying a cost now ends with the crystals breaking. The pieces come from a fracture model (`Blender/neo_crystal_shatter.glb`
+— 18 pieces, centred, and its bounding box matches the crystal's own exactly, which is what allows the whole burst to be
+placed and sized with a single transform). The motion is Godot's: `speed / drag` metres of travel (10 cm), one second
+of life, shrinking to nothing before it frees itself, and a stagger so the row breaks left to right, 0.1 s apart.
+
+**SIX things had to be right and five were ordering.** Written down because each one looked like something else:
+
+- **Shards at the world origin, at full size** — `transform` was set before `add_child`, so the node had no transform.
+- **Shards still at the origin** — the cost row's own position was gated on it being *visible*, so it genuinely sat at
+  (0,0,0) until a frame had passed with it on screen. Positioning a hidden node costs nothing and fixes this.
+- **Shards that tumbled but never moved** — velocities applied to a child of a node scaled 0.052, so a 10 cm burst
+  travelled 8 mm. The scale also came from `_ready()`, which runs *inside* `add_child`, before the caller had set the
+  transform: it read 1.0. The scale is now an argument, so placing and sizing cannot disagree.
+- **Shards that vanished** — pieces were `reparent`ed out of a **detached** scene root with `reparent(self, true)`,
+  "keep the global transform". A detached node has no global transform, so Godot divided the node's 0.052 scale back
+  out to preserve a meaningless value: every piece ~19x too large and flung outside the crystal. The engine warned 36
+  times ("will make owner ... inconsistent") while the code looked perfectly reasonable. The model is now added as a
+  child and its pieces animated where they sit — no reparenting at all.
+- **Crystals vanishing the instant the payment was confirmed** — `pop_modal()` emits the player mode change
+  SYNCHRONOUSLY, so `_hide_cost_readout()` ran *inside* it while the hold flag meant to prevent that was set on the
+  next line. The row is now held across the target step.
+- **Crystals breaking for plays that never happened** — the trigger was `Assistant.on_charge_complete()`, i.e. the
+  payment being confirmed, which for a Summon is *before* its target is chosen and for an ability *before* its
+  activation is committed. Both can be cancelled and both refund the mana. The trigger is now the three points where a
+  play actually becomes legal: `cast_card()`, `_commit_summon_to_stack()`, `commit_skill_activation_costs_if_pending()`.
+
+#### Added
+- `scripts/crystal_shards.gd` — the burst. `speed`, `drag`, `gravity`, `spin_min/max`, `lifetime`, `shrink_from`, all
+  `@export`ed so it can be tuned in the Inspector while the preview loops.
+- `CrystalShardsPreview.tscn` + `scripts/crystal_shards_preview.gd` — a LOOPING preview: open it, press F6, and watch
+  the shatter with no match, no payment, and no waiting for the right moment. One burst per colour, so the tinting can
+  be compared. **It needs its `WorldEnvironment`**: the first version had none, so F6 showed Godot's default flat grey
+  and a quarter-metre burst in the middle of it read as a broken scene — while every shot I took looked perfect,
+  because the shot harness was supplying the sky and camera the scene itself did not own.
+- `tools/shot.gd`: **`--commit`** (finish a payment, so commit-only code is reachable at all) and **`--as-scene`**
+  (keep the subject's own camera and environment, so a preview can be checked as the editor will show it).
+- `CrystalCost.shatter_stagger_seconds` — the left-to-right stagger. Only *paid* crystals count it, so a row with an
+  unpaid crystal in it still breaks evenly rather than leaving a gap.
+
+#### Changed
+- `Assistant.cost_row_hold` + `commit_cost_readout()`: the readout now outlives the payment modal, so the crystals are
+  still on screen when they break. `_hide_cost_readout()` respects the hold, so every hide path does — including ones
+  that do not exist yet — and `commit_cost_readout()` awaits the stagger before hiding, since hiding on commit would
+  remove the later crystals before they broke.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.

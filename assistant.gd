@@ -39,6 +39,15 @@ const COST_READOUT := preload("res://crystal_cost.tscn")
 		cost_readout.label_height_m = value * 0.72
 var cost_readout: CrystalCost = null
 
+## True from the moment a payment is CONFIRMED until the play either lands or is abandoned.
+##
+## It exists because the row used to be driven purely by the player mode, so confirming the payment hid the crystals
+## at once — while a Summon was still choosing a target and an ability was still committing its activation. Both of
+## those can still be cancelled, and the mana comes back, so the row has to survive that window. Otherwise the
+## crystals vanish BEFORE the play, and the shatter later appears out of nothing. Committing hides the row and breaks
+## the crystals in one step; cancelling just hides it.
+var cost_row_hold: bool = false
+
 const MANA_ZERO : Dictionary = {
 		'火': 0, '風': 0, '土': 0, '水': 0, 
 		'雷': 0, '闇': 0, '光': 0, '氷': 0, 
@@ -76,10 +85,15 @@ func _ready():
 	add_child(cost_readout)
 	cost_readout.visible = false
 
-## Keeps the readout above the hand while it is up. It faces the camera by itself; this only places it,
-## and only while visible, so there is no cost when no payment is happening.
+## Keeps the readout above the hand. It faces the camera by itself; this only places it.
+##
+## NOT GATED ON VISIBILITY, and that is the fix for a real bug. It used to return unless the row was visible, which
+## left the row with no position at all until a frame had passed with it on screen. Anything reading the row's
+## transform inside that window got (0,0,0) — the crystal shatter did exactly that and burst at the board's centre,
+## which from this camera is the middle of the screen. Positioning a hidden node costs nothing, so the guard bought
+## nothing and broke something.
 func _process(_delta: float) -> void:
-	if cost_readout == null or not cost_readout.visible:
+	if cost_readout == null:
 		return
 	cost_readout.global_position = hand.global_position + cost_readout_offset
 
@@ -218,6 +232,12 @@ func _show_cost_readout() -> void:
 	cost_readout.visible = true
 
 func _hide_cost_readout() -> void:
+	# HELD — see cost_row_hold. The row deliberately outlives the payment modal: after the payment is confirmed, a
+	# Summon still has to choose a target and an ability still has to commit its activation, and the crystals have to
+	# be on screen when they finally break. Guarding it HERE rather than at the call sites means every hide path
+	# respects the hold, including ones that do not exist yet.
+	if cost_row_hold:
+		return
 	if cost_readout != null:
 		cost_readout.visible = false
 
@@ -257,12 +277,25 @@ func clear_payment_accumulator():
 	mana_acc = MANA_ZERO.duplicate()
 
 func on_charge_complete():
-	# Payment finished: closing the modal reveals the phase's base mode again.
+	# HELD BEFORE THE POP, and that order is the entire point.
+	#
+	# pop_modal() emits the player mode change SYNCHRONOUSLY — it calls _refresh_mode(), which emits
+	# player_mode_change, which calls _on_player_mode_change(), which calls _hide_cost_readout(). All of that happens
+	# inside the pop on the next line. Setting the hold AFTER it arrives too late and the row is already gone, which
+	# is exactly the bug this had: the crystals vanished the instant the payment was confirmed, before the target step
+	# they were supposed to survive.
+	cost_row_hold = true
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	reset_buttons()
+	# The crystals are NOT burst here. Confirming the payment is not the same as playing the card: the emit below
+	# starts the cast, and a Summon still has to choose a target before it enters the stack, while an ability still
+	# has to commit its activation. Both can be cancelled, and both refund the mana — so the crystals stay on screen
+	# until Stack reports that the play actually landed.
 	charge_complete.emit()
 
 func on_charge_cancelled():
+	# Nothing is being played, so the row goes away now.
+	cost_row_hold = false
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	reset_buttons()
 	charge_cancelled.emit()
@@ -273,9 +306,28 @@ func on_target_complete():
 	target_complete.emit()
 
 func on_target_cancel():
+	# Backing out of a target abandons the play, so the row goes away here. The mana it was showing is refunded by
+	# the targeting paths (Stack._clear_skill_proxy() for an ability, the summon path for a Summon).
+	cost_row_hold = false
+	_hide_cost_readout()
 	target_cancel.emit()
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
 	reset_buttons()
+
+## THE PLAY HAS LANDED: break the crystals that paid for it, and take the row down once they are gone.
+##
+## Called by Stack at the three points where a play becomes legal — a Character going to the field, a Summon entering
+## the stack, an ability whose costs are paid and target chosen. Breaking them HERE, rather than when the payment was
+## confirmed, is what makes the shards come out of crystals the player can still see.
+##
+## THE HIDE WAITS FOR THE STAGGER. The crystals break one after another (CrystalCost.shatter_stagger_seconds), so
+## hiding the row the moment the play lands would take the second and third crystals away before they had shattered.
+## The caller does not await this — it needs nothing from it, and the row lives until the sequence is done.
+func commit_cost_readout() -> void:
+	cost_row_hold = false
+	if cost_readout != null:
+		await cost_readout.shatter_paid()
+	_hide_cost_readout()
 
 func _on_hand_charge_start(card: Card) -> void:
 	mana_cost = card.get_cost()

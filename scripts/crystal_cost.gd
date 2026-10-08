@@ -44,6 +44,10 @@ const WILD := "neutral"
 ## check asked for 4-6 px of air; 0.030 is about 5.6 px at this camera's 187 px per metre.
 @export var gap_m: float = 0.030
 
+## Seconds between one crystal shattering and the next, walking the row left to right. See shatter_paid(). Only paid
+## crystals are counted, so a row with an unpaid crystal in it still breaks evenly.
+@export var shatter_stagger_seconds: float = 0.1
+
 ## An optional word before the row, like "Pay". Empty by default — the crystals say it on their own.
 @export var label_text: String = "":
 	set(value):
@@ -109,6 +113,32 @@ func _apply_paid() -> void:
 			payer = str((paid[i] as Dictionary).get("paid_by", ""))
 		crystal.paid_element = payer
 		crystal.lit = not payer.is_empty()
+
+## Bursts every crystal that has been paid, ONE AFTER ANOTHER, left to right.
+##
+## The stagger is the point: a row is read left to right, so breaking it in that order makes the payment feel like it
+## is being spent across the crystals rather than blinking out all at once. `shatter_stagger_seconds` is the gap —
+## 0.1 s by default.
+##
+## ONLY PAID CRYSTALS COUNT. The delay advances once per burst rather than once per row position, so a cost of "fire,
+## wild, wild" paid by a single wild source shatters its two paid crystals 0.1 s apart — not 0.2 s apart with a hole
+## where the unpaid one sits.
+##
+## AWAITED BY THE CALLER, because the row has to stay on screen until the LAST crystal has gone. Hiding it the moment
+## the play lands would take the later crystals away before they had shattered.
+##
+## The shards are parented to THIS ROW'S PARENT, not to the row, so they outlive it: the row is hidden as soon as
+## this sequence finishes, and shards parented to it would vanish with it.
+func shatter_paid() -> void:
+	if not is_inside_tree():
+		return
+	var world_parent: Node = get_parent()
+	for crystal in crystals():
+		if not bool(crystal.get("lit")):
+			continue
+		crystal.call("shatter", world_parent)
+		if shatter_stagger_seconds > 0.0:
+			await get_tree().create_timer(shatter_stagger_seconds).timeout
 
 ## Lays the row out along local +x — which, once the row faces the camera, is screen-right — and centres the
 ## whole thing on this node's origin.

@@ -244,6 +244,8 @@ func _on_assistant_charge_complete() -> void:
 		return
 	if casting_card:
 		cast_card()
+		# A Character going to the field, or a Summon being cast: this IS the play. See _shatter_paid_cost().
+		_shatter_paid_cost()
 		casting_card = null
 		# The parked card left this node (played to the field): re-lay out the row.
 		update_card_positions()
@@ -538,16 +540,37 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 	var effect_card: Card = cards[-1]
 	effect_card.effect_target = target_card
 
+## THE PLAY HAS LANDED, so break the crystals that paid for it — and take the row down with them.
+##
+## This is the moment a play becomes legal, and it is deliberately NOT Assistant.on_charge_complete(): that fires when
+## the payment modal is confirmed, which for a Summon is BEFORE its target is chosen, and for an ability is BEFORE its
+## activation is committed. Both of those steps can still be cancelled — and cancelling REFUNDS the mana — so
+## breaking the crystals there meant they shattered for a play that never happened.
+##
+## The row is HELD on screen between those two moments (Assistant.cost_row_hold) precisely so the crystals are still
+## visible here. Breaking them while they are up is the whole point: the shards come out of something the player can
+## see, instead of appearing out of nothing after the crystals have already gone.
+##
+## Called from the three places a play actually lands: a Character going to the field (cast_card(), reached from
+## _on_assistant_charge_complete), a Summon entering the stack, and an ability whose costs are paid and whose target,
+## if any, is chosen.
+func _shatter_paid_cost() -> void:
+	if assistant != null:
+		assistant.commit_cost_readout()
+
 func _on_assistant_target_complete() -> void:
 	if summon_casting_card != null:
 		_commit_summon_to_stack()
+		_shatter_paid_cost()      # the Summon is on the stack
 		request_priority.emit()
 		return
 	commit_skill_activation_costs_if_pending()
+	_shatter_paid_cost()          # activation committed: costs paid, target chosen
 	request_priority.emit()
 
 func confirm_skill_without_target_then_priority() -> void:
 	commit_skill_activation_costs_if_pending()
+	_shatter_paid_cost()          # activation committed: a skill with no target needs no confirmation
 	request_priority.emit()
 
 func _on_assistant_target_cancel() -> void:

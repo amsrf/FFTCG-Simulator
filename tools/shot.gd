@@ -92,6 +92,11 @@ func _ready() -> void:
 						var pair: PackedStringArray = bits.split(":")
 						if pair.size() >= 2:
 							assistant.call("charge", int(pair[1].strip_edges()), pair[0].strip_edges())
+				# --commit: FINISH the payment, so code that runs only when the mana is actually spent can be
+				# reached at all. Selecting sources is not enough — the crystal row shatters on commit, and
+				# without this the harness could not see that path even exist.
+				if _args.has("commit"):
+					assistant.call("on_charge_complete")
 				var readout: Node = assistant.get("cost_readout")
 				if readout != null:
 					print("[Shot] readout visible=%s" % readout.visible)
@@ -107,6 +112,12 @@ func _ready() -> void:
 	else:
 		await _build_subject()
 
+	# --seconds <t>: wait REAL seconds before shooting. `--frames` counts engine FRAMES, and this harness runs
+	# uncapped — so its frames are a few milliseconds each and "20 frames" is not a fifth of a second. Anything
+	# time-based (a burst in flight, a tween, a rotation) needs this to be reproducible, and without it such things
+	# could only be described rather than shown.
+	if _args.has("seconds"):
+		await get_tree().create_timer(float(_args["seconds"])).timeout
 	await _settle(int(_args.get("frames", 20)))
 	await _save(out)
 
@@ -117,8 +128,18 @@ func _build_subject() -> void:
 	# Wait before measuring: a subject may build its children in a setter (the cost row constructs its
 	# badges that way) and camera-facing scripts need a _process to have run.
 	await _settle(3)
-	_add_environment(str(_args.get("studio", "1")) != "0")
-	_add_camera(_bounds(subject), float(_args.get("zoom", 1.35)))
+	# --as-scene: leave the subject's OWN camera and environment alone, so the shot is exactly what pressing F6 on
+	# that scene shows.
+	#
+	# Without it the harness adds its own studio sky and framing camera, which is right for asset shots and
+	# misleading for a preview: a scene can render perfectly here and still be a blank grey window in the editor,
+	# because the harness was supplying the two things the scene itself was missing. That is exactly how
+	# CrystalShardsPreview.tscn shipped broken — verified with a camera and a sky it did not own.
+	if str(_args.get("as-scene", "0")) == "1":
+		print("[Shot] --as-scene: keeping the subject's own camera and environment")
+	else:
+		_add_environment(str(_args.get("studio", "1")) != "0")
+		_add_camera(_bounds(subject), float(_args.get("zoom", 1.35)))
 
 ## Sets whichever of the subject's known properties were asked for. Done dynamically so the harness
 ## needs no knowledge of any particular scene.

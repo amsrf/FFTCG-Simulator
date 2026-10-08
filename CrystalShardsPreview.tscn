@@ -1,0 +1,57 @@
+[gd_scene load_steps=3 format=3 uid="uid://dtdglrd5ec2nn"]
+
+; A LOOPING PREVIEW OF THE CRYSTAL SHATTER. Open it and press F6 — no match, no payment, no waiting for the right
+; moment. It fires one burst per colour, left to right, every couple of seconds, forever.
+;
+;   * fire    — the ruby the game uses for a fire crystal
+;   * wild    — the near-white "any colour" crystal
+;   * ice     — cyan
+;   * wind    — green
+;
+; It calls CrystalShards exactly as the mana payment does, so what you see here is what the game plays.
+;
+; It can also be shot without a window at all:
+;   godot res://tools/shot.tscn --quit-after 300 -- --scene res://CrystalShardsPreview.tscn \
+;       --seconds 0.6 --out tools/shots/shatter_preview.png
+;
+; THE ENVIRONMENT IS NOT DECORATION. Without a WorldEnvironment the viewport is Godot's default flat grey, and a
+; quarter-of-a-metre burst in the middle of a featureless grey field reads as a broken scene — which is exactly how
+; this first looked under F6, while the shot harness (which supplies its own studio sky) rendered it perfectly. A
+; plain mid-tone background is enough; the two lights below do the actual shading.
+;
+; THE LIGHTS ALSO MATTER: the shards use an ordinary lit material, so with no lights they render black.
+;
+; THE CAMERA IS DELIBERATELY BORING: identity rotation, so it looks straight down -Z from 0.95 m in front of the
+; row, at the row's own height. The burst is only ~0.21 m tall, so being close matters.
+;
+; Watching it: the burst is ~10 cm across and gone in one second, and `gap_seconds` is the empty beat between
+; cycles — this file sets it to 1.2 s, so a burst is on screen most of the time.
+
+[ext_resource type="Script" uid="uid://ju3r82ovfxca" path="res://scripts/crystal_shards_preview.gd" id="1_script"]
+
+[sub_resource type="Environment" id="Env_preview"]
+background_mode = 1
+background_color = Color(0.42, 0.46, 0.54, 1)
+
+[node name="CrystalShardsPreview" type="Node3D"]
+script = ExtResource("1_script")
+gap_seconds = 1.2
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_preview")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7, -0.7, 0, 0.7, 0.7, 0, 2.5, 3)
+light_energy = 1.2
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.34, 0, -0.34, 0.94, 0, 1, 2)
+light_color = Color(0.8, 0.85, 1, 1)
+light_energy = 0.35
+
+; Straight down -Z, level with the row. The row spans about 1 m across, so at 0.95 m with a 45 degree field of
+; view it fills most of the frame rather than sitting in it as a speck.
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0.95)
+current = true
+fov = 45.0
