@@ -323,7 +323,16 @@ func on_target_cancel():
 ## THE HIDE WAITS FOR THE STAGGER. The crystals break one after another (CrystalCost.shatter_stagger_seconds), so
 ## hiding the row the moment the play lands would take the second and third crystals away before they had shattered.
 ## The caller does not await this — it needs nothing from it, and the row lives until the sequence is done.
+## NOTHING WAS PAID FOR, SO THERE IS NOTHING TO BREAK AND NOTHING TO FLY.
+##
+## Stack calls this at the three points where a play becomes legal, and not every one of them involves mana: an
+## enter-the-field ability like the Alchemist's lands on the stack for free. The cost row still holds its crystals marked
+## `lit` from the last payment, so without this guard the row shattered a second time and sent orbs at a card nobody had
+## paid for. `cost_row_hold` is exactly the question being asked — it is set when a payment is confirmed and cleared
+## when that payment is consumed, cancelled, or has its target abandoned.
 func commit_cost_readout(target_card: Card = null) -> void:
+	if not cost_row_hold:
+		return
 	cost_row_hold = false
 	if cost_readout != null:
 		await cost_readout.shatter_paid(target_card)

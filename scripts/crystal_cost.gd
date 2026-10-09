@@ -137,6 +137,7 @@ func shatter_paid(target_card: Card = null) -> void:
 	if not is_inside_tree():
 		return
 	var world_parent: Node = get_parent()
+	var last_orb: Node3D = null
 	for crystal in crystals():
 		if not bool(crystal.get("lit")):
 			continue
@@ -146,20 +147,26 @@ func shatter_paid(target_card: Card = null) -> void:
 			colour = claimed
 		var from: Vector3 = (crystal as Node3D).global_position
 		crystal.call("shatter", world_parent)
-		_launch_orb(world_parent, from, colour, target_card)
+		last_orb = _launch_orb(world_parent, from, colour, target_card)
 		if shatter_stagger_seconds > 0.0:
 			await get_tree().create_timer(shatter_stagger_seconds).timeout
+	# THE LAST ORB LAUNCHED IS THE LAST TO ARRIVE: every flight lasts the same time, so waiting on the final one waits
+	# for all of them WITHOUT serialising them — they overlap, which is the entire point of the stagger.
+	if last_orb != null and is_instance_valid(last_orb) and last_orb.has_signal("arrived"):
+		await last_orb.arrived
 
-## Sends one payment orb from a shattered crystal to the card that mana was spent on.
+## Sends one payment orb from a shattered crystal to the card that mana was spent on, and RETURNS it so the caller can
+## wait for it: a Character must not land on the field until the mana has visibly reached the card.
 ##
 ## The script is preloaded rather than named as a class: a brand-new `class_name` is not in Godot's global class cache
 ## until the editor rescans, so referring to PaymentOrb by name works in the editor and fails headless.
-func _launch_orb(world_parent: Node, from: Vector3, colour: Color, target_card: Card) -> void:
+func _launch_orb(world_parent: Node, from: Vector3, colour: Color, target_card: Card) -> Node3D:
 	if target_card == null or not is_instance_valid(target_card):
-		return
+		return null
 	var orb: Node3D = preload("res://scripts/payment_orb.gd").new()
 	world_parent.add_child(orb)
 	orb.call("launch", from, colour, target_card)
+	return orb
 
 ## Lays the row out along local +x — which, once the row faces the camera, is screen-right — and centres the
 ## whole thing on this node's origin.

@@ -185,6 +185,38 @@ and when it reported 165 matches I read the number instead of the output. The re
 pre-existing warning baseline dropped from 13 to 0, which is impossible unless no cards are being created at all. The
 raw output had the answer on its first line (an undeclared variable, 166 errors, `Card` failing to load). Run it raw.
 
+### Four Bugs in the Payment Effects, and Why They Were All the Same Bug (2026-10-09)
+
+Every one of these was **two pieces of code that assumed nothing would happen between them.** Worth reading as a set,
+because the fix in each case is one line and the diagnosis is the whole of the work.
+
+- **The energized glow lingered on a Character forever.** The glow is set by `absorb_power()`, which runs when the
+  payment lands — and for a Character that is AFTER `cast_card()` has already called `field.play_card()`, which runs
+  `enter_zone()` and clears every ring. So the glow was applied to a card whose rings had just been cleared, and
+  nothing would ever clear it again: a Character never reaches the stack, and it had already changed zone. It stayed
+  lit on the board for the rest of the match. Fixed by making `set_energized_highlight()` refuse unless the card is in
+  HAND, which is the rule the glow was always for: it marks a card you have **paid for but not yet played**.
+- **Orbs flew at cards nobody had paid for.** `Stack._shatter_paid_cost()` fires whenever a play lands, and an
+  enter-the-field ability lands for free — but the cost row still held its crystals marked `lit` from the last payment,
+  so it shattered a second time and launched orbs at the effect card. Fixed by making `commit_cost_readout()` return
+  unless `Assistant.cost_row_hold` is set, which is precisely "a payment is waiting to be applied".
+- **The card's scale ratcheted up on every volley.** Each orb read `scale` for its resting size, so the second of
+  three orbs recorded the first one's inflated size as "resting" and settled there. Only the first hit of a volley
+  records the real scale now, and a `tween_callback` snaps it back.
+- **The game crashed on the frame after a Character was paid for.** `cast_card()` awaits the orb flight, and while it
+  is suspended the caller runs on and clears `casting_card` — so on resume `field.play_card(casting_card, …)`
+  dereferenced null. Fixed by capturing the card in a LOCAL before the await. **Anything read after an `await` must be
+  captured before it**, because an await does not merely allow other code to run, it requires it.
+
+#### Also changed
+- **A Character now waits for its payment to land.** `cast_card()` awaits the shatter before `field.play_card()`, and
+  the whole chain is awaited: `PaymentOrb` gained an `arrived` signal, `_launch_orb()` returns the orb, and
+  `shatter_paid()` awaits the LAST one launched — the last to arrive, since every flight is the same duration. So the
+  orbs still OVERLAP rather than being serialised, and the stagger survives.
+- **Which also makes the energized glow visible at last.** The card is still in hand while the orbs fly, so there is a
+  ring for the glow to light, and moving to the field clears it. Before this change the glow's entire lifetime elapsed
+  within a single frame.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.

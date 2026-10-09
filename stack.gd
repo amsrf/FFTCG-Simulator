@@ -244,7 +244,21 @@ func cast_card():
 		# Character cards go straight to the field: they are never stack objects,
 		# so nothing is popped and no stack slot is consumed. play_card() needs
 		# the side explicitly — it cannot infer it from card.controller.
-		field.play_card(casting_card, casting_card.controller != "player")
+		#
+		# THE MANA LANDS FIRST. Payment orbs fly to this card, so it must not move
+		# until they have arrived — otherwise it is already on the field, with every
+		# ring cleared, when they get there. Awaiting the shatter here is what gives
+		# the orbs their flight, and what lets the energized glow actually be seen:
+		# while the card is still in hand there is a ring for it to light.
+		#
+		# CAPTURED BEFORE THE AWAIT. While this function is suspended the caller runs on
+		# and clears `casting_card` (the line right after its own _shatter_paid_cost()),
+		# so reading the member afterwards dereferences null — which is exactly how this
+		# crashed once the await was added. It is the only use of the member after the
+		# suspension, so capturing it here is the whole fix.
+		var landing: Card = casting_card
+		await _shatter_paid_cost()
+		field.play_card(landing, landing.controller != "player")
 		# Playing a Character is a priority action even though the stack never
 		# changed: priority must move to the opponent.
 		get_parent().note_action_taken()
@@ -566,12 +580,15 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 ## visible here. Breaking them while they are up is the whole point: the shards come out of something the player can
 ## see, instead of appearing out of nothing after the crystals have already gone.
 ##
-## Called from the three places a play actually lands: a Character going to the field (cast_card(), reached from
-## _on_assistant_charge_complete), a Summon entering the stack, and an ability whose costs are paid and whose target,
-## if any, is chosen.
+## Called from the three places a play actually lands: a Character going to the field (cast_card(), which AWAITS this so
+## the orbs can fly before the card moves), a Summon entering the stack, and an ability whose costs are paid and whose
+## target, if any, is chosen.
+##
+## AWAITED, so the payment orbs are not fire-and-forget: the caller is waiting for them, and they finish only when the
+## last one reaches the card. The other two call sites simply do not need to wait, so they let it run.
 func _shatter_paid_cost() -> void:
 	if assistant != null:
-		assistant.commit_cost_readout(_paid_for_card())
+		await assistant.commit_cost_readout(_paid_for_card())
 
 ## The card this payment is being spent on, which is where the shatter orbs fly: the top of the stack, or the Character
 ## being played when there is no stack card at all.

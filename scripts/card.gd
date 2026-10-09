@@ -676,12 +676,24 @@ func set_available_highlight(enabled: bool) -> void:
 	_available_highlight_on = enabled
 	_refresh_target_ring()
 
-## "Mana has been spent on this card" — a glow in that mana's own colour, held until the card is played.
+## "Mana has been spent on this card" — a glow in that element's colour, held until the card is played.
 ##
 ## This is the FIFTH meaning of one ring, and deliberately the LOWEST priority. The other four are prompts telling the
 ## player to ACT; this one only reports. Anything asking for attention therefore outranks it, which is exactly what the
 ## order of the checks in _refresh_target_ring() encodes — later wins.
+##
+## ONLY WHILE THE CARD IS STILL IN HAND, and that guard is load-bearing rather than tidiness. The glow is set when the
+## mana lands, which for a CHARACTER is AFTER the card has been moved to the field: cast_card() calls
+## field.play_card() (which runs enter_zone, clearing every ring) and the shatter that energizes runs after the play
+## has landed. So the glow would be applied to a card whose rings had just been cleared, and nothing would clear it
+## again — a Character never reaches the stack and it has already changed zone — leaving it lit on the board for the
+## rest of the match. That is the reported bug.
+##
+## The rule this encodes is the one the glow is actually for: it marks a card you have PAID FOR BUT NOT YET PLAYED.
+## Once the card has left your hand the play is happening and the glow has nothing left to say.
 func set_energized_highlight(enabled: bool, colour: Color = Color.WHITE) -> void:
+	if enabled and current_zone != Zone.HAND:
+		return
 	if enabled == _energized_highlight_on and (not enabled or colour.is_equal_approx(_energized_colour)):
 		return
 	_energized_highlight_on = enabled

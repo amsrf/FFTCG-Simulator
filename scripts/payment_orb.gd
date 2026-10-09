@@ -49,6 +49,10 @@ var _flying: bool = false
 ## Kept so the card can be told it has been hit, at the moment the orb arrives.
 var _card: Card = null
 
+## Emitted when the orb reaches the card, just before it frees itself. A caller can await this to hold a play open until
+## the payment has visibly landed.
+signal arrived
+
 ## Flies an orb of `colour` from `from` to `card`, then removes itself.
 func launch(from: Vector3, colour: Color, card: Card) -> void:
 	if card == null:
@@ -90,6 +94,9 @@ func _process(delta: float) -> void:
 			# And where it was when it vanished: the shockwave starts there, projected onto the card's plane by the
 			# card itself, rather than at the card's centre.
 			_card.absorb_power(lit, _orb.global_position)
+		# Announced BEFORE freeing, because a caller may be holding a play open until this fires — a Character must not
+		# land on the field until the mana has visibly reached the card.
+		arrived.emit()
 		print("[PaymentOrb] arrived behind the card after %.2f s" % _elapsed)
 		queue_free()
 
