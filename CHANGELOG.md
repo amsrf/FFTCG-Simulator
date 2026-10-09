@@ -8,6 +8,42 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### Deck Editor
+
+Browse, filter and build a 50-card deck, then play a match with it.
+
+- **`deck_editor.tscn` / `scripts/deck_editor.gd`.** All 3644 cards in a paged grid, filterable by job,
+  category, type, element, power range and cost range — every filter matched against counts measured from the
+  database itself, so a filter that quietly stopped matching shows up as a failing check. Saved to
+  `user://decks/<name>.json`; `MatchSetup` gained a `custom` preset that plays a saved deck with both sides
+  using it.
+- **Two independent deck views.** A list on the right (element stripe, name, cost, quantity) and/or stacked
+  card piles along the bottom, each with an `xN` badge. They used to be an either/or switch, which meant you
+  could not read the decklist and the piles together — but nothing actually needed to trade, so they are two
+  toggles now. The layout copes: the pool gives up the width the list needs and the height the strip needs.
+- **An expand handle** between the pool and the strip, because the boundary between them is what it moves.
+- **Hover previews.** Hovering any card image — pool, deck row, or pile — opens a 363 x 508 zoom card beside
+  it, shifted up when there is no room below, flipped to the left when there is no room to the right. The art
+  files ARE the whole card including its rules text, so enlarging the art is exactly what "read its effect"
+  needs. The inset shadow and the pulse-free fade keep it from reading as a paste-in.
+- **`shaders/thumb_round.gdshader`.** Rounds a card's corners, draws a thin hard black line along the bottom
+  of that outline, and lights a blue aura around the border on hover. Every size in it is in UV, so the same
+  numbers look right on a 190 px thumbnail and a 363 px preview.
+
+#### Three things the card hover taught us
+
+- **A `TextureRect`/`TextureButton` has no corner radius.** Godot's rounded corners come from `StyleBoxFlat`,
+  which only exists for panels and buttons with a background — not a raw image. The shape has to be cut in a
+  `canvas_item` fragment shader, which is also what lets one shader serve the rounding, the bottom line and
+  the aura together.
+- **Measure a line from the OUTLINE, not from the image edge.** The bottom line was first drawn from `UV.y`,
+  giving a straight stripe that the corner mask merely chopped off. Measuring inward from the rounded rect's
+  own distance field gives a band of constant width that turns with the corner — which is the difference
+  between the first attempt and `references/black.png`.
+- **A bright colour must be MIXED, not added.** `COLOR.rgb +=` on a bright card clips the channel and washes
+  the border to white. This is the fifth time this project has hit additive clipping; `mix()` has been the
+  answer every time.
+
 ### Things Learned the Hard Way (worth not repeating)
 
 - **A screenshot beats a description, and a probe beats both.** `tools/shot.gd` boots a scene *with rendering*, lets it settle, saves a PNG and quits, so anything visual can be looked at directly:

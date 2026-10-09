@@ -8,15 +8,27 @@ extends Node
 
 const GAME_SCENE := "res://game.tscn"
 const MENU_SCENE := "res://main_menu.tscn"
+const DECK_EDITOR_SCENE := "res://deck_editor.tscn"
+
+## Where the deck editor writes. Same directory and same default name, so a deck saved in the
+## editor is the deck the custom preset plays without anything else having to be kept in step.
+const DECK_DIR := "user://decks"
+const CUSTOM_DECK_NAME := "default"
 
 ## Config for the match about to start. Empty = fall back to the debug preset.
 var config: Dictionary = {}
 
+## Which saved deck the "custom" preset plays. The editor's Play button sets it, so playing from the
+## editor reads back the file you just saved rather than the default one.
+var custom_deck_name: String = CUSTOM_DECK_NAME
+
 func get_presets() -> Array:
-	return ["ai", "standard", "debug"]
+	return ["custom", "ai", "standard", "debug"]
 
 func describe_preset(preset: String) -> String:
 	match preset:
+		"custom":
+			return "Custom Deck  (both players - saved in the Deck Editor)"
 		"ai":
 			return "Vs AI  (Practice Board - opponent plays cards and attacks)"
 		"standard":
@@ -29,6 +41,8 @@ func describe_preset(preset: String) -> String:
 func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 	var cfg: Dictionary
 	match preset:
+		"custom":
+			cfg = _custom()
 		"ai":
 			# The practice board, but with a *playable* opponent. The debug board
 			# leaves it one untapped Backup (1 mana), so it could never afford
@@ -66,11 +80,84 @@ func go_to_menu() -> void:
 	config = {}
 	get_tree().change_scene_to_file(MENU_SCENE)
 
+func go_to_deck_editor() -> void:
+	config = {}
+	get_tree().change_scene_to_file(DECK_EDITOR_SCENE)
+
 ## Config a match should use: the pending one, else the debug preset.
 func resolve_config() -> Dictionary:
 	if config.is_empty():
 		return _debug()
 	return config
+
+# --- custom decks ----------------------------------------------------------
+
+func deck_path(name: String = CUSTOM_DECK_NAME) -> String:
+	return "%s/%s.json" % [DECK_DIR, name]
+
+## Card ids from a deck file, or [] when there is nothing usable there. Every failure prints why:
+## silently falling back to a default deck would look like the editor had saved something it had not.
+##
+## An empty `name` means "the deck we are currently pointed at" (`custom_deck_name`), NOT the constant
+## default: a caller that has just set custom_deck_name must be able to ask for it without repeating
+## itself, or the two can disagree.
+func load_deck_ids(name: String = "") -> Array:
+	var which: String = custom_deck_name if name.is_empty() else name
+	var path: String = deck_path(which)
+	if not FileAccess.file_exists(path):
+		print("[MatchSetup] no deck at %s" % path)
+		return []
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		print("[MatchSetup] cannot open %s" % path)
+		return []
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not (parsed is Dictionary) or not parsed.has("cards"):
+		print("[MatchSetup] %s is not a deck file" % path)
+		return []
+	var ids: Array = []
+	for entry in parsed["cards"]:
+		var id: int = int(entry)
+		if id < 1:
+			print("[MatchSetup] ignoring bogus card id %s in %s" % [str(entry), path])
+			continue
+		ids.append(id)
+	return ids
+
+## A match where BOTH players play the deck from the editor.
+##
+## Both sides get the SAME LIST shuffled with DIFFERENT SEEDS: the lists are identical, so it is the
+## deck versus itself, but the two draws are independent rather than a mirror of each other.
+##
+## An empty or unreadable file falls back to the standard match rather than starting a game with no
+## cards in it — and says so, so an empty Custom Deck is never a silent mystery.
+func _custom() -> Dictionary:
+	var ids: Array = load_deck_ids(custom_deck_name)
+	if ids.is_empty():
+		print("[MatchSetup] custom deck '%s' is empty — falling back to the standard match" % custom_deck_name)
+		var fallback: Dictionary = _standard()
+		fallback["preset"] = "custom"
+		return fallback
+	print("[MatchSetup] custom deck: %d cards from %s" % [ids.size(), deck_path(custom_deck_name)])
+	var deck_seed: int = _pick_seed(0)
+	var player_deck: Array = _shuffled(ids, deck_seed)
+	var opponent_deck: Array = _shuffled(ids, deck_seed + 1)
+	var opening: int = mini(5, player_deck.size())
+	return {
+		"preset": "custom",
+		"opponent_type": "ai",
+		"starting_player": 1,
+		"seed": deck_seed,
+		"shuffle": true,
+		"player_hand": player_deck.slice(0, opening),
+		"opponent_hand": opponent_deck.slice(0, opening),
+		"player_deck": player_deck.slice(opening),
+		"opponent_deck": opponent_deck.slice(opening),
+		"player_field": [],
+		"opponent_field": [],
+		"first_phase": "first_main",
+	}
 
 ## Standard match scaffold: shuffled decks, opening hand from the top of each,
 ## no pre-placed cards, turn starts at the Active Phase. The decklist itself is
@@ -139,13 +226,13 @@ func _debug() -> Dictionary:
 			{"id": 32, "tapped": true},
 			{"id": 31, "tapped": false},
 			{"id": 3, "tapped": false},
-		],
+			],
 		"opponent_field": [
 			{"id": 41, "tapped": false},
 			{"id": 32, "tapped": true},
 			{"id": 31, "tapped": false},
 			# Zidane 1-071L: cannot_be_chosen protection test target.
 			{"id": 71, "tapped": false},
-		],
+			],
 		"first_phase": "first_main",
 	}

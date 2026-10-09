@@ -39,6 +39,12 @@ func _ready() -> void:
 
 	box.add_child(HSeparator.new())
 
+	var deck_button := Button.new()
+	deck_button.text = "Deck Editor"
+	deck_button.custom_minimum_size = Vector2(460, 44)
+	deck_button.pressed.connect(func(): get_tree().change_scene_to_file("res://deck_editor.tscn"))
+	box.add_child(deck_button)
+
 	var quit_button := Button.new()
 	quit_button.text = "Quit"
 	quit_button.custom_minimum_size = Vector2(460, 44)
