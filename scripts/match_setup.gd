@@ -14,6 +14,7 @@ const DECK_EDITOR_SCENE := "res://deck_editor.tscn"
 ## editor is the deck the custom preset plays without anything else having to be kept in step.
 const DECK_DIR := "user://decks"
 const CUSTOM_DECK_NAME := "default"
+const DECK_PICKER_SCENE := "res://deck_picker.tscn"
 
 ## Config for the match about to start. Empty = fall back to the debug preset.
 var config: Dictionary = {}
@@ -21,6 +22,10 @@ var config: Dictionary = {}
 ## Which saved deck the "custom" preset plays. The editor's Play button sets it, so playing from the
 ## editor reads back the file you just saved rather than the default one.
 var custom_deck_name: String = CUSTOM_DECK_NAME
+
+## Which deck the editor should open. Empty = a brand new deck. Set by the picker immediately before it
+## navigates, because a scene cannot receive an argument.
+var editing_deck_name: String = ""
 
 func get_presets() -> Array:
 	return ["custom", "ai", "standard", "debug"]
@@ -80,8 +85,16 @@ func go_to_menu() -> void:
 	config = {}
 	get_tree().change_scene_to_file(MENU_SCENE)
 
-func go_to_deck_editor() -> void:
+func go_to_deck_picker() -> void:
 	config = {}
+	get_tree().change_scene_to_file(DECK_PICKER_SCENE)
+
+## Opens the editor on `name`. An EMPTY name means a brand new deck, and the editor starts blank — that is
+## the difference between "edit this deck" and "create one", and it is carried by the name rather than a
+## separate flag, so there is only one thing to get out of sync.
+func go_to_deck_editor(name: String = "") -> void:
+	config = {}
+	editing_deck_name = name
 	get_tree().change_scene_to_file(DECK_EDITOR_SCENE)
 
 ## Config a match should use: the pending one, else the debug preset.
@@ -94,6 +107,22 @@ func resolve_config() -> Dictionary:
 
 func deck_path(name: String = CUSTOM_DECK_NAME) -> String:
 	return "%s/%s.json" % [DECK_DIR, name]
+
+## Deletes a deck file, reporting why when there is nothing to delete — so a caller never reports success for
+## a file that was already gone.
+##
+## The CALLER confirms first. This is the only destructive operation on a deck and it does not ask.
+func delete_deck(name: String) -> bool:
+	var path: String = deck_path(name)
+	if not FileAccess.file_exists(path):
+		print("[MatchSetup] no deck to delete at %s" % path)
+		return false
+	var err: int = DirAccess.remove_absolute(path)
+	if err != OK:
+		print("[MatchSetup] could not delete %s (error %d)" % [path, err])
+		return false
+	print("[MatchSetup] deleted %s" % path)
+	return true
 
 ## Card ids from a deck file, or [] when there is nothing usable there. Every failure prints why:
 ## silently falling back to a default deck would look like the editor had saved something it had not.
@@ -124,6 +153,42 @@ func load_deck_ids(name: String = "") -> Array:
 			continue
 		ids.append(id)
 	return ids
+
+## Every saved deck, as {name, face, count} — the ONE reader for what is actually on disk, so the picker and
+## the editor cannot disagree about what a deck file contains.
+##
+## `face` is the card that represents the deck on the picker's tile. It defaults to the deck's FIRST card, so
+## a deck saved before faces existed still shows something rather than a blank tile.
+##
+## Unreadable and malformed files are SKIPPED rather than listed: a tile that cannot be opened is worse than
+## no tile at all, and the editor is where a broken file should get diagnosed.
+func list_decks() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(DECK_DIR)
+	if dir == null:
+		return out
+	for file_name in dir.get_files():
+		if not file_name.ends_with(".json"):
+			continue
+		var path: String = "%s/%s" % [DECK_DIR, file_name]
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		file.close()
+		if not (parsed is Dictionary) or not parsed.has("cards"):
+			continue
+		var ids: Array = parsed["cards"]
+		var face: int = int(parsed.get("face", 0))
+		if face < 1 and not ids.is_empty():
+			face = int(ids[0])
+		out.append({
+			"name": str(parsed.get("name", file_name.get_basename())),
+			"face": face,
+			"count": ids.size(),
+		})
+	out.sort_custom(func(a, b): return str(a["name"]) < str(b["name"]))
+	return out
 
 ## A match where BOTH players play the deck from the editor.
 ##

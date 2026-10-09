@@ -12,6 +12,17 @@ The session ended on presentation and tooling: the targeting cue became a **CSS-
 
 Browse, filter and build a 50-card deck, then play a match with it.
 
+- **`deck_picker.tscn` / `scripts/deck_picker.gd`.** An intermediary screen between the menu and the editor,
+  because a scene cannot be handed an argument: it lists every saved deck as a tile — face card, name, card
+  count — and offers Create New Deck. Its list comes from `MatchSetup.list_decks()`, the single reader for what
+  is actually on disk. Delete is per tile and ALWAYS confirms first.
+- **Deck faces, and a rename that MOVES the file.** The editor can name a deck's face — the card that
+  represents it in the picker, defaulting to the deck's first card when none is chosen. Renaming used to write
+  a second file and leave the first behind, which is indistinguishable from creating a new deck: `_loaded_from`
+  is what it renames from now, and a name that is already taken is refused rather than overwritten.
+- **Both deck views start ON.** The card strip is the view that actually shows you the deck; the list is a
+  summary of the same thing.
+
 - **`deck_editor.tscn` / `scripts/deck_editor.gd`.** All 3644 cards in a paged grid, filterable by job,
   category, type, element, power range and cost range — every filter matched against counts measured from the
   database itself, so a filter that quietly stopped matching shows up as a failing check. Saved to

@@ -90,11 +90,47 @@ var filtered: Array[int] = []
 var deck: Array[int] = []
 var page: int = 0
 var deck_name: String = "default"
+## The card that represents this deck in the picker. 0 = none chosen, and the picker falls back to the
+## deck's first card — so choosing a face is a nicety, never a requirement.
+var face_id: int = 0
+
+## Chooses the deck's face, or clears it back to the default when `id` is 0. Kept here rather than in the
+## click handler so the picker's own logic has one entry point.
+func set_face(id: int) -> void:
+	face_id = id
+	_toggle_face_picking(false)
+	_set_status("Face: %s" % (name_of(id) if id > 0 else "first card of the deck"))
+
+## Arms or disarms face picking. While armed the next pool click sets the face — see _on_pool_pressed.
+func _toggle_face_picking(on: bool) -> void:
+	_picking_face = on
+	_set_face_ui()
+
+func _set_face_ui() -> void:
+	if _face_button == null:
+		return
+	if _picking_face:
+		_face_button.text = "Face: pick a card…"
+	else:
+		_face_button.text = "Face: %s" % (name_of(face_id) if face_id > 0 else "auto")
+
+## A pool thumbnail's click currently means "add this card"; face picking borrows it. The button says which
+## meaning is live, because a mode you cannot see is a mode you forget you are in.
+var _picking_face: bool = false
+var _face_button: Button = null
+var _name_box: LineEdit = null
+## The name this deck was OPENED under, which stops being the same as `deck_name` the moment it is renamed.
+## save_deck() renames FROM this, so changing the name moves the file instead of leaving the old one behind
+## and creating what looks like a second deck.
+var _loaded_from: String = ""
 ## The two deck views are INDEPENDENT: either, both or neither can be on. The list wants the right column
 ## and the strip wants full width, but the layout gives each what it asks for rather than trading one for
 ## the other, so the decklist and the card piles can be read at the same time.
+##
+## BOTH START ON, because the card strip is the view that actually shows you the deck — the list is a
+## summary of the same thing, and hiding it by default made the editor open on the less useful half.
 var deck_list_visible: bool = true
-var deck_cards_visible: bool = false
+var deck_cards_visible: bool = true
 
 var _search: LineEdit = null
 var _grid: GridContainer = null
@@ -139,8 +175,18 @@ func _set_strip_expanded(expanded: bool) -> void:
 		_strip_toggle.text = "▼  Collapse deck" if expanded else "▲  Expand deck"
 
 func _ready() -> void:
+	# WHICH deck we are editing: the picker leaves the choice on MatchSetup, because a scene cannot be handed
+	# an argument. An empty name is a NEW deck — it starts blank under a placeholder name that will not
+	# collide with a real file until it is saved.
+	var opening: String = MatchSetup.editing_deck_name
+	deck_name = "new deck" if opening.is_empty() else opening
+	# The file this deck came from. Empty for a NEW deck, which is what tells save_deck() there is nothing to
+	# rename on the first save.
+	_loaded_from = opening
 	_load_database()
 	_build_ui()
+	if not opening.is_empty():
+		load_deck()
 	_apply_filter()
 
 # --- data ------------------------------------------------------------------
@@ -418,6 +464,11 @@ func _make_pool_button(id: int) -> Control:
 	return button
 
 func _on_pool_pressed(id: int) -> void:
+	# In face-picking mode a click CHOOSES THE FACE instead of adding a card. Routing it here rather than
+	# giving the pool a second button means the two actions cannot drift apart, and it costs one branch.
+	if _picking_face:
+		set_face(id)
+		return
 	if deck.size() >= DECK_SIZE:
 		_set_status("Deck is full (%d)" % DECK_SIZE)
 		return
@@ -618,16 +669,38 @@ func deck_path(name: String = "") -> String:
 
 func save_deck(name: String = "") -> bool:
 	DirAccess.make_dir_recursive_absolute(DECK_DIR)
-	var file := FileAccess.open(deck_path(name), FileAccess.WRITE)
+	var target: String = deck_name if name.is_empty() else name
+	var path: String = deck_path(target)
+
+	# RENAMING MOVES THE FILE. Without this, changing the name wrote a SECOND file and left the first one
+	# behind — which looks exactly like the editor having created a new deck.
+	if not _loaded_from.is_empty() and _loaded_from != target:
+		var old_path: String = deck_path(_loaded_from)
+		# Refuse rather than silently destroy a different deck that already has the name being moved onto.
+		if FileAccess.file_exists(path):
+			_set_status("%s already exists — pick another name" % target)
+			return false
+		if FileAccess.file_exists(old_path):
+			var dir := DirAccess.open(DECK_DIR)
+			if dir == null or dir.rename(_loaded_from + ".json", target + ".json") != OK:
+				_set_status("Could not rename %s to %s" % [_loaded_from, target])
+				return false
+
+	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		_set_status("Could not write %s" % deck_path(name))
+		_set_status("Could not write %s" % path)
 		return false
 	file.store_string(JSON.stringify({
-		"name": deck_name if name.is_empty() else name,
+		"name": target,
 		"cards": deck,
+		# The picker's tile art. Written even when 0, so the file documents the field rather than leaving its
+		# absence ambiguous.
+		"face": face_id,
 	}, "\t"))
 	file.close()
-	_set_status("Saved %d cards to %s" % [deck.size(), deck_path(name)])
+	# From here on this deck IS the file it was just written to, whatever it used to be called.
+	_loaded_from = target
+	_set_status("Saved %d cards to %s" % [deck.size(), path])
 	return true
 
 func load_deck(name: String = "") -> bool:
@@ -641,6 +714,16 @@ func load_deck(name: String = "") -> bool:
 	if not (parsed is Dictionary) or not parsed.has("cards"):
 		_set_status("%s is not a deck file" % path)
 		return false
+	# The name this deck was READ from — taken from the PATH, not from inside the file, which may have been
+	# hand-edited. It is what a later rename moves, so it must be captured before `deck_name` is overwritten.
+	_loaded_from = path.get_file().get_basename()
+	# Name and face come back too, so reopening a deck looks the same as when it was saved — otherwise the
+	# picker's tile would lose its face until the deck were saved again.
+	deck_name = str(parsed.get("name", deck_name))
+	face_id = int(parsed.get("face", 0))
+	if _name_box != null:
+		_name_box.text = deck_name
+	_set_face_ui()
 	deck.clear()
 	for entry in parsed["cards"]:
 		deck.append(int(entry))
@@ -699,12 +782,24 @@ func _build_ui() -> void:
 	_cards_button.pressed.connect(func(): _set_deck_cards_visible(not deck_cards_visible))
 	top.add_child(_cards_button)
 
-	var name_box := LineEdit.new()
-	name_box.text = deck_name
-	name_box.custom_minimum_size = Vector2(160, 0)
-	name_box.tooltip_text = "Deck name — the file is user://decks/<name>.json"
-	name_box.text_changed.connect(func(text: String): deck_name = text)
-	top.add_child(name_box)
+	# Held on the editor rather than kept local, because load_deck() has to put the saved name back into it.
+	_name_box = LineEdit.new()
+	_name_box.text = deck_name
+	_name_box.custom_minimum_size = Vector2(160, 0)
+	_name_box.tooltip_text = "Deck name — the file is user://decks/<name>.json"
+	_name_box.text_changed.connect(func(text: String): deck_name = text)
+	top.add_child(_name_box)
+
+	# Label the face button now, so its state is visible before anything has been clicked.
+	_set_face_ui()
+
+	# The deck's FACE: the card that represents it in the picker. Pressing this arms the choice — the next
+	# pool card clicked becomes the face — because there is no room for a second picker on this screen, and
+	# the pool is already a grid of every card in the game.
+	_face_button = Button.new()
+	_face_button.tooltip_text = "Choose which card represents this deck in the picker"
+	_face_button.pressed.connect(func(): _toggle_face_picking(not _picking_face))
+	top.add_child(_face_button)
 
 	# Save first, so what you play is what is on screen and what is on disk. The name goes to
 	# MatchSetup as well, so the match reads THIS file rather than the default one.

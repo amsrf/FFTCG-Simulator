@@ -10,6 +10,8 @@ extends Node
 
 const EDITOR := preload("res://scripts/deck_editor.gd")
 const PROBE_DECK := "probe_deck"
+## A second name the rename checks move the deck to, so the cleanup list can name it too.
+const PROBE_RENAMED := "probe_renamed"
 
 var _checks: int = 0
 var _failures: int = 0
@@ -280,6 +282,48 @@ func _ready() -> void:
 	var expected: Array = [4, 4, 12, 41, 41, 41, 71]
 	_expect(ids == expected, "MatchSetup reads back the same ids (%s vs %s)" % [str(ids), str(expected)])
 
+	# --- the face, and the picker's reader --------------------------------------------------
+	# The face used to be implicit; it is chosen in the editor now and read back by the picker.
+	editor.set_face(41)
+	_expect(editor.face_id == 41, "choosing a face records it")
+	_expect(not editor._picking_face, "and leaves picking mode, so the next click adds a card again")
+	_expect(editor.save_deck(PROBE_DECK), "the deck saves with its face")
+
+	# MatchSetup.list_decks() is the ONE reader the picker and anything else share.
+	var found: Dictionary = {}
+	for entry in MatchSetup.list_decks():
+		if str(entry["name"]) == PROBE_DECK:
+			found = entry
+	_expect(not found.is_empty(), "list_decks() finds the saved deck")
+	_expect(int(found.get("face", 0)) == 41, "and reports the face that was chosen")
+	_expect(int(found.get("count", 0)) == 7, "and its card count")
+
+	# A deck saved with no face falls back to its FIRST card, so a deck from before faces still shows a tile.
+	editor.set_face(0)
+	editor.save_deck(PROBE_DECK)
+	var fallback: Dictionary = {}
+	for entry in MatchSetup.list_decks():
+		if str(entry["name"]) == PROBE_DECK:
+			fallback = entry
+	_expect(int(fallback.get("face", 0)) == editor.deck[0],
+		"a deck with no face reports its first card instead (%d)" % int(fallback.get("face", 0)))
+
+	# --- renaming moves the file ------------------------------------------------------------
+	# This was a real bug: changing the name and pressing Save wrote a SECOND file and left the first one
+	# behind, which looks exactly like the editor having created a new deck.
+	editor._loaded_from = PROBE_DECK
+	editor.deck_name = PROBE_RENAMED
+	_expect(editor.save_deck(), "saving under a new name succeeds")
+	_expect(FileAccess.file_exists(editor.deck_path(PROBE_RENAMED)), "the renamed deck is on disk")
+	_expect(not FileAccess.file_exists(editor.deck_path(PROBE_DECK)),
+		"and the OLD file is gone — a rename is not a copy")
+	_expect(editor.save_deck(), "saving again under the same name still works")
+	_expect(not FileAccess.file_exists(editor.deck_path(PROBE_DECK)),
+		"and does not resurrect the old file")
+
+	# Back to the original name, because the checks below look for PROBE_DECK there.
+	editor.save_deck(PROBE_DECK)
+
 	# --- the custom preset ------------------------------------------------------------------
 	MatchSetup.custom_deck_name = PROBE_DECK
 	var cfg: Dictionary = MatchSetup.build_config("custom")
@@ -322,8 +366,19 @@ func _ready() -> void:
 		bogus.close()
 	_expect(MatchSetup.load_deck_ids("probe_bogus_deck").is_empty(), "ids below 1 are filtered out")
 
+	# --- deleting a deck --------------------------------------------------------------------
+	# Deleting is destructive, so the confirmation lives in the picker where a mouse is needed. This is the
+	# half that can be checked without one: the file goes, and deleting again reports failure, not success.
+	_expect(MatchSetup.delete_deck(PROBE_DECK), "delete_deck removes a saved deck")
+	_expect(not FileAccess.file_exists(MatchSetup.deck_path(PROBE_DECK)), "and the file is gone")
+	_expect(not MatchSetup.delete_deck(PROBE_DECK), "deleting it again fails rather than pretending to work")
+	var offered: Array = []
+	for entry in MatchSetup.list_decks():
+		offered.append(str(entry["name"]))
+	_expect(not (PROBE_DECK in offered), "and the picker's list no longer offers it")
+
 	# --- clean up ---------------------------------------------------------------------------
-	for name in [PROBE_DECK, "probe_junk_deck", "probe_bogus_deck"]:
+	for name in [PROBE_DECK, PROBE_RENAMED, "probe_junk_deck", "probe_bogus_deck"]:
 		var path: String = MatchSetup.deck_path(name)
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
