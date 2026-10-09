@@ -105,5 +105,12 @@
 			"sources":["Summon", "Ability"],
 			"controller":"opponent"
 		}
+	},
+	
+	"151":{
+		"when_enter_field":
+			{
+				"instructions":[{"name":"search_deck", "author":"game", "argument":[{"name":"Ovelia"}]}]
+			}
 	}
 }

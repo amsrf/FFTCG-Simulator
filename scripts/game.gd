@@ -17,6 +17,14 @@ extends Node3D
 @onready var card_scene = preload("res://card.tscn")
 @onready var turn_owner = 1
 
+## The deck search window a card effect can open. Preloaded by PATH rather than referenced through its
+## class_name, because a class_name added since Godot last scanned is not in the global cache — which bites
+## on every headless run.
+const DECK_SEARCH := preload("res://deck_search.tscn")
+## The window's SCRIPT as well, because `DeckSearch.CHOOSE_NONE` needs the class and a class_name added since
+## Godot last scanned the project is NOT in the global cache — naming the type is a parse error on every run.
+const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
+
 
 var _current_instructions: Array[Instruction]
 var _current_source_card: Card
@@ -232,7 +240,11 @@ func _process_next_instruction() -> void:
 			args = instruction.value
 		else:
 			args.append(instruction.value)
-	executor.callv(instruction.action, args)
+	# AWAITED, so an action that suspends for a player decision — search_deck's window — genuinely holds up
+	# the rest of the instruction list rather than letting the game run on behind it. Awaiting a plain
+	# method's return value is a no-op, so actions that do not suspend cost nothing for this. It does make
+	# `_process_next_instruction` a coroutine, which is fine: its callers do not need to wait for it.
+	await executor.callv(instruction.action, args)
 	_process_next_instruction()
 
 func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
@@ -787,3 +799,67 @@ func _on_field_blocker_changed() -> void:
 	if GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.BLOCKING:
 		return
 	assistant.set_declare_block_button('Block' if field.blocker_card != null else 'No Block')
+
+# --- deck search -------------------------------------------------------------
+
+## Agrias 1-151R: look through your deck, take one matching card, then shuffle.
+##
+## A COROUTINE, and `_process_next_instruction` awaits it — so the game genuinely stops here while the player
+## is choosing, instead of running on behind the window.
+##
+## The order is the spec, and it matters: the chosen card goes to the TOP of the deck, is drawn from there,
+## and only THEN is the deck shuffled. Drawing before shuffling is what makes "taken from the deck" literally
+## true rather than a card appearing from nowhere.
+func search_deck(filter: Dictionary) -> void:
+	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
+	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.
+	var deck_node = $Player/Deck
+	var hand_node: Hand = $Player/Hand
+	if deck_node == null or hand_node == null:
+		push_warning("[Game] search_deck needs a Player/Deck and a Player/Hand")
+		return
+	if deck_node.deck_cards.is_empty():
+		return
+
+	var ids: Array = []
+	for card in deck_node.deck_cards:
+		ids.append(card.id)
+
+	# The window's type is not named either — see DECK_SEARCH_SCRIPT.
+	var window = DECK_SEARCH.instantiate()
+	add_child(window)
+	window.open(ids, filter)
+	var chosen: int = await window.finished
+	if chosen == DECK_SEARCH_SCRIPT.CHOOSE_NONE:
+		return
+
+	# The deck's array order IS the deck: the front is the next card drawn, so "top" and "front" are the same
+	# end of it. Put the found card there before drawing, rather than drawing and then claiming it was on top.
+	var found: Card = null
+	for card in deck_node.deck_cards:
+		if card.id == chosen:
+			found = card
+			break
+	if found == null:
+		# The window can only offer cards it was given, so this would be a genuine inconsistency rather than
+		# a player error — say so instead of silently doing nothing.
+		push_warning("[Game] search_deck picked %d, which is not in the deck" % chosen)
+		return
+	deck_node.deck_cards.erase(found)
+	deck_node.deck_cards.push_front(found)
+	hand_node.draw(deck_node.deck_cards.pop_front())
+	shuffle_deck(deck_node)
+
+## Fisher-Yates with a dedicated RNG. NOT `Array.shuffle()`, which uses the global generator and so cannot be
+## reproduced from a seed — the same reason MatchSetup hand-rolls its own.
+##
+## Untyped parameter for the same reason as search_deck: `Deck` has no class_name.
+func shuffle_deck(deck_node) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var cards: Array = deck_node.deck_cards
+	for i in range(cards.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var swap: Variant = cards[i]
+		cards[i] = cards[j]
+		cards[j] = swap

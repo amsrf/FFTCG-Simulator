@@ -287,6 +287,47 @@ is that the two halves belong in different places.
   steeply that coming toward the viewer reads as RISING, exactly like `hover_lift` does, so the two stacked — and the
   larger of the two was the one left alone. Now 0.05 / 1.25 / 0.32.
 
+### Deck Search: the Tutor Window (2026-10-09)
+
+Agrias 1-151R searches the deck. The reference (`references/search.png`) was read as an ASCII map by
+`tools/ref_probe.gd` because the image tool hangs on it, and the window was built to match: a centred TITLE and
+SUBTITLE over a fanned row of the matching cards, heavily overlapped, each rotating about its BOTTOM edge.
+
+- **Only the cards that PASS the filter are shown, sorted.** An earlier pass showed the whole deck with the rest
+  dimmed, which buried the takeable cards among the untakeable ones. The subtitle is built from the same filter
+  dict that does the matching, so it cannot describe a search different from the one performed.
+- **The hovered card IS the zoom.** Growing it in place about its bottom-centre pivot — base fixed, the rest
+  swelling outward and up — reads as coming toward the viewer, and it moves no card the player is not pointing at.
+  A large preview panel on the right was built first and then removed: two zooms of the same card was one too many.
+- **The height budget is derived from the hover.** A 1.35x card grows 35% of its height ABOVE the row, so the band
+  height, the card size and the row's vertical placement are all computed from `HOVER_SCALE`. Without that the
+  enlarged card grows straight out of the top of the window.
+- **Pivoting at the BOTTOM edge is what makes a fan look held.** Rotating about the centre swings the cards around
+  their middles and reads as cards lying on a line. `z_index` raises the hovered card rather than
+  `move_to_front()`, which would renumber the indexes `_hovered_index` is expressed in.
+
+**Four bugs, and every one was mine:**
+
+1. **`_cards` keyed by card id collapsed duplicates.** The test deck holds six Ovelia, so five nodes landed on one
+   key: the row showed *"1 takeable of 10"* and the other four were invisible to selection and to the aura. Now a
+   LIST per id, with the *clicked* node tracked separately from the chosen id.
+2. **`_available.has(id) or i < passing.size()`** — leftover dead weight. `_available` is written as the loop that
+   reads it runs, so the SECOND and THIRD copies of a failed card saw the first one's `true` and came back
+   takeable. Three identical Agrias, two of them wrongly offered.
+3. **`custom_minimum_size = CARD` is a FLOOR**, so it silently clamped away the shrink-to-fit: the card stayed
+   308 px tall while the pivot and the layout maths assumed 283, and all six overflowed the box. Found by the
+   containment check written immediately after that overflow was reported.
+4. **`game.gd` failed to PARSE.** `Deck` has no `class_name`, and `DeckSearch` was new and not yet in Godot's
+   global class cache. The menu boot reported 0 errors because the menu never loads `game.gd`; the flow and block
+   probes, which do boot it, were what caught it.
+
+**And the tooling lesson.** The image tool is not dependable in this project: it hangs on the full-size references
+and once described an arrow-tip reference as "Clash Royale with a blue energy beam". Three things replaced it —
+`tools/row_measure.gd` measures a reference's panel seams and content columns, `tools/ref_shrink.gd` downscales a
+reference until the tool will take it, and `tools/search_shot.gd` screenshots the built window so the
+IMPLEMENTATION can be looked at rather than only measured. It is at `tools/shots/search_window.png`, and it caught
+two things no probe could: cards too overlapped to read, and a hollow centre between the row and the panel.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.
