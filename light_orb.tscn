@@ -1,0 +1,33 @@
+[gd_scene load_steps=2 format=3]
+
+; AN ORB OF LIGHT WITH A COMET TRAIL.
+;
+;   var orb := preload("res://light_orb.tscn").instantiate()
+;   add_child(orb)
+;   orb.global_position = somewhere
+;   orb.teleport_to(somewhere_else)   # any real move: clears the streak instead of drawing one
+;
+; THREE NODES, NOT FOUR. There is deliberately no Trail node here: the ribbon is a MeshInstance3D that
+; scripts/light_orb.gd creates for itself, because Godot's built-in particle-trail feature is unavailable on this
+; project's renderer —
+
+;     "The Compatibility renderer does not support particle trails."
+
+; — which covers both `GPUParticles3D.trail_enabled` and a RibbonTrailMesh draw pass. The trail is therefore a
+; triangle strip rebuilt each frame from the orb's recent world positions. See scripts/light_orb.gd.
+;
+; Everything else is built in code too: the sphere, its material, the light, the sparks and their ramps, curves and
+; material. orb_color has to reach all of them, and a shared .tres would leak colour between instances.
+;
+; See LightOrbPreview.tscn to watch it move.
+
+[ext_resource type="Script" path="res://scripts/light_orb.gd" id="1_orb"]
+
+[node name="LightOrb" type="Node3D"]
+script = ExtResource("1_orb")
+
+[node name="Orb" type="MeshInstance3D" parent="."]
+
+[node name="Light" type="OmniLight3D" parent="."]
+
+[node name="Sparks" type="GPUParticles3D" parent="."]

@@ -42,15 +42,43 @@ var priority_holder: int = 0
 ## as soon as it is made; this only paces it so a human can actually read the link.
 @export var block_announce_time: float = 1.2
 
-
+## Shaders that only appear MID-ANIMATION, so they must be compiled before the player ever sees them.
+##
+## Godot compiles a shader the first time a material using it is actually rendered — lazily, on the spot. Under the
+## Compatibility renderer that compile lands in the middle of a frame, so the first card to absorb a payment orb
+## stutters exactly when the player is watching, and every later one is smooth. Warming them up here, at match start,
+## moves that cost to a moment where nothing is moving.
+##
+## Anything added to the payment/absorb effects belongs in this list.
+const EFFECT_SHADERS: Array[Shader] = [
+	preload("res://shaders/orb_halo.gdshader"),
+	preload("res://shaders/absorb_ring.gdshader"),
+]
 
 func _ready():
 	start_match(MatchSetup.resolve_config())
+
+## Forces each effect shader to compile by putting a 1-pixel quad using it on screen for one frame. The quads free
+## themselves at the end of that frame, by which point the compile has happened, which is all this is for.
+func _warm_up_effect_shaders() -> void:
+	for shader in EFFECT_SHADERS:
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		var plane := QuadMesh.new()
+		plane.size = Vector2(0.001, 0.001)
+		var quad := MeshInstance3D.new()
+		quad.name = "ShaderWarmup"
+		quad.mesh = plane
+		quad.material_override = mat
+		quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(quad)
+		quad.queue_free()
 
 func start_match(config: Dictionary) -> void:
 	# Everything a match needs comes from its config (see MatchSetup presets);
 	# the same scene serves the menu, the practice board, and future self-play.
 	priority_holder = 0
+	_warm_up_effect_shaders()
 
 	player_agent = LocalAgent.new()
 	player_agent.bind(self)

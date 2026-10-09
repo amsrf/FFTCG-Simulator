@@ -1,0 +1,40 @@
+[gd_scene load_steps=4 format=3]
+
+; AN ORB OF LIGHT WITH A COMET TRAIL — the moving preview. Open it and press F6, or shoot it:
+;   godot res://tools/shot.tscn --quit-after 600 -- --scene res://LightOrbPreview.tscn --as-scene 1 \
+;       --seconds 1.2 --out tools/shots/orb_preview.png
+;
+; THE PREVIEW MOVES THE ORB, which is the only way to judge a trail: the trail is particles left behind in world
+; space, so a stationary orb leaves a single dot. The script orbits it, and teleports it once per lap to show that
+; teleport_to() clears the streak instead of drawing one across the circle.
+;
+; ⚠ gl_compatibility ignores Environment glow, so this will NOT bloom — the orb is a bright shape, not light spilling
+; into the air. The WorldEnvironment below is a plain background so the trail has something to read against.
+
+[ext_resource type="Script" path="res://scripts/light_orb_preview.gd" id="2_preview"]
+[ext_resource type="PackedScene" path="res://light_orb.tscn" id="3_orb"]
+
+[sub_resource type="Environment" id="Env_orb"]
+background_mode = 1
+background_color = Color(0.06, 0.07, 0.10, 1)
+
+[node name="LightOrbPreview" type="Node3D"]
+script = ExtResource("2_preview")
+orb_scene = ExtResource("3_orb")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_orb")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7, -0.7, 0, 0.7, 0.7, 0, 2.5, 3)
+light_energy = 1.2
+
+; IDENTITY ROTATION, LEVEL, LOOKING STRAIGHT DOWN -Z — deliberately the same shape of camera as
+; CrystalShardsPreview.tscn, which is proven to render. The first version of this pitched the camera down 20 degrees
+; from (0, 1.6, 3.4), and the scene came out completely empty even though the orb was verified to exist, be visible,
+; be 0.5 m across, and sit 2.87 m in front of that camera with only 0.84 m of lateral offset — comfortably inside a
+; 45 degree frustum. Rather than keep arguing about the arithmetic, this substitutes a camera known to work.
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 3.2)
+current = true
+fov = 45.0

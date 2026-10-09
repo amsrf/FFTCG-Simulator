@@ -384,12 +384,14 @@ func enter_zone(zone: Zone) -> void:
 	is_dragging = false
 	is_valid_target = false
 	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked
-	# this", "they picked this", and "you may activate this". Leaving any of them set would
-	# carry the ring into the next zone — a red or a green one into the graveyard.
+	# this", "they picked this", "you may activate this", and "mana was spent on this". Leaving
+	# any of them set would carry the ring into the next zone — a red or a green one into the
+	# graveyard, an energized one onto the field.
 	_prompt_glow = false
 	_selected_highlight_on = false
 	_targeted_highlight_on = false
 	_available_highlight_on = false
+	_energized_highlight_on = false
 	_refresh_target_ring()
 	reset()  # drops the mana-crystal marker
 	if bool(presentation["power_ui"]):
@@ -643,6 +645,13 @@ var _targeted_highlight_on: bool = false
 var _available_highlight_on: bool = false
 
 ## "The game is asking YOU to pick this" (blue) — the same meaning in the hand and on the field.
+## "Mana has been spent on this card" — a glow in that mana's own colour, held until the card is played.
+##
+## The FIFTH meaning of one ring and deliberately the LOWEST priority: the other four are prompts telling the player to
+## act, while this one only reports, so anything asking for attention outranks it.
+var _energized_highlight_on: bool = false
+var _energized_colour: Color = Color.WHITE
+
 func set_prompt_glow(enabled: bool) -> void:
 	_prompt_glow = enabled
 	_refresh_target_ring()
@@ -667,6 +676,19 @@ func set_available_highlight(enabled: bool) -> void:
 	_available_highlight_on = enabled
 	_refresh_target_ring()
 
+## "Mana has been spent on this card" — a glow in that mana's own colour, held until the card is played.
+##
+## This is the FIFTH meaning of one ring, and deliberately the LOWEST priority. The other four are prompts telling the
+## player to ACT; this one only reports. Anything asking for attention therefore outranks it, which is exactly what the
+## order of the checks in _refresh_target_ring() encodes — later wins.
+func set_energized_highlight(enabled: bool, colour: Color = Color.WHITE) -> void:
+	if enabled == _energized_highlight_on and (not enabled or colour.is_equal_approx(_energized_colour)):
+		return
+	_energized_highlight_on = enabled
+	if enabled:
+		_energized_colour = colour
+	_refresh_target_ring()
+
 ## The material's stock widths, captured when the ring is built (see _build_target_border).
 var _border_width_base: float = 0.025
 var _glow_width_base: float = 0.07
@@ -674,13 +696,41 @@ var _glow_width_base: float = 0.07
 ## cue — it can sit on several cards for a whole turn — while blue/orange/red are momentary, so
 ## it is drawn thinner to stay subordinate to them.
 const AVAILABLE_WIDTH_SCALE := 0.5
+## The same argument again, taken further. An energized ring is a standing cue on the card that was
+## paid into, and it is scenery next to the prompts rather than a signal, so it is thinner still.
+const ENERGIZED_WIDTH_SCALE := 0.35
+## ...and dimmer, because width alone left it reading like a prompt that never went away. Multiplied
+## into the element colour rather than applied as a separate alpha, so the ring's own look is untouched.
+const ENERGIZED_DIM := 0.65
+
+## Each element as a colour, for cues that should read as "THIS CARD" rather than "what paid for it".
+##
+## Keyed by the CJK character because that is what `element` holds — the same form MANA_ZERO and the
+## payment code use. The values match ManaCrystal.CRYSTAL_TINT, so a card's glow and its crystals agree.
+const ELEMENT_COLOURS := {
+	"火": Color(0.86, 0.09, 0.17),   # fire
+	"氷": Color(0.55, 0.87, 0.98),   # ice
+	"風": Color(0.36, 0.85, 0.44),   # wind
+	"土": Color(0.90, 0.74, 0.26),   # earth
+	"雷": Color(0.72, 0.45, 1.00),   # lightning
+	"水": Color(0.32, 0.58, 1.00),   # water
+	"光": Color(1.00, 0.95, 0.78),   # light
+	"闇": Color(0.58, 0.52, 0.86),   # dark
+}
+
+## This card's own element as a colour, dimmed for the energized ring. Falls back to `fallback` for an
+## element not in the table, so an unknown or empty element still lights something rather than nothing.
+func element_colour(fallback: Color) -> Color:
+	var found: Color = ELEMENT_COLOURS.get(element, fallback)
+	return found * ENERGIZED_DIM
 
 ## The single owner of the ring's appearance: LIT if any meaning is on, and coloured by
 ## priority — orange (my pick) over red (their pick) over green (available) over blue (merely
-## legal). Lighting it is not optional: a ring that is coloured but not lit shows nothing on
-## screen, which is how the red reveal once shipped invisible.
+## legal), with energized below all of them. Lighting it is not optional: a ring that is
+## coloured but not lit shows nothing on screen, which is how the red reveal once shipped invisible.
 func _refresh_target_ring() -> void:
-	var lit: bool = _prompt_glow or _selected_highlight_on or _targeted_highlight_on or _available_highlight_on
+	var lit: bool = (_prompt_glow or _selected_highlight_on or _targeted_highlight_on
+		or _available_highlight_on or _energized_highlight_on)
 	if target_border == null and not lit:
 		# Nothing built and nothing wanted: do not build a ring just to switch it off.
 		_highlight_on = false
@@ -689,13 +739,22 @@ func _refresh_target_ring() -> void:
 		_build_target_border()
 	if _border_material == null:
 		return
-	# Width before colour. Only the green scales, and every other state restores the stock
+	# Width before colour. Each state names its own scale and every other state restores the stock
 	# width, so switching between states is exact rather than accumulating.
-	var width_scale: float = AVAILABLE_WIDTH_SCALE if _available_highlight_on else 1.0
+	var width_scale: float = 1.0
+	if _available_highlight_on:
+		width_scale = AVAILABLE_WIDTH_SCALE
+	elif _energized_highlight_on:
+		width_scale = ENERGIZED_WIDTH_SCALE
 	_border_material.set_shader_parameter("border_width", _border_width_base * width_scale)
 	_border_material.set_shader_parameter("glow_width", _glow_width_base * width_scale)
 	var color: Color = _border_color_base
 	var glow: Color = _glow_color_base
+	# LOWEST PRIORITY, so it is checked FIRST: everything below overwrites it. The colour is the CARD's
+	# own element — the glow is about this card, not about which mana happened to pay for it.
+	if _energized_highlight_on:
+		color = element_colour(_energized_colour)
+		glow = element_colour(_energized_colour)
 	if _available_highlight_on:
 		color = AVAILABLE_BORDER_COLOR
 		glow = AVAILABLE_GLOW_COLOR
@@ -973,3 +1032,116 @@ func is_effect_card() -> bool:
 	
 func signal_target():
 	emit_signal('on_target',self)
+
+## The card reacts to being hit by a payment orb: a short flash of the orb's colour across its face, and a punch.
+##
+## BOTH TOGETHER is what reads as absorption rather than decoration. Either one alone reads as an effect happening near
+## the card; light arriving AND the card physically receiving it reads as the card taking something in.
+##
+## The flash is its own quad rather than a tint on the card's own material. The art material carries the prompt-ring
+## state — blue, orange, red and green all live in one set of shader parameters — and this must not touch any of it, so
+## the flash borrows the orb's halo shader instead and throws it away afterwards.
+##
+## The punch restores whatever scale the card had when it was hit rather than a hard-coded one, so it cannot fight
+## enter_zone(), which owns the per-zone scale. A zone change mid-tween simply overwrites it.
+const ABSORB_HALO := preload("res://shaders/orb_halo.gdshader")
+const ABSORB_RING := preload("res://shaders/absorb_ring.gdshader")
+
+## Seconds the whole reaction lasts, how much the card swells at its peak, and how far the ring travels (as a multiple
+## of the card's own width).
+@export var absorb_seconds: float = 0.25
+@export var absorb_punch: float = 1.15
+@export var absorb_ring_size: float = 1.9
+
+var _absorb_tween: Tween = null
+## The scale to come back to. Recorded only on the first hit of a volley — see absorb_power().
+var _absorb_resting: Vector3 = Vector3.ONE
+
+## `at` is the impact point in WORLD space — where the orb was when it vanished. The shockwave is centred there, after
+## being projected onto the card's plane; a zero vector means none was supplied and the ring falls back to the middle.
+func absorb_power(colour: Color, at: Vector3 = Vector3.ZERO) -> void:
+	if not is_inside_tree():
+		return
+	_flash_absorbed_power(colour)
+	_shockwave_absorbed_power(colour, at)
+	# THE GLOW HOLDS, unlike the flash and the ring: it stays until the card is played, which is what makes it a STATE
+	# rather than an event. It is drawn in the mana's own colour and is the ring's lowest-priority meaning, so any
+	# prompt outranks it. Stack clears it when the card reaches the top of the stack; a zone change clears it for a
+	# Character, which never enters the stack at all.
+	set_energized_highlight(true, colour)
+	# A VOLLEY MUST NOT RATCHET. The row sends one orb per crystal, roughly 0.1 s apart, so a later orb arrives while
+	# an earlier punch is still up. Reading `scale` on every hit recorded the INFLATED size as the resting size, so the
+	# card grew a little with every orb and never came back — a permanent size increase. Only the first hit of a volley
+	# records the real resting scale; every later hit reuses it.
+	if _absorb_tween == null or not _absorb_tween.is_valid():
+		_absorb_resting = scale
+	else:
+		_absorb_tween.kill()
+	_absorb_tween = create_tween()
+	# Back-out on the way up gives the punch its snap. A plain ease reads as a gentle swell instead of a hit.
+	_absorb_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_absorb_tween.tween_property(self, "scale", _absorb_resting * absorb_punch, absorb_seconds * 0.35)
+	_absorb_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_absorb_tween.tween_property(self, "scale", _absorb_resting, absorb_seconds * 0.65)
+	# Snap on completion: belt and braces against the same class of drift arriving from anywhere else, including this
+	# tween being killed halfway through by a zone change.
+	_absorb_tween.tween_callback(func(): scale = _absorb_resting)
+
+## An expanding ring in the orb's colour, thrown outward across the card's face.
+##
+## This is the loudest of the three cues and the most legible from a distance: the flash says something happened, the
+## punch says the card felt it, and the ring says it is SPREADING. Radius and brightness are tweened together so the
+## ring both travels and spends itself.
+func _shockwave_absorbed_power(colour: Color, at: Vector3) -> void:
+	var mat := ShaderMaterial.new()
+	mat.shader = ABSORB_RING
+	mat.set_shader_parameter("ring_color", colour)
+	mat.set_shader_parameter("intensity", 2.0)
+	mat.set_shader_parameter("ring_radius", 0.05)
+	var face: Vector2 = _card_face_size()
+	# A SQUARE quad covering the card's longer side, plus a rounded-rect mask in the shader. A quad cut to the card's
+	# shape would make the ring an ellipse AND clip it along straight edges — visibly wrong at the card's rounded
+	# corners, which is exactly what "must not go beyond the card" rules out.
+	var side: float = maxf(face.x, face.y)
+	mat.set_shader_parameter("card_half", face * 0.5)
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(side, side)
+	var quad := MeshInstance3D.new()
+	quad.name = "AbsorbRing"
+	quad.mesh = plane
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# ORIGIN = THE IMPACT POINT. The caller projects the orb's last position onto the card's plane; in the card's local
+	# space that is just (x, 0, z), because local Y is the card's normal. A zero vector means no impact point was
+	# supplied, and the ring falls back to the card's centre.
+	if at != Vector3.ZERO:
+		var here: Vector3 = to_local(at)
+		quad.position = Vector3(here.x, 0.0, here.z)
+	add_child(quad)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(mat, "shader_parameter/ring_radius", side * 0.5, absorb_seconds)
+	tween.tween_property(mat, "shader_parameter/intensity", 0.0, absorb_seconds)
+	tween.chain().tween_callback(quad.queue_free)
+
+## A soft radial burst in the orb's colour, lying flat on the card's own face.
+func _flash_absorbed_power(colour: Color) -> void:
+	var mat := ShaderMaterial.new()
+	mat.shader = ABSORB_HALO
+	mat.set_shader_parameter("halo_color", colour)
+	mat.set_shader_parameter("intensity", 2.4)
+	# Tighter than the orb's own halo: a card is broader than it is tall, so the default skirt would spill off it.
+	mat.set_shader_parameter("falloff", 1.6)
+	var plane := PlaneMesh.new()
+	# A PlaneMesh already lies in the XZ plane, which is the plane the cards lie in, so no rotation is needed: as a
+	# child it inherits the card's own tilt and fan rotation.
+	plane.size = _card_face_size() * 1.3
+	var quad := MeshInstance3D.new()
+	quad.name = "AbsorbFlash"
+	quad.mesh = plane
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(quad)
+	var tween := create_tween()
+	tween.tween_property(mat, "shader_parameter/intensity", 0.0, absorb_seconds)
+	tween.tween_callback(quad.queue_free)

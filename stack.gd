@@ -208,6 +208,21 @@ func add_card_to_tree(card):
 	var trans = card.global_transform
 	card.reparent(self,false)
 	card.global_transform = trans
+	_clear_top_energized()
+
+## THE ENERGIZED GLOW ENDS WHEN THE CARD IS PLAYED.
+##
+## A glowing card is one the mana was spent on. The moment it sits on top of the stack it IS the signal — it needs no
+## badge saying it was paid for — so the glow has done its job and stops there. On a Character, which never enters the
+## stack at all, the zone change clears it instead (Card.enter_zone).
+##
+## Safe to call anywhere: it only clears a flag that is already set.
+func _clear_top_energized() -> void:
+	if cards.is_empty():
+		return
+	var top: Card = cards.back()
+	if top != null:
+		top.set_energized_highlight(false)
 	
 func add_created_card_to_tree(card:Card):
 	cards.append(card)
@@ -556,7 +571,18 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 ## if any, is chosen.
 func _shatter_paid_cost() -> void:
 	if assistant != null:
-		assistant.commit_cost_readout()
+		assistant.commit_cost_readout(_paid_for_card())
+
+## The card this payment is being spent on, which is where the shatter orbs fly: the top of the stack, or the Character
+## being played when there is no stack card at all.
+##
+## A CHARACTER NEVER ENTERS THE STACK, so for one of those "the card being paid for" is the card itself — casting_card,
+## which is set while it is being played. Either way the orbs have something to be swallowed by, which is the point of
+## the effect.
+func _paid_for_card() -> Card:
+	if not cards.is_empty():
+		return cards.back()
+	return casting_card
 
 func _on_assistant_target_complete() -> void:
 	if summon_casting_card != null:

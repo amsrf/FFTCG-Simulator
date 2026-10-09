@@ -133,6 +133,58 @@ of life, shrinking to nothing before it frees itself, and a stagger so the row b
   that do not exist yet — and `commit_cost_readout()` awaits the stagger before hiding, since hiding on commit would
   remove the later crystals before they broke.
 
+### The Light Orb, the Payment Orbs, and Absorbing Them (2026-10-09)
+
+Mana now visibly leaves the crystals and enters the card it paid for, and the card stays marked until it is played.
+
+**The orb.** `light_orb.tscn` + `scripts/light_orb.gd`: an emissive sphere, an OmniLight3D, sparks and a comet trail,
+all built in code so `orb_color` reaches every part of it. Three things had to be discovered by running it:
+
+- **`gl_compatibility` has no particle trails.** Both `GPUParticles3D.trail_enabled` AND a `RibbonTrailMesh` draw pass
+  print "The Compatibility renderer does not support particle trails." and do nothing. The trail is therefore a
+  triangle strip rebuilt each frame from the orb's recent world positions — which turned out better: because that
+  history is in world space, the orb can be moved by a script, a tween or a physics body and the trail follows without
+  knowing anything about the movement. `teleport_to()` clears the history, because a world-space trail joins wherever
+  it was left to wherever the orb now is.
+- **It also has no bloom**, so an emissive sphere reads as a bright object rather than as light. The "diffuse light" is
+  a camera-facing halo quad with a soft radial falloff plus the OmniLight3D landing on the board — and with nothing for
+  the light to fall on, "this emits light" is invisible no matter how bright the orb is.
+- **The halo must DEPTH-TEST.** It was written with `depth_test_disabled` so the orb would not clip its own glow, but
+  that also makes the halo ignore the depth buffer entirely, so a payment orb stayed visible *through* the card it was
+  supposed to disappear behind. Nothing was gained: the core is transparent and writes no depth either.
+
+**The payment orbs.** `scripts/payment_orb.gd`: one orb per paid crystal, in that crystal's colour, flying to the card
+the mana was spent on. The arc is the targeting curve INVERTED — a quadratic Bézier with the bow flattened in Y and the
+path capped at the orb's own starting height, so it descends to the card and can never climb over it. The cap is the
+*origin*, not the lower endpoint: the crystal row sits above the board, so `minf(from.y, to.y)` is the card's own
+level, and capping there drops the orb to it on the first frame and flattens the flight into a horizontal glide. It
+ends behind the card, jittered, and shrinks to nothing over its last quarter so it is swallowed rather than blinking out.
+
+**Absorbing.** `Card.absorb_power(colour, at)`: a flash of colour on the card's face, a punch (1.15x with a back-out
+snap) and an expanding shockwave ring — clipped to the card's silhouette by a rounded-rect SDF, starting at the impact
+point projected onto the card's plane, and spent before it reaches the edge. Three cues that layer into one sentence:
+the flash says something happened, the punch says the card felt it, the ring says it is spreading.
+
+- **A VOLLEY MUST NOT RATCHET.** Every orb read `scale` to find its resting size, so the second of three orbs recorded
+  the first one's inflated size as "resting" and settled there — the card grew on every volley and never came back.
+  Only the first hit of a volley records the real scale now, and a `tween_callback` snaps it back.
+- **The energized ring** is the FIFTH meaning of the card's one ring and the LOWEST priority: the other four are prompts
+  telling the player to act, this one only reports, so any prompt outranks it. Drawn thinner (0.35) and dimmer (0.65)
+  than the prompts, for the same reason the green ring is thinner, and coloured by the CARD's element rather than the
+  mana's. Cleared when the card reaches the top of the stack (`Stack._clear_top_energized()`) or changes zone — which
+  covers a Character, since a Character never enters the stack.
+
+#### The lag spike, and the process lesson
+
+The first orb to be absorbed stuttered. Godot compiles a shader the first time a material using it is rendered, and
+under Compatibility that lands mid-frame; `Game._warm_up_effect_shaders()` now forces each effect shader to compile at
+match start on a 1-pixel quad for one frame. **Anything added to these effects belongs in `EFFECT_SHADERS`.**
+
+**And the process lesson, which cost more than the bug:** I filtered my own error output with a pattern I had written,
+and when it reported 165 matches I read the number instead of the output. The real tell was beside it — the
+pre-existing warning baseline dropped from 13 to 0, which is impossible unless no cards are being created at all. The
+raw output had the answer on its first line (an undeclared variable, 166 errors, `Card` failing to load). Run it raw.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.
