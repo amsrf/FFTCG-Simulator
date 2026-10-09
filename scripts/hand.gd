@@ -3,6 +3,12 @@ class_name Hand
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
+## Hover: the hovered card's own mesh is what lifts (mesh_instance_3d.gd), because that is presentation. The
+## NEIGHBOURS making room is layout, so it happens here, in calculate_card_position().
+##
+## How far a neighbour slides away at full strength, and how many cards either side feel it.
+const HOVER_SPREAD := 0.28
+const HOVER_REACH_CARDS := 3
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
@@ -13,7 +19,9 @@ var card_width = GlobalVariables.get_card_width();
 var card_spacing = GlobalVariables.get_card_spacing();
 var charging_card
 var start_x;
-var grabbed_card_index = 0;
+var grabbed_card_index = 0
+## The card the pointer is over, or null. Read by calculate_card_position() to make room for it.
+var hovered_card: Card = null;
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal effect_card_selection_changed(has_selection: bool)
@@ -145,9 +153,32 @@ func calculate_card_position(i):
 	# Height stagger: separates overlapping cards, and keeps each glow behind the
 	# card in front of it (see CARD_STACK_HEIGHT).
 	var y_offset: float = i * CARD_STACK_HEIGHT
+	# NEIGHBOURS MAKE ROOM for the hovered card: a falloff either side of it, strongest at its immediate neighbour,
+	# applied along x so the fan opens up around the pointer. It belongs HERE because where the other cards sit is
+	# layout, and this function owns layout — the hovered card's own lift is the mesh's job (mesh_instance_3d.gd).
+	if hovered_card != null and is_instance_valid(hovered_card) and cards.has(hovered_card):
+		var hovered_i: int = cards.find(hovered_card)
+		var distance: int = absi(i - hovered_i)
+		if distance > 0 and distance <= HOVER_REACH_CARDS:
+			var strength: float = 1.0 - float(distance - 1) / float(HOVER_REACH_CARDS)
+			x_offset += signf(float(i - hovered_i)) * HOVER_SPREAD * strength
 	return Vector3(x_offset, y_offset, z_offset)
 	
 	
+## The pointer entered or left `card`. Re-lays the hand out, and that tween is what animates the neighbours sliding
+## away — the same path that animates a draw or a reorder, so the movement is consistent with everything else in the
+## hand rather than a special case.
+func set_hovered(card: Card, entered: bool) -> void:
+	var was: Card = hovered_card
+	if entered:
+		hovered_card = card
+	elif hovered_card == card:
+		hovered_card = null
+	# Unchanged request: do not re-lay out, or a pointer drifting within one card would restart every tween.
+	if hovered_card == was:
+		return
+	update_card_positions()
+
 func find_index(card):
 	var total_width = calculate_total_width()
 	var card_zone_width = total_width/cards.size()

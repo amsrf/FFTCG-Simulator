@@ -217,6 +217,29 @@ because the fix in each case is one line and the diagnosis is the whole of the w
   ring for the glow to light, and moving to the field clears it. Before this change the glow's entire lifetime elapsed
   within a single frame.
 
+### Hand Hover: Animated Rise, and Neighbours That Make Room (2026-10-09)
+
+Hovering a hand card used to SNAP it, and the cards either side never moved. Both are fixed, and the interesting part
+is that the two halves belong in different places.
+
+- **The lift was never on the Card.** `card.gd` says so in a comment: *"The hand's LIFT is driven separately by
+  HandMesh (mesh_instance_3d.gd)"*. `mesh_instance_3d.gd` assigned `scale`, `position.y`, `position.z` and `rotation`
+  outright, which is the jump. It now tweens all four (0.16 s, sine ease) and — importantly — BUILDS the lifted pose
+  from the card's current frame each time instead of adjusting it in place. The old code did `position.y += 0.1`, which
+  ACCUMULATED: re-entering the area without a `mouse_exited` walked the card up the screen, one hover at a time.
+- **The neighbours are layout, so they belong to the Hand.** `Hand.calculate_card_position()` now offsets each card
+  away from the hovered one along x with a falloff: full strength at the immediate neighbour, dying out by
+  `HOVER_REACH_CARDS` (3). `Hand.set_hovered()` re-lays the hand out, and because `update_card_positions()` already
+  tweens every card into its slot, the spread animates through the SAME path as a draw or a drag-reorder — no
+  special-case animation, and it stays consistent with the rest of the hand. It early-returns when nothing changed, so
+  a pointer drifting around inside one card does not restart every tween.
+- **The grab still snaps, deliberately.** The drag owns the card's position from the next frame, and a tween running
+  against it would fight the pointer.
+- **The three hover dials had to come down together.** They started at lift 0.1 / scale 1.5 / reach 0.525 and read as
+  far too much. The forward travel was the real culprit and the last one adjusted: the board camera is angled so
+  steeply that coming toward the viewer reads as RISING, exactly like `hover_lift` does, so the two stacked — and the
+  larger of the two was the one left alone. Now 0.05 / 1.25 / 0.32.
+
 ### Next Steps (suggested order)
 
 1. **`DRAW_PHASE` on an empty deck should be a loss**, matching how `take_damage()` already reports running out of deck. Unreachable in practice (7 damage lands first), but it is a silent `return` of exactly the kind that has already caused bugs here.
