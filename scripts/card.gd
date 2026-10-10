@@ -350,17 +350,46 @@ enum Zone { NONE, DECK, HAND, FIELD, STACK, GRAVEYARD, DAMAGE }
 ## rotation put every field card upside down.
 const READABLE_ROTATION := Vector3(0, PI, 0)
 
+## The size a card is drawn at once it is legally ON THE STACK.
+##
+## Public because the HAND grows a hovered card to exactly this size (see the STACK entry below and Hand.set_hovered):
+## a card played straight from the hand then lands on the stack at the size it is already drawn at, instead of
+## popping. That only stays true while this and the table agree, so the table reads this constant.
+##
+## 2.4 is a SIZE CHOICE, not a layout one: this is also the size a hovered hand card grows to, so it has to be big
+## enough to read a card comfortably — about 270 px tall at 1080p, a quarter of the screen — and small enough that a
+## stack of them does not swallow the board. Changing this changes the hand's hover too, which is the point: the two
+## are the same card.
+const STACK_CARD_SCALE := 2.4
+
+## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so writing a world size
+## into it multiplies by this — which is what a stack card used to do, coming out 2.3x bigger than the number said.
+## Every zone entry below means the WORLD size its cards are drawn at, and STACK divides this back out to keep that
+## promise. The other containers are at or near 1 (Hand 1.0, DamageZone 1.0, Field 1.005). Deck (1.4), Graveyard (1.2)
+## and FocusCard (4.5) have the same latent inconsistency; left alone because nothing has asked for their world size.
+const STACK_CONTAINER_SCALE := 2.305
+
 ## Per-zone look. `rotation` is the card's LOCAL baseline for that zone (see
 ## READABLE_ROTATION: it depends on whether the container node is flipped).
 ## `power_ui` is the field readout (Forward power + accumulated damage). A zone's
 ## layout code may still add rotation on top of this baseline — the hand fan adds
 ## its per-card tilt — but it starts from here.
+##
+## `scale` is the size a card is drawn at in that zone, and this table is the only
+## place either number lives. The two that matter are HAND and STACK: a fan card RESTS
+## at 1.4, and hovering it grows it to STACK_CARD_SCALE, so the hovered card is
+## EXACTLY the size it will be on the stack and playing it is not a resize.
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.DECK:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
-	Zone.HAND:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. A hovered card grows out of this and up
+	# to the stack's size (Hand._size_card) — that growth is where the readability comes from, so this number can stay
+	# modest and keep the row of cards from filling the screen.
+	Zone.HAND:      {"scale": 1.6, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
-	Zone.STACK:     {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
+	# WORLD. See STACK_CONTAINER_SCALE.
+	Zone.STACK:     {"scale": STACK_CARD_SCALE / STACK_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	Zone.GRAVEYARD: {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	# TODO: the damage-zone node is identity like the Field, so by this rule it
 	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
@@ -369,6 +398,33 @@ const ZONE_PRESENTATION := {
 }
 
 var current_zone: Zone = Zone.NONE
+
+## Put the card back to its current zone's resting size.
+##
+## Kept apart from enter_zone() because a drag that ends with the card staying in the SAME zone only needs its size
+## restored — re-running the whole zone transition would also drop the target glow and the mana crystal.
+func apply_zone_scale() -> void:
+	var presentation: Dictionary = ZONE_PRESENTATION.get(current_zone, ZONE_PRESENTATION[Zone.NONE])
+	scale = Vector3.ONE * float(presentation["scale"])
+
+## The tween currently sizing this card, so a second request cancels the first rather than fighting it.
+var _size_tween: Tween = null
+
+## Grow or shrink to `to_scale` over `seconds`. Used by the hand's hover, which takes a card to the size it will be on
+## the stack.
+##
+## It lives here because the card's scale is the card's — and it is PER CARD rather than one tween owned by the hand,
+## because hovering across a hand cancels the outgoing card's shrink as well as the incoming card's growth, and one
+## shared tween would leave one of them stranded part-way.
+func tween_to_scale(to_scale: float, seconds: float) -> void:
+	if _size_tween != null and _size_tween.is_valid():
+		_size_tween.kill()
+	if not is_inside_tree():
+		scale = Vector3.ONE * to_scale
+		return
+	_size_tween = create_tween()
+	_size_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_size_tween.tween_property(self, "scale", Vector3.ONE * to_scale, seconds)
 
 ## The ONE entry point for a zone change. Call it as soon as the card has been
 ## reparented and BEFORE the destination lays it out: it normalises rotation and
@@ -380,7 +436,7 @@ func enter_zone(zone: Zone) -> void:
 	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
 	# unflipped container, so its cards must carry the half turn themselves.
 	rotation = presentation["rotation"]
-	scale = Vector3.ONE * float(presentation["scale"])
+	apply_zone_scale()
 	is_dragging = false
 	is_valid_target = false
 	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked

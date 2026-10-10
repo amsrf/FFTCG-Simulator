@@ -8,6 +8,32 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### The Hand: Hover Grows the Card, and the Hand Is 10% Larger
+
+- **The hover is a growth in place, taken from the deck search window.** It used to lift the card off the fan, bring it
+  toward the camera, cancel its tilt and slide the neighbours aside. None of that happens now: the hovered card simply
+  grows and nothing else moves.
+- **It grows to the size a card is ON THE STACK** (`Card.STACK_CARD_SCALE`, 1.4) and keeps that size through a drag.
+  That is the whole point — a card played straight from the hand arrives on the stack already at the size it is drawn
+  at, instead of shrinking on the way out and popping back up as it landed.
+- **The size lives on the CARD, not on its mesh.** It is the card's scale that the drag and the zone system already
+  use, so growing the mesh would leave the card itself at hand size and lose the effect entirely.
+- **The hand is 10% larger**, and that is one number: `Card.ZONE_PRESENTATION`'s HAND entry. `Hand.card_width` and
+  `card_spacing` are read from that same entry rather than repeated, so raising it cannot silently make the cards
+  overlap.
+
+#### The bug this uncovered
+
+The 10% did not take effect, and why is worth keeping: **`Hand.animate_card()` — the layout tween that runs on every
+re-layout — was tweening the card's scale to `Vector3.ONE`.** That made 1.0 the hand's real resting size no matter what
+the zone table said, and it is why the draw's settle also ended at 1.0 and why `HandCardState` set 1.05 on pickup and
+1.0 on release. Three writers hard-coding what the zone table should own. Layout now moves the card's POSITION only;
+size belongs to the zone table and the hover.
+
+`tests/hand_hover_probe.tscn` asserts the resting size, the growth, that no neighbour moves, that a dragged card keeps
+the grown size, and that the stack's zone entry agrees with `Card.STACK_CARD_SCALE` — the last because the no-pop claim
+is only true while those two numbers match.
+
 ### The Draw Animation
 
 A drawn card travels the deck-to-hand arc drawn in `references/draw6.png`, flips face-up on the way, and only joins

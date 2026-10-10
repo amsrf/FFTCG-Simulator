@@ -3,20 +3,27 @@ class_name Hand
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
-## Hover: the hovered card's own mesh is what lifts (mesh_instance_3d.gd), because that is presentation. The
-## NEIGHBOURS making room is layout, so it happens here, in calculate_card_position().
-##
-## How far a neighbour slides away at full strength, and how many cards either side feel it.
-const HOVER_SPREAD := 0.28
-const HOVER_REACH_CARDS := 3
+## Hover: the hovered card GROWS to the size it will be once it is on the stack, STRAIGHTENS UP, LIFTS toward the camera
+## so nothing can overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
+## and _hover_offset(). This is the timeline for all of it.
+const HOVER_SECONDS := 0.16
+## How far the hovered card is lifted toward the camera. It only has to clear the fan's whole height stagger
+## (CARD_STACK_HEIGHT times the number of cards), and it is nearly free on screen: +Y costs 0.174 m of travel per metre
+## against 0.985 for +Z, so this reads as DEPTH rather than as movement. See _hover_offset().
+const HOVER_DEPTH_LIFT := 0.15
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
 ## "Choose a card in hand" state (triggered "may" abilities such as Auron).
 var choose_card_criteria: Dictionary = {}
 var selected_card_for_effect: Card = null
-var card_width = GlobalVariables.get_card_width();
-var card_spacing = GlobalVariables.get_card_spacing();
+## The size cards are drawn at in the hand, read from Card's zone table rather than repeated here: the fan has to be
+## LAID OUT for the size the cards actually are, so raising that one scale would otherwise make them silently overlap.
+var hand_scale: float = float(Card.ZONE_PRESENTATION[Card.Zone.HAND]["scale"])
+var card_width = GlobalVariables.get_card_width() * hand_scale;
+## Centre-to-centre distance between neighbours, derived from the card's WIDTH rather than from the old absolute
+## spacing: that spacing was tuned for a card less than half this size, and the overlap it gives is not the reference's.
+var card_spacing = card_width * (FAN_STEP_FRACTION - 1.0);
 var charging_card
 var start_x;
 var grabbed_card_index = 0
@@ -124,10 +131,13 @@ func draw(card):
 	# AND IT COMES TOWARDS THE VIEWER on the way, settling as it lands — the beat Arena uses to make a draw read as
 	# the card leaving the deck and arriving in your hand rather than sliding under the table. It gets its own tween,
 	# because the flight tween is already running and two tweeners on one property would fight over it.
-	# 1.45 is how close it comes; 0.5 puts the peak near the top of the arc, and 1.2 settles it by the time it lands.
+	# 1.45x is how close it comes; 0.5 puts the peak near the top of the arc, and 1.2 settles it by the time it lands.
+	# IT IS A RATIO ON THE HAND'S RESTING SIZE, and it settles BACK to that size — not to 1.0, which is not the size a
+	# hand card is drawn at (see Card.ZONE_PRESENTATION and Hand.hand_scale). The 1.45 was tuned when the resting size
+	# happened to be 1.0, so it is the RATIO that was tuned; keeping it a multiple preserves that.
 	var bump: Tween = create_tween()
-	bump.tween_property(card, "scale", Vector3.ONE * 1.45, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	bump.tween_property(card, "scale", Vector3.ONE, 1.2).set_trans(Tween.TRANS_SINE)
+	bump.tween_property(card, "scale", Vector3.ONE * hand_scale * 1.45, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	bump.tween_property(card, "scale", Vector3.ONE * hand_scale, 1.2).set_trans(Tween.TRANS_SINE)
 
 	# Reparent the card back to its original parent after the animation
 	tween.tween_callback(card.reparent.bind(self))
@@ -196,9 +206,11 @@ func update_card_positions(ignore = -1):
 		if(card.is_dragging):
 			continue
 		card.index = i
-		# Tilt with the arc, so the hand reads as a fan instead of a straight row.
-		card.rotation = Vector3(0.0, fan_angle_for(i), 0.0)
-		animate_card(card, calculate_card_position(i)) # Position relative to the Hand
+		# Tilt with the arc, so the hand reads as a fan instead of a straight row — EXCEPT the hovered card, which
+		# STRAIGHTENS UP. That is the card being read, and the reference's hovered card is exactly vertical. The tilt
+		# is tweened inside animate_card() rather than assigned, or the straightening would snap.
+		var tilt: float = 0.0 if is_hovered(i) else fan_angle_for(i)
+		animate_card(card, calculate_card_position(i), tilt) # Position and tilt, relative to the Hand
 	# Idempotent and cheap: keeps the selectable glow correct after draws and
 	# every other layout change, not just on mode changes.
 	refresh_highlights()
@@ -210,57 +222,168 @@ func last_card_position():
 	
 ## Hand fan geometry: cards are spread along a shallow arc (like a hand of cards
 ## held in one hand) rather than in a straight row. The chord between neighbours
-## stays `card_width + card_spacing`, so a bigger radius only flattens the arc.
-const FAN_RADIUS := 2.4
+## stays `card_width + card_spacing`.
+##
+## THE ARC AND THE TILT ARE SEPARATE NUMBERS, deliberately. They were once the same one — each card tilted to be tangent
+## to the arc it sits on — which tied the row's depth to how hard the cards lean: spreading the cards out, or making
+## them bigger, silently leaned them harder AND bowed the row deeper at the same time. They are not the same thing. The
+## reference leans its outer cards about 16 degrees over a row that is nearly a straight line, and a straight row of
+## leaning cards is exactly what the two constants below describe.
+##
+## A big radius is a nearly-straight row: the sagitta is (half-span)^2 / 2R. It has to be BIG, and the reason is that
+## the bow grows with the SQUARE of the step — widening the spacing from 0.38 to 0.86 multiplied it by five, which at 24
+## put the outer cards 16 px above the middle ones and read as "some cards are in higher positions". At 70 the same row
+## bows 0.03 m, about 5 px, which is the reference's near-horizontal line.
+const FAN_ARC_RADIUS := 70.0
+## The LEAN, in degrees per card of offset from the middle. 4.6 puts the outermost card of an eight-card hand (3.5 cards
+## out) at 16 degrees. Per CARD rather than a share of the radius, so the lean follows how wide the hand actually is —
+## a wider row leans more, which is what a real held fan does.
+const FAN_TILT_PER_CARD_DEGREES := 4.6
+## How far apart neighbours sit, as a fraction of a card's WIDTH; the rest of the card is covered by its right-hand
+## neighbour.
+##
+## THIS IS AN INTERACTION NUMBER, NOT A LOOK. The hovered card is drawn on top of its neighbours at 2.4 while they rest
+## at 1.6, so it is 1.5x their width and hangs (1.5 - 1) / 2 = 0.25 of a card width over each side. A neighbour is only
+## reachable with the pointer while the step clears that — below it the hovered card swallows them whole and the pointer
+## can never get to the next card, which is exactly what a 0.38 step did. At 1.0 they touch; above it they separate
+## into a plain row.
+##
+## DEFAULT ONLY: step_fraction below is the live value, and it is the one to change. 0.86 is the midpoint of "more space
+## than 0.78" and "too much at 0.95", which is as close as this got — the reference could not be measured (the image
+## tool fails on it, and a pixel scan of its card borders finds noise rather than cards).
+const FAN_STEP_FRACTION := 0.86
 ## Height step per card. This MUST stay bigger than the glow quad's offset above
 ## the card face (2 mm, see Card._build_target_border()): otherwise the prompt
 ## glow of a card BEHIND shines through the card lying in front of it.
 const CARD_STACK_HEIGHT := 0.008
 
-## Arc angle of a card in the fan, in radians. NOTE the sign: this is the angle of
-## the card's TILT (rotation.y), so left cards lean left and right cards lean
-## right — a hand fan radiates OUTWARD from the pivot. calculate_card_position()
-## negates it, because a card's up axis is its local -Z, so its arc position and
-## its tilt run opposite ways. Flip only one of the two and the fan looks closed.
+## The live spacing. EXPORTED so it can be dialled in by eye in the Inspector instead of by editing and re-running:
+## select Player/Hand (or Opponent/Hand) in game.tscn, and dragging `Step Fraction` re-lays the hand out immediately.
+## It is declared down here rather than with the other exports on purpose — its setter writes card_spacing, so that has
+## to exist first.
+@export_range(0.3, 1.4, 0.01) var step_fraction: float = FAN_STEP_FRACTION:
+	set(value):
+		step_fraction = value
+		if card_width > 0.0:
+			card_spacing = card_width * (value - 1.0)
+		if is_inside_tree() and is_node_ready():
+			update_card_positions()
+
+## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and terms of the arc it sits on it is
+## NEGATED: a card's up axis is its local -Z, so its arc position and its tilt run opposite ways. Flip only one of the
+## two and the fan looks closed. Per CARD of offset from the middle rather than a share of a radius, so the lean follows
+## the hand's width: 4.6 puts the outermost card of an eight-card hand at 16 degrees.
 func fan_angle_for(i: int) -> float:
 	var t: float = i - (cards.size() - 1) / 2.0
-	return -t * (card_width + card_spacing) / FAN_RADIUS
+	return -deg_to_rad(t * FAN_TILT_PER_CARD_DEGREES)
+
+## How far round the row's arc a card sits, in radians, for its POSITION. Positive, and the negation above keeps the
+## tilt opposite to it. See FAN_ARC_RADIUS for why this is not the same number as the tilt.
+func fan_arc_angle_for(i: int) -> float:
+	var t: float = i - (cards.size() - 1) / 2.0
+	return t * (card_width + card_spacing) / FAN_ARC_RADIUS
 
 func calculate_card_position(i):
-	# Negated on purpose: see the sign note on fan_angle_for().
-	var angle: float = -fan_angle_for(i)
+	var angle: float = fan_arc_angle_for(i)
 	# x along the chord, z from the arc's sagitta: the middle card of the fan sits
 	# closest to the player and the outer ones fall away.
-	var x_offset: float = FAN_RADIUS * sin(angle)
-	var z_offset: float = FAN_RADIUS * (1.0 - cos(angle))
+	var x_offset: float = FAN_ARC_RADIUS * sin(angle)
+	var z_offset: float = FAN_ARC_RADIUS * (1.0 - cos(angle))
 	# Height stagger: separates overlapping cards, and keeps each glow behind the
 	# card in front of it (see CARD_STACK_HEIGHT).
 	var y_offset: float = i * CARD_STACK_HEIGHT
-	# NEIGHBOURS MAKE ROOM for the hovered card: a falloff either side of it, strongest at its immediate neighbour,
-	# applied along x so the fan opens up around the pointer. It belongs HERE because where the other cards sit is
-	# layout, and this function owns layout — the hovered card's own lift is the mesh's job (mesh_instance_3d.gd).
-	if hovered_card != null and is_instance_valid(hovered_card) and cards.has(hovered_card):
-		var hovered_i: int = cards.find(hovered_card)
-		var distance: int = absi(i - hovered_i)
-		if distance > 0 and distance <= HOVER_REACH_CARDS:
-			var strength: float = 1.0 - float(distance - 1) / float(HOVER_REACH_CARDS)
-			x_offset += signf(float(i - hovered_i)) * HOVER_SPREAD * strength
-	return Vector3(x_offset, y_offset, z_offset)
-	
-	
-## The pointer entered or left `card`. Re-lays the hand out, and that tween is what animates the neighbours sliding
-## away — the same path that animates a draw or a reorder, so the movement is consistent with everything else in the
-## hand rather than a special case.
+	# NO ROOM-MAKING ANY MORE: the hovered card grows in place instead of the neighbours sliding aside — see
+	# set_hovered(). What is left here is the fan's chord position and nothing else.
+	var spot: Vector3 = Vector3(x_offset, y_offset, z_offset)
+	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
+			and cards[i] == hovered_card:
+		spot += _hover_offset(i, spot)
+	return spot
+
+
+## The pointer entered or left `card`: the card GROWS to the size it will be once it is on the stack, and shrinks back
+## on the way out.
+##
+## The size is set on the CARD, not on its mesh. That is what the drag and the zone system already use, and it is the
+## CARD's scale that has to be right when it lands on the stack: growing only the mesh would leave the card at hand
+## size, so playing it would shrink it and then pop it back up as it landed.
 func set_hovered(card: Card, entered: bool) -> void:
 	var was: Card = hovered_card
 	if entered:
 		hovered_card = card
 	elif hovered_card == card:
 		hovered_card = null
-	# Unchanged request: do not re-lay out, or a pointer drifting within one card would restart every tween.
+	# Unchanged request: leave a pointer drifting within one card alone, or every frame restarts the tween.
 	if hovered_card == was:
 		return
+	if was != null and is_instance_valid(was):
+		_size_card(was, false)
+	if hovered_card != null:
+		_size_card(hovered_card, true)
+	# RE-LAY OUT: the hovered card's POSITION is part of the hover now — lifted toward the camera and fitted to the
+	# bottom of the screen (see _hover_offset). animate_card()'s tween is what animates it out and back.
 	update_card_positions()
+
+
+## Where the HOVERED card has to sit so its whole face can be read: pushed toward the camera so nothing overlaps it,
+## and slid until its bottom edge rests on the bottom of the screen.
+##
+## Returns a LOCAL offset to add to the card's fan position. It is computed from that position rather than from the
+## node, because the node has not been moved yet and is mid-growth — and one pass is enough, because orthographic
+## projection is affine: moving a card cannot change how big it looks, only where it lands.
+func _hover_offset(i: int, base: Vector3) -> Vector3:
+	# LIFT FIRST, ALWAYS. Depth toward this camera is dominated by +Y — it looks almost straight down — and Y is also
+	# the axis that costs almost nothing on screen: 0.174 m of travel per metre against 0.985 for Z. So a lift that
+	# clears the fan's whole stagger is invisible as movement. Doing it in Z would slide the card up the screen, which
+	# is a repositioning, not a layer change.
+	var lift: Vector3 = Vector3.UP * HOVER_DEPTH_LIFT
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL:
+		# Under perspective a fit would have to be solved iteratively, because moving the card would change how big it
+		# is. Better to leave it lifted than to half-do it.
+		return lift
+	var card: Card = cards[i]
+	var half: Vector2 = card._card_face_size() * 0.5
+	# Measured at the size it is GROWING TO and UPRIGHT, because that is what the fit is for: update_card_positions()
+	# untilts the hovered card, and fitting a tilted one would leave the upright card sitting somewhere else.
+	var placement: Transform3D = global_transform * Transform3D(
+		Basis().scaled(Vector3.ONE * Card.STACK_CARD_SCALE), base + lift)
+	# Unrolled rather than looped: the four corners of a quad, and this way there is no Variant in a Transform3D
+	# multiply.
+	var lowest: float = -INF
+	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(-half.x, 0.0, -half.y)).y)
+	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(half.x, 0.0, -half.y)).y)
+	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(-half.x, 0.0, half.y)).y)
+	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(half.x, 0.0, half.y)).y)
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
+	# Screen Y grows DOWNWARD, so a positive (view_h - lowest) means the card sits too high and must come down.
+	var world_move: Vector3 = -cam.global_transform.basis.y.normalized() * ((view_h - lowest) / px_per_metre)
+	return lift + global_transform.basis.inverse() * world_move
+
+
+## Grow or shrink one card between the hand's resting size and the stack's.
+func _size_card(card: Card, grown: bool) -> void:
+	if card == null or not is_instance_valid(card) or card.current_zone != Card.Zone.HAND:
+		return
+	# NOT WHILE IT IS IN THE AIR. A card being drawn is already in the HAND zone but parented to a PathFollow, and its
+	# scale belongs to the draw tween — growing it here would fight that. Same guard update_card_positions() uses.
+	if card.get_parent() != self:
+		return
+	# A card being dragged KEEPS the size it grew to: it is on its way to the stack, which draws cards at exactly
+	# that size, and shrinking it under the pointer would only make it grow again on the way there.
+	if not grown and card.is_dragging:
+		return
+	# THE STACK'S SIZE, exactly. Not a multiple of the resting size: this card is on its way to the stack, and arriving
+	# there at the size it is already drawn at is the whole point of matching the two. Card.STACK_CARD_SCALE is the one
+	# number behind both, and it is chosen to be readable — see the note on it in Card.
+	card.tween_to_scale(Card.STACK_CARD_SCALE if grown else hand_scale, HOVER_SECONDS)
+
+
+## Is the card at fan index `i` the one the pointer is over?
+func is_hovered(i: int) -> bool:
+	return hovered_card != null and is_instance_valid(hovered_card) \
+		and i >= 0 and i < cards.size() and cards[i] == hovered_card
 
 func find_index(card):
 	var total_width = calculate_total_width()
@@ -447,12 +570,18 @@ func remove_card_from_mana_conversion(card:Card):
 	card.clear_mana_crystal()
 	selected_cards_for_mana_has_changed.emit(-2,card.element)
 			
-func animate_card(card, target_position):
-	# Create a Tween to animate the card's movement
+func animate_card(card, target_position, target_tilt: float = 0.0):
+	# POSITION AND TILT. It used to tween the scale to 1.0 as well, which quietly made 1.0 the hand's REAL resting size:
+	# whatever Card.ZONE_PRESENTATION said, every layout pass wrote 1.0 back over it. Size belongs to the zone table
+	# and to the hover (Hand._size_card) — and leaving that here also meant a layout during a hover shrank the card the
+	# pointer was on.
+	#
+	# The TILT is tweened here rather than assigned by the caller so that straightening up on hover, and leaning back
+	# as the pointer leaves, both GLIDE. Assigning it made the straightening snap.
 	var tween = create_tween()
 	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.15)
-	tween.tween_property(card, "scale", Vector3.ONE, 0.15)
+	tween.tween_property(card, "rotation", Vector3(0.0, target_tilt, 0.0), 0.15)
 
 
 func _on_assistant_charge_complete() -> void:

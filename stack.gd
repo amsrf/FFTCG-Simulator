@@ -196,7 +196,11 @@ func animate_card(card, target_position):
 	var tween = create_tween()
 	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.3)
-	tween.tween_property(card, "scale", Vector3.ONE*1.4, 0.3)
+	# Card.STACK_CARD_SCALE is a WORLD size and this node is scaled 2.305, so it is divided by that to land the card at
+	# the size the constant promises — the same size the hand grows a hovered card to. Writing the constant straight
+	# into `scale` made stack cards 2.3x too big, which is what "a hovered hand card and a stack card are different
+	# sizes" turned out to be.
+	tween.tween_property(card, "scale", Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE), 0.3)
 	# The fan tilt is tweened too, so a card added to the stack rotates into place rather than
 	# snapping straight and then leaning.
 	tween.tween_property(card, "rotation", Vector3(0.0, fan_angle_for(_slot_for(card.index)), 0.0), 0.3)

@@ -30,7 +30,9 @@ func handle_grabbed():
 			card.is_dragging = true
 			card.position +=  Vector3(0, 0.1,-0.1)
 			card.rotation = Vector3.ZERO
-			card.scale = Vector3.ONE * 1.05
+			# NO SIZE CHANGE HERE. The card keeps the size it already has, which after a hover is the STACK's size —
+			# and the stack is where it is going. This used to force it to 1.05, which fought the hover and made a
+			# played card shrink on the way out and then pop back up as it landed.
 			card.offset = card.global_transform.origin - card._get_mouse_3d_position_on_card_plane()
 
 func handle_released():
@@ -40,7 +42,7 @@ func handle_released():
 		# Selection happens on grab; release just ends any drag state.
 		card.is_dragging = false
 		hand.update_card_positions()
-		card.scale = Vector3.ONE
+		card.apply_zone_scale()
 		return
 	var new_index = hand.find_index(card)
 	# Define the rectangle bounds
@@ -60,4 +62,7 @@ func handle_released():
 		card.index = new_index
 	card.is_dragging = false
 	hand.update_card_positions()
-	card.scale = Vector3.ONE
+	# Back to whatever size its zone wants. apply_zone_scale() rather than a hard-coded Vector3.ONE, because a card
+	# that was just PLAYED has already been parked on the stack and must keep the stack's size — and because the
+	# hand's own resting size lives in Card.ZONE_PRESENTATION, where a copy of it here would drift.
+	card.apply_zone_scale()

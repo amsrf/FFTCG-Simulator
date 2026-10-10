@@ -182,8 +182,13 @@ func _ready() -> void:
 	var tail_to: Vector2 = screens[screens.size() - 1]
 	print("[DrawProbe] the closing leg travels %.0f px down and %.0f px across" % [
 		absf(tail_to.y - tail_from.y), absf(tail_to.x - tail_from.x)])
-	_expect(absf(tail_to.y - tail_from.y) > 150.0, "and it comes back DOWN into the hand")
-	_expect(absf(tail_to.x - tail_from.x) > 50.0, "travelling back LEFT as it does")
+	# MEASURED FROM THE ARC'S RIGHTMOST POINT — where it turns back — rather than from the highest sample. The crest
+	# and the turn-back are only a sample or two apart, and which one the sampler tops out on shifts with the frame
+	# timing, so the horizontal expectation here flickered between pass and fail run to run. The turn-back point is
+	# stable, and it is the right thing to measure a "return" from anyway.
+	var back: Vector2 = screens[right_index]
+	_expect(absf(tail_to.y - back.y) > 150.0, "and it comes back DOWN into the hand")
+	_expect(absf(tail_to.x - back.x) > 100.0, "and a long way LEFT from where it turned back")
 
 	var a: Vector2 = screens[0]
 	var b: Vector2 = screens[screens.size() - 1]
@@ -199,14 +204,18 @@ func _ready() -> void:
 	_expect(rise > 60.0, "and it humps UP on screen, which is what the eye actually reads")
 
 	# AND IT COMES TOWARDS THE VIEWER — the Arena beat. The card must grow noticeably at the top of the flight and
-	# settle back to hand size, rather than travelling at a constant size.
+	# settle back to the hand's RESTING size, which is NOT 1.0 (see Card.ZONE_PRESENTATION) — every layout pass used to
+	# write 1.0 back over it, so "settles at 1.0" was the bug rather than the expectation.
+	# Both are measured AGAINST that resting size, because the growth was tuned when the resting size happened to be
+	# 1.0 and what was tuned was the RATIO.
+	var rest: float = float(Card.ZONE_PRESENTATION[Card.Zone.HAND]["scale"])
 	var peak_scale: float = 0.0
 	for sc in scales:
 		peak_scale = maxf(peak_scale, sc)
-	print("[DrawProbe] the card grows to %.2fx mid-flight and settles at %.2fx" % [
-		peak_scale, scales[scales.size() - 1]])
-	_expect(peak_scale > 1.2, "the card comes TOWARDS the viewer mid-flight")
-	_expect(absf(scales[scales.size() - 1] - 1.0) < 0.05, "and settles back to hand size on arrival")
+	print("[DrawProbe] the card peaks at %.2fx and settles at %.2fx (the hand rests at %.2fx)" % [
+		peak_scale / rest, scales[scales.size() - 1] / rest, rest])
+	_expect(peak_scale > rest * 1.2, "the card comes TOWARDS the viewer mid-flight")
+	_expect(absf(scales[scales.size() - 1] - rest) < 0.05, "and settles to the hand's resting size on arrival")
 
 	# AND IT MUST FLY FLAT — no fan tilt until it has arrived. The tilt belongs to the hand's LAYOUT, and the layout
 	# must not touch a card that is still in the air: applying it up front left the drawn card leaning through the
