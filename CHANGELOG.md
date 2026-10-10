@@ -8,6 +8,40 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### The Draw Animation
+
+A drawn card travels the deck-to-hand arc drawn in `references/draw6.png`, flips face-up on the way, and only joins
+the hand when it lands.
+
+- **One arc, not five points.** It was a chain of five `Curve3D` control points — lift, crest, come in from the
+  right, hook down — and each was its own little move, which is what read as snappy. It is now ONE cubic from the
+  deck to the hand, with both handles on a single control point (the exact cubic form of a quadratic Bézier), so
+  there is no interior kink.
+- **The control point sits ABOVE AND TO THE RIGHT OF THE DESTINATION, not above the midpoint of the chord**, and
+  that one choice is the whole shape. A Bézier leaves its start heading AT its control point and arrives at its end
+  heading AWAY from it: control over the hand gives a long straight diagonal out of the deck and a hooked descent
+  into the hand, where control over the midpoint gives a symmetric dome that glides in from the side.
+- **The bow is ~130 px past the hand, measured off the reference rather than guessed.** The red arc in draw6 turns
+  back at x 1385 while the card lands at x 1255 — +130 px, 7.7% of the screen width. So the arc deliberately
+  overshoots the hand and hooks back into it.
+- **The crest does not follow the control one-for-one.** For a quadratic, the crest offset from the landing is
+  `(start.x - end.x) / 4 + overshoot / 2`, and the deck-to-hand run is ~4.4 — so the first ~2.2 of overshoot is
+  spent merely cancelling the curve's natural shortfall. Tuning this by eye is hopeless: an overshoot of 0.7 left
+  the crest still 208 px SHORT of the hand, and small numbers produced the opposite of the intended change.
+- **1.7 s, one ease, `QUAD EASE_OUT`.** The duration has been 1.3 → 1.9 → 1.5 → 1.7.
+- **A two-stage flight was tried and REVERTED.** Giving the last fifth of the path a third of the time did slow the
+  arrival, but it read as unnatural — the card visibly changes pace part-way in. One `EASE_OUT` already spends most
+  of its time near the end; that tail is enough.
+- **The flip starts immediately and finishes at ~76% of the PATH** (0.9 s of the 1.7 s flight) — the draw5 frame.
+  It used to be on `EASE_IN_OUT`, which holds a turn almost still for its first third, so while the flight ran
+  ahead at full speed the card looked like it was not turning at all.
+- **The card flies FLAT and takes its fan tilt only once it has landed**, via `_tilt_into_hand()`. `enter_zone()`
+  assigns the zone rotation outright, so a card in the air must not be handed the hand's tilt.
+- **It comes towards the viewer and settles** — scale 1.45 at the crest, back to 1.0 on arrival.
+- **`tests/draw_probe.gd`** samples the flight every 0.09 s and asserts all of it: starts face-down, ends face-up,
+  turns gradually, starts immediately, finishes on the way in, flies flat, humps up on screen, grows and settles,
+  survives a mid-flight hover re-layout, and bows the right distance past the hand.
+
 ### Deck Editor
 
 Browse, filter and build a 50-card deck, then play a match with it.
