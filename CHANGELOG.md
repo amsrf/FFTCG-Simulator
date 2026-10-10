@@ -8,6 +8,20 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### Hand Sizing, the Stack-Scale Bug, and a Fan That Reads (2026-10-10)
+
+The hand was rebuilt around what a card is FOR at each moment. Sizes: a fan card **rests at 1.6** (129 × 180 px) and a **hovered one grows to 2.4** (193 × 270 px) — which is exactly what a card on the stack draws at, so playing from the hand is not also a resize. `Card.STACK_CARD_SCALE` is the one number behind both.
+
+**The bug that was hiding underneath it.** The `Stack` node in `game.tscn` carries a scale of **2.305**, and a card's `scale` is LOCAL to its container — so `STACK_CARD_SCALE` was multiplied by 2.305 before it reached the screen. A stack card came out **2.3× the number written down**, and no amount of tuning that constant could make a hovered hand card match one. It was found by following the user's own test literally — *"put a card in the stack, any card. Then hover over a card in the hand, if their sizes are different than it is wrong"* — and measuring the two **world** scales (`2.400 vs 2.400 (local 1.041)`). The zone table's numbers now mean the world size a card is drawn at, with `STACK_CONTAINER_SCALE` divided back out in both the zone entry and `stack.gd`'s layout tween. `Deck` (1.4), `Graveyard` (1.2) and `FocusCard` (4.5) have the same latent inconsistency and were deliberately left alone.
+
+**The hover.** The card grows, **straightens up** (a leaning card cannot be read), **lifts toward the camera** so no neighbour can cover it, and is **fitted so its bottom edge rests on the bottom of the screen**. The lift is in **+Y, not +Z**: this camera looks almost straight down, so +Y is the depth axis and costs only 0.174 m of screen travel per metre against 0.985 for +Z.
+
+**The fan.** The arc and the lean are now **separate numbers**. They used to be one — each card tilted tangent to the arc it sits on — which tied the row's depth to how hard the cards lean, so every spacing change also needed a radius change and bowed the row deeper each time. `FAN_ARC_RADIUS = 70` is nearly the reference's horizontal line; `FAN_TILT_PER_CARD_DEGREES = 4.6` is 16° at the outer card of an eight-card hand. The step is an **interaction** number rather than a look — the hovered card hangs a quarter of a card over each side, so below ~0.6 it swallows its neighbours and the pointer can never reach the next card — and it is exported as `Hand.step_fraction` to be dialled in live in the Remote Inspector.
+
+Also: `mesh_instance_3d` now hands the hover to `Hand` instead of moving the mesh itself, `hand_card_state` stops forcing a scale on grab/release, and `animate_card` tweens position **and** tilt so straightening up glides rather than snapping.
+
+**New probes:** `hand_hover` (23 checks, including "a hovered hand card is EXACTLY the size of a card on the stack" and "the row reads as LEVEL"), `projection` (advisory — what switching to perspective would do to each zone), and a reusable `tools/hand_measure.gd` for reading a reference's geometry out of its pixels. It could not measure `references/hand.png`: the image tool fails on it and the pixel scan finds only noise where its card borders should be, so the spacing was dialled in by eye — five rounds of it.
+
 ### The Hand: Hover Grows the Card, and the Hand Is 10% Larger
 
 - **The hover is a growth in place, taken from the deck search window.** It used to lift the card off the fan, bring it
