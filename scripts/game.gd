@@ -289,6 +289,8 @@ func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 				push_error("Instruction targets no card")
 				return null
 			return _targets[0]
+		"targets":
+			return _targets
 		_:
 			var node: Node = get_node_or_null(executor_key)
 			if node == null:

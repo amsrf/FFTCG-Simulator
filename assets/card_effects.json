@@ -67,7 +67,8 @@
 				"s_cost":true,
 				"tap":true,
 				"cost":{},
-				"instructions":[]
+				"apply_effect":{"is_type":"Forward","controller":"player"},
+				"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
 			}
 		]
 	},
