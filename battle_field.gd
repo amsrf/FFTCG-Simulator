@@ -833,10 +833,21 @@ func set_blockable(controller: String, enabled: bool) -> void:
 			continue
 		card.set_valid_target(enabled and can_block(card))
 
-## The block predicate: an untapped Forward. Deliberately the same rule the click gate
-## applies in field_card_state.gd, so everything that glows is also clickable.
+## The block predicate, and THE ONE PLACE blocking legality is decided. Everything that glows and everything that is
+## clickable goes through here, which is what keeps those two in agreement.
+##
+## "block_disabled" is a status the card data has always handed out — Red Mage's ability applies it — and NOTHING ever
+## consulted it, so the ability looked like it worked and did nothing. It belongs here rather than at each call site, for
+## the same reason `unbreakable` lives in one place in Game.
+##
+## The status expires on its own: Card.turn_end() decrements it, so "this turn" is enforced by construction and there is
+## no second place that has to remember to take it off.
 func can_block(card: Card) -> bool:
-	return card != null and card.can_attack()
+	if card == null:
+		return false
+	if card.status_effects.has("block_disabled"):
+		return false
+	return card.can_attack()
 
 ## The review link: the arc that shows what a card IN THE STACK was pointed at, re-drawn on
 ## demand as the player moves over the stack (see Stack.refresh_target_display).

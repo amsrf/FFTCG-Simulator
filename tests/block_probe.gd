@@ -100,6 +100,26 @@ func _ready() -> void:
 	_expect(not second.ring_selected(), "deselecting clears the orange")
 	_expect(arrow == null or not arrow.is_aiming, "deselecting hides the arc")
 
+	# --- block_disabled: a status the data has always applied and nothing consulted -------------------------------
+	# Red Mage's ability hands this out, and it did nothing at all. It has to stop the RING and the CLICK together —
+	# "everything that glows is also clickable" only holds if both go through can_block().
+	var squall: Card = null
+	for c in _field.get_front_cards_for("player"):
+		if c.card_name == "Squall":
+			squall = c
+	_expect(squall != null, "the debug board has a player Forward to try this on")
+	if squall != null:
+		_expect(_field.can_block(squall), "an untapped Forward can block to begin with")
+		squall.add_status_effect("block_disabled", 1)
+		print("[BlockProbe] %s with block_disabled: can_block=%s can_attack=%s" % [
+			squall.card_name, _field.can_block(squall), squall.can_attack()])
+		_expect(not _field.can_block(squall), "block_disabled stops it blocking")
+		_expect(squall.can_attack(), "but does NOT stop it attacking — the status is about blocking only")
+		_field.set_blockable("player", true)
+		_expect(not squall.is_valid_target, "and it is not offered as a blocker — no blue ring")
+		squall.turn_end()
+		_expect(_field.can_block(squall), "the status expires at the end of the turn and blocking comes back")
+
 	# The prompt glow is only for the duration of the question.
 	_field.set_blockable("player", false)
 	_expect(_marked().is_empty(), "clearing the prompt leaves every card dark again")

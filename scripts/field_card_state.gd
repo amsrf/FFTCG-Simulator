@@ -39,7 +39,10 @@ func handle_grabbed():
 			# Blocking is the local player's call: any of your own untapped
 			# Forwards may block, even one that would break — the AI's "only
 			# trade up" heuristic is a policy, not a rule.
-			if card.controller == 'player' and card.can_attack():
+			#
+			# THROUGH can_block(), not can_attack(): the two differed, and the ring already used the former, so a card with
+			# block_disabled would not have glowed but was still clickable.
+			if card.controller == 'player' and field.can_block(card):
 				field.set_blocker_card(card)
 		
 func handle_released():
