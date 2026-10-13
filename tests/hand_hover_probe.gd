@@ -127,8 +127,9 @@ func _ready() -> void:
 				i, p.x, p.y, rad_to_deg(c.rotation.y), p.y - foe_centre])
 		print("[HandHover]   offsets run %+.1f .. %+.1f px — theirs must be NEGATIVE where ours are positive" % [
 			foe_low, foe_out])
-		_expect(foe_low < -2.0 and foe_out < 2.0,
-			"the opponent's row is a HAPPY face: ends higher than the middle, the mirror of ours")
+		# SAME WAY UP AS OURS, which is the correction the screen asked for. The arc was being mirrored along with the
+		# lean; only the lean should be. So their ends are LOWER on screen than their middle, exactly as the player's are.
+		_expect(foe_out > 2.0, "the opponent's row curves the SAME way up as the player's — ends lower than the middle")
 
 		# AND THE POINTER DOES NOTHING TO THEM.
 		var foe_before: float = foe_mid.scale.x

@@ -418,9 +418,14 @@ func calculate_card_position(i) -> Vector3:
 	# DEPTH and nothing else — no pixels of screen movement at all. A world Y ramp is also a little bit of screen height,
 	# which is what made the row look very slightly lopsided in the first place.
 	var y_offset: float = 0.0
-	# THE ARC TURNS OVER when this hand is mirrored: their ends ride UP and the middle is LOWEST, a happy face where ours
-	# is a sad one. That is not really a special case — it is the same presentation seen from the other side of the table.
-	var turn: float = -1.0 if mirror_presentation else 1.0
+	# THE ARC DOES NOT TURN OVER. It was mirrored along with everything else, and it should not be: on screen the
+	# opponent's row curves the SAME way up as ours — the ends lower than the middle — and only the LEAN is mirrored.
+	#
+	# That is genuinely what was reported and re-reported ("the curve is upside down"), and it disagrees with the numbers
+	# this file can print: measured through the camera, the mirrored arc put their ends 27 px HIGHER than their middle.
+	# Both cannot be true, the eyes looking at the screen are the authority, and the thing that has to stay consistent is
+	# the screen — so the sag is no longer flipped. If it ever looks wrong the other way, this is the line, and the
+	# measurement that disagrees with it is in hand_hover_probe's per-card table.
 	# The camera's own back-to-front axis, in this hand's local space. Camera.basis.z points BACK toward the viewer, so
 	# this is "one step nearer the camera" — depth and nothing else, because the projection is orthographic.
 	var toward_cam: Vector3 = Vector3.UP
@@ -435,7 +440,7 @@ func calculate_card_position(i) -> Vector3:
 		var to_screen_right: float = global_transform.basis.x.dot(cam_now.global_transform.basis.x.normalized())
 		rightward = t * (1.0 if to_screen_right >= 0.0 else -1.0)
 	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) \
-		+ _screen_down() * (z_offset * turn) \
+		+ _screen_down() * z_offset \
 		+ toward_cam * (rightward * CARD_STACK_HEIGHT) \
 		+ _sink_offset()
 	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
