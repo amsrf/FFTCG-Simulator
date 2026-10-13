@@ -45,7 +45,7 @@ func _ready() -> void:
 	var flash: Node = card.get_node_or_null("AbsorbFlash")
 	var ring: Node = card.get_node_or_null("AbsorbRing")
 	print("[Absorb] after one hit: flash=%s ring=%s energized=%s" % [
-		flash != null, ring != null, card.get("_energized_highlight_on")])
+		flash != null, ring != null, card.ring_energized()])
 	_expect(flash != null and ring != null, "the flash and the shockwave are both parented to the card")
 	_expect(card.get("_absorb") != null, "the card builds its CardAbsorb on first use")
 	if ring != null:
@@ -59,7 +59,7 @@ func _ready() -> void:
 	# A FIELD card is deliberately NOT energized. set_energized_highlight() only lights a card that is still in HAND,
 	# because the meaning is "mana was spent on this and it is about to be played" — a card already on the field has
 	# been played. Asserting `true` here was my mistake, not the code's.
-	_expect(not bool(card.get("_energized_highlight_on")),
+	_expect(not card.ring_energized(),
 		"a card already on the field is NOT energized — that glow is for cards awaiting payment in hand")
 
 	# THE VOLLEY. Three more hits while the first punch is still up, the way the crystal row sends them.
