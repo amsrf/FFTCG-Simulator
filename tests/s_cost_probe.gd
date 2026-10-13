@@ -79,6 +79,18 @@ func _ready() -> void:
 	_expect(not stack.s_cost_active, "and closes the s-cost step")
 	_expect(stack.skill_activation_proxy != null, "the activation continues to the mana step")
 
+	# --- NO MANA STAGE WHEN THERE IS NOTHING TO PAY -------------------------------------------------------------------
+	# Aerith's cost is {} — the discarded card IS the whole payment — so the activation goes straight on instead of asking
+	# the player to press Confirm on an empty screen. The mode is the check: a payment modal would put us in PAYING_COST.
+	var mode_after: int = GlobalVariables.get_player_mode()
+	print("[SCost] after an S cost with an EMPTY mana cost: mode=%s (PAYING_COST would be %s), proxy=%s" % [
+		mode_after, GlobalVariables.Player_Mode.PAYING_COST, stack.skill_activation_proxy != null])
+	_expect(mode_after != GlobalVariables.Player_Mode.PAYING_COST,
+		"an ability with no mana cost never opens a payment stage")
+	_expect(field.cost_is_free({}), "and an empty cost counts as free")
+	_expect(field.cost_is_free({"neutral": 0}), "as does one listing zero")
+	_expect(not field.cost_is_free({"neutral": 1}), "while any real mana does not")
+
 	# --- the exclusion ------------------------------------------------------------------------------------------------
 	hand.selected_cards_for_mana_conversion.clear()
 	hand.add_card_to_mana_conversion(sacrifice)

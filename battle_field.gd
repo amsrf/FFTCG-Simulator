@@ -293,7 +293,20 @@ func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
 		stack.begin_s_cost_selection(card, skill_index)
 		return
 	var cost: Dictionary = def.get("cost", {})
+	if cost_is_free(cost):
+		# NOTHING TO PAY, SO NO PAYMENT STAGE — and no Confirm to press on an empty screen before anything can happen.
+		# This is exactly the branch the Confirm button would have taken, so nothing is skipped but the modal.
+		continue_skill_activation_after_mana(stack.skill_activation_proxy)
+		return
 	card_activated_ability.emit(cost)
+
+## A mana cost with nothing in it — absent, empty, or all zeroes. Those cost the player nothing, so showing them a payment
+## modal asks them to confirm that they intend to pay nothing.
+func cost_is_free(cost: Dictionary) -> bool:
+	for key in cost:
+		if int(cost[key]) > 0:
+			return false
+	return true
 
 func continue_skill_activation_after_mana(_proxy: Card) -> void:
 	if _proxy == null or _proxy.effect_source == null:

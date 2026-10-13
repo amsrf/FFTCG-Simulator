@@ -379,9 +379,14 @@ func _on_choose_card_finished(play: bool) -> void:
 		return
 
 	s_cost_selected_card = chosen
-	# S cost chosen: proceed to the regular mana payment step.
+	# S cost chosen. The mana stage follows ONLY if there is mana to pay: when the cost is empty the discarded card WAS the
+	# whole payment, so asking for a Confirm on an empty screen is a button that exists only to be pressed.
 	var def: Dictionary = s_cost_source.card_effects["skill"][s_cost_skill_index]
-	field.card_activated_ability.emit(def.get("cost", {}))
+	var cost: Dictionary = def.get("cost", {})
+	if field.cost_is_free(cost):
+		field.continue_skill_activation_after_mana(skill_activation_proxy)
+		return
+	field.card_activated_ability.emit(cost)
 
 func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
 	## Physical stack object for UI (pay + target). Costs apply later at de facto stack commit.
