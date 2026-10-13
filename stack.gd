@@ -646,11 +646,19 @@ func _on_assistant_target_complete() -> void:
 		return
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: costs paid, target chosen
+	assistant.hide_buttons()
 	request_priority.emit()
 
 func confirm_skill_without_target_then_priority() -> void:
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: a skill with no target needs no confirmation
+	# CLEAR THE BUTTON THAT GOT US HERE. The priority round that follows is going to put the PASS button up, in the SAME
+	# slot — so leaving the previous one standing hides the only control the player has. The effect sits on the stack, no
+	# button does anything, and the game looks frozen: exactly what was reported for a skill with no target, where this
+	# confirm came from generate_confirm_button() and nothing ever dismissed it.
+	#
+	# Both skill paths do this, so neither can forget.
+	assistant.hide_buttons()
 	request_priority.emit()
 
 func _on_assistant_target_cancel() -> void:
