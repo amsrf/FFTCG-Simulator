@@ -59,7 +59,7 @@
 	},
 	"64":{
 		"when_enter_field":{
-			"choose_target":{"is_type":"Backup","count":3},
+			"choose_target":{"is_type":"Backup","count":3,"exclude":{"is_named":"Aerith"}},
 			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
 		},
 		"skill":[

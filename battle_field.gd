@@ -80,8 +80,14 @@ func activate_aura_in_field(aura:AuraValue):
 
 ## APPLIED AT MOST ONCE PER CARD. `granted` is the guard; it is also the exact record the teardown needs, so taking the
 ## bonus back does not have to re-derive which cards it went to from the target test.
+##
+## Routed through the SAME evaluator as choose_target (scripts/card_target.gd), so an aura and an effect mean the same
+## thing by "type: Forward, controller: player" — and an aura can now say `exclude` or `is_named` too, which the old
+## does_card_match_target() could not express at all.
+const CARD_TARGET := preload("res://scripts/card_target.gd")
+
 func add_aura_to_card(aura: AuraValue, card: Card):
-	if not card.does_card_match_target(aura.targets):
+	if not CARD_TARGET.matches(card, aura.targets):
 		return
 	if aura.granted.has(card):
 		return
@@ -583,7 +589,10 @@ func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Car
 	# the candidate) and the candidate's own protection against this source.
 	# source_kind overrides the source card's own kind, because ability targeting
 	# is requested with the field card, which carries no effect_kind.
-	if not card.matches_criteria(target_criteria):
+	#
+	# The SOURCE is passed through: an exclude block may say "other than this card", and the relative controller keys
+	# ("one of yours") need to know whose effect is asking.
+	if not card.matches_criteria(target_criteria, source):
 		return false
 	return card.can_be_chosen_by(source, source_kind)
 		

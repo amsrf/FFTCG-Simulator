@@ -1075,17 +1075,16 @@ func is_element(value: String) -> bool:
 		return true
 	return ELEMENT_NAMES.get(value, "") == element
 
-func matches_criteria(criteria: Dictionary) -> bool:
-	# Criteria keys are method names on Card (is_type, is_element, ...).
-	for key in criteria:
-		var method_name = key
-		if not has_method(method_name):
-			push_error("Criteria method not found on Card: %s" % method_name)
-			return false
-		var method_args = [criteria[key]]
-		if not callv(method_name, method_args):
-			return false
-	return true
+const CARD_TARGET := preload("res://scripts/card_target.gd")
+
+## Is this card within `criteria`? Delegated to the shared TARGET BLOCK evaluator, which also understands the `exclude`
+## rule — "other than Aerith" — and skips session keys like `count`. See scripts/card_target.gd for the three kinds of
+## key. The signature is unchanged, so existing callers and data keep working exactly as they did.
+##
+## `source` is optional and only matters for the relative keys an exclude block can use ("other than THIS card", "one of
+## YOURS"). A caller that does not pass one simply cannot use those keys; nothing else changes.
+func matches_criteria(criteria: Dictionary, source: Card = null) -> bool:
+	return CARD_TARGET.matches(self, criteria, source)
 
 func get_effect_kind() -> String:
 	# Targeting-source kind for protection checks: "Summon" or "Ability".
