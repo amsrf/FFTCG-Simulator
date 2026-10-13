@@ -390,6 +390,29 @@ func set_target_card(card: Card):
 	print("[Targeting] target selected: ", card.card_name)
 	arrow.lock_arc(card.get_global_face_centre())
 	request_target_confirmation.emit(target_card, targeting_allow_cancel)
+
+## ONE STEP BACK, for a right-click. Undoes a PICK, not the targeting: the arc unlocks and goes back to following the
+## mouse, the picked card loses its ring, and the Confirm button goes away — which is exactly the state the session
+## started in. The Cancel button (or the same key doing nothing further) remains the way out of the effect entirely.
+func clear_target_selection() -> void:
+	if target_card == null or not is_instance_valid(target_card):
+		return
+	if source_card != null and target_card == source_card:
+		return
+	target_card.set_selected_highlight(false)
+	target_card.set_targeted_highlight(false)
+	print("[Targeting] selection cleared — aiming again")
+	target_card = null
+	if arrow != null and is_instance_valid(arrow):
+		# `locked` is what froze the arc on the pick (see lock_arc); dropping it and re-aiming puts the arc back on the
+		# pointer. Both, because unlocking alone leaves the arc pointing at wherever the pick was.
+		arrow.locked = false
+		arrow.set_is_aiming_from_card(true, source_card)
+	if assistant != null:
+		if targeting_allow_cancel:
+			assistant.prepare_targeting_phase_cancel()
+		else:
+			assistant.hide_buttons()
 	
 func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
 	# The blue ring means "the game is asking YOU". When the OPPONENT is the one choosing,
@@ -450,6 +473,7 @@ func remove_card(card):
 	opponent_front_cards.erase(card)
 	opponent_back_cards.erase(card)
 	recompute_conditional_power()
+	refresh_auras()
 
 ## Conditional continuous effects ("if you control X, this gains power").
 ## Re-evaluated only when the field composition changes: play_card/remove_card.
@@ -515,6 +539,19 @@ func register_card_auras(card: Card) -> void:
 			add_aura(effect, card.get_instance_id())
 			activate_aura_in_field(_auras[card.get_instance_id()])
 	add_all_auras_to_card(card)
+	refresh_auras()
+
+## EVERY aura onto EVERY card, on every field change. This looks redundant next to the two calls above and is not: it is
+## what makes the result independent of the ORDER things arrive in. Which aura a card picks up depended on whether the
+## card was already down when the aura arrived (activate_aura_in_field) or arrived afterwards
+## (add_all_auras_to_card), and a card that was on the field before the aura could miss out entirely.
+##
+## It is safe to run repeatedly only because AuraValue.granted makes add_aura_to_card() a no-op for a card it has already
+## been applied to — without that guard this would stack a fresh +1000 on every field change.
+func refresh_auras() -> void:
+	for aura in _auras.values():
+		for card in get_all_cards():
+			add_aura_to_card(aura, card)
 
 func unregister_card_auras(card: Card) -> void:
 	var key: int = card.get_instance_id()

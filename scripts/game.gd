@@ -191,6 +191,11 @@ func _input(event):
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		# RIGHT-CLICK WHILE TARGETING IS ONE STEP BACK, not a cancel: from "a target is picked, the arc is locked and
+		# Confirm is offered" to "aiming again, the arc follows the mouse". Cancel is still the way out of the effect
+		# entirely. Anything else it might mean is left alone.
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			field.clear_target_selection()
 		if($FocusCard):
 			$FocusCard.visible = false
 
