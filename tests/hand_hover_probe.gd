@@ -279,12 +279,18 @@ func _ready() -> void:
 	_expect(card.scale.x >= resting * 1.35, "a hovered card GROWS — noticeably, not just a nudge")
 	_expect(absf(card.rotation.y) < 0.02, "and STRAIGHTENS UP — a leaning card cannot be read")
 
-	# WHOLY ON SCREEN, on all four sides — that is what bringing it up is for.
+	# WHOLLY ON SCREEN — AND CLEAR OF THE EDGE, WHICH IS THE PART THAT WAS MISSING. "Bottom < view.y" is satisfied by a
+	# bottom sitting on the last pixel row, which is where the card's bottom border and its power box were: on screen, and
+	# unreadable. The margin below is the whole point of the check.
 	var hover_box: Dictionary = _visible(card, cam, view)
+	var clearance: float = view.y - hover_box["bottom"]
 	print("[HandHover] the hovered card occupies x %.0f..%.0f, y %.0f..%.0f of a %.0f x %.0f viewport" % [
 		hover_box["left"], hover_box["right"], hover_box["top"], hover_box["bottom"], view.x, view.y])
-	_expect(hover_box["top"] > -1.0 and hover_box["bottom"] < view.y + 1.0,
-		"it is on screen top to bottom, so the whole card can be read")
+	print("[HandHover]   it keeps %.0f px of board below it (the fit targets %.0f)" % [
+		clearance, hand.HOVER_BOTTOM_MARGIN])
+	_expect(hover_box["top"] > -1.0, "it is on screen top to bottom")
+	_expect(clearance >= hand.HOVER_BOTTOM_MARGIN - 2.0,
+		"and its BOTTOM edge sits clear of the screen edge by the margin, so the power box is readable")
 	_expect(hover_box["left"] > -1.0 and hover_box["right"] < view.x + 1.0,
 		"and on screen left to right")
 	_expect(card.scale.x * face.y * px_per_metre > view.y * 0.2,

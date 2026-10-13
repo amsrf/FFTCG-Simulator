@@ -9,6 +9,10 @@ const CARD_CHARGE = 2
 const HOVER_SECONDS := 0.16
 ## How far a hovered card is lifted toward the camera is NOT a constant: it has to clear the whole stacking ramp, which
 ## depends on how many cards are in the hand. See _hover_lift() below.
+## How much clean board a hovered card keeps BELOW it, in screen pixels. The fit used to target the viewport's bottom
+## edge exactly, which is technically "fully on screen" and useless: the card's bottom border and the power box sit right
+## on the last pixel row. A short strip of board underneath is what makes the bottom of the card readable.
+const HOVER_BOTTOM_MARGIN := 34.0
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
@@ -533,8 +537,13 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(half.x, 0.0, half.y)).y)
 	var view_h: float = get_viewport().get_visible_rect().size.y
 	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
-	# Screen Y grows DOWNWARD, so a positive (view_h - lowest) means the card sits too high and must come down.
-	var world_move: Vector3 = -cam.global_transform.basis.y.normalized() * ((view_h - lowest) / px_per_metre)
+	# AND IT FITS TO A LINE ABOVE THE EDGE, NOT TO THE EDGE ITSELF. This used to target `view_h` exactly, which put the
+	# hovered card's bottom on the LAST PIXEL ROW of the window: every corner is on screen, so the check passed, but the
+	# card's bottom border and the power box just above it were pressed against the window edge and read as cut off —
+	# "I can't see the power number". A card is not fully visible when the thing you want to read is on the boundary.
+	var want_bottom: float = view_h - HOVER_BOTTOM_MARGIN
+	# Screen Y grows DOWNWARD, so a positive (want_bottom - lowest) means the card sits too high and must come down.
+	var world_move: Vector3 = -cam.global_transform.basis.y.normalized() * ((want_bottom - lowest) / px_per_metre)
 	return lift + global_transform.basis.inverse() * world_move
 
 
