@@ -176,24 +176,43 @@ func _ready() -> void:
 	# Godot's SCREEN y grows downward, so "lower on screen" is a LARGER y — the ends must have the LARGER y. The local
 	# y below is the hand's own axis, which is a different thing and is only printed for reference.
 	var centre_y: float = 0.0
-	print("[HandHover]   i   local.y   screen.y   rotation    vs the middle")
+	print("[HandHover]   i   screen.x   screen.y   depth(m)   rotation    vs the middle")
 	var row: Array[Dictionary] = []
+	var cam_origin: Vector3 = cam.global_position
+	var towards_view: Vector3 = -cam.global_transform.basis.z.normalized()
 	for i in range(hand.cards.size()):
 		var c: Card = hand.cards[i]
 		if c.get_parent() != hand:
 			continue
+		var p: Vector2 = cam.unproject_position(hand.global_transform * c.position)
 		row.append({
 			"i": i,
-			"local_y": c.position.y,
-			"screen_y": cam.unproject_position(hand.global_transform * c.position).y,
+			"screen_x": p.x,
+			"screen_y": p.y,
+			# HOW NEAR THE CAMERA IT ACTUALLY IS, read straight off the transform rather than from any table: this is the
+			# number that decides which card the depth buffer draws on top.
+			"depth": (c.global_position - cam_origin).dot(towards_view),
 			"rot": rad_to_deg(c.rotation.y),
 		})
 	var mid_index: int = row.size() / 2
 	centre_y = row[mid_index]["screen_y"]
 	for entry in row:
-		print("[HandHover] %3d   %7.4f   %8.1f   %7.2f    %+6.1f px" % [
-			entry["i"], entry["local_y"], entry["screen_y"], entry["rot"],
+		print("[HandHover] %3d   %8.1f   %8.1f   %8.4f   %7.2f    %+6.1f px" % [
+			entry["i"], entry["screen_x"], entry["screen_y"], entry["depth"], entry["rot"],
 			float(entry["screen_y"]) - centre_y])
+
+	# STACKING ORDER. Sort by SCREEN X and every card must be nearer the camera than the one before it — a card to the
+	# right is drawn over the one on its left. Driving the ramp from the index instead of from the screen got this exactly
+	# backwards, which is what "Aerith is behind Garland" was.
+	var wrong_way: int = 0
+	var sorted: Array = row.duplicate()
+	sorted.sort_custom(func(a, b): return float(a["screen_x"]) < float(b["screen_x"]))
+	for k in range(1, sorted.size()):
+		if float(sorted[k]["depth"]) >= float(sorted[k - 1]["depth"]):
+			wrong_way += 1
+	print("[HandHover] left to right, %d of %d steps are NOT nearer the camera than the card before" % [
+		wrong_way, sorted.size() - 1])
+	_expect(wrong_way == 0, "every card is drawn OVER the one to its left")
 
 	# EVERY EDGE CARD LOWER THAN THE MIDDLE, and by more than the lean's own corner lift (~10 px at 2 degrees), or the
 	# row reads as flat however correct the maths is.

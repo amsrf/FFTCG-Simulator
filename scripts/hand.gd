@@ -269,10 +269,16 @@ const CARD_ASPECT := 1.398
 ## reachable with the pointer while the spacing clears that — below about 0.6 the hovered card swallows them whole and
 ## the pointer can never get to the next card.
 const FAN_STEP_FRACTION := 0.86
-## Height step per card. This MUST stay bigger than the glow quad's offset above
-## the card face (2 mm, see Card._build_target_border()): otherwise the prompt
-## glow of a card BEHIND shines through the card lying in front of it.
-const CARD_STACK_HEIGHT := 0.008
+## Depth step per card, along the CAMERA's axis (see calculate_card_position), so it costs nothing on screen: an
+## orthographic camera projected along exactly this direction, so the card does not move a pixel.
+##
+## It MUST stay bigger than the glow quad's offset above the card face (2 mm, see Card._build_target_border()), or the
+## prompt glow of a card behind shines through the card lying in front of it — that is what the old "height stagger"
+## comment was about, and it is why this is not simply the smallest number that sorts correctly.
+##
+## 20 mm, up from 8. It was 8 while the ramp was in world Y, where every millimetre is also a millimetre of screen
+## height. Along the camera axis there is no such cost, and a stacking order is worth making unambiguous.
+const CARD_STACK_HEIGHT := 0.02
 
 ## The dialled maximum spacing. EXPORTED so it can be dialled in by eye in the Inspector instead of by editing and
 ## re-running: select Player/Hand (or Opponent/Hand) in game.tscn, and dragging `Step Fraction` re-lays the hand out
@@ -419,11 +425,18 @@ func calculate_card_position(i) -> Vector3:
 	# this is "one step nearer the camera" — depth and nothing else, because the projection is orthographic.
 	var toward_cam: Vector3 = Vector3.UP
 	var cam_now: Camera3D = get_viewport().get_camera_3d()
+	# AND WHICH WAY IS SCREEN-RIGHT IN THIS HAND'S OWN SPACE. The ramp is driven by how far RIGHT a card is ON SCREEN,
+	# not by its index. Which end of the row index 0 sits at depends on how this hand is oriented, and the two hands are
+	# not oriented the same way — so an index ramp put the whole thing backwards for the player, which is what "Aerith is
+	# behind Garland and Evoker behind Aerith" was. The screen is the thing that has to be consistent, not the index.
+	var rightward: float = t
 	if cam_now != null:
 		toward_cam = global_transform.basis.inverse() * cam_now.global_transform.basis.z.normalized()
+		var to_screen_right: float = global_transform.basis.x.dot(cam_now.global_transform.basis.x.normalized())
+		rightward = t * (1.0 if to_screen_right >= 0.0 else -1.0)
 	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) \
 		+ _screen_down() * (z_offset * turn) \
-		+ toward_cam * (float(i) * CARD_STACK_HEIGHT) \
+		+ toward_cam * (rightward * CARD_STACK_HEIGHT) \
 		+ _sink_offset()
 	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
 	# layout, and Card.set_revealed() returns immediately when nothing has changed.
