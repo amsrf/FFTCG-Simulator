@@ -41,12 +41,16 @@ class AuraValue:
 	var method: String
 	var targets: Dictionary  # Changed from Array[String] to Dictionary
 	var value: int
+	## The cards this aura has ALREADY been applied to. Without it the same card can be reached twice — a card arriving
+	## runs add_all_auras_to_card(), and an aura arriving runs activate_aura_in_field() over everything — and a
+	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
+	var granted: Dictionary = {}
 
 	func _init(p_method: String, p_targets: Dictionary, p_value: int = 0):
 		method = p_method
 		targets = p_targets
 		value = p_value
-		
+
 
 var _auras: Dictionary[int, AuraValue] = {}
 func add_aura(aura: Dictionary, id:int):
@@ -63,11 +67,17 @@ func activate_aura_in_field(aura:AuraValue):
 	for card:Card in all_cards:
 		add_aura_to_card(aura,card)
 
+## APPLIED AT MOST ONCE PER CARD. `granted` is the guard; it is also the exact record the teardown needs, so taking the
+## bonus back does not have to re-derive which cards it went to from the target test.
 func add_aura_to_card(aura: AuraValue, card: Card):
-	if card.does_card_match_target(aura.targets):
-		if aura.method == 'power_change':
-			# -1 = permanent modifier (does not expire at end of turn).
-			card.power_change(aura.value, -1)
+	if not card.does_card_match_target(aura.targets):
+		return
+	if aura.granted.has(card):
+		return
+	aura.granted[card] = true
+	if aura.method == 'power_change':
+		# -1 = permanent modifier (does not expire at end of turn).
+		card.power_change(aura.value, -1)
 				
 func add_all_auras_to_card(card:Card):
 	for aura in _auras.values():
@@ -108,6 +118,7 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 	target_array.append(card)
 	register_conditional_effects(card)
 	recompute_conditional_power()
+	register_card_auras(card)
 	
 	# Calculate position
 	var target_position = target_node.position
@@ -433,6 +444,7 @@ func clear_targeted_highlights() -> void:
 
 func remove_card(card):
 	unregister_conditional_effects(card)
+	unregister_card_auras(card)
 	front_cards.erase(card)
 	back_cards.erase(card)
 	opponent_front_cards.erase(card)
@@ -479,6 +491,45 @@ func _condition_met(condition: Dictionary) -> bool:
 		if card.matches_criteria(condition):
 			return true
 	return false
+
+## AURAS — continuous effects a card grants to OTHERS while it is on the field ("your Fire Forwards gain +1000 power",
+## card 1-030R). Not the same thing as `conditional_power`, which a card applies to ITSELF when a condition holds.
+##
+## THE SYSTEM WAS ALREADY HERE AND WAS SIMPLY NEVER CALLED. `AuraValue`, `add_aura`, `activate_aura_in_field`,
+## `add_aura_to_card`, `add_all_auras_to_card`, and `Card.does_card_match_target()` — which reads exactly the
+## {type, controller, element} block the JSON uses — were all present and correct. Nothing invoked any of them, so
+## 1-030R's effect was loaded, stored, and changed no number at all. That is the whole bug.
+##
+## So this is the WIRING, not a second implementation. Two entry points, one per direction:
+##
+##   * a card ARRIVES: it receives every aura already on the field, and if it has an aura of its own, that one is
+##     registered and applied to everything already there;
+##   * a card LEAVES: its auras are removed, and whatever they granted is taken back off the cards they matched.
+##
+## The accounting is one-shot per (aura, card) pair — applied when the card arrives or when the aura arrives, never
+## recomputed in a loop — because that is the shape the existing helpers have, and re-applying in a loop is how a total
+## like this ratchets upward every time the field changes.
+func register_card_auras(card: Card) -> void:
+	if "aura" in card.card_effects:
+		for effect in card.card_effects["aura"]:
+			add_aura(effect, card.get_instance_id())
+			activate_aura_in_field(_auras[card.get_instance_id()])
+	add_all_auras_to_card(card)
+
+func unregister_card_auras(card: Card) -> void:
+	var key: int = card.get_instance_id()
+	if not _auras.has(key):
+		return
+	var aura: AuraValue = _auras[key]
+	_auras.erase(key)
+	if aura.method != "power_change":
+		return
+	# The exact inverse, off the record of what was actually granted — not off the target test, which would also take the
+	# bonus off cards that never received it.
+	for other in aura.granted.keys():
+		if is_instance_valid(other):
+			other.power_change(-aura.value, -1)
+	aura.granted.clear()
 	
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their
