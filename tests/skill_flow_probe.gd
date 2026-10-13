@@ -86,20 +86,23 @@ func _ready() -> void:
 		"the confirm that started this is GONE — left up, it hides the pass button and the game looks frozen")
 	if assistant_node != null:
 		assistant_node.pressed_pass_priority.emit()
-	# MODEL THE HUMAN: press the pass button whenever it is up, and COUNT whether it ever appears. That distinction is the
-	# diagnosis — a pass button that shows and does nothing is a different bug from one that never shows at all.
+	# MODEL THE HUMAN: press the PASS button whenever it is up, and count whether it ever appears.
+	#
+	# passPhaseButton, NOT confirmButton — they are separate nodes, and checking the confirm told me nothing about the pass
+	# button. That is what produced the previous run's "seen 0 times" and made me report a false finding.
 	var passes: int = 0
 	var button_seen: int = 0
 	var waited: float = 0.0
 	while stack.stack_length() > 0 and waited < 4.0:
 		await get_tree().create_timer(0.1).timeout
 		waited += 0.1
-		if assistant_node != null and assistant_node.confirmButton.visible:
+		if assistant_node != null and assistant_node.passPhaseButton.visible:
 			button_seen += 1
 			assistant_node.pressed_pass_priority.emit()
 			passes += 1
-	print("[SkillFlow] pass button: seen %d time(s), pressed %d time(s), waited %.1fs, stack_len=%d, mode=%s" % [
-		button_seen, passes, waited, stack.stack_length(), GlobalVariables.get_player_mode()])
+	print("[SkillFlow] pass button: seen %d time(s), pressed %d time(s), waited %.1fs, stack_len=%d, mode=%s, confirm=%s" % [
+		button_seen, passes, waited, stack.stack_length(), GlobalVariables.get_player_mode(),
+		assistant_node.confirmButton.visible if assistant_node != null else "?"])
 	_expect(button_seen > 0,
 		"the pass button APPEARS while priority is waiting — a human has to be able to pass to resolve this")
 	_expect(stack.stack_length() == 0, "THE STACK EMPTIES — the effect resolves and leaves, which is the whole report")
