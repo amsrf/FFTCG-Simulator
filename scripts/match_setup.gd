@@ -55,6 +55,10 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			cfg = _debug()
 			cfg["preset"] = "ai"
 			cfg["opponent_type"] = "ai"
+			# AERITH ON THE PLAYER'S BACKUP LINE, for the S cost. Her ability needs a card with the SAME NAME discarded
+			# from hand, and _debug() already puts one (64) in the opening hand — she is the source here. So the two are
+			# deliberately both present: one on the board to activate, one in hand to spend.
+			cfg["player_field"].append({"id": 64, "tapped": false})
 			cfg["opponent_field"] = [
 				{"id": 41, "tapped": false},   # Squall (Forward 6000)
 				{"id": 31, "tapped": false},   # Chemist (ice Backup)

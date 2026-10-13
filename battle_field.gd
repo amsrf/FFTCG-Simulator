@@ -233,7 +233,18 @@ func can_activate_now(card: Card) -> bool:
 		return false
 	if not "skill" in card.card_effects:
 		return false
-	return not (card.card_effects["skill"] as Array).is_empty()
+	var skills: Array = card.card_effects["skill"]
+	if skills.is_empty():
+		return false
+	# AN S COST THAT CANNOT BE PAID IS NOT AN AVAILABLE ABILITY. Without this the activation TAPPED the source and then
+	# aborted silently — and because the abort untaps again, every further click re-tapped it, which reads as "the card
+	# just taps and nothing happens". Checking here means the card is simply not offered (no green ring), and
+	# begin_skill_activation() refuses it for the same reason, so the tap never happens.
+	#
+	# Every card in the data has exactly one skill, so the one that would be activated is the first.
+	if bool(skills[0].get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
+		return false
+	return true
 
 ## Green ring: "you may activate this right now" — your cards only, and gone the moment a modal
 ## takes the moment away. It is DERIVED state with many causes (the input mode, a card's tapped

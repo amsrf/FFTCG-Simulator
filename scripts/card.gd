@@ -465,6 +465,9 @@ func enter_zone(zone: Zone) -> void:
 	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
 	# unflipped container, so its cards must carry the half turn themselves.
 	rotation = presentation["rotation"]
+	# The pose a tap animates away from and comes back to. Recorded HERE because this is the single place a card's resting
+	# orientation is decided; tap()/untap() aim at this absolute angle instead of offsetting whatever they find.
+	_upright_y = rotation_degrees.y
 	apply_zone_scale()
 	is_dragging = false
 	is_valid_target = false
@@ -488,33 +491,34 @@ func enter_zone(zone: Zone) -> void:
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -90.0
 
+## The y rotation this card holds when it is NOT tapped. Set on entering a zone, because that is the one place a card's
+## resting orientation is decided — so tap()/untap() always have an absolute angle to aim at.
+var _upright_y: float = 0.0
+
 func tap():
 	if tapped: return
 	
 	tapped = true
 	
-	if tween:
+	if tween != null and tween.is_valid():
 		tween.kill()
 	
-	# Rotate 90° clockwise FROM CURRENT POSITION
+	# AN ABSOLUTE ANGLE, NOT "90 degrees from wherever it happens to be". Both tweens used to be relative, so killing one
+	# mid-flight — which is exactly what an activation that gets undone immediately does — left the card part-way round,
+	# and every later tap started from a worse angle than the last. Repeated tap/untap cycles walked the card around.
 	tween = create_tween()
-	tween.tween_property(self, "rotation_degrees:y",
-						rotation_degrees.y - 90.0,  # -90° = clockwise
-						tap_speed)
+	tween.tween_property(self, "rotation_degrees:y", _upright_y + tap_angle, tap_speed)
 
 func untap():
 	if not tapped: return
 	
 	tapped = false
 	
-	if tween:
+	if tween != null and tween.is_valid():
 		tween.kill()
 	
-	# Rotate 90° counter-clockwise back
 	tween = create_tween()
-	tween.tween_property(self, "rotation_degrees:y",
-						rotation_degrees.y + 90.0,  # +90° = counter-clockwise
-						tap_speed)
+	tween.tween_property(self, "rotation_degrees:y", _upright_y, tap_speed)
 
 
 '''func _log_state(context: String):

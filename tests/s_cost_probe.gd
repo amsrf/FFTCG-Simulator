@@ -105,6 +105,19 @@ func _ready() -> void:
 	_expect(stack.skill_activation_proxy == null, "cancelling the s-cost step abandons the activation")
 	_expect(not source.tapped, "and the source untaps, because the cost was never really paid")
 
+	# --- THE REPORTED BUG: an s cost you cannot pay must not be offered at all ----------------------------------------
+	# It used to be activatable, which TAPPED the source and then aborted silently — and because the abort untaps again,
+	# every further click re-tapped it. The card reads as broken: it taps, nothing happens, and clicking it taps it more.
+	hand.discard_card(sacrifice)
+	print("[SCost] with the last matching card discarded from hand: can_activate_now=%s tapped=%s" % [
+		field.can_activate_now(source), source.tapped])
+	_expect(not field.can_activate_now(source),
+		"an ability whose S cost cannot be paid is not offered — no green ring, no tap")
+	var before_tap: bool = source.tapped
+	field.begin_skill_activation(source, 0)
+	_expect(source.tapped == before_tap,
+		"and starting it anyway does NOT tap the source: nothing half-happens")
+
 	_finish()
 
 func _finish() -> void:
