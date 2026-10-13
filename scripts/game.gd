@@ -35,12 +35,12 @@ var _targets = []
 ## AERITH 1-064. "When Aerith enters the field, choose up to 3 Backups you control other than Aerith. Activate them." —
 ## which here is simply: untap each one that was picked.
 ##
-## The instruction carries NO argument, because the PICKS are the argument. It reads `Field.targeting_picked`, which is
-## the whole list in order and outlives the session — `Field.target_card` only ever holds the last one.
+## The instruction carries NO argument, because the effect's TARGETS are the argument: `_targets` is filled from the
+## effect card's own list when its instructions run (see _on_stack_execute_card_effect). It deliberately does NOT read
+## `Field.targeting_picked` any more — that is the targeting UI's state, and another session can overwrite it before the
+## effect resolves. The effect carries what it was given; nothing has to go looking for it afterwards.
 func untap_targets(_argument = null) -> void:
-	if field == null:
-		return
-	for card in field.targeting_picked:
+	for card in _targets:
 		if card != null and is_instance_valid(card):
 			card.untap()
 			print("[Untap] ", card.card_name)
@@ -721,10 +721,14 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	# Backup" choice). Stack.resolve_top_effect() waits for our
 	# _mark_resolution_complete() signal at the end of this function.
 	var instructions = card.get_card_effect_instructions()
-	var target = card.effect_target
+	# THE EFFECT'S OWN TARGETS. `effect_targets` is the whole list (see Card) and `effect_target` is still the last one
+	# for consumers that want a single card. A targetless effect keeps the one-element list it always had.
+	var targets: Array = card.effect_targets.duplicate()
+	if targets.is_empty():
+		targets = [card.effect_target]
 	_current_source_card = card.effect_source if card.effect_source != null else card
 	_current_controller = card.controller
-	_targets = [target]
+	_targets = targets
 
 	# Triggered "may" abilities resolve NOW: open the choose-card modal and,
 	# if the player confirms, pass the chosen hand card to may_play_for_free.

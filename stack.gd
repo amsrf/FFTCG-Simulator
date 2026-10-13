@@ -578,7 +578,15 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 	if cards.is_empty():
 		return
 	var effect_card: Card = cards[-1]
-	effect_card.effect_target = target_card
+	# THE WHOLE SESSION, not just the card this call carries. A multi-target session calls this once per pick, so
+	# assigning the single card would leave only the last one — which is exactly the wall this had. The session's picks
+	# are captured HERE, at the moment of the pick: from then on the EFFECT owns them, and nothing downstream has to go
+	# looking in the targeting UI's state, which the next session overwrites.
+	var picks: Array = get_parent().field.targeting_picked
+	if picks.size() > 1:
+		effect_card.set_effect_targets(picks)
+	else:
+		effect_card.effect_target = target_card
 
 ## THE PLAY HAS LANDED, so break the crystals that paid for it — and take the row down with them.
 ##

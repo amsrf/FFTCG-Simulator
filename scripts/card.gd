@@ -38,7 +38,27 @@ var mat: ShaderMaterial
 @export var power_array = []
 @export var card_effects : Dictionary
 @export var key_word_effect: String
-@export var effect_target: Card
+## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
+## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
+var effect_targets: Array[Card] = []
+## The single target — which is what nearly every consumer wants. A PROPERTY over the list rather than a second field,
+## so the two can never disagree: reading gives the LAST pick, and assigning replaces the whole list with that one card.
+## Every existing `.effect_target` read and write therefore keeps working exactly as it did.
+var effect_target: Card:
+	get:
+		return effect_targets.back() if not effect_targets.is_empty() else null
+	set(value):
+		effect_targets.clear()
+		if value != null:
+			effect_targets.append(value)
+
+## Record a whole session's picks. Called by the Stack at pick time, so the EFFECT owns its targets from then on and
+## nothing downstream has to read the targeting UI's state (which the next session overwrites).
+func set_effect_targets(picks: Array) -> void:
+	effect_targets.clear()
+	for pick in picks:
+		if pick != null and is_instance_valid(pick):
+			effect_targets.append(pick)
 @export var effect_source: Card
 ## Index into card_effects["skill"] for stack copies activating a skill (-1 = not used).
 @export var skill_activation_index: int = -1
