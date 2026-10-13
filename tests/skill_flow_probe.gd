@@ -82,6 +82,16 @@ func _ready() -> void:
 	_report("after Discard", stack, stack.skill_activation_proxy, source)
 	_expect(stack.s_cost_selected_card == sacrifice, "the s cost is recorded")
 
+	# TAP THE FORWARDS NOW, so the untap is observable. Left untapped they are already upright, and "still untapped after
+	# the effect" would pass without the effect doing anything — which is exactly how a missing untap slipped through.
+	var tapped_before: int = 0
+	for c in field.get_front_cards_for("player"):
+		if not c.tapped:
+			c.tap()
+			tapped_before += 1
+	print("[SkillFlow] tapped %d player Forward(s) before the effect resolves" % tapped_before)
+	_expect(tapped_before > 0, "there is at least one player Forward to watch untap")
+
 	# THE CONFIRM. This is the press that is supposed to commit and start the resolution.
 	stack.confirm_skill_without_target_then_priority()
 	_report("after Confirm", stack, stack.skill_activation_proxy, source)
@@ -120,13 +130,17 @@ func _ready() -> void:
 		"the pass button APPEARS while priority is waiting — a human has to be able to pass to resolve this")
 	_expect(stack.stack_length() == 0, "THE STACK EMPTIES — the effect resolves and leaves, which is the whole report")
 
-	# And the effect actually happened: every player Forward should now carry the granted immunity.
+	# And the effect actually happened: every player Forward should now carry the granted immunity AND be upright again.
 	var granted: int = 0
+	var still_tapped: int = 0
 	for c in field.get_front_cards_for("player"):
 		if c.status_effects.has("cannot_be_chosen"):
 			granted += 1
-	print("[SkillFlow] player Forwards carrying the grant: %d" % granted)
+		if c.tapped:
+			still_tapped += 1
+	print("[SkillFlow] player Forwards carrying the grant: %d | still tapped: %d" % [granted, still_tapped])
 	_expect(granted > 0, "and the grant reached the player's Forwards")
+	_expect(still_tapped == 0, "AND THE UNTAP HAPPENED — they were tapped before the effect resolved")
 
 	_finish()
 

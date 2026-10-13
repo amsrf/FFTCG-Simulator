@@ -68,7 +68,10 @@
 				"tap":true,
 				"cost":{},
 				"apply_effect":{"is_type":"Forward","controller":"player"},
-				"instructions":[{"name":"add_status_to_targets","author":"game","argument":["cannot_be_chosen", 1]}]
+				"instructions":[
+					{"name":"untap_targets","author":"game","argument":[]},
+					{"name":"add_status_to_targets","author":"game","argument":["cannot_be_chosen", 1]}
+				]
 			}
 		]
 	},

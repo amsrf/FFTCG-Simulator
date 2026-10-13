@@ -203,6 +203,18 @@ func show_pass_priority_button():
 	if modal_mode:
 		passPhaseButton.hide_button()
 	else:
+		# THE LABEL SAYS WHAT PRESSING IT WILL DO. With something waiting on the stack, pressing it hands the game on to
+		# resolve that; with the stack empty, it advances the phase. Two different actions behind one button, so the player
+		# should be able to read which one they are getting.
+		#
+		# SKIPPED IN THE ATTACK STEPS: the same button is the Attack / No Attack declaration there, and
+		# set_declare_attack_button() owns its text. Overwriting it would relabel the attack declaration as a phase pass.
+		var phase_now = get_parent().get("phase")
+		if phase_now != GlobalVariables.Phase.ATTACK_DECLARATION_STEP \
+				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
+			var stack_now = get_parent().get("stack")
+			var waiting: int = stack_now.stack_length() if stack_now != null else 0
+			passPhaseButton.set_text("Process Stack" if waiting > 0 else "Next Phase")
 		passPhaseButton.show_button()
 
 func _pass_priority():
