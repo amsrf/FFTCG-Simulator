@@ -637,8 +637,16 @@ func priority() -> void:
 	# One round of priority at a time. Extra requests (e.g. Stack.request_priority
 	# while a round is running) are no-ops; the running loop picks up the change.
 	if _priority_lock:
+		# LOUD, because this is where a request can disappear. The running loop only notices a new stack object when it
+		# comes back round to its own checks — so a request arriving while the loop is parked on a player is picked up
+		# only if that player then does something. A stall here is otherwise completely silent, which is what makes this
+		# printed rather than reasoned about.
+		print("[Priority] a round is ALREADY RUNNING — request absorbed (stack=%d, mode=%s)" % [
+			stack.stack_length(), GlobalVariables.get_player_mode()])
 		return
 	_priority_lock = true
+	print("[Priority] round begins — turn_owner=P%s | stack=%d | mode=%s" % [
+		turn_owner, stack.stack_length(), GlobalVariables.get_player_mode()])
 
 	# Priority model (FF TCG): the turn player receives priority first in a phase
 	# or step. A player with priority either performs an action — which hands
@@ -650,6 +658,11 @@ func priority() -> void:
 	var passed_since_action: bool = false
 	while true:
 		priority_holder = holder
+		# WHO IS BEING ASKED, and in what state. With the two lines at the top of this function and the mode log, a stall can
+		# be read off the console: the last "asking" line names the player the game is waiting on, and if it is never followed
+		# by a line for the other player, that one never answered.
+		print("[Priority] asking P%s | stack=%d | mode=%s" % [
+			holder, stack.stack_length(), GlobalVariables.get_player_mode()])
 		var acted: bool = await agent_for(holder).take_priority(holder)
 		if acted:
 			passed_since_action = false

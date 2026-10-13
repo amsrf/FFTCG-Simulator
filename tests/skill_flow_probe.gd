@@ -26,13 +26,26 @@ func _expect(ok: bool, what: String) -> void:
 		_fails += 1
 		print("[SkillFlow] FAIL ", what)
 
+## The preset to run against. "ai" is what the user actually plays; it differs from "debug" in one way that matters here —
+## its opponent is an AIAgent rather than a MockAgent — and that difference was never controlled for. Pass the preset on the
+## command line to compare: -- ai
+var _preset: String = "debug"
+
 func _report(tag: String, stack, proxy, source) -> void:
-	print("[SkillFlow] %-22s proxy_in_cards=%s stack_len=%d s_cost_used=%s source_tapped=%s" % [
+	# THE MODE AND THE MODAL STACK ON EVERY STEP. "Stuck in a modal" is the obvious shape for this bug, and the pass button
+	# hides itself in PAYING_COST / TARGET / CHOOSE_CARD_IN_HAND / NO_PRIORITY — so if the mode is modal when the priority
+	# round starts, the human has nothing to press and the effect never resolves.
+	print("[SkillFlow] %-22s proxy_in_cards=%s stack_len=%d s_cost_used=%s tapped=%s | mode=%s modal=%s top=%s" % [
 		tag, proxy != null and proxy in stack.cards, stack.stack_length(),
-		stack.s_cost_selected_card != null, source.tapped])
+		stack.s_cost_selected_card != null, source.tapped,
+		GlobalVariables.get_player_mode(), GlobalVariables.has_modal(),
+		GlobalVariables.modal_top() if GlobalVariables.has_modal() else "-"])
 
 func _ready() -> void:
-	MatchSetup.config = MatchSetup.build_config("debug")
+	for arg in OS.get_cmdline_user_args():
+		_preset = str(arg)
+	print("[SkillFlow] preset=%s" % _preset)
+	MatchSetup.config = MatchSetup.build_config(_preset)
 	var game = GAME_SCENE.instantiate()
 	add_child(game)
 	await get_tree().process_frame

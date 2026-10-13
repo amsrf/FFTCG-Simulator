@@ -646,19 +646,27 @@ func _on_assistant_target_complete() -> void:
 		return
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: costs paid, target chosen
+	# Same as the no-target path below: clear the button that got us here, then put the player's pass button back. Hiding the
+	# rack alone leaves the parked priority round with nothing to be answered by.
 	assistant.hide_buttons()
+	assistant.show_pass_priority_button()
 	request_priority.emit()
 
 func confirm_skill_without_target_then_priority() -> void:
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: a skill with no target needs no confirmation
-	# CLEAR THE BUTTON THAT GOT US HERE. The priority round that follows is going to put the PASS button up, in the SAME
-	# slot — so leaving the previous one standing hides the only control the player has. The effect sits on the stack, no
-	# button does anything, and the game looks frozen: exactly what was reported for a skill with no target, where this
-	# confirm came from generate_confirm_button() and nothing ever dismissed it.
+	# REPLACE THE CONFIRM WITH THE PASS BUTTON — do not just clear the rack.
 	#
-	# Both skill paths do this, so neither can forget.
+	# The confirm that got here came from generate_confirm_button() and shares the rack with the pass button. Left standing,
+	# it hides the pass button and the player has no control. But HIDING THE WHOLE RACK IS JUST AS BAD, and worse in a way
+	# that is easy to miss: the priority round that is PARKED on the human is still waiting for a pass, and clearing the
+	# buttons takes away the very button it is waiting for. That version of this fix left the player staring at an empty
+	# screen with the effect on the stack — which is exactly what happened.
+	#
+	# hide_buttons() then show_pass_priority_button(): the first removes the stale confirm, the second puts the player's
+	# only remaining control back. Both skill paths do this so neither can forget.
 	assistant.hide_buttons()
+	assistant.show_pass_priority_button()
 	request_priority.emit()
 
 func _on_assistant_target_cancel() -> void:

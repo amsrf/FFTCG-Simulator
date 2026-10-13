@@ -97,6 +97,12 @@ func refresh_mode() -> void:
 
 func _refresh_mode() -> void:
 	var mode: Player_Mode = _modal_stack.back() if not _modal_stack.is_empty() else _base_mode
+	# PRINTED ON EVERY TRANSITION, including the ones a modal push or pop causes. The chattiness is the point: when the game
+	# looks stuck, the last line of this log says which mode it is stuck IN and whether a modal is still stacked — "stuck
+	# in a modal" is otherwise indistinguishable from "waiting for something that never came". Only transitions print, so a
+	# repeated refresh cannot flood the console.
+	if mode != player_mode:
+		print("[Mode] %s -> %s (modals=%s)" % [player_mode, mode, _modal_stack])
 	player_mode = mode
 	player_mode_change.emit(mode)
 
