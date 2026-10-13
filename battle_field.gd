@@ -482,18 +482,27 @@ func set_target_card(card: Card):
 	request_target_confirmation.emit(
 		targeting_picked.back() if not targeting_picked.is_empty() else null, targeting_allow_cancel)
 
-## ONE STEP BACK, for a right-click. With SEVERAL picks it undoes the last one — its ring, its arc, its claim — and aims
-## again, which is the state before that pick. With one pick it is the "drop the pick, keep aiming" it has always been.
-## Cancel remains the way out of the effect entirely.
+## ONE STEP BACK, for a right-click, and it works from ANY point in the session.
+##
+## ANY pick steps back — INCLUDING THE LAST ONE ONCE THE COUNT IS FULL. The first version only stepped back while fewer
+## than `count` had been picked, so once three of three were chosen the guard failed, control fell through to the
+## single-target path below, and that path found `target_card` already null and returned without doing anything. The
+## picks were never taken off the list, which is the "it cancels the last target and then the button stops working"
+## report. Stepping back re-opens the session: a new aiming arc appears and the picks that remain are still picks.
 func clear_target_selection() -> void:
-	if targeting_count > 1 and not targeting_picked.is_empty() and targeting_picked.size() < targeting_count:
+	if targeting_count > 1 and not targeting_picked.is_empty():
 		_drop_pick(targeting_picked.size() - 1)
 		# `_drop_pick` freed the arc that was locked on it; the aiming arc is a separate one.
 		if arrow != null and is_instance_valid(arrow):
 			arrow.queue_free()
 		_spawn_aiming_arrow(source_card)
 		print("[Targeting] back to %d of %d" % [targeting_picked.size(), targeting_count])
-		if assistant != null:
+		if not targeting_picked.is_empty():
+			# Picks remain, so finishing early is still allowed: Confirm stays on offer next to the aiming arc.
+			target_card = targeting_picked.back()
+			request_target_confirmation.emit(target_card, targeting_allow_cancel)
+		elif assistant != null:
+			target_card = null
 			if targeting_allow_cancel:
 				assistant.prepare_targeting_phase_cancel()
 			else:

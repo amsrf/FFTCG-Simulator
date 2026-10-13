@@ -90,6 +90,20 @@ func _ready() -> void:
 	_expect(field.targeting_picked.size() == 3, "the session completes at three picks")
 	_expect(_confirms >= 3, "and Confirm was offered at every pick, the last one closing the session")
 
+	# --- AND IT STILL STEPS BACK FROM A FULL SESSION, one pick per click, all the way to none -------------------------
+	# This is the case that was broken: at three of three the step-back guard no longer applied, so the first right-click
+	# did nothing to the list and every one after it did nothing either.
+	field.clear_target_selection()
+	print("[Multi] step back 1 from full: picked=%d arcs=%d" % [
+		field.targeting_picked.size(), field.targeting_arrows.size()])
+	_expect(field.targeting_picked.size() == 2, "a full session steps back to two")
+	field.clear_target_selection()
+	print("[Multi] step back 2 from full: picked=%d" % field.targeting_picked.size())
+	_expect(field.targeting_picked.size() == 1, "and again to one")
+	field.clear_target_selection()
+	print("[Multi] step back 3 from full: picked=%d" % field.targeting_picked.size())
+	_expect(field.targeting_picked.size() == 0, "and again to none — every pick comes back, one per click")
+
 	# --- count 1 is untouched -----------------------------------------------------------------------------------------
 	_confirms = 0
 	field.request_target({"is_type": "Backup"}, source, true, "Ability")
