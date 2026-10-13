@@ -189,6 +189,10 @@ func calculate_total_width():
 
 # Function to update the positions of the cards in the hand
 func update_card_positions(ignore = -1):
+	# THE SPACING IS RECOMPUTED HERE, and it has to be before anything reads it: spacing() depends on how many cards
+	# there are and on how much room the screen has, so it changes every time the hand does. `card_spacing` is kept as
+	# the derived value so the width maths below (calculate_total_width, last_card_position) stays in step.
+	card_spacing = spacing() - card_width
 	# Kept for last_card_position(); the fan below centres on the card index.
 	start_x = -calculate_total_width() / 2 + card_width / 2
 
@@ -220,81 +224,143 @@ func last_card_position():
 	return start_x + (card_width + card_spacing)*cards.size()
 	
 	
-## Hand fan geometry: cards are spread along a shallow arc (like a hand of cards
-## held in one hand) rather than in a straight row. The chord between neighbours
-## stays `card_width + card_spacing`.
+## Hand fan geometry.
 ##
-## THE ARC AND THE TILT ARE SEPARATE NUMBERS, deliberately. They were once the same one — each card tilted to be tangent
-## to the arc it sits on — which tied the row's depth to how hard the cards lean: spreading the cards out, or making
-## them bigger, silently leaned them harder AND bowed the row deeper at the same time. They are not the same thing. The
-## reference leans its outer cards about 16 degrees over a row that is nearly a straight line, and a straight row of
-## leaning cards is exactly what the two constants below describe.
+## THE ROW SINKS BELOW THE SCREEN. A hand of cards is held below the edge of the table: at rest most of each card is off
+## the bottom of the screen and what is left showing is the strip with the name and the cost on it. That is not
+## decoration — it is what makes the hover mean something, because the hovered card is the one brought up where the
+## whole of it can be read. See FAN_VISIBLE_FRACTION and _sink_offset().
 ##
-## A big radius is a nearly-straight row: the sagitta is (half-span)^2 / 2R. It has to be BIG, and the reason is that
-## the bow grows with the SQUARE of the step — widening the spacing from 0.38 to 0.86 multiplied it by five, which at 24
-## put the outer cards 16 px above the middle ones and read as "some cards are in higher positions". At 70 the same row
-## bows 0.03 m, about 5 px, which is the reference's near-horizontal line.
-const FAN_ARC_RADIUS := 70.0
-## The LEAN, in degrees per card of offset from the middle. 4.6 puts the outermost card of an eight-card hand (3.5 cards
-## out) at 16 degrees. Per CARD rather than a share of the radius, so the lean follows how wide the hand actually is —
-## a wider row leans more, which is what a real held fan does.
-const FAN_TILT_PER_CARD_DEGREES := 4.6
-## How far apart neighbours sit, as a fraction of a card's WIDTH; the rest of the card is covered by its right-hand
-## neighbour.
+## SPACING IS ADAPTIVE. Neighbours sit one `spacing` apart, and that spacing is the smaller of the dialled maximum and
+## whatever FITS the screen — so a small hand spreads out, a big one tightens up, and the row never runs off the sides.
+## See spacing(). With one card there is nothing to space and it sits centred.
+##
+## THE ARC AND THE LEAN ARE SEPARATE NUMBERS, deliberately. They were once one — each card tilted to be tangent to the
+## arc it sits on — which tied the row's depth to how hard the cards lean: spreading the cards out, or making them
+## bigger, silently leaned them harder AND bowed the row deeper at the same time.
+const FAN_TILT_PER_CARD_DEGREES := 2.0
+## The most any card may lean, however wide the hand gets. Past this a large hand's outer cards look like they are
+## falling over rather than lying in a row.
+const FAN_MAX_TILT_DEGREES := 12.0
+## How much of a card is left ABOVE the bottom edge at rest. The rest hangs off the bottom of the screen.
+const FAN_VISIBLE_FRACTION := 0.45
+## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. THE MIDDLE IS HIGHEST:
+## the row is a shallow arch, not a bowl, so the outer cards hang further off the bottom edge than the middle ones.
+const FAN_SAG_FRACTION := 0.06
+## The blank strip the row keeps at each side of the screen, in metres, before it starts compressing.
+const FAN_SIDE_MARGIN := 0.45
+## A card's height over its width — 63 x 88 mm. Only used to size things that are proportional to the CARD rather than
+## to its width, the sag most of all.
+const CARD_ASPECT := 1.398
+## The dialled MAXIMUM spacing, as a fraction of a card's width; the rest of the card is covered by its right-hand
+## neighbour. This is a ceiling, not a promise — spacing() tightens it when the hand is too wide for the screen.
 ##
 ## THIS IS AN INTERACTION NUMBER, NOT A LOOK. The hovered card is drawn on top of its neighbours at 2.4 while they rest
 ## at 1.6, so it is 1.5x their width and hangs (1.5 - 1) / 2 = 0.25 of a card width over each side. A neighbour is only
-## reachable with the pointer while the step clears that — below it the hovered card swallows them whole and the pointer
-## can never get to the next card, which is exactly what a 0.38 step did. At 1.0 they touch; above it they separate
-## into a plain row.
-##
-## DEFAULT ONLY: step_fraction below is the live value, and it is the one to change. 0.86 is the midpoint of "more space
-## than 0.78" and "too much at 0.95", which is as close as this got — the reference could not be measured (the image
-## tool fails on it, and a pixel scan of its card borders finds noise rather than cards).
+## reachable with the pointer while the spacing clears that — below about 0.6 the hovered card swallows them whole and
+## the pointer can never get to the next card.
 const FAN_STEP_FRACTION := 0.86
 ## Height step per card. This MUST stay bigger than the glow quad's offset above
 ## the card face (2 mm, see Card._build_target_border()): otherwise the prompt
 ## glow of a card BEHIND shines through the card lying in front of it.
 const CARD_STACK_HEIGHT := 0.008
 
-## The live spacing. EXPORTED so it can be dialled in by eye in the Inspector instead of by editing and re-running:
-## select Player/Hand (or Opponent/Hand) in game.tscn, and dragging `Step Fraction` re-lays the hand out immediately.
-## It is declared down here rather than with the other exports on purpose — its setter writes card_spacing, so that has
-## to exist first.
+## The dialled maximum spacing. EXPORTED so it can be dialled in by eye in the Inspector instead of by editing and
+## re-running: select Player/Hand (or Opponent/Hand) in game.tscn, and dragging `Step Fraction` re-lays the hand out
+## immediately. It is declared down here rather than with the other exports on purpose — its setter re-lays out, and the
+## layout maths below has to exist first.
 @export_range(0.3, 1.4, 0.01) var step_fraction: float = FAN_STEP_FRACTION:
 	set(value):
 		step_fraction = value
-		if card_width > 0.0:
-			card_spacing = card_width * (value - 1.0)
 		if is_inside_tree() and is_node_ready():
 			update_card_positions()
 
-## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and terms of the arc it sits on it is
+## The card's face height at the hand's resting size, for the geometry that is proportional to the CARD rather than to
+## its width.
+var card_height: float = card_width * CARD_ASPECT
+
+## Centre-to-centre distance between neighbours: the dialled maximum, or whatever fits the screen with
+## FAN_SIDE_MARGIN clear at each end, whichever is SMALLER. So the hand compresses smoothly as it grows and never
+## overflows horizontally.
+func spacing() -> float:
+	var n: int = cards.size()
+	if n <= 1:
+		return card_width * step_fraction
+	var fit: float = maxf(card_width * 0.2, _available_width() - card_width - FAN_SIDE_MARGIN * 2.0) / float(n - 1)
+	return minf(card_width * step_fraction, fit)
+
+## How much of the board the camera can see across, in metres. The hand's `fits` test is in screen terms because that is
+## where "off the side of the screen" means anything.
+func _available_width() -> float:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return 10.0
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	return view.x / (view.y / maxf(cam.size, 0.001))
+
+## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and against the arc it sits on it is
 ## NEGATED: a card's up axis is its local -Z, so its arc position and its tilt run opposite ways. Flip only one of the
-## two and the fan looks closed. Per CARD of offset from the middle rather than a share of a radius, so the lean follows
-## the hand's width: 4.6 puts the outermost card of an eight-card hand at 16 degrees.
+## two and the fan looks closed.
 func fan_angle_for(i: int) -> float:
 	var t: float = i - (cards.size() - 1) / 2.0
-	return -deg_to_rad(t * FAN_TILT_PER_CARD_DEGREES)
+	var degrees: float = clampf(t * FAN_TILT_PER_CARD_DEGREES, -FAN_MAX_TILT_DEGREES, FAN_MAX_TILT_DEGREES)
+	return -deg_to_rad(degrees)
 
-## How far round the row's arc a card sits, in radians, for its POSITION. Positive, and the negation above keeps the
-## tilt opposite to it. See FAN_ARC_RADIUS for why this is not the same number as the tilt.
-func fan_arc_angle_for(i: int) -> float:
+## How far BELOW the middle card a card sits, upward being +Z here. Zero at the middle, FAN_SAG_FRACTION of a card's
+## height at the ends, and quadratic in between so the arch has no crease in it.
+func fan_sag_for(i: int) -> float:
+	var n: int = cards.size()
+	if n <= 1:
+		return 0.0
+	var t: float = i - (n - 1) / 2.0
+	var edge: float = (n - 1) / 2.0
+	var r: float = t / maxf(edge, 0.0001)
+	return FAN_SAG_FRACTION * card_height * (r * r)
+
+## How far the whole row sits below the bottom of the screen, in the Hand's local space.
+##
+## Worked out from the camera on every layout rather than written down, because how much of a card ends up on screen
+## depends on the card's size AND on the projection. The MIDDLE card is what is measured — the sink is applied to the
+## whole row, so the arch survives it.
+func _sink_offset() -> Vector3:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cards.is_empty():
+		return Vector3.ZERO
+	var half: Vector2 = cards[0]._card_face_size() * 0.5
+	var xf: Transform3D = global_transform * Transform3D(Basis().scaled(Vector3.ONE * hand_scale), Vector3.ZERO)
+	var top: float = INF
+	var bottom: float = -INF
+	for corner in [Vector3(-half.x, 0.0, -half.y), Vector3(half.x, 0.0, -half.y),
+			Vector3(-half.x, 0.0, half.y), Vector3(half.x, 0.0, half.y)]:
+		var y: float = cam.unproject_position(xf * corner).y
+		top = minf(top, y)
+		bottom = maxf(bottom, y)
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	var want_top: float = view_h - (bottom - top) * FAN_VISIBLE_FRACTION
+	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
+	# Screen Y grows DOWNWARD, so a positive (want_top - top) means the card sits too high and has to come down the
+	# screen — which is the opposite direction to the camera's up axis.
+	#
+	# AND IT HAS TO BE BROUGHT INTO THIS NODE'S SPACE FIRST. The direction is a WORLD one and the result is added to a
+	# LOCAL position, and this Hand is rotated 180 degrees about Y (see game.tscn) — so the raw world vector arrives
+	# pointing the other way and the row moves UP the screen instead of down. That is exactly what it did: the cards were
+	# already below the bottom edge on their own, and the sink dragged them back up into full view.
+	var down: Vector3 = -cam.global_transform.basis.y.normalized()
+	return (global_transform.basis.inverse() * down) * ((want_top - top) / px_per_metre)
+
+func calculate_card_position(i) -> Vector3:
 	var t: float = i - (cards.size() - 1) / 2.0
-	return t * (card_width + card_spacing) / FAN_ARC_RADIUS
-
-func calculate_card_position(i):
-	var angle: float = fan_arc_angle_for(i)
-	# x along the chord, z from the arc's sagitta: the middle card of the fan sits
-	# closest to the player and the outer ones fall away.
-	var x_offset: float = FAN_ARC_RADIUS * sin(angle)
-	var z_offset: float = FAN_ARC_RADIUS * (1.0 - cos(angle))
+	# x is symmetric about zero, so the row is CENTRED on the Hand whatever its size is.
+	var x_offset: float = t * spacing()
+	# The arch: the middle highest, the ends lower. NOTE THE SIGN — this is a LOCAL offset and the Hand is rotated 180
+	# degrees about Y, so up the screen is this node's -Z, which means the ends come DOWN the screen by moving to +Z.
+	# Written the other way round the row is a bowl: the ends high and the middle low, the opposite of the intent, and
+	# the two are only ~10 px apart so it is easy to look at for a while and not see it.
+	var z_offset: float = fan_sag_for(i)
 	# Height stagger: separates overlapping cards, and keeps each glow behind the
 	# card in front of it (see CARD_STACK_HEIGHT).
 	var y_offset: float = i * CARD_STACK_HEIGHT
-	# NO ROOM-MAKING ANY MORE: the hovered card grows in place instead of the neighbours sliding aside — see
-	# set_hovered(). What is left here is the fan's chord position and nothing else.
-	var spot: Vector3 = Vector3(x_offset, y_offset, z_offset)
+	var spot: Vector3 = Vector3(x_offset, y_offset, z_offset) + _sink_offset()
 	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
 		spot += _hover_offset(i, spot)
