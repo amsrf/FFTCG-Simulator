@@ -8,6 +8,34 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### The Opponent's Fan, the Stacking Order, and a Tool That Sees (2026-10-13, continued)
+
+The opponent's hand was corrected four times in a row — position, arc, lean, then arc again — because each round fixed
+something I could *describe* rather than the thing the screen showed. What ended it was building
+**`tools/hand_outline.tscn`**, which traces the lowest card pixel down every column of a screenshot and prints the row's
+profile as text: a card is grey-ish and the board beneath it is strongly blue, so saturation alone separates them. Two
+pictures settled in one run what four rounds of camera arithmetic could not.
+
+- **`UnderstandImage` is a remote service** with a 60 s per-image upload timeout (`filesApiTimeoutMs`, max 600 s) — that
+  is what "fetch failed" and "did not complete" were. `deepseek-v4-flash-vision-exp` reads local images directly and
+  needs no upload at all.
+- **A card's `scale` is local to its container, and the two `Hand` nodes are not oriented the same way** (the player's is
+  flipped 180° about Y, the opponent's is not). Every screen-relative decision — which edge the row hangs off, which way
+  the arc turns, which way is screen-right, which card is nearer the camera — has to be **derived from the camera** and
+  never written as a local axis. A hand-written local axis produced four separate bugs in this stretch.
+- **Stacking is depth, and depth is free.** The left-to-right order runs along the *camera's* axis, so on an orthographic
+  camera it costs zero pixels of screen movement. The ramp is driven by how far right a card is **on screen**, not by its
+  index, because the index runs the other way for one of the two hands — which is what "Aerith is behind Garland" was.
+- **The mirror is: the arc turns over, the lean does not.** Mirroring the lean as well was the error that kept returning.
+  Measured off the render: the opponent's ends read `y 208` against a middle of `y 176` before, and `y 144` against the
+  same `176` after.
+- **`_get_card_back_material()` was near-black** — `(0.10, 0.11, 0.16)`, fine for a single card turning over mid-draw and
+  a hole when a whole hand of them is on screen (measured `#3f3f3f` across 6% of the frame). Now `(0.58, 0.60, 0.64)`.
+
+**Lesson.** When the complaint is about what a picture looks like, measure the picture. The tools were already here
+(`shot`, `ref_probe`, `ref_shrink`); pointing one at the question took eighty lines and a single run, and should have
+been the first move rather than the last.
+
 ### The Hand Becomes a Spec: Sinks, Arches, and Adaptive Spacing (2026-10-13)
 
 The hand was rebuilt to a written spec, and the probe was reorganised so its 48 checks **are** that spec — five claims, in the order they are checked.
