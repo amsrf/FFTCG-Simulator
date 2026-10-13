@@ -313,7 +313,10 @@ func _available_width() -> float:
 func fan_angle_for(i: int) -> float:
 	var t: float = i - (cards.size() - 1) / 2.0
 	var degrees: float = clampf(t * FAN_TILT_PER_CARD_DEGREES, -FAN_MAX_TILT_DEGREES, FAN_MAX_TILT_DEGREES)
-	return -deg_to_rad(degrees)
+	# MIRRORED, the fan leans the other way: the arc it is meant to be tangent to has turned over, and a lean that did
+	# not follow it would point the outer cards INTO the curve.
+	var turn: float = -1.0 if mirror_presentation else 1.0
+	return -deg_to_rad(degrees) * turn
 
 ## How far BELOW the middle card a card sits, upward being +Z here. Zero at the middle, FAN_SAG_FRACTION of a card's
 ## height at the ends, and quadratic in between so the arch has no crease in it.
@@ -332,15 +335,17 @@ func fan_sag_for(i: int) -> float:
 ## depends on the card's size AND on the projection. The MIDDLE card is what is measured — the sink is applied to the
 ## whole row, so the arch survives it.
 ##
-## ONLY THE LOCAL PLAYER'S HAND SINKS. This is one script used by both hands, and the sink is "put the cards' bottoms
-## on the bottom of the screen" — so applying it to the opponent's hand as well dragged THAT one down to the bottom
-## edge too, which is where nobody's hand should be. The opponent's hand sits at the top of their side and is left
-## where the scene puts it. Set this false on Opponent/Hand in game.tscn.
-@export var sink_below_screen: bool = true
+## MIRRORS THIS HAND'S PRESENTATION. One script drives both hands, and the opponent's is ours seen from the other side of
+## the table: set this true on Opponent/Hand in game.tscn and everything below turns over together.
+##
+##   * the row hangs off the TOP edge instead of the bottom, which puts their hand up against the top of the screen,
+##   * the arc curves the other way — their ends ride UP and the middle is lowest, a happy face where ours is a sad one,
+##   * the lean turns over with the arc, or the outer cards would lean INTO it and the fan would look closed,
+##   * the cards are dealt face DOWN, so we see backs and they see faces,
+##   * and the pointer does nothing to them at all. Only the local player's cards react to being hovered.
+@export var mirror_presentation: bool = false
 
 func _sink_offset() -> Vector3:
-	if not sink_below_screen:
-		return Vector3.ZERO
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cards.is_empty():
 		return Vector3.ZERO
@@ -354,17 +359,23 @@ func _sink_offset() -> Vector3:
 		top = minf(top, y)
 		bottom = maxf(bottom, y)
 	var view_h: float = get_viewport().get_visible_rect().size.y
-	var want_top: float = view_h - (bottom - top) * FAN_VISIBLE_FRACTION
 	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
-	# Screen Y grows DOWNWARD, so a positive (want_top - top) means the card sits too high and has to come down the
-	# screen — which is the opposite direction to the camera's up axis.
+	# WHICH EDGE, AND WHICH EDGE OF THE CARD. Ours hangs off the BOTTOM: its top edge is left FAN_VISIBLE_FRACTION of a
+	# card above the bottom of the screen. A MIRRORED hand hangs off the TOP instead, so its BOTTOM edge is left the same
+	# fraction below the top — which is what puts the opponent's cards up against the top of the screen rather than ours.
+	var want_edge: float = view_h - (bottom - top) * FAN_VISIBLE_FRACTION
+	var here: float = top
+	if mirror_presentation:
+		want_edge = (bottom - top) * FAN_VISIBLE_FRACTION
+		here = bottom
+	# Screen Y grows DOWNWARD, so a positive difference means the card sits too high and has to come down the screen —
+	# which is the opposite direction to the camera's up axis.
 	#
 	# AND IT HAS TO BE BROUGHT INTO THIS NODE'S SPACE FIRST. The direction is a WORLD one and the result is added to a
-	# LOCAL position, and this Hand is rotated 180 degrees about Y (see game.tscn) — so the raw world vector arrives
-	# pointing the other way and the row moves UP the screen instead of down. That is exactly what it did: the cards were
-	# already below the bottom edge on their own, and the sink dragged them back up into full view.
+	# LOCAL position — and the two hands are not rotated the same way (see game.tscn), so the raw world vector arrives
+	# pointing the other way for one of them and its row moves the wrong way.
 	var down: Vector3 = -cam.global_transform.basis.y.normalized()
-	return (global_transform.basis.inverse() * down) * ((want_top - top) / px_per_metre)
+	return (global_transform.basis.inverse() * down) * ((want_edge - here) / px_per_metre)
 
 
 ## The direction, in THIS hand's local space, that moves a card DOWN the screen.
@@ -394,7 +405,13 @@ func calculate_card_position(i) -> Vector3:
 	# at different depths and the two halves were not mirror images. Card i and card n-1-i have to sit at the same height
 	# with opposite lean, and this term was the one breaking that.
 	var y_offset: float = absf(t) * CARD_STACK_HEIGHT
-	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) + _screen_down() * z_offset + _sink_offset()
+	# THE ARC TURNS OVER when this hand is mirrored: their ends ride UP and the middle is LOWEST, a happy face where ours
+	# is a sad one. That is not really a special case — it is the same presentation seen from the other side of the table.
+	var turn: float = -1.0 if mirror_presentation else 1.0
+	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) + _screen_down() * (z_offset * turn) + _sink_offset()
+	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
+	# layout, and Card.set_revealed() returns immediately when nothing has changed.
+	cards[i].set_revealed(not mirror_presentation)
 	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
 		spot += _hover_offset(i, spot)
@@ -408,6 +425,11 @@ func calculate_card_position(i) -> Vector3:
 ## CARD's scale that has to be right when it lands on the stack: growing only the mesh would leave the card at hand
 ## size, so playing it would shrink it and then pop it back up as it landed.
 func set_hovered(card: Card, entered: bool) -> void:
+	# THE OPPONENT'S CARDS DO NOT REACT TO THE POINTER. They are face down, and they are not the local player's to touch;
+	# letting them grow, lift and straighten meant that sweeping the mouse along the top of the screen played the whole
+	# hover animation on cards nobody can read.
+	if mirror_presentation:
+		return
 	var was: Card = hovered_card
 	if entered:
 		hovered_card = card

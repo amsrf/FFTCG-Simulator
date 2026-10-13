@@ -86,24 +86,34 @@ func _ready() -> void:
 	_expect(resting < Card.STACK_CARD_SCALE,
 		"the hand RESTS smaller than the stack, so a hover has somewhere to grow to")
 
-	# ---------------------------------------------------------------- 0. the OPPONENT's hand does not sink
-	# ONE HAND SCRIPT DRIVES BOTH HANDS, and the sink means "put the cards' bottoms on the bottom edge of the screen" —
-	# which, applied to the opponent's hand as well, dragged that one down to the bottom too. The opponent's hand belongs
-	# at the top of their side and is left where the scene puts it; only the local player's sinks.
+	# ---------------------------------------------------------------- 0. the OPPONENT's hand is MIRRORED
+	# ONE HAND SCRIPT DRIVES BOTH HANDS, and the opponent's is ours seen from the other side of the table. Everything that
+	# is not automatically mirrored by the geometry is driven by Hand.mirror_presentation, set on Opponent/Hand.
 	var foe: Hand = game.get("opponent_hand")
 	_expect(foe != null, "the match has an opponent's hand")
 	if foe != null and not foe.cards.is_empty():
-		var foe_mid: Card = foe.cards[foe.cards.size() / 2]
-		var foe_y: float = cam.unproject_position(foe.global_transform * foe_mid.position).y
-		print("[HandHover] the opponent's hand sits at y %.0f of %.0f, and sink_below_screen is %s" % [
-			foe_y, view.y, str(foe.sink_below_screen)])
-		_expect(not foe.sink_below_screen, "only the local player's hand sinks below the screen")
-		_expect(foe_y < view.y * 0.5, "so the opponent's hand is NOT dragged down to the bottom with it")
+		_expect(foe.mirror_presentation, "the opponent's hand is the MIRRORED presentation")
 
-		# ITS FAN SHAPE is a separate question from its position, and worth printing rather than assuming. This Hand is
-		# NOT rotated 180 degrees about Y the way the player's is (see game.tscn), so a local +Z points up the screen for
-		# one hand and down for the other — which would mirror the arch and the lean even with the position correct.
-		# Printed only: the position is what was reported, and this says whether the shape needs the same treatment.
+		# UP AGAINST THE TOP. Ours hangs off the bottom edge by FAN_VISIBLE_FRACTION of a card; theirs is the mirror of
+		# that and hangs off the top by the same amount.
+		var foe_mid: Card = foe.cards[foe.cards.size() / 2]
+		var foe_box: Dictionary = _visible(foe_mid, cam, view)
+		var foe_band: float = foe_box["bottom"]
+		print("[HandHover] the opponent's hand: card tops at y %.0f, bottoms at y %.0f of %.0f (band %.0f px)" % [
+			foe_box["top"], foe_box["bottom"], view.y, foe_band])
+		_expect(foe_box["top"] < view.y * 0.5, "it is up against the TOP of the screen, not the bottom")
+		_expect(foe_box["top"] < 0.0, "with the part we should not see hanging off above it")
+
+		# FACE DOWN. We see backs, they see faces.
+		var face_down: int = 0
+		for c in foe.cards:
+			if not c.revealed:
+				face_down += 1
+		print("[HandHover] %d of %d opponent cards are face down" % [face_down, foe.cards.size()])
+		_expect(face_down == foe.cards.size(), "the opponent's cards are NOT exposed — every one is face down")
+
+		# THE MIRRORED ARC — A HAPPY FACE. Their ends ride UP and the middle is LOWEST, which is exactly the opposite of
+		# ours, and it is what the fan looks like from where they are sitting.
 		var foe_centre: float = cam.unproject_position(foe.global_transform * foe_mid.position).y
 		var foe_out: float = -INF
 		var foe_low: float = INF
@@ -111,15 +121,19 @@ func _ready() -> void:
 			var cy: float = cam.unproject_position(foe.global_transform * c.position).y
 			foe_out = maxf(foe_out, cy - foe_centre)
 			foe_low = minf(foe_low, cy - foe_centre)
-		print("[HandHover]   %d cards in the opponent's hand: offsets from the middle run %+.1f .. %+.1f px" % [
+		print("[HandHover]   %d cards, offsets from the middle run %+.1f .. %+.1f px — theirs must be NEGATIVE where ours are positive" % [
 			foe.cards.size(), foe_low, foe_out])
-		print("[HandHover]   its ends sit %.1f px %s the middle, and its outer cards lean %+.1f deg (player: %+.1f)" % [
-			absf(foe_out), "BELOW" if foe_out > 0.0 else "ABOVE",
-			rad_to_deg(foe.fan_angle_for(0)), rad_to_deg(hand.fan_angle_for(0))])
-		# AND IT ARCHES THE SAME WAY UP AS THE PLAYER'S. The two Hand nodes are not rotated the same way — the player's
-		# is flipped 180 degrees about Y and this one is not — so a hard-coded local axis bowed the opponent's row
-		# UPWARDS at the ends, a bowl, while the player's arched down. Both now take the direction from the camera.
-		_expect(foe_out > 2.0, "the opponent's row arches the SAME way — its ends lower than its middle too")
+		_expect(foe_low < -2.0 and foe_out < 2.0,
+			"the opponent's row is a HAPPY face: ends higher than the middle, the mirror of ours")
+
+		# AND THE POINTER DOES NOTHING TO THEM.
+		var foe_before: float = foe_mid.scale.x
+		foe.set_hovered(foe_mid, true)
+		await get_tree().create_timer(0.3).timeout
+		print("[HandHover] hovering an opponent card: scale %.2f -> %.2f, hovered_card is %s" % [
+			foe_before, foe_mid.scale.x, str(foe.hovered_card)])
+		_expect(foe_mid.scale.x == foe_before and foe.hovered_card == null,
+			"and hovering one of THEIR cards does nothing — only the local player's react")
 
 
 	# ---------------------------------------------------------------- 5. the lean is subtle
