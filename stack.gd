@@ -570,6 +570,13 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 	if summon_casting_card != null:
 		summon_casting_card.effect_target = target_card
 		return
+	# AN EMPTY STACK IS NOT AN ERROR HERE. A multi-target session emits this once per pick, and by a later pick the effect
+	# may already have resolved and been popped — there is simply no stack object left to record a target on, and
+	# `cards[-1]` on an empty array is what threw "Invalid access of index '-1' on a base object of type: 'Array'".
+	# NOTE for whoever reads this next: `effect_target` can only ever hold ONE card, so it is the LAST pick. An effect
+	# that wants all of them reads Field.targeting_picked instead (see Game.untap_targets for 1-064).
+	if cards.is_empty():
+		return
 	var effect_card: Card = cards[-1]
 	effect_card.effect_target = target_card
 
