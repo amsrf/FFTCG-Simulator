@@ -232,18 +232,22 @@ func _notification(what):
 func _updateUI():
 	showPower()
 
-func _applyAurasOnField(field:Field):
-	if 'aura' in card_effects:
-		for aura in card_effects['aura']:
-			field.add_aura(aura, self.get_instance_id())
-			
-func _receiveAurasFromField(field:Field):
-	field.add_all_auras_to_card(self)
-	
+## THERE USED TO BE A SECOND AURA REGISTRATION PATH HERE, and it was a bug. It added this card's auras keyed by the
+## card's instance id and applied the field's auras to itself — but it never called activate_aura_in_field(), so an aura
+## arriving through THIS path was recorded and never given to the cards already on the field. That is precisely the
+## report that "cards that were already on the field are not affected by the new born aura": the wiring in Field had it
+## right, this competing path did not, and both of them ran.
+##
+## There is one path now. Field.register_card_auras() registers this card's auras, gives them to the whole field, and
+## receives everyone else's — and it is idempotent per card, so being called from here AND from play_card() cannot
+## register the same aura twice. (That matters: each AuraValue carries its own `granted` record, so a second one for the
+## same effect would not be deduplicated and the bonus would land twice.)
+##
+## Kept as a thin call rather than deleted, so whatever parents a card into the field still triggers registration.
 func _executeAuraEffects():
-	var field: Field = get_parent()
-	_applyAurasOnField(field)
-	_receiveAurasFromField(field)
+	var field_node: Node = get_parent()
+	if field_node != null and field_node.has_method("register_card_auras"):
+		field_node.register_card_auras(self)
 
 ## Loaded by PATH rather than by its `class_name`: a newly added global class is only registered
 ## in Godot's class cache by the editor, so a headless run would fail to parse this file with
@@ -1032,18 +1036,11 @@ func _card_face_size() -> Vector2:
 			return Vector2(aabb.size.x, aabb.size.z)
 	return Vector2(0.429, 0.6)
 
-func does_card_match_target(target_dict: Dictionary) -> bool:
-	if target_dict.has("type") and type != target_dict["type"]:
-		return false
-	
-	if target_dict.has("controller") and controller != target_dict["controller"]:
-		return false
-		
-	if target_dict.has("element") and element != target_dict["element"]:
-		return false
-		
-	return true
-	
+## does_card_match_target() used to live here: a second, narrower matcher that understood only {type, controller,
+## element} and was called by the aura path alone. Everything now goes through the shared TARGET BLOCK evaluator, which
+## speaks the canonical is_* criteria plus a direct controller comparison — so the second matcher was deleted rather than
+## left to drift out of step with the first. See scripts/card_target.gd.
+
 func set_target(value):
 	is_target = value
 	

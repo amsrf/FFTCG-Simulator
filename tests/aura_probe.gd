@@ -97,6 +97,48 @@ func _ready() -> void:
 		_expect(second.power == base_power, "for every card it was given to")
 		_expect(backup.power == backup_base, "and nothing drifts on a card it never touched")
 
+	# --- TWO AURAS ON ONE CARD ---------------------------------------------------------------------------------------
+	# The collision that was fixed: _auras was a Dictionary keyed by the source card's INSTANCE ID, so a card granting two
+	# things kept only the second — the first was overwritten before anything applied it, and the teardown only ever undid
+	# the survivor. No card in the data has two auras yet, so one is appended here in memory rather than waiting for such
+	# a card to be written. The failure would be a silently missing bonus, not an error.
+	var plain_forward: int = 0
+	index = 1
+	for entry in CardDatabase.card_database:
+		if str(entry.get("type_en", "")) == "Forward" and not _is_fire(entry):
+			plain_forward = index
+			break
+		index += 1
+	_expect(plain_forward > 0, "there is a Forward that is NOT Fire, to prove the second aura is a separate one")
+
+	if plain_forward > 0:
+		var other: Card = game.create_card(plain_forward, "player")
+		field.add_child(other)
+		field.play_card(other, false, false)
+		var other_base: int = other.power
+
+		var twin: Card = game.create_card(AURA_CARD, "player")
+		twin.card_effects["aura"].append({
+			"targets": {"is_type": "Forward"},
+			"method": "power_change",
+			"value": 500,
+		})
+		field.add_child(twin)
+		field.play_card(twin, false, false)
+		print("[Aura] with a TWO-aura card on the field: Fire Forward %d (was %d), other Forward %d (was %d)" % [
+			target.power, base_power, other.power, other_base])
+		_expect(target.power == base_power + 1000 + 500,
+			"a card granting two auras applies BOTH — the first is not overwritten by the second")
+		_expect(other.power == other_base + 500,
+			"and the second aura reaches a card the first one does not name")
+		field.remove_card(twin)
+		print("[Aura] after the two-aura card leaves: Fire Forward %d, other Forward %d" % [
+			target.power, other.power])
+		# `base_power`, not base + 1000: this card granted BOTH auras, so leaving takes back both. (The first 1-030R was
+		# removed earlier, so the +1000 on the Fire Forward was this one's.)
+		_expect(target.power == base_power, "it takes back both bonuses it gave the Fire Forward")
+		_expect(other.power == other_base, "and the +500 it gave the other one")
+
 	print("[Aura] %d checks | failures: %d" % [_checks, _fails])
 	print("[Aura] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit(0)

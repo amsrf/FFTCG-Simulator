@@ -52,6 +52,10 @@ class AuraValue:
 	var method: String
 	var targets: Dictionary  # Changed from Array[String] to Dictionary
 	var value: int
+	## THE CARD THAT GRANTED IT, held so auras can be found by their source instead of by a dictionary key equal to the
+	## source's instance id — which is what limited a card to one aura: a second entry under the same key overwrote the
+	## first before anything had applied it, and the teardown only ever undid the survivor.
+	var source: Card = null
 	## The cards this aura has ALREADY been applied to. Without it the same card can be reached twice — a card arriving
 	## runs add_all_auras_to_card(), and an aura arriving runs activate_aura_in_field() over everything — and a
 	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
@@ -63,15 +67,18 @@ class AuraValue:
 		value = p_value
 
 
+## Every aura, each under its OWN id. This was a Dictionary keyed by the source card's instance id, so a card that granted
+## two things kept only the last one. No card in the data has two auras today — which is exactly why it was worth fixing
+## before one does, since the failure would be a silently missing bonus rather than an error.
 var _auras: Dictionary[int, AuraValue] = {}
-func add_aura(aura: Dictionary, id:int):
-	var value = aura.get('value', 0)
-	var aura_value = AuraValue.new(
-	aura['method'],
-	aura['targets'], 
-	value,
-)
-	_auras[id] = aura_value
+var _next_aura_id: int = 1
+
+func add_aura(aura: Dictionary, source: Card) -> AuraValue:
+	var aura_value := AuraValue.new(str(aura.get('method', '')), aura.get('targets', {}), int(aura.get('value', 0)))
+	aura_value.source = source
+	_auras[_next_aura_id] = aura_value
+	_next_aura_id += 1
+	return aura_value
 	
 func activate_aura_in_field(aura:AuraValue):
 	var all_cards: Array[Card] = get_all_cards()
@@ -684,10 +691,18 @@ func _condition_met(condition: Dictionary) -> bool:
 ## recomputed in a loop — because that is the shape the existing helpers have, and re-applying in a loop is how a total
 ## like this ratchets upward every time the field changes.
 func register_card_auras(card: Card) -> void:
+	# ALREADY REGISTERED IS NOT AN ERROR. This runs both when a card is parented into the field (Card._executeAuraEffects)
+	# and when it is played (play_card). Registering twice would create a SECOND AuraValue for the same effect, and since
+	# each one keeps its own `granted` record the guard inside add_aura_to_card() would NOT deduplicate them — the bonus
+	# would be applied twice. One aura per card per effect, and this is what makes that true.
+	for id in _auras:
+		if _auras[id].source == card:
+			return
+	# ADD THE AURA AND ACTIVATE IT, one id per aura. Keyed by the card's instance id, a card granting two things kept only
+	# the second — the first was overwritten in the dictionary before anything applied it.
 	if "aura" in card.card_effects:
 		for effect in card.card_effects["aura"]:
-			add_aura(effect, card.get_instance_id())
-			activate_aura_in_field(_auras[card.get_instance_id()])
+			activate_aura_in_field(add_aura(effect, card))
 	add_all_auras_to_card(card)
 	refresh_auras()
 
@@ -704,19 +719,22 @@ func refresh_auras() -> void:
 			add_aura_to_card(aura, card)
 
 func unregister_card_auras(card: Card) -> void:
-	var key: int = card.get_instance_id()
-	if not _auras.has(key):
-		return
-	var aura: AuraValue = _auras[key]
-	_auras.erase(key)
-	if aura.method != "power_change":
-		return
-	# The exact inverse, off the record of what was actually granted — not off the target test, which would also take the
-	# bonus off cards that never received it.
-	for other in aura.granted.keys():
-		if is_instance_valid(other):
-			other.power_change(-aura.value, -1)
-	aura.granted.clear()
+	# EVERY aura this card granted — not the single entry a key-per-card dictionary could hold.
+	var keys: Array = []
+	for id in _auras:
+		if _auras[id].source == card:
+			keys.append(id)
+	for id in keys:
+		var aura: AuraValue = _auras[id]
+		_auras.erase(id)
+		if aura.method != "power_change":
+			continue
+		# The exact inverse, off the record of what was actually granted — not off the target test, which would also take the
+		# bonus off cards that never received it.
+		for other in aura.granted.keys():
+			if is_instance_valid(other):
+				other.power_change(-aura.value, -1)
+		aura.granted.clear()
 	
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their
