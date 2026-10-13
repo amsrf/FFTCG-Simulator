@@ -356,11 +356,11 @@ const READABLE_ROTATION := Vector3(0, PI, 0)
 ## a card played straight from the hand then lands on the stack at the size it is already drawn at, instead of
 ## popping. That only stays true while this and the table agree, so the table reads this constant.
 ##
-## 2.4 is a SIZE CHOICE, not a layout one: this is also the size a hovered hand card grows to, so it has to be big
-## enough to read a card comfortably — about 270 px tall at 1080p, a quarter of the screen — and small enough that a
-## stack of them does not swallow the board. Changing this changes the hand's hover too, which is the point: the two
-## are the same card.
-const STACK_CARD_SCALE := 2.4
+## 2.8 is a SIZE CHOICE, not a layout one: this is also the size a hovered hand card grows to (Hand._size_card), so it
+## has to be comfortably bigger than a resting fan card — which is 2.0 — and big enough to read a card without a squint:
+## about 315 px tall at 1080p, a third of the screen. The margin over 2.0 is also what keeps a hover feeling like a
+## hover rather than a nudge.
+const STACK_CARD_SCALE := 2.8
 
 ## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so writing a world size
 ## into it multiplies by this — which is what a stack card used to do, coming out 2.3x bigger than the number said.
@@ -382,10 +382,11 @@ const STACK_CONTAINER_SCALE := 2.305
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.DECK:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
-	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. A hovered card grows out of this and up
-	# to the stack's size (Hand._size_card) — that growth is where the readability comes from, so this number can stay
-	# modest and keep the row of cards from filling the screen.
-	Zone.HAND:      {"scale": 1.6, "rotation": Vector3.ZERO,      "power_ui": false},
+	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. 2.0 makes a card 225 px tall at 1080p,
+	# and with 70% of it above the bottom edge (Hand.FAN_VISIBLE_FRACTION) that is a ~157 px band — enough to read, and
+	# the reason this went up from 1.6: 46% of a 180 px card was an 82 px strip, which is technically "40-50% visible"
+	# and looked like nothing.
+	Zone.HAND:      {"scale": 2.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
 	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
 	# WORLD. See STACK_CONTAINER_SCALE.

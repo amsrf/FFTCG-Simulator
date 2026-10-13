@@ -242,8 +242,11 @@ const FAN_TILT_PER_CARD_DEGREES := 2.0
 ## The most any card may lean, however wide the hand gets. Past this a large hand's outer cards look like they are
 ## falling over rather than lying in a row.
 const FAN_MAX_TILT_DEGREES := 12.0
-## How much of a card is left ABOVE the bottom edge at rest. The rest hangs off the bottom of the screen.
-const FAN_VISIBLE_FRACTION := 0.45
+## How much of a card is left ABOVE the bottom edge at rest; the rest hangs off the bottom. This is the number that
+## decides how big the hand LOOKS, and it is measured against the card's own height, so it has to be read together with
+## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". 70% of a 225 px
+## card is a ~157 px band, which is the point of showing less than the whole card in the first place.
+const FAN_VISIBLE_FRACTION := 0.70
 ## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. THE MIDDLE IS HIGHEST:
 ## the row is a shallow arch, not a bowl, so the outer cards hang further off the bottom edge than the middle ones.
 const FAN_SAG_FRACTION := 0.06

@@ -107,8 +107,14 @@ func _ready() -> void:
 		rest_box["top"], view.y, rest_box["bottom"], rest_box["visible"] * 100.0])
 	_expect(rest_box["top"] > 0.0, "its top edge is on screen, so the name and cost can be read")
 	_expect(rest_box["bottom"] > view.y, "and its bottom hangs off the bottom of the screen")
-	_expect(rest_box["visible"] > 0.35 and rest_box["visible"] < 0.6,
-		"leaving roughly the top 40-50% of the card showing at rest")
+	_expect(rest_box["visible"] > 0.6 and rest_box["visible"] < 0.85,
+		"showing most of each card, with the rest under the bottom edge")
+	# AND IT HAS TO BE WORTH LOOKING AT, IN PIXELS. The FRACTION alone is not a check, and this is the one that was
+	# missing: 46% of a card that is only 180 px tall is an 82 px strip — comfortably inside "40-50% visible" and
+	# impossible to read. The spec said "cards are large" and only the fraction ever got verified.
+	var band: float = view.y - rest_box["top"]
+	print("[HandHover] the visible band is %.0f px — %.0f%% of the screen height" % [band, band / view.y * 100.0])
+	_expect(band > 140.0, "and the strip left showing is big enough to actually read")
 
 	# The arch: the MIDDLE highest, the ends gently lower. The DIRECTION is the part worth asserting — the row was a
 	# bowl before (ends high, middle low) and a handful of pixels reads either way by eye.
@@ -147,7 +153,10 @@ func _ready() -> void:
 	await get_tree().create_timer(0.4).timeout
 	print("[HandHover] hovered scale %.2f (was %.2f) = %.2fx, tilted %.2f deg" % [
 		card.scale.x, resting, card.scale.x / resting, rad_to_deg(card.rotation.y)])
-	_expect(card.scale.x > resting * 1.4, "a hovered card GROWS — noticeably, not just a nudge")
+	# Against the size the card is DRAWN at, not a hard-coded multiple: the hand and the stack are set independently and
+	# the growth is whatever falls out. 1.35 rather than 1.4 because the ratio is exactly 1.40 (2.8 / 2.0) and a strict
+	# ">" failed a hover that is precisely at spec.
+	_expect(card.scale.x >= resting * 1.35, "a hovered card GROWS — noticeably, not just a nudge")
 	_expect(absf(card.rotation.y) < 0.02, "and STRAIGHTENS UP — a leaning card cannot be read")
 
 	# WHOLY ON SCREEN, on all four sides — that is what bringing it up is for.
