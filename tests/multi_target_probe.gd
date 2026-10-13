@@ -64,12 +64,25 @@ func _ready() -> void:
 		field.targeting_picked.size(), field.targeting_arrows.size()])
 	_expect(field.targeting_picked.size() == 2, "the second pick is recorded")
 	_expect(field.targeting_arrows.size() == 3, "two locked arcs plus the aiming one")
+	# EVERY PICK KEEPS ITS RING. Refreshing the legal set after a pick runs set_viable_targets(), which clears the pick
+	# highlight on every card — so without putting it back, only the newest pick stayed lit.
+	var lit: int = 0
+	for b in backups:
+		if b.get("_selected_highlight_on"):
+			lit += 1
+	print("[Multi] orange rings on %d cards for %d picks" % [lit, field.targeting_picked.size()])
+	_expect(lit == field.targeting_picked.size(), "every picked card wears a ring, not just the last one")
 
 	# --- the right-click step back ------------------------------------------------------------------------------------
+	var dropped: Card = field.targeting_picked[1]
 	field.clear_target_selection()
 	print("[Multi] step back: picked=%d arcs=%d" % [
 		field.targeting_picked.size(), field.targeting_arrows.size()])
 	_expect(field.targeting_picked.size() == 1, "a right-click steps back exactly one pick")
+	_expect(not dropped.get("_selected_highlight_on"),
+		"and the card it gave back loses its ring")
+	_expect(field.targeting_picked[0].get("_selected_highlight_on"),
+		"while the pick that is still picked keeps its own")
 
 	field.set_target_card(backups[2])
 	field.set_target_card(backups[3] if backups.size() > 3 else backups[2])

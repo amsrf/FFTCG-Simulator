@@ -427,6 +427,12 @@ func _drop_pick(at: int) -> void:
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
 	for taken in targeting_picked:
 		taken.set_valid_target(false, false)
+		# ...and the picks that are STILL picked keep their rings, for the same reason as in set_target_card(): the call
+		# above clears them all.
+		if taken.controller == "opponent":
+			taken.set_targeted_highlight(true)
+		else:
+			taken.set_selected_highlight(true)
 
 func set_target_card(card: Card):
 	# A click only counts when the candidate is a legally valid target.
@@ -463,6 +469,13 @@ func set_target_card(card: Card):
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
 	for taken in targeting_picked:
 		taken.set_valid_target(false, false)
+		# AND GIVE EVERY PICKED CARD ITS RING BACK. The set_viable_targets() call just above clears the pick highlight on
+		# EVERY card — that is how a session is supposed to start — so using it to refresh the legal set after each pick
+		# wiped the ring off all the earlier picks and left only the newest one lit.
+		if taken.controller == "opponent":
+			taken.set_targeted_highlight(true)
+		else:
+			taken.set_selected_highlight(true)
 	# CONFIRM IS AVAILABLE NOW, WITH FEWER PICKS THAN THE COUNT. The card says "choose UP TO 3", so stopping early has to
 	# be possible — and the aiming arc stays, so the player can equally keep going and reach the full count, which ends
 	# the session by itself. Only the last slot is ever mandatory.
@@ -832,9 +845,8 @@ func _on_assistant_target_cancel() -> void:
 	targeting_allow_cancel = false
 	target_card = null
 	source_card = null
-	if arrow:
-		arrow.queue_free()
-		arrow = null
+	# EVERY arc, for the same reason as the completion path: a multi-target session leaves one locked on each pick.
+	_clear_target_arrows()
 	reset_targets()
 	# NOTE: the TARGET modal is popped by Assistant.on_target_cancel() /
 	# on_target_complete(), which owns the modal it opened. Don't pop here too.
@@ -843,10 +855,20 @@ func _on_assistant_target_cancel() -> void:
 func _on_stack_execute_card_effect(card: Card) -> void:
 	# Targeting session is over: clear all targeting state so the next
 	# session starts fresh.
-	if arrow:
-		arrow.queue_free()
-		arrow = null
+	# EVERY arc, not just the aiming one. A multi-target session leaves a locked arc on each pick, and freeing only
+	# `arrow` left the rest of them in the scene pointing at nothing.
+	_clear_target_arrows()
 	target_card = null
 	source_card = null
 	targeting_allow_cancel = false
 	reset_targets()
+
+## Free every arc this session spawned: the aiming one and the locked ones. Called wherever a session ends.
+func _clear_target_arrows() -> void:
+	for a in targeting_arrows:
+		if a != null and is_instance_valid(a):
+			a.queue_free()
+	targeting_arrows.clear()
+	if arrow != null and is_instance_valid(arrow):
+		arrow.queue_free()
+	arrow = null

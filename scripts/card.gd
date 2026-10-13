@@ -526,6 +526,9 @@ func take_damage(damage: int):
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.
 	return accumulated_damage >= power
+	
+func on_break():
+	pass
 
 func has_zero_power() -> bool:
 	# Power of 0 or less is NOT a break: the card is put into the Graveyard.

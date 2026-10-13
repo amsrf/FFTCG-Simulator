@@ -678,11 +678,10 @@ func break_card(card: Card):
 		return
 	# Trigger "when this card is put from the field into the break zone"
 	# effects before the card leaves the field.
-	if card.is_key_word_in_card_effect("when_enter_break_from_field"):
-		field.execute_card_effect(card, "when_enter_break_from_field")
 	card.untap()
 	field.remove_card(card)
 	_send_card_to_graveyard(card)
+	card.on_break()
 
 func pop_stack():
 	var card = stack.pop_stack()
