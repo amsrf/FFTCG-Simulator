@@ -21,6 +21,17 @@ var arrow: BallisticArrow
 var block_arrow: BallisticArrow = null
 ## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
 var targeting_allow_cancel: bool = false
+## MULTI-TARGET SESSIONS. `choose_target` may carry a "count" (default 1). At 1 nothing below changes: one pick, one arc,
+## straight to Confirm. Above 1 the session keeps a list — each pick leaves its own arc locked on the card, a fresh aiming
+## arc appears for the next, picked cards come out of the legal set, and Confirm only appears once the last pick is made.
+##
+## `target_card` stays the LAST pick, so every existing consumer (instruction resolution, the agents, the stack) is
+## untouched; `targeting_picked` is the whole list, in order.
+var targeting_count: int = 1
+var targeting_picked: Array[Card] = []
+var targeting_arrows: Array = []
+var targeting_criteria_now: Variant = {}
+var targeting_source_kind: String = ""
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
@@ -342,6 +353,28 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	targeting_allow_cancel = allow_cancel
 	target_card = null
 	source_card = card
+	# A SESSION MAY ASK FOR MORE THAN ONE TARGET. `choose_target` may carry a "count"; absent (or anything that is not a
+	# Dictionary) means ONE, and one behaves exactly as it always has — including going straight to Confirm on the pick.
+	# See `targeting_picked`.
+	#
+	# `count` IS A SESSION KEY, NOT A PROPERTY OF A CARD, so it is stripped before anything is matched against it.
+	# Card.matches_criteria() treats every key as a METHOD NAME ON CARD and errors out on anything else — so leaving
+	# "count" in the criteria made has_method("count") false, which made every candidate illegal and meant no pick could
+	# ever be recorded. That is a silent failure: the ring simply never lit.
+	targeting_criteria_now = targeting_criteria
+	targeting_source_kind = source_kind
+	targeting_count = 1
+	if targeting_criteria is Dictionary:
+		targeting_count = maxi(1, int(targeting_criteria.get("count", 1)))
+		if targeting_criteria.has("count"):
+			targeting_criteria_now = targeting_criteria.duplicate()
+			targeting_criteria_now.erase("count")
+	targeting_picked.clear()
+	# EVERY arc from the last session goes, not just the aiming one: a multi-target session leaves several behind.
+	for old in targeting_arrows:
+		if old != null and is_instance_valid(old):
+			old.queue_free()
+	targeting_arrows.clear()
 	if arrow:
 		arrow.queue_free()
 		arrow = null
@@ -351,13 +384,10 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	var stack_node = get_parent().get("stack")
 	if stack_node != null:
 		stack_node.release_target_display()
-	print("[Targeting] request_target source=%s criteria=%s" % [card.card_name, targeting_criteria])
+	print("[Targeting] request_target source=%s criteria=%s count=%d" % [card.card_name, targeting_criteria, targeting_count])
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
-	set_viable_targets(targeting_criteria, card, source_kind)
-	var ballistic_arrow = ballistic_arrow_scene.instantiate()
-	arrow = ballistic_arrow
-	add_child(ballistic_arrow)
-	ballistic_arrow.set_is_aiming_from_card(true, card)
+	set_viable_targets(targeting_criteria_now, card, source_kind)
+	_spawn_aiming_arrow(card)
 	if allow_cancel:
 		assistant.prepare_targeting_phase_cancel()
 	# A non-local owner resolves targeting through its agent instead of waiting
@@ -366,6 +396,37 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	var agent: Agent = get_parent().agent_for(owner_id)
 	if agent != null and not (agent is LocalAgent):
 		agent.choose_target(owner_id, card, targeting_criteria)
+
+## A fresh arc, aimed at the pointer from `from`. Kept in `targeting_arrows` as well as `arrow` so a session can leave
+## several behind — one locked on each pick — and still free every one of them when it ends.
+func _spawn_aiming_arrow(from: Card) -> void:
+	var fresh = ballistic_arrow_scene.instantiate()
+	arrow = fresh
+	add_child(fresh)
+	fresh.set_is_aiming_from_card(true, from)
+	targeting_arrows.append(fresh)
+
+## Drop one pick: its ring, its arc, and its claim on being the current target. Used by the step-back path.
+##
+## THE ARC AT `at`, not at `at + 1`: the session spawns one arc per pick in order, so the arc that was locked on pick 0
+## is targeting_arrows[0] and the aiming one at the end is the extra.
+func _drop_pick(at: int) -> void:
+	var picked: Card = targeting_picked[at]
+	targeting_picked.remove_at(at)
+	if at < targeting_arrows.size():
+		var spent = targeting_arrows[at]
+		targeting_arrows.remove_at(at)
+		if spent != null and is_instance_valid(spent):
+			spent.queue_free()
+	if picked != null and is_instance_valid(picked):
+		picked.set_selected_highlight(false)
+		picked.set_targeted_highlight(false)
+	if picked == target_card:
+		target_card = null
+	# It becomes legal again: the card is no longer spoken for, and the ring it lost has to come back.
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
 
 func set_target_card(card: Card):
 	# A click only counts when the candidate is a legally valid target.
@@ -389,12 +450,37 @@ func set_target_card(card: Card):
 		card.set_targeted_highlight(true)
 	print("[Targeting] target selected: ", card.card_name)
 	arrow.lock_arc(card.get_global_face_centre())
-	request_target_confirmation.emit(target_card, targeting_allow_cancel)
+	targeting_picked.append(card)
+	if targeting_picked.size() >= targeting_count:
+		request_target_confirmation.emit(target_card, targeting_allow_cancel)
+		return
+	# MORE PICKS TO COME. The arc stays where it landed — that IS the record of the pick — a new one takes over the
+	# aiming, and the card just taken leaves the legal set so the same Backup cannot be chosen twice. Its orange ring
+	# stays: set_valid_target() only owns the blue prompt glow.
+	print("[Targeting] %d of %d picked — aiming for the next" % [targeting_picked.size(), targeting_count])
+	target_card = null
+	_spawn_aiming_arrow(source_card)
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
 
-## ONE STEP BACK, for a right-click. Undoes a PICK, not the targeting: the arc unlocks and goes back to following the
-## mouse, the picked card loses its ring, and the Confirm button goes away — which is exactly the state the session
-## started in. The Cancel button (or the same key doing nothing further) remains the way out of the effect entirely.
+## ONE STEP BACK, for a right-click. With SEVERAL picks it undoes the last one — its ring, its arc, its claim — and aims
+## again, which is the state before that pick. With one pick it is the "drop the pick, keep aiming" it has always been.
+## Cancel remains the way out of the effect entirely.
 func clear_target_selection() -> void:
+	if targeting_count > 1 and not targeting_picked.is_empty() and targeting_picked.size() < targeting_count:
+		_drop_pick(targeting_picked.size() - 1)
+		# `_drop_pick` freed the arc that was locked on it; the aiming arc is a separate one.
+		if arrow != null and is_instance_valid(arrow):
+			arrow.queue_free()
+		_spawn_aiming_arrow(source_card)
+		print("[Targeting] back to %d of %d" % [targeting_picked.size(), targeting_count])
+		if assistant != null:
+			if targeting_allow_cancel:
+				assistant.prepare_targeting_phase_cancel()
+			else:
+				assistant.hide_buttons()
+		return
 	if target_card == null or not is_instance_valid(target_card):
 		return
 	if source_card != null and target_card == source_card:
