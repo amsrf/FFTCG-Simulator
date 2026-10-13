@@ -704,8 +704,9 @@ func end_choose_card() -> void:
 
 func clear_effect_card_selection() -> void:
 	if selected_card_for_effect != null:
-		# Drop the orange "this is the one" ring with the selection.
+		# Drop the "this is the one" ring with the selection — whichever colour it was wearing.
 		selected_card_for_effect.set_selected_highlight(false)
+		selected_card_for_effect.set_s_cost_highlight(false)
 		if selected_card_for_effect.crystal_instance != null:
 			selected_card_for_effect.crystal_instance.queue_free()
 			selected_card_for_effect.crystal_instance = null
@@ -718,8 +719,13 @@ func toggle_effect_card_selection(card: Card) -> void:
 	else:
 		clear_effect_card_selection()
 		selected_card_for_effect = card
-		# Orange = "this is the card you picked", blue = the other legal choices.
-		card.set_selected_highlight(true)
+		# PINK for an S COST pick, ORANGE for every other hand choice: the S cost is a payment already made, the others
+		# mean "you picked this". The STACK owns which stage is being asked for, so this asks it rather than keeping a
+		# second flag in step with it — one owner, and it cannot drift.
+		if stack != null and stack.s_cost_active:
+			card.set_s_cost_highlight(true)
+		else:
+			card.set_selected_highlight(true)
 		if card.crystal_scene != null:
 			card.crystal_instance = card.crystal_scene.instantiate()
 			card.add_child(card.crystal_instance)
@@ -749,6 +755,11 @@ func add_card_to_mana_conversion(card:Card):
 	# A card being cast (e.g. a Summon awaiting payment) cannot be used as
 	# its own mana payment.
 	if card == charging_card:
+		return
+	# NOR CAN THE CARD ALREADY SPENT ON THIS ABILITY'S S COST. It is still IN HAND — the discard is deferred until the
+	# skill commits, so that backing out can hand it back — but it is spoken for, and letting it also pay the mana would
+	# spend the same card twice.
+	if stack != null and card == stack.s_cost_selected_card:
 		return
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)

@@ -474,6 +474,7 @@ func enter_zone(zone: Zone) -> void:
 	# graveyard, an energized one onto the field.
 	_prompt_glow = false
 	_selected_highlight_on = false
+	_s_cost_highlight_on = false
 	_targeted_highlight_on = false
 	_available_highlight_on = false
 	_energized_highlight_on = false
@@ -816,6 +817,23 @@ func set_available_highlight(enabled: bool) -> void:
 	_available_highlight_on = enabled
 	_refresh_target_ring()
 
+## "You picked this card to pay a special ability's S cost" — pink, so it can never be confused with the orange
+## targeting pick (the card you are choosing) or with the blue legal candidates.
+##
+## It is a payment rather than a prompt, which is why it outranks the other four meanings in _refresh_target_ring().
+const S_COST_BORDER_COLOR := Color(1.0, 0.35, 0.75)
+const S_COST_GLOW_COLOR := Color(0.95, 0.15, 0.6)
+var _s_cost_highlight_on: bool = false
+
+func set_s_cost_highlight(enabled: bool) -> void:
+	if enabled == _s_cost_highlight_on:
+		return
+	_s_cost_highlight_on = enabled
+	_refresh_target_ring()
+
+func ring_s_cost() -> bool:
+	return _s_cost_highlight_on
+
 ## "Mana has been spent on this card" — a glow in that element's colour, held until the card is played.
 ##
 ## This is the FIFTH meaning of one ring, and deliberately the LOWEST priority. The other four are prompts telling the
@@ -882,7 +900,7 @@ func element_colour(fallback: Color) -> Color:
 ## coloured but not lit shows nothing on screen, which is how the red reveal once shipped invisible.
 func _refresh_target_ring() -> void:
 	var lit: bool = (_prompt_glow or _selected_highlight_on or _targeted_highlight_on
-		or _available_highlight_on or _energized_highlight_on)
+		or _available_highlight_on or _energized_highlight_on or _s_cost_highlight_on)
 	if target_border == null and not lit:
 		# Nothing built and nothing wanted: do not build a ring just to switch it off.
 		_highlight_on = false
@@ -916,6 +934,11 @@ func _refresh_target_ring() -> void:
 	if _selected_highlight_on:
 		color = SELECTED_BORDER_COLOR
 		glow = SELECTED_GLOW_COLOR
+	# HIGHEST, so it is checked LAST: an S cost pick is a payment already made, while the four above are questions being
+	# asked. Pink, so it is never confused with the orange targeting pick or the blue legal candidates.
+	if _s_cost_highlight_on:
+		color = S_COST_BORDER_COLOR
+		glow = S_COST_GLOW_COLOR
 	_border_material.set_shader_parameter("border_color", color)
 	_border_material.set_shader_parameter("glow_color", glow)
 	set_highlight(lit)

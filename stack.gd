@@ -496,6 +496,19 @@ func _on_hand_charge_start(card: Card) -> void:
 
 func _on_assistant_charge_cancelled() -> void:
 	if skill_activation_proxy != null:
+		# BACK ONE STEP, NOT OUT. A special ability is a TWO-STEP payment — pick the card that shares its name, then pay
+		# the mana — so backing out of the MANA step returns to the s-cost step inside the same activation. The proxy is
+		# kept, and with it the tap: cancelling AT the s-cost step is what abandons the activation, which is the branch
+		# below. The previous pick is redone from scratch — its pink ring goes with it and begin_s_cost_selection()
+		# re-prompts.
+		if s_cost_selected_card != null:
+			var src: Card = s_cost_source
+			var idx: int = s_cost_skill_index
+			if is_instance_valid(s_cost_selected_card):
+				s_cost_selected_card.set_s_cost_highlight(false)
+			s_cost_selected_card = null
+			begin_s_cost_selection(src, idx)
+			return
 		_clear_skill_proxy()
 		return
 	if summon_casting_card != null:
