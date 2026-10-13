@@ -455,6 +455,31 @@ func _ready() -> void:
 			"a %d-card hand stays on screen horizontally" % want)
 		_expect(absf(centre - view.x * 0.5) < 12.0, "and a %d-card hand stays centred" % want)
 
+		# THE STACKING ORDER AT EVERY SIZE, not just the eight-card hand the hover section uses. A card to the right must
+		# be nearer the camera than the one to its left — and this had only ever been checked at n = 8, where the ramp
+		# (20 mm per card) easily out-runs anything the SCREEN-SPACE offsets contribute to depth. At n = 3 it does not.
+		var by_x: Array = []
+		for c in hand.cards:
+			by_x.append({"c": c, "x": cam.unproject_position(c.global_position).x})
+		by_x.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+		var out_of_order: int = 0
+		for k in range(1, by_x.size()):
+			# Flagged when the card to the RIGHT is FARTHER, not nearer. `towards_view` points INTO the screen, so a card to
+			# the right being nearer makes this difference NEGATIVE — the first version of this check had the comparison the
+			# other way round and reported a correct layout as broken.
+			if (by_x[k]["c"].global_position - by_x[k - 1]["c"].global_position).dot(towards_view) >= 0.0:
+				out_of_order += 1
+		if out_of_order > 0:
+			print("[HandHover] %2d cards: %d of %d steps are NOT nearer than the card to the left" % [
+				want, out_of_order, by_x.size() - 1])
+			for dbg in by_x:
+				var dbg_gp: Vector3 = dbg["c"].global_position
+				print("[HandHover]      x %7.1f | world %7.3f %7.3f %7.3f | depth %.4f | parent %s" % [
+					dbg["x"], dbg_gp.x, dbg_gp.y, dbg_gp.z, (dbg_gp - cam_origin).dot(towards_view),
+					str(dbg["c"].get_parent().name)])
+		_expect(out_of_order == 0,
+			"a %d-card hand still stacks left to right — each card over the one on its left" % want)
+
 	# LAST, so the checks above saw the hand as the match set it up.
 	while hand.cards.size() > original:
 		var extra_drop: Card = hand.cards.pop_back()

@@ -256,8 +256,12 @@ const FAN_VISIBLE_FRACTION := 0.80
 ## IT HAS TO BEAT THE LEAN'S CORNER LIFT, which is the whole reason it is 0.12 and not smaller. A card leaning outward
 ## about its own centre lifts its outer corner — at 2 degrees and 161 px that is about 10 px — so the old 0.06 gave a
 ## 14 px drop that was almost exactly cancelled by it. The row then read as FLAT, and as "the edges are higher" once the
-## two landed either side of each other. 0.12 drops the ends 27 px, so the curve is unmistakable.
-const FAN_SAG_FRACTION := 0.12
+## two landed either side of each other. These two are calibrated so an EIGHT-card hand drops its ends about 27 px.
+##
+## FAN_SAG_CURVE is metres of drop per metre of lateral offset SQUARED (see fan_sag_for), so the fan's depth follows the
+## width of the row instead of being normalised to it. FAN_SAG_MAX caps the drop, in fractions of a card's height.
+const FAN_SAG_CURVE := 0.0216
+const FAN_SAG_MAX := 0.12
 ## The blank strip the row keeps at each side of the screen, in metres, before it starts compressing.
 const FAN_SIDE_MARGIN := 0.45
 ## A card's height over its width — 63 x 88 mm. Only used to size things that are proportional to the CARD rather than
@@ -328,16 +332,19 @@ func fan_angle_for(i: int) -> float:
 	# sign of rotation.y does not even mean the same direction on screen for them.
 	return -deg_to_rad(degrees)
 
-## How far BELOW the middle card a card sits, upward being +Z here. Zero at the middle, FAN_SAG_FRACTION of a card's
-## height at the ends, and quadratic in between so the arch has no crease in it.
+## How far BELOW the middle card a card sits, upward being +Z here.
+##
+## QUADRATIC IN THE CARD'S ACTUAL LATERAL OFFSET, capped — NOT normalised to the ends of the row. Normalising meant a
+## three-card hand curved exactly as deeply as a fifteen-card one, over a quarter of the width: a two-metre row bent
+## through the same 27 px as a six-metre one, which is what "the fan looks awful with three cards" was. Now the curvature
+## follows the row, so a short hand is very nearly a straight line, a wide one arches, and the cap stops a big hand from
+## folding itself in half.
 func fan_sag_for(i: int) -> float:
 	var n: int = cards.size()
 	if n <= 1:
 		return 0.0
-	var t: float = i - (n - 1) / 2.0
-	var edge: float = (n - 1) / 2.0
-	var r: float = t / maxf(edge, 0.0001)
-	return FAN_SAG_FRACTION * card_height * (r * r)
+	var lateral: float = (i - (n - 1) / 2.0) * spacing()
+	return minf(FAN_SAG_CURVE * lateral * lateral, FAN_SAG_MAX * card_height)
 
 ## How far the whole row sits below the bottom of the screen, in the Hand's local space.
 ##
