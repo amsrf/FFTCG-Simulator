@@ -68,7 +68,7 @@ func _ready() -> void:
 	# highlight on every card — so without putting it back, only the newest pick stayed lit.
 	var lit: int = 0
 	for b in backups:
-		if b.get("_selected_highlight_on"):
+		if b.ring_selected():
 			lit += 1
 	print("[Multi] orange rings on %d cards for %d picks" % [lit, field.targeting_picked.size()])
 	_expect(lit == field.targeting_picked.size(), "every picked card wears a ring, not just the last one")
@@ -79,9 +79,9 @@ func _ready() -> void:
 	print("[Multi] step back: picked=%d arcs=%d" % [
 		field.targeting_picked.size(), field.targeting_arrows.size()])
 	_expect(field.targeting_picked.size() == 1, "a right-click steps back exactly one pick")
-	_expect(not dropped.get("_selected_highlight_on"),
+	_expect(not dropped.ring_selected(),
 		"and the card it gave back loses its ring")
-	_expect(field.targeting_picked[0].get("_selected_highlight_on"),
+	_expect(field.targeting_picked[0].ring_selected(),
 		"while the pick that is still picked keeps its own")
 
 	field.set_target_card(backups[2])

@@ -61,7 +61,7 @@ func _ready() -> void:
 	var first: Card = mine[0]
 	_field.set_blocker_card(first)
 	_expect(_field.blocker_card == first, "clicking a card selects it as the blocker")
-	_expect(first._selected_highlight_on, "the selected blocker turns orange")
+	_expect(first.ring_selected(), "the selected blocker turns orange")
 	var arrow = _field.block_arrow
 	_expect(arrow != null and arrow.is_aiming, "selecting a blocker draws an arc")
 	if arrow != null:
@@ -87,8 +87,8 @@ func _ready() -> void:
 	var second: Card = mine[1]
 	_field.set_blocker_card(second)
 	print("[BlockProbe] reselected: %s" % second.card_name)
-	_expect(not first._selected_highlight_on, "the previous blocker is no longer orange")
-	_expect(second._selected_highlight_on, "the new blocker is orange")
+	_expect(not first.ring_selected(), "the previous blocker is no longer orange")
+	_expect(second.ring_selected(), "the new blocker is orange")
 	_expect(_field.blocker_card == second, "the new blocker is the selected one")
 	if arrow != null:
 		_expect(arrow.start_pos.distance_to(second.get_global_face_centre()) < 0.01,
@@ -97,7 +97,7 @@ func _ready() -> void:
 	# Clicking the same card again deselects.
 	_field.set_blocker_card(second)
 	_expect(_field.blocker_card == null, "clicking the same card again deselects it")
-	_expect(not second._selected_highlight_on, "deselecting clears the orange")
+	_expect(not second.ring_selected(), "deselecting clears the orange")
 	_expect(arrow == null or not arrow.is_aiming, "deselecting hides the arc")
 
 	# The prompt glow is only for the duration of the question.
@@ -118,7 +118,7 @@ func _ready() -> void:
 	# And the whole thing is cleared when the combat's blocker resets.
 	_field.reset_blocker()
 	_expect(arrow == null or not arrow.is_aiming, "reset_blocker() hides the arc")
-	_expect(not their_blocker._selected_highlight_on, "reset_blocker() clears any orange")
+	_expect(not their_blocker.ring_selected(), "reset_blocker() clears any orange")
 
 	_report()
 	get_tree().quit()
