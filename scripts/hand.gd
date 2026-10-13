@@ -319,10 +319,12 @@ func _available_width() -> float:
 func fan_angle_for(i: int) -> float:
 	var t: float = i - (cards.size() - 1) / 2.0
 	var degrees: float = clampf(t * FAN_TILT_PER_CARD_DEGREES, -FAN_MAX_TILT_DEGREES, FAN_MAX_TILT_DEGREES)
-	# MIRRORED, the fan leans the other way: the arc it is meant to be tangent to has turned over, and a lean that did
-	# not follow it would point the outer cards INTO the curve.
-	var turn: float = -1.0 if mirror_presentation else 1.0
-	return -deg_to_rad(degrees) * turn
+	# THE LEAN IS NOT MIRRORED. Only the arc is (see calculate_card_position). This had a `turn` factor that flipped the
+	# lean's sign for the opponent, on the reasoning that a mirrored arc needs a mirrored lean to stay tangent to it —
+	# and the render disagrees: with the lean flipped the opponent's outer cards read as leaning INTO the row, which is
+	# what "the fan looks wrong" kept being about. The two hands do not share a card orientation either, so the same
+	# sign of rotation.y does not even mean the same direction on screen for them.
+	return -deg_to_rad(degrees)
 
 ## How far BELOW the middle card a card sits, upward being +Z here. Zero at the middle, FAN_SAG_FRACTION of a card's
 ## height at the ends, and quadratic in between so the arch has no crease in it.
@@ -439,8 +441,14 @@ func calculate_card_position(i) -> Vector3:
 		toward_cam = global_transform.basis.inverse() * cam_now.global_transform.basis.z.normalized()
 		var to_screen_right: float = global_transform.basis.x.dot(cam_now.global_transform.basis.x.normalized())
 		rightward = t * (1.0 if to_screen_right >= 0.0 else -1.0)
+	# THE ARC IS MIRRORED, AND THIS IS THE LINE THAT DOES IT. Their row curves the opposite way up from ours — ends
+	# HIGHER than the middle, a happy face where ours is a sad one, which is what the fan looks like from where they sit.
+	#
+	# Measured off the render (tools/hand_outline.tscn) rather than argued about: un-mirrored, the opponent's bottom
+	# outline descended from y 176 in the middle to y 208 at the ends, i.e. their ends hung 32 px LOWER than their middle.
+	var mirror: float = -1.0 if mirror_presentation else 1.0
 	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) \
-		+ _screen_down() * z_offset \
+		+ _screen_down() * (z_offset * mirror) \
 		+ toward_cam * (rightward * CARD_STACK_HEIGHT) \
 		+ _sink_offset()
 	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
