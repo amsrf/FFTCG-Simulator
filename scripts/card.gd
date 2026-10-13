@@ -1122,9 +1122,16 @@ func get_effect_kind() -> String:
 	return ""
 
 func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
-	# Protection rules (e.g. Zidane: "cannot be chosen by your opponent's
-	# Summons or abilities"). Unlike choose_target, these are evaluated against
-	# the SOURCE of the targeting effect, not against this card.
+	# GRANTED PROTECTION FIRST, and deliberately unconditional: a card that has been GIVEN this status cannot be chosen by
+	# ANY source, its own controller's included. Aerith's Planet Protector protects your Forwards from your own Summons and
+	# abilities as well — that is what the card says and what was asked for. It expires with the status, at the end of the
+	# turn it was granted (Card.turn_end).
+	#
+	# Checked before the `source == null` exit below, because a caller that passes no source must not thereby bypass it.
+	if status_effects.has("cannot_be_chosen"):
+		return false
+	# Protection rules PRINTED on the card (e.g. Zidane: "cannot be chosen by your opponent's Summons or abilities").
+	# Unlike choose_target, these are evaluated against the SOURCE of the targeting effect, not against this card.
 	if source == null:
 		return true
 	if not card_effects.has("cannot_be_chosen"):

@@ -44,6 +44,42 @@ func untap_targets(_argument = null) -> void:
 		if card != null and is_instance_valid(card):
 			card.untap()
 			print("[Untap] ", card.card_name)
+
+## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
+## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
+func _apply_effect_block(card: Card) -> Dictionary:
+	if card == null:
+		return {}
+	var src: Card = card.effect_source
+	if src != null and card.skill_activation_index >= 0 and "skill" in src.card_effects:
+		var skills: Array = src.card_effects["skill"]
+		if card.skill_activation_index < skills.size():
+			var def: Dictionary = skills[card.skill_activation_index]
+			if def.get("apply_effect") is Dictionary:
+				return def["apply_effect"]
+	if card.card_effects.get("apply_effect") is Dictionary:
+		return card.card_effects["apply_effect"]
+	return {}
+
+## Every card on the field matching `block`, in field order — the same evaluator choose_target uses, so an apply_effect
+## block and a choose_target block mean the same thing by the same keys.
+func _cards_matching(block: Dictionary) -> Array:
+	var found: Array = []
+	for c in field.get_all_cards():
+		if c != null and is_instance_valid(c) and c.matches_criteria(block):
+			found.append(c)
+	return found
+
+## Grant a status to EVERY target of the current effect. The multi-target twin of Card.add_status_effect, which an
+## instruction can only reach one card with — see untap_targets above for the same shape and why it lives here.
+##
+## The duration is in TURNS: 1 means "until the end of this turn", expired by Card.turn_end() alongside attacking and
+## blocking.
+func add_status_to_targets(status: String, duration: int = 1, _extra = null) -> void:
+	for card in _targets:
+		if card != null and is_instance_valid(card):
+			card.add_status_effect(status, duration)
+			print("[Status] ", card.card_name, " gains ", status, " for ", duration, " turn(s)")
 ## Re-entrancy guard: true while a priority round is running. Prevents
 ## overlapping priority loops when Stack.request_priority fires mid-round.
 var _priority_lock: bool = false
@@ -728,6 +764,14 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	var targets: Array = card.effect_targets.duplicate()
 	if targets.is_empty():
 		targets = [card.effect_target]
+	# "apply_effect" — THE ABILITY SELECTS ITS OWN TARGETS, so the player is not asked. The set is worked out HERE, at
+	# resolution, and never re-evaluated: a Forward that arrives later in the turn does not gain the effect. That snapshot
+	# is the whole point of doing it at resolution rather than hanging it off the field changing, and it is the rule for
+	# an ability that affects "all Forwards you control" — it means the ones on the field when it resolved.
+	var applied_from: Dictionary = _apply_effect_block(card)
+	if not applied_from.is_empty():
+		targets = _cards_matching(applied_from)
+		print("[ApplyEffect] ", card.card_name, " applies to ", targets.size(), " card(s)")
 	_current_source_card = card.effect_source if card.effect_source != null else card
 	_current_controller = card.controller
 	_targets = targets
