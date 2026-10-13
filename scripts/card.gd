@@ -736,6 +736,58 @@ var _available_highlight_on: bool = false
 var _energized_highlight_on: bool = false
 var _energized_colour: Color = Color.WHITE
 
+## WHAT THE RING IS SHOWING — the public way to ask, so that callers and tests do not have to know which private flags
+## the card happens to keep. That matters more than tidiness here: the probes used to read `card._selected_highlight_on`
+## directly, which is a test measuring the LAYOUT rather than the behaviour — and worse, `card.get("_selected_highlight_on")`
+## silently returns null once a flag moves, so `not <that>` is true and the check PASSES for the wrong reason.
+##
+## The ring is also the thing being extracted next, and it cannot move while the tests are holding onto its fields.
+## The ring's own flags live just below and remain private; these are the observable behaviour.
+func is_ringed() -> bool:
+	return _highlight_on
+
+## Which meaning is currently winning: "" when nothing is lit, otherwise one of
+## "selected" | "targeted" | "available" | "prompt" | "energized" — the same order _refresh_target_ring() resolves them
+## in, so this cannot disagree with the colour actually drawn.
+func ring_meaning() -> String:
+	if _selected_highlight_on:
+		return "selected"
+	if _targeted_highlight_on:
+		return "targeted"
+	if _available_highlight_on:
+		return "available"
+	if _prompt_glow:
+		return "prompt"
+	if _energized_highlight_on:
+		return "energized"
+	return ""
+
+## Narrower queries, for a caller that cares about one meaning rather than about which one wins.
+func ring_selected() -> bool:
+	return _selected_highlight_on
+
+func ring_targeted() -> bool:
+	return _targeted_highlight_on
+
+func ring_available() -> bool:
+	return _available_highlight_on
+
+func ring_prompt() -> bool:
+	return _prompt_glow
+
+func ring_energized() -> bool:
+	return _energized_highlight_on
+
+## The widths actually on the ring's live material, in metres — (border, glow). Read back from the material rather than
+## from the constants, so a caller can tell "the green ring really is drawn at half width" from "the constants agree".
+## Returns zero when there is no material yet (nothing has been lit).
+func ring_widths() -> Vector2:
+	if _border_material == null:
+		return Vector2.ZERO
+	var w: Variant = _border_material.get_shader_parameter("border_width")
+	var g: Variant = _border_material.get_shader_parameter("glow_width")
+	return Vector2(float(w) if w != null else 0.0, float(g) if g != null else 0.0)
+
 func set_prompt_glow(enabled: bool) -> void:
 	_prompt_glow = enabled
 	_refresh_target_ring()
