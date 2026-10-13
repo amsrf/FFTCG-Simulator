@@ -116,22 +116,66 @@ func _ready() -> void:
 	print("[HandHover] the visible band is %.0f px — %.0f%% of the screen height" % [band, band / view.y * 100.0])
 	_expect(band > 140.0, "and the strip left showing is big enough to actually read")
 
-	# The arch: the MIDDLE highest, the ends gently lower. The DIRECTION is the part worth asserting — the row was a
-	# bowl before (ends high, middle low) and a handful of pixels reads either way by eye.
-	var mid_px: float = INF
-	var end_px: float = -INF
+	# The arch: the MIDDLE highest, the ends lower. Measured per card and printed as a table, because "the edges sit
+	# higher" and "the edges sit lower" are 20 px apart and impossible to argue about by eye.
+	#
+	# Godot's SCREEN y grows downward, so "lower on screen" is a LARGER y — the ends must have the LARGER y. The local
+	# y below is the hand's own axis, which is a different thing and is only printed for reference.
+	var centre_y: float = 0.0
+	print("[HandHover]   i   local.y   screen.y   rotation    vs the middle")
+	var row: Array[Dictionary] = []
 	for i in range(hand.cards.size()):
 		var c: Card = hand.cards[i]
 		if c.get_parent() != hand:
 			continue
-		var cy: float = cam.unproject_position(hand.global_transform * c.position).y
-		if i == hand.cards.size() / 2:
-			mid_px = cy
-		if i == 0 or i == hand.cards.size() - 1:
-			end_px = maxf(end_px, cy)
-	print("[HandHover] the middle card sits %.1f px above the ends" % (end_px - mid_px))
-	_expect(end_px - mid_px > 2.0, "the row arches with the MIDDLE highest, not the ends")
-	_expect(end_px - mid_px < 24.0, "and only gently")
+		row.append({
+			"i": i,
+			"local_y": c.position.y,
+			"screen_y": cam.unproject_position(hand.global_transform * c.position).y,
+			"rot": rad_to_deg(c.rotation.y),
+		})
+	var mid_index: int = row.size() / 2
+	centre_y = row[mid_index]["screen_y"]
+	for entry in row:
+		print("[HandHover] %3d   %7.4f   %8.1f   %7.2f    %+6.1f px" % [
+			entry["i"], entry["local_y"], entry["screen_y"], entry["rot"],
+			float(entry["screen_y"]) - centre_y])
+
+	# EVERY EDGE CARD LOWER THAN THE MIDDLE, and by more than the lean's own corner lift (~10 px at 2 degrees), or the
+	# row reads as flat however correct the maths is.
+	# THE CENTRAL PAIR IS THE MIDDLE. An even-sized hand has no single middle card — indices 3 and 4 of eight are both
+	# half a card off centre and sit at exactly the same height — so the cards that must be strictly lower are the ones
+	# at |t| > 0.5, and the pair itself has to be level with each other.
+	var half_centre: float = (hand.cards.size() - 1) / 2.0
+	var above: int = 0
+	var spread: float = 0.0
+	for entry in row:
+		if absf(float(entry["i"]) - half_centre) <= 0.5:
+			_expect(absf(float(entry["screen_y"]) - centre_y) < 0.5,
+				"the central card at index %d is level with its pair" % entry["i"])
+			continue
+		if float(entry["screen_y"]) < centre_y - 0.5:
+			above += 1
+		spread = maxf(spread, float(entry["screen_y"]) - centre_y)
+	print("[HandHover] the end cards sit %.1f px LOWER on screen than the middle pair" % spread)
+	_expect(above == 0, "every other card is LOWER on screen (larger y) than the middle — never higher")
+	_expect(spread > 8.0, "and by enough to beat the lean's own corner lift, so the curve is visible")
+
+	# SYMMETRY, exactly as stated: card i and card n-1-i must have the same height and opposite lean. An index-based
+	# depth ramp was quietly breaking this, which is what "the left side dips lower than the right" was.
+	var asymmetric: int = 0
+	var mirrored_lean: int = 0
+	for i in range(row.size()):
+		var a: Dictionary = row[i]
+		var b: Dictionary = row[row.size() - 1 - i]
+		if absf(float(a["screen_y"]) - float(b["screen_y"])) > 0.5:
+			asymmetric += 1
+		if absf(float(a["rot"]) + float(b["rot"])) > 0.05:
+			mirrored_lean += 1
+	print("[HandHover] of %d mirrored pairs, %d differ in height and %d in lean" % [
+		row.size() / 2, asymmetric, mirrored_lean])
+	_expect(asymmetric == 0, "card i and card n-1-i sit at the SAME height")
+	_expect(mirrored_lean == 0, "and lean by equal and opposite amounts")
 
 	# ---------------------------------------------------------------- 3. the hover
 	print("[HandHover] --- 3. the hover ---------------------------------------------")

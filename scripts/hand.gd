@@ -244,12 +244,18 @@ const FAN_TILT_PER_CARD_DEGREES := 2.0
 const FAN_MAX_TILT_DEGREES := 12.0
 ## How much of a card is left ABOVE the bottom edge at rest; the rest hangs off the bottom. This is the number that
 ## decides how big the hand LOOKS, and it is measured against the card's own height, so it has to be read together with
-## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". 70% of a 225 px
-## card is a ~157 px band, which is the point of showing less than the whole card in the first place.
-const FAN_VISIBLE_FRACTION := 0.70
-## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. THE MIDDLE IS HIGHEST:
-## the row is a shallow arch, not a bowl, so the outer cards hang further off the bottom edge than the middle ones.
-const FAN_SAG_FRACTION := 0.06
+## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". At 80% of a 225 px
+## card the band is ~180 px, which keeps the whole cost strip and most of the art above the edge.
+const FAN_VISIBLE_FRACTION := 0.80
+## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. The drop is this times
+## `r * r`, where `r` is the card's offset from the middle over half the row — so it is a `t * t` curve, symmetric by
+## construction, and it can never exceed this fraction however big the hand gets. THE MIDDLE IS HIGHEST.
+##
+## IT HAS TO BEAT THE LEAN'S CORNER LIFT, which is the whole reason it is 0.12 and not smaller. A card leaning outward
+## about its own centre lifts its outer corner — at 2 degrees and 161 px that is about 10 px — so the old 0.06 gave a
+## 14 px drop that was almost exactly cancelled by it. The row then read as FLAT, and as "the edges are higher" once the
+## two landed either side of each other. 0.12 drops the ends 27 px, so the curve is unmistakable.
+const FAN_SAG_FRACTION := 0.12
 ## The blank strip the row keeps at each side of the screen, in metres, before it starts compressing.
 const FAN_SIDE_MARGIN := 0.45
 ## A card's height over its width — 63 x 88 mm. Only used to size things that are proportional to the CARD rather than
@@ -360,9 +366,11 @@ func calculate_card_position(i) -> Vector3:
 	# Written the other way round the row is a bowl: the ends high and the middle low, the opposite of the intent, and
 	# the two are only ~10 px apart so it is easy to look at for a while and not see it.
 	var z_offset: float = fan_sag_for(i)
-	# Height stagger: separates overlapping cards, and keeps each glow behind the
-	# card in front of it (see CARD_STACK_HEIGHT).
-	var y_offset: float = i * CARD_STACK_HEIGHT
+	# Height stagger: separates overlapping cards so a glow cannot bleed through the card in front of it. Measured from
+	# |t|, NOT from the index: an index ramp (i * CARD_STACK_HEIGHT) made the row lean, because card 0 and card n-1 sat
+	# at different depths and the two halves were not mirror images. Card i and card n-1-i have to sit at the same height
+	# with opposite lean, and this term was the one breaking that.
+	var y_offset: float = absf(t) * CARD_STACK_HEIGHT
 	var spot: Vector3 = Vector3(x_offset, y_offset, z_offset) + _sink_offset()
 	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
