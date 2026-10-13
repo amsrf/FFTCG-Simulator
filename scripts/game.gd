@@ -32,6 +32,18 @@ var _current_controller: String
 var _current_attacker_card: Card
 var _current_blocker_card: Card
 var _targets = []
+## AERITH 1-064. "When Aerith enters the field, choose up to 3 Backups you control other than Aerith. Activate them." —
+## which here is simply: untap each one that was picked.
+##
+## The instruction carries NO argument, because the PICKS are the argument. It reads `Field.targeting_picked`, which is
+## the whole list in order and outlives the session — `Field.target_card` only ever holds the last one.
+func untap_targets(_argument = null) -> void:
+	if field == null:
+		return
+	for card in field.targeting_picked:
+		if card != null and is_instance_valid(card):
+			card.untap()
+			print("[Untap] ", card.card_name)
 ## Re-entrancy guard: true while a priority round is running. Prevents
 ## overlapping priority loops when Stack.request_priority fires mid-round.
 var _priority_lock: bool = false

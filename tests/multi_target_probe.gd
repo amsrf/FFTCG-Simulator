@@ -54,7 +54,9 @@ func _ready() -> void:
 	print("[Multi] pick 1: picked=%d confirms=%d target_card=%s" % [
 		field.targeting_picked.size(), _confirms, str(field.target_card)])
 	_expect(field.targeting_picked.size() == 1, "the first pick is recorded")
-	_expect(_confirms == 0, "and Confirm has NOT been offered yet")
+	# UP TO N, so confirming early is allowed and Confirm is therefore offered from the FIRST pick onward — the session
+	# stays open and the aiming arc stays, so the player can also keep going.
+	_expect(_confirms >= 1, "Confirm is already offered after one pick — the card says 'up to 3'")
 	_expect(field.target_card == null, "the session is ready for a second pick")
 
 	field.set_target_card(backups[2])
@@ -73,7 +75,7 @@ func _ready() -> void:
 	field.set_target_card(backups[3] if backups.size() > 3 else backups[2])
 	print("[Multi] three picks: picked=%d confirms=%d" % [field.targeting_picked.size(), _confirms])
 	_expect(field.targeting_picked.size() == 3, "the session completes at three picks")
-	_expect(_confirms == 1, "and only then is Confirm offered, exactly once")
+	_expect(_confirms >= 3, "and Confirm was offered at every pick, the last one closing the session")
 
 	# --- count 1 is untouched -----------------------------------------------------------------------------------------
 	_confirms = 0

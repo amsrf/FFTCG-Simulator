@@ -58,6 +58,10 @@
 		]
 	},
 	"64":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Backup","count":3},
+			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
+		},
 		"skill":[
 			{
 				"s_cost":true,

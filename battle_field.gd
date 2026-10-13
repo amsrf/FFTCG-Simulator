@@ -463,6 +463,11 @@ func set_target_card(card: Card):
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
 	for taken in targeting_picked:
 		taken.set_valid_target(false, false)
+	# CONFIRM IS AVAILABLE NOW, WITH FEWER PICKS THAN THE COUNT. The card says "choose UP TO 3", so stopping early has to
+	# be possible — and the aiming arc stays, so the player can equally keep going and reach the full count, which ends
+	# the session by itself. Only the last slot is ever mandatory.
+	request_target_confirmation.emit(
+		targeting_picked.back() if not targeting_picked.is_empty() else null, targeting_allow_cancel)
 
 ## ONE STEP BACK, for a right-click. With SEVERAL picks it undoes the last one — its ring, its arc, its claim — and aims
 ## again, which is the state before that pick. With one pick it is the "drop the pick, keep aiming" it has always been.
