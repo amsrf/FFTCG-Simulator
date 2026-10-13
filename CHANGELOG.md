@@ -8,6 +8,22 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### The Hand Becomes a Spec: Sinks, Arches, and Adaptive Spacing (2026-10-13)
+
+The hand was rebuilt to a written spec, and the probe was reorganised so its 48 checks **are** that spec — five claims, in the order they are checked.
+
+**The row sinks.** At rest most of each card is **below the bottom edge**: the middle card tops out at y 998 of 1080 and runs to 1178, leaving **46% showing** — the name-and-cost strip. That is what gives the hover something to mean: the hovered card is the one brought up where the whole of it can be read.
+
+**The arch points the right way.** The middle card is highest and the ends sit ~11 px lower. The DIRECTION is asserted, not just the amount: the row had been a **bowl** — ends high, middle low — which is the opposite, and at ten pixels the two read the same by eye.
+
+**Spacing is adaptive.** `min(the dialled maximum, whatever fits the screen with a margin at each end)`, so a small hand spreads out, a large one tightens up, and the row never overflows. Horizontal position is symmetric about zero, so the hand is centred at every size. Swept at **1, 3, 7, 10 and 15 cards: centred at 960.0 of 1920 every single time**, spanning 104..1785 px at the widest.
+
+**The lean is subtle.** `FAN_TILT_PER_CARD_DEGREES = 2.0` (was 4.6), capped at 12° — neighbours differ by exactly **2.00°**, and the most any card leans is **7.0°** on an eight-card hand.
+
+**Two world-versus-local sign bugs, and both were invisible for the same reason.** This Hand is rotated 180° about Y, so a world-space direction added to a LOCAL position arrives reversed: the sink moved the row **up** the screen — dragging cards that were already below the edge back into full view — and the arch came out as a bowl. Both are about ten pixels and both looked exactly like "the feature isn't there". Every camera-derived offset now goes through the node's basis first. `_hover_offset()` already did; `calculate_card_position()` did not.
+
+**Also fixed:** the lean check was measuring the spread **end to end** (14°) instead of the most a single card leans (7°), which failed a hand comfortably inside the spec. And the hover test "lifted toward the camera" was comparing the hovered card with its own resting spot — which the sink moves away from the camera, so it mostly measured the sink cancelling the lift. It now measures against the **highest neighbour**, which is what being in front actually means: **0.234 m above it, and 0 of 7 neighbours in front.**
+
 ### Hand Sizing, the Stack-Scale Bug, and a Fan That Reads (2026-10-10)
 
 The hand was rebuilt around what a card is FOR at each moment. Sizes: a fan card **rests at 1.6** (129 × 180 px) and a **hovered one grows to 2.4** (193 × 270 px) — which is exactly what a card on the stack draws at, so playing from the hand is not also a resize. `Card.STACK_CARD_SCALE` is the one number behind both.
