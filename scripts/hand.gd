@@ -331,7 +331,16 @@ func fan_sag_for(i: int) -> float:
 ## Worked out from the camera on every layout rather than written down, because how much of a card ends up on screen
 ## depends on the card's size AND on the projection. The MIDDLE card is what is measured — the sink is applied to the
 ## whole row, so the arch survives it.
+##
+## ONLY THE LOCAL PLAYER'S HAND SINKS. This is one script used by both hands, and the sink is "put the cards' bottoms
+## on the bottom of the screen" — so applying it to the opponent's hand as well dragged THAT one down to the bottom
+## edge too, which is where nobody's hand should be. The opponent's hand sits at the top of their side and is left
+## where the scene puts it. Set this false on Opponent/Hand in game.tscn.
+@export var sink_below_screen: bool = true
+
 func _sink_offset() -> Vector3:
+	if not sink_below_screen:
+		return Vector3.ZERO
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cards.is_empty():
 		return Vector3.ZERO
@@ -357,21 +366,35 @@ func _sink_offset() -> Vector3:
 	var down: Vector3 = -cam.global_transform.basis.y.normalized()
 	return (global_transform.basis.inverse() * down) * ((want_top - top) / px_per_metre)
 
+
+## The direction, in THIS hand's local space, that moves a card DOWN the screen.
+##
+## Any camera-derived direction has to come through the node's own basis before it is added to a local position, and
+## this is that conversion in one place. It matters that it is derived rather than written as an axis: the player's Hand
+## is flipped 180 degrees about Y and the opponent's is not, so the same local axis means opposite things to the two of
+## them. That is what made the opponent's row bow upwards at the ends while the player's arched down.
+func _screen_down() -> Vector3:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return Vector3(0.0, 0.0, 1.0)
+	return global_transform.basis.inverse() * (-cam.global_transform.basis.y.normalized())
+
 func calculate_card_position(i) -> Vector3:
 	var t: float = i - (cards.size() - 1) / 2.0
 	# x is symmetric about zero, so the row is CENTRED on the Hand whatever its size is.
 	var x_offset: float = t * spacing()
-	# The arch: the middle highest, the ends lower. NOTE THE SIGN — this is a LOCAL offset and the Hand is rotated 180
-	# degrees about Y, so up the screen is this node's -Z, which means the ends come DOWN the screen by moving to +Z.
-	# Written the other way round the row is a bowl: the ends high and the middle low, the opposite of the intent, and
-	# the two are only ~10 px apart so it is easy to look at for a while and not see it.
+	# The arch: the middle highest, the ends lower. The direction comes from the CAMERA (see _screen_down), not from a
+	# hard-coded axis, because the two hands are not oriented the same way: the player's Hand is flipped 180 degrees
+	# about Y and the opponent's is not, so a local +Z moves one of them DOWN the screen and the other one UP. Written as
+	# a fixed axis the opponent's row bowed the wrong way — its ends sat 27 px ABOVE its middle, a bowl, while the
+	# player's arched correctly.
 	var z_offset: float = fan_sag_for(i)
 	# Height stagger: separates overlapping cards so a glow cannot bleed through the card in front of it. Measured from
 	# |t|, NOT from the index: an index ramp (i * CARD_STACK_HEIGHT) made the row lean, because card 0 and card n-1 sat
 	# at different depths and the two halves were not mirror images. Card i and card n-1-i have to sit at the same height
 	# with opposite lean, and this term was the one breaking that.
 	var y_offset: float = absf(t) * CARD_STACK_HEIGHT
-	var spot: Vector3 = Vector3(x_offset, y_offset, z_offset) + _sink_offset()
+	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) + _screen_down() * z_offset + _sink_offset()
 	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
 		spot += _hover_offset(i, spot)

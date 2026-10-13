@@ -196,6 +196,7 @@ transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.1
 
 [node name="Hand" parent="Opponent" unique_id=945820898 instance=ExtResource("5_7jktm")]
 transform = Transform3D(1, 0, 0, 0, 0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 2.211, 0.675683)
+sink_below_screen = false
 
 [node name="DamageZone" parent="Opponent" unique_id=1462438399 instance=ExtResource("14_215e1")]
 transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.597, 0.1, 0.579)

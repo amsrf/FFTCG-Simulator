@@ -86,6 +86,42 @@ func _ready() -> void:
 	_expect(resting < Card.STACK_CARD_SCALE,
 		"the hand RESTS smaller than the stack, so a hover has somewhere to grow to")
 
+	# ---------------------------------------------------------------- 0. the OPPONENT's hand does not sink
+	# ONE HAND SCRIPT DRIVES BOTH HANDS, and the sink means "put the cards' bottoms on the bottom edge of the screen" —
+	# which, applied to the opponent's hand as well, dragged that one down to the bottom too. The opponent's hand belongs
+	# at the top of their side and is left where the scene puts it; only the local player's sinks.
+	var foe: Hand = game.get("opponent_hand")
+	_expect(foe != null, "the match has an opponent's hand")
+	if foe != null and not foe.cards.is_empty():
+		var foe_mid: Card = foe.cards[foe.cards.size() / 2]
+		var foe_y: float = cam.unproject_position(foe.global_transform * foe_mid.position).y
+		print("[HandHover] the opponent's hand sits at y %.0f of %.0f, and sink_below_screen is %s" % [
+			foe_y, view.y, str(foe.sink_below_screen)])
+		_expect(not foe.sink_below_screen, "only the local player's hand sinks below the screen")
+		_expect(foe_y < view.y * 0.5, "so the opponent's hand is NOT dragged down to the bottom with it")
+
+		# ITS FAN SHAPE is a separate question from its position, and worth printing rather than assuming. This Hand is
+		# NOT rotated 180 degrees about Y the way the player's is (see game.tscn), so a local +Z points up the screen for
+		# one hand and down for the other — which would mirror the arch and the lean even with the position correct.
+		# Printed only: the position is what was reported, and this says whether the shape needs the same treatment.
+		var foe_centre: float = cam.unproject_position(foe.global_transform * foe_mid.position).y
+		var foe_out: float = -INF
+		var foe_low: float = INF
+		for c in foe.cards:
+			var cy: float = cam.unproject_position(foe.global_transform * c.position).y
+			foe_out = maxf(foe_out, cy - foe_centre)
+			foe_low = minf(foe_low, cy - foe_centre)
+		print("[HandHover]   %d cards in the opponent's hand: offsets from the middle run %+.1f .. %+.1f px" % [
+			foe.cards.size(), foe_low, foe_out])
+		print("[HandHover]   its ends sit %.1f px %s the middle, and its outer cards lean %+.1f deg (player: %+.1f)" % [
+			absf(foe_out), "BELOW" if foe_out > 0.0 else "ABOVE",
+			rad_to_deg(foe.fan_angle_for(0)), rad_to_deg(hand.fan_angle_for(0))])
+		# AND IT ARCHES THE SAME WAY UP AS THE PLAYER'S. The two Hand nodes are not rotated the same way — the player's
+		# is flipped 180 degrees about Y and this one is not — so a hard-coded local axis bowed the opponent's row
+		# UPWARDS at the ends, a bowl, while the player's arched down. Both now take the direction from the camera.
+		_expect(foe_out > 2.0, "the opponent's row arches the SAME way — its ends lower than its middle too")
+
+
 	# ---------------------------------------------------------------- 5. the lean is subtle
 	print("[HandHover] --- 5. the lean ----------------------------------------------")
 	var per_card: float = rad_to_deg(absf(hand.fan_angle_for(1) - hand.fan_angle_for(0)))
