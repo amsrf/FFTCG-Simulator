@@ -117,12 +117,16 @@ func _ready() -> void:
 		var foe_centre: float = cam.unproject_position(foe.global_transform * foe_mid.position).y
 		var foe_out: float = -INF
 		var foe_low: float = INF
-		for c in foe.cards:
-			var cy: float = cam.unproject_position(foe.global_transform * c.position).y
-			foe_out = maxf(foe_out, cy - foe_centre)
-			foe_low = minf(foe_low, cy - foe_centre)
-		print("[HandHover]   %d cards, offsets from the middle run %+.1f .. %+.1f px — theirs must be NEGATIVE where ours are positive" % [
-			foe.cards.size(), foe_low, foe_out])
+		print("[HandHover]   i   screen.x   screen.y   rotation    vs the middle")
+		for i in range(foe.cards.size()):
+			var c: Card = foe.cards[i]
+			var p: Vector2 = cam.unproject_position(foe.global_transform * c.position)
+			foe_out = maxf(foe_out, p.y - foe_centre)
+			foe_low = minf(foe_low, p.y - foe_centre)
+			print("[HandHover] %3d   %8.1f   %8.1f   %7.2f    %+6.1f px" % [
+				i, p.x, p.y, rad_to_deg(c.rotation.y), p.y - foe_centre])
+		print("[HandHover]   offsets run %+.1f .. %+.1f px — theirs must be NEGATIVE where ours are positive" % [
+			foe_low, foe_out])
 		_expect(foe_low < -2.0 and foe_out < 2.0,
 			"the opponent's row is a HAPPY face: ends higher than the middle, the mirror of ours")
 

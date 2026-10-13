@@ -134,7 +134,11 @@ func set_revealed(is_revealed: bool) -> void:
 func _get_card_back_material() -> StandardMaterial3D:
 	if _card_back_material == null:
 		_card_back_material = StandardMaterial3D.new()
-		_card_back_material.albedo_color = Color(0.10, 0.11, 0.16)
+		# A NORMAL GREY, not near-black. This was (0.10, 0.11, 0.16), which is fine for one card turning over during a
+		# draw and reads as a black hole when a whole hand of them sits on screen — the opponent's five cards measured
+		# #3f3f3f and covered 6% of the frame. It is meant to say "there is a card here, face down", and the rest of the
+		# board's card-sized greys sit around 0.6.
+		_card_back_material.albedo_color = Color(0.58, 0.60, 0.64)
 		_card_back_material.roughness = 0.85
 	return _card_back_material
 

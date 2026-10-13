@@ -400,15 +400,31 @@ func calculate_card_position(i) -> Vector3:
 	# a fixed axis the opponent's row bowed the wrong way — its ends sat 27 px ABOVE its middle, a bowl, while the
 	# player's arched correctly.
 	var z_offset: float = fan_sag_for(i)
-	# Height stagger: separates overlapping cards so a glow cannot bleed through the card in front of it. Measured from
-	# |t|, NOT from the index: an index ramp (i * CARD_STACK_HEIGHT) made the row lean, because card 0 and card n-1 sat
-	# at different depths and the two halves were not mirror images. Card i and card n-1-i have to sit at the same height
-	# with opposite lean, and this term was the one breaking that.
-	var y_offset: float = absf(t) * CARD_STACK_HEIGHT
+	# STACKING ORDER, and it is monotonic in `i` on purpose: a card to the RIGHT is always drawn over the one to its
+	# left, so the row reads as a sequence of overlaps rather than a jumble. It also separates them far enough that a
+	# glow cannot bleed through the card in front of it.
+	#
+	# NOT |t|, which is what this was for one revision while fixing the lopsided row. A symmetric ramp makes the CENTRE
+	# the furthest card and BOTH ENDS the nearest, so the stacking flips over at the middle — the left half has the left
+	# card on top and the right half has the right one, and it is the cards either side of centre that look wrong.
+	#
+	# AND ALONG THE CAMERA'S AXIS, not world Y. The camera is orthographic, so moving along its own axis changes a card's
+	# DEPTH and nothing else — no pixels of screen movement at all. A world Y ramp is also a little bit of screen height,
+	# which is what made the row look very slightly lopsided in the first place.
+	var y_offset: float = 0.0
 	# THE ARC TURNS OVER when this hand is mirrored: their ends ride UP and the middle is LOWEST, a happy face where ours
 	# is a sad one. That is not really a special case — it is the same presentation seen from the other side of the table.
 	var turn: float = -1.0 if mirror_presentation else 1.0
-	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) + _screen_down() * (z_offset * turn) + _sink_offset()
+	# The camera's own back-to-front axis, in this hand's local space. Camera.basis.z points BACK toward the viewer, so
+	# this is "one step nearer the camera" — depth and nothing else, because the projection is orthographic.
+	var toward_cam: Vector3 = Vector3.UP
+	var cam_now: Camera3D = get_viewport().get_camera_3d()
+	if cam_now != null:
+		toward_cam = global_transform.basis.inverse() * cam_now.global_transform.basis.z.normalized()
+	var spot: Vector3 = Vector3(x_offset, y_offset, 0.0) \
+		+ _screen_down() * (z_offset * turn) \
+		+ toward_cam * (float(i) * CARD_STACK_HEIGHT) \
+		+ _sink_offset()
 	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
 	# layout, and Card.set_revealed() returns immediately when nothing has changed.
 	cards[i].set_revealed(not mirror_presentation)
