@@ -397,8 +397,16 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	if agent != null and not (agent is LocalAgent):
 		agent.choose_target(owner_id, card, targeting_criteria)
 
-## A fresh arc, aimed at the pointer from `from`. Kept in `targeting_arrows` as well as `arrow` so a session can leave
-## several behind — one locked on each pick — and still free every one of them when it ends.
+## A fresh arc, aimed at the pointer from `from`.
+##
+## THE INVARIANT this section maintains, and that everything here depends on:
+##
+##     targeting_arrows is ONE ARC PER PICK, in pick order, PLUS ONE AIMING ARC at the end.
+##
+## So targeting_arrows[i] is the arc locked on targeting_picked[i], and the last element is the one following the pointer.
+## When the session is FULL there is no aiming arc — the last element is the final pick's — and _aim_with_current() adds
+## one after a step back re-opens it. Breaking this is invisible until a step back removes the wrong arc, or two at once,
+## or leaves one on screen: the arrows and the state quietly stop agreeing.
 func _spawn_aiming_arrow(from: Card) -> void:
 	var fresh = ballistic_arrow_scene.instantiate()
 	arrow = fresh
@@ -406,10 +414,24 @@ func _spawn_aiming_arrow(from: Card) -> void:
 	fresh.set_is_aiming_from_card(true, from)
 	targeting_arrows.append(fresh)
 
-## Drop one pick: its ring, its arc, and its claim on being the current target. Used by the step-back path.
+## Point the aiming arc at the pointer from `source_card`, spawning one when the picks have caught up with the arcs.
+## The ONLY place `arrow` is assigned besides a spawn, so the invariant cannot drift out from under it.
+func _aim_with_current() -> void:
+	while targeting_arrows.size() <= targeting_picked.size():
+		_spawn_aiming_arrow(source_card)
+	var pointing = targeting_arrows.back()
+	arrow = pointing
+	if pointing != null and is_instance_valid(pointing):
+		# It must not stay locked: at a full session the last element is a PICK's arc, and borrowing it would set that
+		# pick's arrow following the pointer and leave its card bare.
+		pointing.locked = false
+		pointing.set_is_aiming_from_card(true, source_card)
+
+## Drop one pick: its ring, its arc, and its claim on being the current target.
 ##
-## THE ARC AT `at`, not at `at + 1`: the session spawns one arc per pick in order, so the arc that was locked on pick 0
-## is targeting_arrows[0] and the aiming one at the end is the extra.
+## THE ARC AT `at` IS THAT PICK'S, by the invariant above — so exactly ONE arrow leaves the board. `at + 1` was wrong,
+## and freeing the aiming arc separately in the caller was wrong too: between them the array collected dead arcs, its
+## indexes stopped matching the picks, and a single step back could take two arrows off at once.
 func _drop_pick(at: int) -> void:
 	var picked: Card = targeting_picked[at]
 	targeting_picked.remove_at(at)
@@ -433,12 +455,19 @@ func _drop_pick(at: int) -> void:
 			taken.set_targeted_highlight(true)
 		else:
 			taken.set_selected_highlight(true)
+	# Re-establish the invariant before anything reads the arrows again.
+	_aim_with_current()
 
 func set_target_card(card: Card):
 	# A click only counts when the candidate is a legally valid target.
 	# is_valid_target is set by set_viable_targets() (criteria + protection).
 	if not card.is_valid_target:
 		push_warning("[Targeting] %s is not a valid target" % card.card_name)
+		return
+	# A FULL SESSION IGNORES FURTHER PICKS. It is complete at `count`, and a click after that used to be taken anyway —
+	# leaving one more pick than the session had arcs for, which is a state nothing downstream could match back up.
+	# Confirm and a right-click are the two ways on from here.
+	if targeting_count > 1 and targeting_picked.size() >= targeting_count:
 		return
 	# Blue and orange are the LOCAL player's vocabulary: "legal" and "you picked this".
 	# When the opponent is the one choosing, the picked card is shown in RED instead —
@@ -491,11 +520,10 @@ func set_target_card(card: Card):
 ## report. Stepping back re-opens the session: a new aiming arc appears and the picks that remain are still picks.
 func clear_target_selection() -> void:
 	if targeting_count > 1 and not targeting_picked.is_empty():
+		# ONE call. `_drop_pick` removes that pick's arc AND re-establishes the aiming one (see _aim_with_current).
+		# Also freeing the aiming arc here, as this used to, is what let a single step back take TWO arrows off the
+		# board — and left a dead arc in the array, so the indexes stopped matching the picks.
 		_drop_pick(targeting_picked.size() - 1)
-		# `_drop_pick` freed the arc that was locked on it; the aiming arc is a separate one.
-		if arrow != null and is_instance_valid(arrow):
-			arrow.queue_free()
-		_spawn_aiming_arrow(source_card)
 		print("[Targeting] back to %d of %d" % [targeting_picked.size(), targeting_count])
 		if not targeting_picked.is_empty():
 			# Picks remain, so finishing early is still allowed: Confirm stays on offer next to the aiming arc.

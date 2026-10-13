@@ -104,6 +104,23 @@ func _ready() -> void:
 	print("[Multi] step back 3 from full: picked=%d" % field.targeting_picked.size())
 	_expect(field.targeting_picked.size() == 0, "and again to none — every pick comes back, one per click")
 
+	# --- the reported sequence: three picks, taken to none, then re-picked IN THE OTHER ORDER and stepped back once.
+	# The arrows and the picks used to stop agreeing here, and the single step back took TWO arrows off the board.
+	field.set_target_card(backups[3])
+	field.set_target_card(backups[2])
+	field.set_target_card(backups[1])
+	print("[Multi] reversed order, full: picked=%d arcs=%d" % [
+		field.targeting_picked.size(), field.targeting_arrows.size()])
+	_expect(field.targeting_picked.size() == 3, "re-picking in the other order fills the session again")
+	_expect(field.targeting_arrows.size() == 3, "a full session holds exactly one arc per pick, and none aiming")
+	field.clear_target_selection()
+	print("[Multi] reversed order, one step back: picked=%d arcs=%d" % [
+		field.targeting_picked.size(), field.targeting_arrows.size()])
+	_expect(field.targeting_picked.size() == 2, "one step back leaves two picks")
+	_expect(field.targeting_arrows.size() == 3, "and takes exactly ONE arrow, not two")
+	_expect(field.targeting_arrows.size() == field.targeting_picked.size() + 1,
+		"leaving the invariant intact: one arc per pick, plus the aiming one")
+
 	# --- count 1 is untouched -----------------------------------------------------------------------------------------
 	_confirms = 0
 	field.request_target({"is_type": "Backup"}, source, true, "Ability")
