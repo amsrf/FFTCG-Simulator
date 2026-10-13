@@ -7,10 +7,8 @@ const CARD_CHARGE = 2
 ## so nothing can overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
 ## and _hover_offset(). This is the timeline for all of it.
 const HOVER_SECONDS := 0.16
-## How far the hovered card is lifted toward the camera. It only has to clear the fan's whole height stagger
-## (CARD_STACK_HEIGHT times the number of cards), and it is nearly free on screen: +Y costs 0.174 m of travel per metre
-## against 0.985 for +Z, so this reads as DEPTH rather than as movement. See _hover_offset().
-const HOVER_DEPTH_LIFT := 0.15
+## How far a hovered card is lifted toward the camera is NOT a constant: it has to clear the whole stacking ramp, which
+## depends on how many cards are in the hand. See _hover_lift() below.
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
@@ -495,13 +493,27 @@ func set_hovered(card: Card, entered: bool) -> void:
 ## Returns a LOCAL offset to add to the card's fan position. It is computed from that position rather than from the
 ## node, because the node has not been moved yet and is mid-growth — and one pass is enough, because orthographic
 ## projection is affine: moving a card cannot change how big it looks, only where it lands.
+## HOW FAR A HOVERED CARD IS LIFTED TOWARD THE CAMERA, in metres.
+##
+## DERIVED FROM THE HAND, and it has to be, because the stacking ramp ACCUMULATES: every card sits CARD_STACK_HEIGHT
+## nearer than the one to its left, so the cards to a hovered card's right are up to (n - 1) steps nearer and the deepest
+## of them wins the depth test. A flat 0.15 m lift loses that race from eight cards onward, which is exactly what "even
+## when I hover over a card I can't see it fully" was: the cards to its right were drawn over it.
+##
+## Clearing the whole ramp is the requirement, so the lift IS the whole ramp plus a margin — and it is free. The lift runs
+## along the camera's own axis and the camera is orthographic, so the card does not move a single pixel; only the order
+## the depth buffer draws them in changes.
+func _hover_lift() -> float:
+	return (float(cards.size()) + 2.0) * CARD_STACK_HEIGHT
+
 func _hover_offset(i: int, base: Vector3) -> Vector3:
-	# LIFT FIRST, ALWAYS. Depth toward this camera is dominated by +Y — it looks almost straight down — and Y is also
-	# the axis that costs almost nothing on screen: 0.174 m of travel per metre against 0.985 for Z. So a lift that
-	# clears the fan's whole stagger is invisible as movement. Doing it in Z would slide the card up the screen, which
-	# is a repositioning, not a layer change.
-	var lift: Vector3 = Vector3.UP * HOVER_DEPTH_LIFT
+	# LIFT FIRST, ALWAYS, AND ALONG THE CAMERA'S OWN AXIS. Under an orthographic camera that costs not one pixel of
+	# screen movement — the card changes depth and nothing else — which is what a layer change should be made of. Doing it
+	# in Z would slide the card up the screen, which is a repositioning, not a layer change.
 	var cam: Camera3D = get_viewport().get_camera_3d()
+	var lift: Vector3 = Vector3.UP * _hover_lift()
+	if cam != null:
+		lift = cam.global_transform.basis.z.normalized() * _hover_lift()
 	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL:
 		# Under perspective a fit would have to be solved iteratively, because moving the card would change how big it
 		# is. Better to leave it lifted than to half-do it.

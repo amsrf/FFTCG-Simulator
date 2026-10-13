@@ -307,6 +307,32 @@ func _ready() -> void:
 	print("[HandHover] %d of %d neighbours are in front of it" % [behind, hand.cards.size() - 1])
 	_expect(behind == 0, "no neighbour can overlap it")
 
+	# AND THE SAME CHECK FOR THE WORST CASE — THE LEFTMOST CARD, which has the most cards to its right and therefore the
+	# most depth to make up. This exists because the previous version of this probe hovered cards[1] of eight and PASSED
+	# while the feature was broken: the lift was a flat 0.15 m and the stacking ramp accumulates at CARD_STACK_HEIGHT per
+	# card, so cards[1] cleared it by 10 mm and a real hand did not.
+	var ramp_span: float = float(maxi(hand.cards.size() - 1, 0)) * hand.CARD_STACK_HEIGHT
+	print("[HandHover] the hover lift is %.3f m against a stacking ramp span of %.3f m" % [
+		hand._hover_lift(), ramp_span])
+	_expect(hand._hover_lift() > ramp_span, "the hover lift clears the ENTIRE stacking ramp, not just part of it")
+
+	var worst: Card = hand.cards[0]
+	hand.set_hovered(worst, true)
+	await get_tree().create_timer(0.3).timeout
+	var worst_view: Vector3 = -cam.global_transform.basis.z
+	var worst_in_front: int = 0
+	for c in hand.cards:
+		if c != worst and (c.global_position - worst.global_position).dot(worst_view) < 0.0:
+			worst_in_front += 1
+	print("[HandHover] leftmost card hovered: %d of %d neighbours are still in front of it" % [
+		worst_in_front, hand.cards.size() - 1])
+	_expect(worst_in_front == 0, "even the leftmost card is fully visible when hovered — nothing overlaps it")
+	# PUT THE PREVIOUS CARD BACK. The checks that follow are about the card the hover section opened with, and this block
+	# just moved the hover off it.
+	hand.set_hovered(worst, false)
+	hand.set_hovered(card, true)
+	await get_tree().create_timer(0.3).timeout
+
 	# Lifted CLEAR OF ITS NEIGHBOURS, measured against them rather than against its own resting spot: the whole row
 	# SINKS below the screen now, and the sink moves a card AWAY from the camera, so comparing with its own resting
 	# position mostly measures the sink cancelling the lift back out.
