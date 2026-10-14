@@ -484,6 +484,9 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	var zone: Node3D = side.get_node_or_null("DamageZone") as Node3D
 	if zone == null:
 		return
+	# DECLARED HERE, not inside the fallback below: the print further down reports which side was zoomed, and
+	# scoping it to the fallback is what turned this function into a parse error for a whole run.
+	var which: String = "player" if side == player else "opponent"
 	# THE CAMERA LIVES IN THE ZONE, and its NAME DOES NOT MATTER: whatever Camera3D sits inside this side's damage
 	# zone IS this side's damage camera. That is the arrangement the game uses, and position is something a scene
 	# cannot get wrong by typing the name differently. The old names remain as a fallback so a camera left at the
@@ -493,7 +496,6 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 		cam = child as Camera3D
 		break
 	if cam == null:
-		var which: String = "player" if side == player else "opponent"
 		cam = find_child(str(DAMAGE_CAMERAS[which]), true, false) as Camera3D
 	if cam == null:
 		return
