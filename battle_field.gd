@@ -96,6 +96,10 @@ func _ensure_preview() -> void:
 	_preview_layer.layer = 5
 	add_child(_preview_layer)
 	_preview = TextureRect.new()
+	# ROUNDED CORNERS AND THE THIN BLACK BOTTOM LINE, from the same shader the deck editor's and the search
+	# window's previews use. Reusing it rather than redrawing the effect here means a hovered card looks the
+	# same everywhere in the game, and the corner radius stays a single number to change.
+	_preview.material = CARD_VIEW.round_material()
 	_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 	# Never takes the mouse: the preview must not steal hover from the card that opened it.

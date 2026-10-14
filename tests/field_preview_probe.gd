@@ -56,6 +56,14 @@ func _ready() -> void:
 	_expect(p != null, "the preview node exists")
 	if p != null:
 		_expect(p.texture != null, "and it has a texture — the full scan, not a blank panel")
+		# THE ROUNDED TREATMENT, asserted rather than assumed. The preview must carry the shared
+		# rounded-corner material, or the hovered card would be the one square-cornered card image in a game
+		# where every other card image has rounded corners and the thin black bottom line.
+		_expect(p.material is ShaderMaterial,
+			"and it wears the rounded-corner material, not a bare square texture")
+		if p.material is ShaderMaterial:
+			_expect(float(p.material.get_shader_parameter("radius")) > 0.0,
+				"and that material actually rounds the corners (radius > 0)")
 		var view: Vector2 = get_viewport().get_visible_rect().size
 		var frac: float = p.size.y / maxf(view.y, 1.0)
 		print("[FieldPreview] preview %.0f x %.0f px (%.0f%% of %.0f tall) at %s" % [
