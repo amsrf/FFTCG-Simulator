@@ -129,13 +129,40 @@ func show_card_preview(card: Card) -> void:
 	_preview.pivot_offset = size * 0.5
 
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	var anchor: Vector2 = view * 0.5
+	# PLACE IT OUTSIDE THE CARD, NOT BESIDE ITS CENTRE. Offsetting from the centre put the preview's left edge
+	# ~16 px right of the middle of the card, so the thing meant to help you read the card covered its right half.
+	# The edges come from projecting the card's four face corners, which is what makes this survive the field's
+	# rotation and the card's own tilt instead of assuming an upright card of a known size.
 	var cam: Camera3D = get_viewport().get_camera_3d()
+	var rect: Rect2 = Rect2()
 	if cam != null:
-		anchor = cam.unproject_position(card.global_position)
-	var x: float = anchor.x + preview_gap
+		# A card face is 0.429 wide by 0.6 tall in its own space: x is the width axis, z the height. The
+		# transform scale is not 1 (a zone sets it), so it is read rather than assumed.
+		var s: Vector3 = card.global_transform.basis.get_scale()
+		var across: Vector3 = card.global_transform.basis.x.normalized() * (0.429 * 0.5 * s.x)
+		var along: Vector3 = card.global_transform.basis.z.normalized() * (0.6 * 0.5 * s.z)
+		var corners: Array[Vector3] = [
+			card.global_position + across + along, card.global_position + across - along,
+			card.global_position - across + along, card.global_position - across - along]
+		var mn: Vector2 = Vector2(INF, INF)
+		var mx: Vector2 = Vector2(-INF, -INF)
+		for p in corners:
+			var sp: Vector2 = cam.unproject_position(p)
+			mn = mn.min(sp)
+			mx = mx.max(sp)
+		rect = Rect2(mn, mx - mn)
+	var anchor: Vector2 = rect.position + rect.size * 0.5
+	var edge_right: float = rect.position.x + rect.size.x
+	var edge_left: float = rect.position.x
+	if rect.size.x <= 0.0:
+		# No camera, or a degenerate projection: fall back to the middle of the screen, still preferring the right.
+		anchor = view * 0.5
+		edge_right = anchor.x
+		edge_left = anchor.x
+	var x: float = edge_right + preview_gap
 	if x + size.x > view.x - 8.0:
-		x = anchor.x - preview_gap - size.x
+		# No room to the right of the card, so put it to the LEFT of the card instead.
+		x = edge_left - preview_gap - size.x
 	x = clampf(x, 8.0, maxf(8.0, view.x - size.x - 8.0))
 	var y: float = anchor.y - size.y * 0.5
 	y = clampf(y, 8.0, maxf(8.0, view.y - size.y - 8.0))

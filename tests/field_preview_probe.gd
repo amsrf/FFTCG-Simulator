@@ -72,6 +72,19 @@ func _ready() -> void:
 		_expect(p.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 			"and it IGNORES the mouse, or it would steal the hover that opened it")
 
+		# AND IT MUST NOT SIT ON TOP OF THE CARD. This check exists because of the reported bug: the preview was
+		# offset from the card's CENTRE, so it covered the card's right half — the aid hiding the thing it was
+		# meant to help read. Measured against the card's rightmost projected corner so a rotated card is handled.
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		if cam != null:
+			var s3: Vector3 = card.global_transform.basis.get_scale()
+			var across: Vector3 = card.global_transform.basis.x.normalized() * (0.429 * 0.5 * s3.x)
+			var right_x: float = maxf(cam.unproject_position(card.global_position + across).x,
+				cam.unproject_position(card.global_position - across).x)
+			_expect(p.position.x >= right_x - 2.0,
+				"and it does NOT overlap the card it previews (its left edge %.0f vs the card's right edge %.0f)"
+					% [p.position.x, right_x])
+
 	# Now the real path: the card's own handler, which is what a hovering pointer triggers.
 	card._on_card_area_3d_mouse_entered()
 	await get_tree().process_frame
