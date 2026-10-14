@@ -278,6 +278,14 @@ func _input(event):
 		# zoom. The old version called the zone directly, so a card appeared in the damage zone but nothing
 		# counted it as damage and the camera never moved — which is exactly how it looked when the AI attacked.
 		opponent.take_damage(1)
+	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_Y:
+		# DEBUG: the same, on OURSELVES. T damages the opponent (their zone, their camera); Y damages the player,
+		# so the player's own damage zone and its camera can be looked at without waiting for the AI to land an
+		# attack through the block step. Same real path, so it counts.
+		#
+		# Worth knowing: it counts toward the defeat total like any other damage. Seven presses of Y and you lose,
+		# which is correct rather than a bug — the debug key uses the real rules on purpose.
+		player.take_damage(1)
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
