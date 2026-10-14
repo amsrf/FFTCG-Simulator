@@ -8,6 +8,47 @@ All notable changes to the FF TCG Simulator project.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
 
+### Cameras, the Unlit Board, and the Hover Preview (2026-10-14)
+
+**Hovering a field card shows it readable.** A battlefield card is drawn small because that is what a board
+is for, so its rules text cannot be read there. Hovering one now shows the full scan at 38% of the viewport,
+placed to the RIGHT of the card, flipping left when there is no room and then clamped into the window — the
+same rule the deck editor and the search window use, and the same `CardView.round_material()` for the rounded
+corners and the thin black bottom line, so a hovered card looks the same everywhere in the game. Screen-space
+`CanvasLayer` with `mouse_filter = IGNORE`, built on first hover. **The first size tried was 62%, which is a
+~670 px card — a takeover, not a preview.**
+
+**Cards render unlit.** `shaders/card.gdshader` had no `render_mode`, so every card was lit by the board's
+directional light and ambient and read pale beside the same scan shown as a 2D texture in the preview — which
+is how it was spotted. It is `render_mode unshaded` now, so the art shows the colours that are in the scan.
+The trade: unlit board cards read slightly flatter. The hand keeps its physicality from the fan and overlaps;
+a soft shadow quad under a card would restore it on the board if it ever looks too flat.
+
+**The damage zoom.** When a side takes damage the view cuts to that side's damage zone — 0.35 s in, 1.0 s held,
+0.4 s back — so the card landing there is seen rather than inferred from a number. The cameras are placed by
+hand, because angle and distance are taste and the scene should own them; what the code adds is tracking, since
+"the centre of where the card is going to be placed" moves as the row grows. `T` and `Y` debug keys fire real
+damage at the opponent and at the player, and `C` cycles the active camera.
+
+#### Things this cost, worth not repeating
+
+- **A camera is identified by WHERE IT IS, not what it is called.** Tried names first and failed three times in
+  one day. A damage camera is any `Camera3D` inside a `DamageZone` now.
+- **Godot activates the FIRST `Camera3D` when none is marked `current`.** A damage camera above the board camera
+  becomes the view from the first frame: an upside-down board, and every probe measuring screen positions falls
+  over. `start_match` picks the board camera itself now, so scene order is not load-bearing.
+- **A verification claim must come from raw output.** Grepping a probe's output for its own tag hid a
+  `SCRIPT ERROR`, and the truncated list was read as a pass. Check the error count and the tail, not a filter.
+- **An assertion must describe what a person will SEE.** `edge_depth > 0` passed on a 1.6 px line nobody could
+  see; `frac > 0.4` failed the moment the preview was made sensibly smaller. Bands and pixels, not "a value was
+  set".
+- **A flag does not make a change safe.** The tiles experiment sat behind `use_tiles_on_field`, but
+  `_apply_visual_mode()` ran on every zone change for every card, so turning it off still went through the new
+  code. It was reverted. Probes check GAME state, and a visual regression passes all of them.
+- **Build the look in isolation first.** The tiles failed because a whole visual swap was wired into the live
+  card in one step. The hover preview worked because it is additive: reachable only from a hover, on a field
+  card, through two accessors.
+
 ### The Opponent's Fan, the Stacking Order, and a Tool That Sees (2026-10-13, continued)
 
 The opponent's hand was corrected four times in a row — position, arc, lean, then arc again — because each round fixed
