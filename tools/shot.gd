@@ -47,6 +47,26 @@ func _ready() -> void:
 		MatchSetup.config = MatchSetup.build_config(preset)
 		var game: Node = load("res://game.tscn").instantiate()
 		add_child(game)
+		# --hover-field <index>: open the field's hover preview on a battlefield card so a shot can show it.
+		# The preview only appears on hover and a screenshot harness cannot hover, which meant every claim about
+		# its rounded corners, its bottom line and where it lands was unverifiable until a person looked — and
+		# several of those claims turned out to be wrong in ways no boot could reveal.
+		# This drives the SAME entry point the pointer drives, so what it shows is what a player sees.
+		if _args.has("hover-field"):
+			await _settle(4)
+			var hover_field: Node = game.get("field")
+			if hover_field == null:
+				print("[Shot] no field to hover")
+			else:
+				var fronts: Array = hover_field.get("front_cards")
+				var idx: int = int(_args["hover-field"])
+				if idx >= 0 and idx < fronts.size():
+					hover_field.call("show_card_preview", fronts[idx])
+					await _settle(4)
+					print("[Shot] hover preview on '%s' | visible=%s" % [
+						fronts[idx].get("card_name"), hover_field.call("preview_visible")])
+				else:
+					print("[Shot] --hover-field %d is out of range (the board has %d)" % [idx, fronts.size()])
 		# --cam-zoom <f>: multiply the game's camera size (or fov) so a small detail can be inspected at
 		# full resolution. With a payment up, the camera also centres on the readout — zooming about the
 		# screen centre alone would push a readout that sits low on the screen straight out of frame.
