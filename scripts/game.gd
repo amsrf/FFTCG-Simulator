@@ -135,6 +135,19 @@ func start_match(config: Dictionary) -> void:
 	# the same scene serves the menu, the practice board, and future self-play.
 	priority_holder = 0
 	_warm_up_effect_shaders()
+	# DECIDE THE VIEW EXPLICITLY. game.tscn marks no camera current, so Godot activates the FIRST Camera3D in the
+	# tree — and once a damage camera exists it is easy to place one ABOVE the board camera, at which point the
+	# match starts looking through a snapshot camera aimed at a damage zone. That is not hypothetical: it happened,
+	# it showed an upside-down board, and it broke every test that measures screen positions. The board view is the
+	# camera that is NOT one of the damage cameras, and it is made current here so scene order stops mattering.
+	var damage_names: Array = DAMAGE_CAMERAS.values()
+	for node in find_children("*", "Camera3D", true, false):
+		if not (str(node.name) in damage_names):
+			var board_cam: Camera3D = node as Camera3D
+			board_cam.current = true
+			_board_camera = board_cam
+			print("[Camera] board view is '%s'" % board_cam.name)
+			break
 
 	player_agent = LocalAgent.new()
 	player_agent.bind(self)
