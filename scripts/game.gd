@@ -403,11 +403,91 @@ func cause_attacking_damage():
 ## A side took damage. Checking the threshold here means every damage source —
 ## attacks and effects alike — shares one win condition.
 func _on_player_side_damaged(side: PlayerSide) -> void:
+	# THE ZOOM RUNS FOR EVERY HIT, so it is called BEFORE the guard below — that guard returns early for
+	# ordinary damage and only lets a defeat through, so hooking after it would zoom only on the losing blow.
+	_zoom_to_damage(side)
 	if match_over or not side.is_defeated():
 		return
 	# Compare against the node, like side_for(), so there is only one definition
 	# of which side is P1 (the exported `controller` must not be a second one).
 	_end_match(2 if side == player else 1)
+
+
+# ------------------------------------------------------------------
+# Damage zoom
+# ------------------------------------------------------------------
+## When a side takes damage the view cuts to that side's damage zone for a moment, so the card landing there
+## is actually seen rather than inferred from a number.
+##
+## THE CAMERAS ARE PLACED BY HAND, and that is deliberate: angle, height and distance are taste decisions, so
+## the scene owns them and this only decides WHEN to look and for how long. What it adds is TRACKING — "the
+## centre of where the damage card is going to be placed" is a moving target, because the row grows as cards
+## accumulate, so the camera is translated by however far that slot has drifted from the first one. Parked
+## over the first slot it reproduces the hand-placed framing exactly.
+##
+## A missing camera is skipped silently. A match must never depend on a node existing, and these two are
+## optional decoration — the game is fully playable with neither built.
+const DAMAGE_CAMERAS := {
+	"player": "CameraDamagePlayer",
+	"opponent": "CameraDamageOpponent",
+}
+
+@export var damage_zoom_in_seconds: float = 0.35
+@export var damage_zoom_hold_seconds: float = 1.0
+@export var damage_zoom_out_seconds: float = 0.4
+
+## The board view to come back to. Captured on the first zoom, because at that moment it IS the board view.
+var _board_camera: Camera3D = null
+var _damage_tween: Tween = null
+
+
+## The world point the NEXT damage card will occupy in `zone` — the same formula the zone uses for an incoming
+## card, evaluated at the slot after the last one, in the zone's own space.
+func _damage_slot_world(zone: Node3D, index: int) -> Vector3:
+	return zone.global_transform * (zone.call("calculate_card_position", index) as Vector3)
+
+
+func _zoom_to_damage(side: PlayerSide) -> void:
+	if side == null or match_over:
+		return
+	var which: String = "player" if side == player else "opponent"
+	var cam: Camera3D = find_child(str(DAMAGE_CAMERAS[which]), true, false) as Camera3D
+	if cam == null:
+		return
+	var zone: Node3D = side.get_node_or_null("DamageZone") as Node3D
+	if zone == null:
+		return
+	if _board_camera == null or not is_instance_valid(_board_camera):
+		_board_camera = get_viewport().get_camera_3d()
+	if _board_camera == null or _board_camera == cam:
+		return
+
+	var cards: Array = zone.get("cards")
+	var next_index: int = cards.size() if cards != null else 0
+	# The pose to land on: the camera's own hand-placed framing, shifted by the slot's drift from slot zero.
+	var drift: Vector3 = _damage_slot_world(zone, next_index) - _damage_slot_world(zone, 0)
+	var target: Transform3D = cam.global_transform
+	target.origin = cam.global_position + drift
+
+	var board_pose: Transform3D = _board_camera.global_transform
+	if _damage_tween != null and _damage_tween.is_valid():
+		_damage_tween.kill()
+	# Tweening the DAMAGE camera rather than the board one means the board's own transform is never touched.
+	cam.global_transform = board_pose
+	cam.current = true
+	print("[DamageZoom] %s -> %s (slot %d)" % [which, cam.name, next_index])
+
+	_damage_tween = create_tween()
+	_damage_tween.set_trans(Tween.TRANS_SINE)
+	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
+	_damage_tween.tween_interval(damage_zoom_hold_seconds)
+	_damage_tween.tween_property(cam, "global_transform", board_pose, damage_zoom_out_seconds).set_ease(Tween.EASE_IN)
+	_damage_tween.tween_callback(_end_damage_zoom)
+
+
+func _end_damage_zoom() -> void:
+	if _board_camera != null and is_instance_valid(_board_camera):
+		_board_camera.current = true
 
 func _end_match(winner_id: int) -> void:
 	if match_over:
