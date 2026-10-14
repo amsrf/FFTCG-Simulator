@@ -57,6 +57,9 @@ script = ExtResource("1_80nbo")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1102712664]
 environment = SubResource("Environment_j5wjh")
 
+[node name="CameraPlayerDamage" type="Camera3D" parent="." unique_id=1402199374]
+transform = Transform3D(1, 0, 0, 0, 0.2334657, 0.972365, 0, -0.972365, 0.2334657, 2.499316, 1.5240791, -0.14536583)
+
 [node name="Camera3D" type="Camera3D" parent="." unique_id=181693429]
 transform = Transform3D(-1, 8.60946e-08, -1.51808e-08, 0, 0.173648, 0.984808, 8.74228e-08, 0.984808, -0.173648, 0, 4.346, -0.86)
 projection = 1
@@ -123,6 +126,7 @@ transform = Transform3D(1.005, 0, 0, 0, 1.005, 0, 0, 0, 1.005, 0, 0, 0)
 
 [node name="FocusCard" parent="." unique_id=497932167 instance=ExtResource("2_e2o6t")]
 transform = Transform3D(-4.5, 0, 6.79481e-07, 0, 4.5, 0, -6.79481e-07, 0, -4.5, 3.864, 0.54, 0)
+visible = false
 script = ExtResource("9_iotsf")
 
 [node name="Stack" type="Node3D" parent="." unique_id=290184940]

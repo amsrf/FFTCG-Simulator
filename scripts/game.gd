@@ -427,9 +427,15 @@ func _on_player_side_damaged(side: PlayerSide) -> void:
 ##
 ## A missing camera is skipped silently. A match must never depend on a node existing, and these two are
 ## optional decoration — the game is fully playable with neither built.
+##
+## THE NAMES ARE THE SCENE'S, NOT MINE. The first version looked for "CameraDamagePlayer" and the node was
+## built as "CameraPlayerDamage" — the same words in the other order — so the camera existed, was placed, was
+## saved, and was never once used, silently, because that is exactly what a missing camera does. Matching the
+## scene's own convention rather than insisting on mine is the fix; the silence is the reason it took a
+## round trip to find.
 const DAMAGE_CAMERAS := {
-	"player": "CameraDamagePlayer",
-	"opponent": "CameraDamageOpponent",
+	"player": "CameraPlayerDamage",
+	"opponent": "CameraOpponentDamage",
 }
 
 @export var damage_zoom_in_seconds: float = 0.35
@@ -458,7 +464,20 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	if zone == null:
 		return
 	if _board_camera == null or not is_instance_valid(_board_camera):
-		_board_camera = get_viewport().get_camera_3d()
+		# NOT simply "whatever is currently active". The damage cameras live in the same scene, Godot activates
+		# whichever camera is FIRST in the tree, and if one of those is first it is current from the first frame.
+		# Capturing it would make the return trip a no-op AND stop the zoom happening at all, because of the
+		# guard below. So the board view is found as a camera that is NOT one of the damage cameras, and the
+		# active one is only a fallback for a scene with nothing else in it.
+		var damage_names: Array = DAMAGE_CAMERAS.values()
+		for node in find_children("*", "Camera3D", true, false):
+			if not (str(node.name) in damage_names):
+				_board_camera = node as Camera3D
+				break
+		if _board_camera == null:
+			_board_camera = get_viewport().get_camera_3d()
+		print("[DamageZoom] board view captured as '%s'" % (
+			_board_camera.name if _board_camera != null else "<none>"))
 	if _board_camera == null or _board_camera == cam:
 		return
 

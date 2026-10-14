@@ -53,7 +53,10 @@ func _ready() -> void:
 	var zone: Node3D = player_side.get_node_or_null("DamageZone")
 	_expect(zone != null, "the player has a damage zone")
 	var fake := Camera3D.new()
-	fake.name = "CameraDamagePlayer"
+	# THE SCENE'S NAME, exactly. This probe originally stood in with "CameraDamagePlayer" — the same words as the
+	# real node in the other order — and passed, while the real camera was never used by the game at all. A
+	# stand-in that does not share the name the code looks for tests nothing.
+	fake.name = "CameraPlayerDamage"
 	fake.projection = Camera3D.PROJECTION_PERSPECTIVE
 	fake.fov = 35.0
 	game.add_child(fake)
