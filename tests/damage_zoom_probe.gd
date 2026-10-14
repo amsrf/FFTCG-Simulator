@@ -39,29 +39,50 @@ func _ready() -> void:
 	var opp_side = game.get("opponent")
 	_expect(player_side != null and opp_side != null, "both sides exist")
 
-	# --- 1. no cameras built yet: damage must be uneventful ---------------------------------------------
-	var board: Camera3D = get_viewport().get_camera_3d()
-	_expect(board != null, "the board camera is active")
-	player_side.take_damage(1)
-	await get_tree().process_frame
-	_expect(game.get("_damage_tween") == null, "with no damage camera, no zoom is started at all")
-	_expect(get_viewport().get_camera_3d() == board, "and the view stays exactly where it was")
-	print("[DamageZoom] no-camera path survived a hit")
+	# --- 1. the scene's cameras --------------------------------------------------------------------------
+	# The board view is found the same way the game finds it — a camera that is NOT one of the damage cameras —
+	# rather than taken as "whatever is current", because game.tscn marks neither camera current and Godot
+	# activates the FIRST in the tree. That distinction is exactly what broke the game once already.
+	var damage_names: Array = game.get("DAMAGE_CAMERAS").values()
+	var board: Camera3D = game.find_child("Camera3D", true, false) as Camera3D
+	_expect(board != null, "the scene has a board camera")
+	_expect(not (str(board.name) in damage_names), "and it is not one of the damage cameras")
+
+	# --- 2. the graceful path, ONLY when the scene has no damage camera ---------------------------------
+	# A match must never depend on optional decoration, so this still matters — but it is conditional now,
+	# because game.tscn HAS one and asserting "no camera, therefore no zoom" against a scene with a camera
+	# would fail for the right reason and mean nothing.
+	var real_cam: Camera3D = game.find_child("CameraPlayerDamage", true, false) as Camera3D
+	if real_cam == null:
+		print("[DamageZoom] no damage camera is built - checking the graceful path")
+		player_side.take_damage(1)
+		await get_tree().process_frame
+		_expect(game.get("_damage_tween") == null, "with no damage camera, no zoom is started at all")
+		_expect(get_viewport().get_camera_3d() == board, "and the view stays exactly where it was")
+	else:
+		print("[DamageZoom] a damage camera IS built - checking the real path")
 
 	# --- 2. the real behaviour, with a stand-in -----------------------------------------------------------
 	# Placed exactly where the hand-placed one would be: above the zone, looking down at it.
 	var zone: Node3D = player_side.get_node_or_null("DamageZone")
 	_expect(zone != null, "the player has a damage zone")
-	var fake := Camera3D.new()
-	# THE SCENE'S NAME, exactly. This probe originally stood in with "CameraDamagePlayer" — the same words as the
-	# real node in the other order — and passed, while the real camera was never used by the game at all. A
-	# stand-in that does not share the name the code looks for tests nothing.
-	fake.name = "CameraPlayerDamage"
+	# THE SCENE'S OWN CAMERA IS THE SUBJECT. It used to be a stand-in built here, which is how the swapped name
+	# went unnoticed: the stand-in carried MY name, so the probe passed while the game used nothing. Testing the
+	# node the player actually has is the only version of this that means anything.
+	#
+	# Still called `fake` so the checks below read unchanged — it is the camera the game will find, which is what
+	# they were always meant to be about.
+	var fake: Camera3D = real_cam
+	if fake == null:
+		print("[DamageZoom] no damage camera to drive - stopping here")
+		_finish()
+		return
 	fake.projection = Camera3D.PROJECTION_PERSPECTIVE
 	fake.fov = 35.0
-	game.add_child(fake)
+	# Placed where a hand-placed one would go, so the framing is predictable: above the zone, looking down.
 	fake.global_position = zone.global_position + Vector3(0.0, 2.4, 2.2)
 	fake.look_at(zone.global_position, Vector3.UP)
+	fake.current = false
 	await get_tree().process_frame
 
 	# The slot the NEXT card will land in, in world space, worked out here independently of the game's own
