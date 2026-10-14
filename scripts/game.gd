@@ -258,9 +258,26 @@ func _input(event):
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_F:
 		var card = opponent_deck.deck_cards.pop_front()
 		opponent_hand.draw(card)
+	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_C:
+		# DEBUG: press C to look through the next camera. "What will this camera actually see" is otherwise only
+		# answerable by editing the scene, running, looking, and editing again — and the answer is a picture, not
+		# a transform. The list is rebuilt on every press from the live tree, so it cannot go stale when a camera
+		# is added, moved, renamed or put inside a zone. The next one is worked out from whichever is active now,
+		# so nothing has to remember a counter.
+		var cams: Array = find_children("*", "Camera3D", true, false)
+		if not cams.is_empty():
+			var here: int = cams.find(get_viewport().get_camera_3d())
+			var next_cam: Camera3D = cams[(here + 1) % cams.size()]
+			next_cam.current = true
+			print("[Camera] looking through '%s' | fov %.0f | pos %s" % [
+				next_cam.name, next_cam.fov, str(next_cam.global_position)])
+			if $PhaseText:
+				$PhaseText.text = "CAMERA: %s  (C to cycle)" % next_cam.name
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_T:
-		var card = opponent_deck.deck_cards.pop_front()
-		opponent_damage_zone.draw(card)
+		# DEBUG: the REAL damage path. take_damage() is what emits `damaged` and therefore what fires the damage
+		# zoom. The old version called the zone directly, so a card appeared in the damage zone but nothing
+		# counted it as damage and the camera never moved — which is exactly how it looked when the AI attacked.
+		opponent.take_damage(1)
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
