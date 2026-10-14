@@ -79,6 +79,12 @@ func _ready() -> void:
 		return
 	fake.projection = Camera3D.PROJECTION_PERSPECTIVE
 	fake.fov = 35.0
+	# PARENTED INSIDE THE DAMAGE ZONE, which is the arrangement the user asked about. It ought to change nothing:
+	# the lookup is recursive, and both the placement below and every position the zoom computes are in GLOBAL
+	# space, so the parent's transform cancels out. That reasoning is exactly the kind that missed the swapped
+	# camera name, so the whole probe now runs with the camera where they want to put it.
+	fake.reparent(zone, true)
+	print("[DamageZoom] camera parented to '%s'" % fake.get_parent().name)
 	# Placed where a hand-placed one would go, so the framing is predictable: above the zone, looking down.
 	fake.global_position = zone.global_position + Vector3(0.0, 2.4, 2.2)
 	fake.look_at(zone.global_position, Vector3.UP)
