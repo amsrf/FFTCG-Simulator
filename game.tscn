@@ -63,11 +63,6 @@ projection = 1
 fov = 60.0
 size = 5.766
 
-[node name="Camera3D2" type="Camera3D" parent="." unique_id=564423654]
-transform = Transform3D(1, 0, 0, 0, 0.173648, 0.984808, 0, -0.984808, 0.173648, 0, 4.492, 1.2)
-fov = 60.0
-size = 0.650597
-
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=305865392]
 transform = Transform3D(1, 0, 0, 0, 0.000506119, 1, 0, -1, 0.000506119, 0, 0, 0)
 sky_mode = 1
