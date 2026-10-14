@@ -64,6 +64,16 @@ func _ready() -> void:
 		if p.material is ShaderMaterial:
 			_expect(float(p.material.get_shader_parameter("radius")) > 0.0,
 				"and that material actually rounds the corners (radius > 0)")
+			# THE BOTTOM LINE, IN PIXELS. edge_depth is UV (a fraction of the image), so asserting it is
+			# "greater than zero" would pass on a line too fine to see — which is exactly what happened: the
+			# default 0.004 comes out at ~1.6 px here and read as absent. Converting back to pixels is the only
+			# way this check can describe what a person will actually see.
+			var depth: float = float(p.material.get_shader_parameter("edge_depth"))
+			var line_px: float = depth * p.size.y
+			print("[FieldPreview] bottom line %.1f px (edge_depth %.4f over %.0f px)" % [
+				line_px, depth, p.size.y])
+			_expect(line_px >= 2.0 and line_px <= 6.0,
+				"and its black bottom line is 2-6 px — thick enough to see, thin enough to stay a line")
 		var view: Vector2 = get_viewport().get_visible_rect().size
 		var frac: float = p.size.y / maxf(view.y, 1.0)
 		print("[FieldPreview] preview %.0f x %.0f px (%.0f%% of %.0f tall) at %s" % [

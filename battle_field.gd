@@ -99,7 +99,17 @@ func _ensure_preview() -> void:
 	# ROUNDED CORNERS AND THE THIN BLACK BOTTOM LINE, from the same shader the deck editor's and the search
 	# window's previews use. Reusing it rather than redrawing the effect here means a hovered card looks the
 	# same everywhere in the game, and the corner radius stays a single number to change.
-	_preview.material = CARD_VIEW.round_material()
+	#
+	# THE LINE IS SET IN PIXELS. The shader's default edge_depth is 0.004 in UV — a FRACTION of the image — which
+	# on a preview this size comes out at about 1.6 px. It was drawing all along and was simply too fine to
+	# notice, which is why it looked absent. A pixel width over the preview's height gives the UV figure the
+	# shader wants, and keeps the number in the units a person actually thinks in.
+	const PREVIEW_LINE_PIXELS: float = 3.0
+	var preview_material: ShaderMaterial = CARD_VIEW.round_material()
+	var preview_size: Vector2 = _preview_size()
+	if preview_size.y > 0.0:
+		preview_material.set_shader_parameter("edge_depth", PREVIEW_LINE_PIXELS / preview_size.y)
+	_preview.material = preview_material
 	_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 	# Never takes the mouse: the preview must not steal hover from the card that opened it.
