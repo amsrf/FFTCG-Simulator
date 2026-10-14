@@ -62,9 +62,10 @@ var phase: GlobalVariables.Phase:
 ##
 ## It is built on first hover, so a match where nobody hovers a field card never pays for it.
 
-## Height of the preview as a fraction of the viewport. 0.62 is comfortably readable without covering
-## the board outright.
-@export var preview_height_fraction: float = 0.62
+## Height of the preview as a fraction of the viewport. 0.38 is a ~410 px card at 1080p: comfortable to
+## read without covering the board. The first value tried was 0.62, which is a ~670 px card and far too
+## much — it read as a takeover rather than a preview. Tune in the Inspector while the game runs.
+@export var preview_height_fraction: float = 0.38
 ## Gap between the hovered card and the preview, in screen pixels.
 @export var preview_gap: float = 16.0
 @export var preview_grow_seconds: float = 0.12

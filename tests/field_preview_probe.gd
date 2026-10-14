@@ -60,7 +60,11 @@ func _ready() -> void:
 		var frac: float = p.size.y / maxf(view.y, 1.0)
 		print("[FieldPreview] preview %.0f x %.0f px (%.0f%% of %.0f tall) at %s" % [
 			p.size.x, p.size.y, frac * 100.0, view.y, str(p.position)])
-		_expect(frac > 0.4, "and it is BIG — a preview that cannot be read is pointless")
+		# A BAND, NOT A FLOOR. The first version only asked "is it big enough", so turning the size down to
+		# something reasonable FAILED the test — an assertion holding a number fights every tuning change.
+		# This encodes the actual intent: readable, but not covering the board.
+		_expect(frac > 0.25 and frac < 0.55,
+			"and it is readable without taking over the screen (0.25-0.55 of the viewport)")
 		_expect(p.size.y <= view.y and p.size.x <= view.x, "and it fits in the viewport")
 		_expect(p.position.x >= 0.0 and p.position.y >= 0.0, "and it is not off the left or top")
 		_expect(p.position.x + p.size.x <= view.x + 1.0, "nor off the right")
