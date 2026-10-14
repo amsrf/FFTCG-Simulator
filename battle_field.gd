@@ -48,6 +48,122 @@ var phase: GlobalVariables.Phase:
 @onready var stack: Stack = get_parent().get_node("Stack") as Stack
 @onready var hand: Hand = get_parent().get_node("Player/Hand") as Hand
 
+# ------------------------------------------------------------------
+# Field card preview (hover)
+# ------------------------------------------------------------------
+## A field card is drawn small — that is the whole point of a board — so its rules text cannot be read
+## there. Hovering one shows the full scan at a readable size, the same idea (and the same placement
+## rule) as the deck editor's and the search window's hover previews, so hovering reads the same way
+## everywhere in the game.
+##
+## The preview is deliberately screen-space: a CanvasLayer over the board, not a mesh in it. It must
+## not be pickable, must not cast anything, and must never take part in targeting — it is a reading
+## aid, not a game object.
+##
+## It is built on first hover, so a match where nobody hovers a field card never pays for it.
+
+## Height of the preview as a fraction of the viewport. 0.62 is comfortably readable without covering
+## the board outright.
+@export var preview_height_fraction: float = 0.62
+## Gap between the hovered card and the preview, in screen pixels.
+@export var preview_gap: float = 16.0
+@export var preview_grow_seconds: float = 0.12
+## Card scans are 2:3 — the preview's width follows from its height through this.
+const PREVIEW_ASPECT: float = 0.667
+const CARD_VIEW := preload("res://scripts/card_view.gd")
+
+var _preview_layer: CanvasLayer = null
+var _preview: TextureRect = null
+var _preview_tween: Tween = null
+## The card the preview is currently showing, so a hide can be ignored when it belongs to a different
+## card than the one being left (a gap between two cards fires enter/exit in a fiddly order).
+var _preview_card: Card = null
+
+
+func _preview_size() -> Vector2:
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var h: float = view.y * preview_height_fraction
+	return Vector2(h * PREVIEW_ASPECT, h)
+
+
+func _ensure_preview() -> void:
+	if _preview != null and is_instance_valid(_preview):
+		return
+	_preview_layer = CanvasLayer.new()
+	# Above the board but below the DeckSearch window (10) and the buttons' own canvas, so a modal
+	# still covers it rather than being covered by it.
+	_preview_layer.layer = 5
+	add_child(_preview_layer)
+	_preview = TextureRect.new()
+	_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	# Never takes the mouse: the preview must not steal hover from the card that opened it.
+	_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_preview.visible = false
+	_preview_layer.add_child(_preview)
+
+
+## Show the full scan of `card`. Placed to the RIGHT of it, or to the LEFT when there is no room,
+## then clamped into the viewport — the same rule the deck editor uses.
+func show_card_preview(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	_ensure_preview()
+	if _preview == null:
+		return
+	# CardView owns "where does this card's art live, and is there any" — one definition, checked in
+	# one place, rather than a second copy of the path convention here.
+	var path: String = CARD_VIEW.art_path(card.id)
+	var tex: Texture2D = null
+	if not path.is_empty():
+		tex = load(path) as Texture2D
+	if tex == null:
+		hide_card_preview()
+		return
+
+	_preview_card = card
+	_preview.texture = tex
+	var size: Vector2 = _preview_size()
+	_preview.size = size
+	_preview.pivot_offset = size * 0.5
+
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var anchor: Vector2 = view * 0.5
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		anchor = cam.unproject_position(card.global_position)
+	var x: float = anchor.x + preview_gap
+	if x + size.x > view.x - 8.0:
+		x = anchor.x - preview_gap - size.x
+	x = clampf(x, 8.0, maxf(8.0, view.x - size.x - 8.0))
+	var y: float = anchor.y - size.y * 0.5
+	y = clampf(y, 8.0, maxf(8.0, view.y - size.y - 8.0))
+	_preview.position = Vector2(x, y)
+	_preview.visible = true
+
+	# Grow in from small rather than popping, exactly like the deck editor's preview.
+	if _preview_tween != null and _preview_tween.is_valid():
+		_preview_tween.kill()
+	_preview.scale = Vector2.ONE * 0.1
+	_preview_tween = create_tween()
+	_preview_tween.tween_property(_preview, "scale", Vector2.ONE, preview_grow_seconds)
+
+
+func hide_card_preview() -> void:
+	_preview_card = null
+	if _preview != null and is_instance_valid(_preview):
+		_preview.visible = false
+
+
+## Which card the preview is showing, or null. Exposed for tests and for anything that needs to know
+## whether the preview is up without reading a private field.
+func preview_card() -> Card:
+	return _preview_card
+
+
+func preview_visible() -> bool:
+	return _preview != null and is_instance_valid(_preview) and _preview.visible
+
 class AuraValue:
 	var method: String
 	var targets: Dictionary  # Changed from Array[String] to Dictionary

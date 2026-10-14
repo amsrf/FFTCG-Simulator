@@ -288,16 +288,28 @@ func _on_card_area_3d_card_grabbed(_card: Variant):
 
 ## Hover on the card's own area. The hand's LIFT is driven separately by HandMesh
 ## (mesh_instance_3d.gd); these handlers exist so a zone can react to the pointer being over a
-## card. Only the stack needs it: hovering a stack card puts THAT card's targeting on display.
+## card. The stack uses it to put a hovered card's targeting on display. The FIELD uses it to show a
+## readable preview: a battlefield card is small, and at board scale its text cannot be read at all.
+##
+## Duck-typed on purpose — asking the parent whether it offers the preview keeps this handler from
+## depending on the Field's class name, and a card parented anywhere else simply does nothing.
 func _on_card_area_3d_mouse_entered():
 	var stack: Stack = get_parent() as Stack
 	if stack != null:
 		stack.set_hovered(self, true)
+		return
+	var host: Node = get_parent()
+	if host != null and current_zone == Zone.FIELD and host.has_method("show_card_preview"):
+		host.show_card_preview(self)
 
 func _on_card_area_3d_mouse_exited():
 	var stack: Stack = get_parent() as Stack
 	if stack != null:
 		stack.set_hovered(self, false)
+		return
+	var host: Node = get_parent()
+	if host != null and current_zone == Zone.FIELD and host.has_method("hide_card_preview"):
+		host.hide_card_preview()
 	
 func can_be_played():
 	var player_mode = GlobalVariables.get_player_mode()
