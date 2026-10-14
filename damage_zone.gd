@@ -99,7 +99,17 @@ func last_card_position():
 	
 	
 func calculate_card_position(i):
-	var x_offset = start_x + i * (card_width + card_spacing)
+	# start_x is only set by update_card_positions(), so before this zone has ever laid a card out it is null
+	# and the arithmetic below fails with "Invalid operands 'Nil' and 'float'". The damage zoom asks for a slot
+	# position to aim a camera at, and it can legitimately ask before the first card lands — so the fallback is
+	# the row's own centre, which is where a single card would sit anyway. Without this, aiming at an empty
+	# zone is a crash rather than a miss.
+	var base: float = 0.0
+	if start_x != null:
+		base = float(start_x)
+	elif card_width != null:
+		base = -float(card_width) * 0.5
+	var x_offset = base + i * (card_width + card_spacing)
 	var y_offset = (i)*0.001
 	return Vector3(x_offset, y_offset, 0)
 	
