@@ -1,30 +1,48 @@
 class_name CardTile
 extends Control
-## Compact battlefield tile: art crop + element-tinted frame + name strip + power badge.
+## Compact battlefield tile: name bar + art crop + element border + power badge.
 ##
-## ADAPTED FROM the original CardTile: the structure and every drawing decision are unchanged, and what changed is that the
-## values worth tuning are @export now instead of consts, so the look can be dialled in from the Inspector without editing
-## this file. Plus a debug overlay that draws the art crop rectangle over the FULL card, which is the only way to see
-## exactly what part of the scan is being used.
+## ADAPTED FROM the original CardTile. Two changes on top of the @export pass:
 ##
-## Add a plain Control node with this script, or CardTile.new(). Note the root MUST be a Control — a Control script
-## cannot be attached to a Node3D.
+##   * THE NAME HAS ITS OWN BAR. It used to be drawn over the art, which cost the art its top edge. The bar is a real row
+##     now and the tile is taller by its height — see name_bar_height and the sizes, which measure the WHOLE tile.
+##   * THE BORDER IS DRAWN, NOT TINTED. The original tinted frame_texture per element, which does nothing when there is no
+##     frame texture — and there is none in this repo, so tiles had no element border at all. A StyleBoxFlat border needs
+##     no texture and always shows. frame_texture still works if you ever add one; it draws under the border.
+##
+## Add a plain Control node with this script, or CardTile.new(). The root MUST be a Control — a Control script cannot be
+## attached to a Node3D.
 
 signal hovered(tile: CardTile)
 signal unhovered(tile: CardTile)
 
-@export_group("Frame")
-## Optional decorative frame, drawn over the art and tinted per element. Tiles render fine without it.
-@export var frame_texture: Texture2D:
-	set(value):
-		frame_texture = value
-		if _frame:
-			_frame.texture = value
-
 @export_group("Size")
-## Same 10:7 ratio as the frame texture (320x224).
-@export var forward_size := Vector2(140, 98)
-@export var backup_size := Vector2(120, 84)
+## THE WHOLE TILE, name bar included. The art cell is whatever is left after the bar and the insets.
+@export var forward_size := Vector2(140, 124)
+@export var backup_size := Vector2(120, 106)
+
+@export_group("Name bar")
+## Height of the bar across the top. The tile grows by this much, so the art keeps its own height.
+@export var name_bar_height: float = 26.0:
+	set(value):
+		name_bar_height = value
+		_apply_layout()
+
+@export var name_font_size: int = 13:
+	set(value):
+		name_font_size = value
+		if _name_label:
+			_name_label.add_theme_font_size_override("font_size", value)
+
+@export_range(0.0, 1.0, 0.01) var name_bar_opacity: float = 0.72:
+	set(value):
+		name_bar_opacity = value
+		_apply_layout()
+
+@export var name_bar_color := Color(0.06, 0.07, 0.10):
+	set(value):
+		name_bar_color = value
+		_apply_layout()
 
 @export_group("Art")
 ## Part of the full card image to show, as FRACTIONS of width/height: x, y, width, height. Default is between the name bar
@@ -35,6 +53,12 @@ signal unhovered(tile: CardTile)
 		if _art:
 			_apply_art_crop()
 
+## Gap between the tile edge and the art, so the border and corners have room.
+@export var art_inset: float = 3.0:
+	set(value):
+		art_inset = value
+		_apply_layout()
+
 ## Draws art_region over the whole card, on top of the tile, so the crop can be judged directly.
 @export var debug_show_crop: bool = false:
 	set(value):
@@ -42,34 +66,22 @@ signal unhovered(tile: CardTile)
 		if _crop_debug:
 			_crop_debug.visible = value
 
-@export_group("Name strip")
-@export var name_font_size: int = 12:
+@export_group("Element border")
+## The border is coloured from the card's element, so a tile's element reads at a glance.
+@export var show_element_border: bool = true:
 	set(value):
-		name_font_size = value
-		if _name_label:
-			_name_label.add_theme_font_size_override("font_size", value)
+		show_element_border = value
+		_apply_layout()
 
-@export_range(0.0, 1.0, 0.01) var strip_opacity: float = 0.62:
+@export var border_width: int = 3:
 	set(value):
-		strip_opacity = value
-		_refresh_strip()
+		border_width = value
+		_apply_layout()
 
-@export var strip_height: float = 20.0:
+@export var border_radius: int = 5:
 	set(value):
-		strip_height = value
-		_refresh_strip()
-
-@export_group("Power badge")
-@export var badge_size := Vector2(68, 20)
-@export var badge_font_size: int = 12:
-	set(value):
-		badge_font_size = value
-		if _power_label:
-			_power_label.add_theme_font_size_override("font_size", value)
-			_damage_label.add_theme_font_size_override("font_size", value)
-
-@export_group("Element")
-var _unused_element_group_anchor: int = 0
+		border_radius = value
+		_apply_layout()
 
 @export var element_colors := {
 	"fire": Color("e0503a"),
@@ -81,6 +93,24 @@ var _unused_element_group_anchor: int = 0
 	"light": Color("f2efe0"),
 	"dark": Color("4a4458"),
 }
+
+@export_group("Optional frame texture")
+## Drawn UNDER the element border, tinted per element. Tiles look complete without it — this is only for a decorative
+## frame image if one is added later.
+@export var frame_texture: Texture2D:
+	set(value):
+		frame_texture = value
+		if _frame:
+			_frame.texture = value
+
+@export_group("Power badge")
+@export var badge_size := Vector2(68, 20)
+@export var badge_font_size: int = 12:
+	set(value):
+		badge_font_size = value
+		if _power_label:
+			_power_label.add_theme_font_size_override("font_size", value)
+			_damage_label.add_theme_font_size_override("font_size", value)
 
 @export_group("Filtering")
 ## NEAREST keeps the scan crisp at these small sizes; LINEAR smooths it. Which is better depends on how the cards were
@@ -94,7 +124,8 @@ var _glow: Panel
 var _art: TextureRect
 var _frozen: ColorRect
 var _frame: TextureRect
-var _strip: Panel
+var _border: Panel
+var _name_bar: Panel
 var _name_label: Label
 var _element_dot: Panel
 var _power_panel: Panel
@@ -104,6 +135,8 @@ var _crop_debug: Control
 
 ## The full card image as handed to setup(), kept so the crop can be redrawn when art_region changes.
 var _card_texture: Texture2D = null
+## The element colour last applied, so the border can be recoloured when width/radius change.
+var _element_color: Color = Color.WHITE
 
 
 func _init() -> void:
@@ -120,10 +153,10 @@ func setup(card_tex: Texture2D, display_name: String, element: String,
 
 	_name_label.text = display_name
 
-	var c: Color = element_colors.get(element.to_lower(), Color.WHITE)
-	_frame.self_modulate = c
-	(_element_dot.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = c
-	(_power_panel.get_theme_stylebox("panel") as StyleBoxFlat).border_color = c
+	_element_color = element_colors.get(element.to_lower(), Color.WHITE)
+	_frame.self_modulate = _element_color
+	(_element_dot.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = _element_color
+	(_power_panel.get_theme_stylebox("panel") as StyleBoxFlat).border_color = _element_color
 
 	# Backups have no power, so only Forwards get the badge.
 	_power_panel.visible = is_forward and power_text != ""
@@ -133,8 +166,7 @@ func setup(card_tex: Texture2D, display_name: String, element: String,
 	custom_minimum_size = forward_size if is_forward else backup_size
 	size = custom_minimum_size
 	pivot_offset = size / 2.0
-	_refresh_strip()
-	_refresh_badge()
+	_apply_layout()
 	_apply_texture_filter()
 	_apply_crop_debug()
 
@@ -152,23 +184,43 @@ func _apply_art_crop() -> void:
 	_art.texture = atlas
 
 
-func _refresh_strip() -> void:
-	if _strip == null:
+## EVERYTHING POSITIONAL LIVES HERE, so the bar, the art cell and the border cannot disagree. The art starts BELOW the
+## name bar — that separation is the whole point, and it is the one thing that must not drift back to an overlay.
+func _apply_layout() -> void:
+	if _name_bar == null or _art == null:
 		return
-	_strip.offset_top = 4
-	_strip.offset_bottom = 4 + strip_height
-	var sb := _strip.get_theme_stylebox("panel")
-	if sb is StyleBoxFlat:
-		(sb as StyleBoxFlat).bg_color = Color(0, 0, 0, strip_opacity)
 
+	# The name bar owns the top strip, edge to edge.
+	_name_bar.offset_left = 0.0
+	_name_bar.offset_right = 0.0
+	_name_bar.offset_top = 0.0
+	_name_bar.offset_bottom = name_bar_height
+	var nb := _name_bar.get_theme_stylebox("panel")
+	if nb is StyleBoxFlat:
+		(nb as StyleBoxFlat).bg_color = Color(name_bar_color.r, name_bar_color.g, name_bar_color.b, name_bar_opacity)
 
-func _refresh_badge() -> void:
-	if _power_panel == null:
-		return
-	_power_panel.offset_left = -(badge_size.x + 6.0)
-	_power_panel.offset_right = -6
-	_power_panel.offset_top = -(badge_size.y + 6.0)
-	_power_panel.offset_bottom = -6
+	# The art cell is what is left: under the bar, inset on the other three sides.
+	var top: float = name_bar_height + art_inset
+	for node in [_art, _frozen]:
+		node.offset_left = art_inset
+		node.offset_top = top
+		node.offset_right = -art_inset
+		node.offset_bottom = -art_inset
+
+	# The element border draws over the art's edge, so it needs no texture to be visible.
+	_border.visible = show_element_border
+	var bs := _border.get_theme_stylebox("panel")
+	if bs is StyleBoxFlat:
+		var sb: StyleBoxFlat = bs
+		sb.bg_color = Color(0, 0, 0, 0)
+		sb.border_color = _element_color
+		sb.set_border_width_all(border_width)
+		sb.set_corner_radius_all(border_radius)
+
+	_power_panel.offset_left = -(badge_size.x + art_inset + 3.0)
+	_power_panel.offset_right = -(art_inset + 3.0)
+	_power_panel.offset_top = -(badge_size.y + art_inset + 3.0)
+	_power_panel.offset_bottom = -(art_inset + 3.0)
 
 
 func _apply_texture_filter() -> void:
@@ -265,30 +317,31 @@ func _label(font_size: int) -> Label:
 
 
 func _build() -> void:
-	# Highlight glow (e.g. "can be played / selected"), hidden by default.
+	# Highlight glow (e.g. "can be played / selected"), hidden by default. Added FIRST, so its shadow draws behind the
+	# art rather than washing over it.
 	_glow = Panel.new()
 	_fill(_glow)
-	var gs := _box(Color(0, 0, 0, 0), 9, Color("3dffb0"), 3)
+	var gs := _box(Color(0, 0, 0, 0), border_radius, Color("3dffb0"), 3)
 	gs.shadow_color = Color(0.24, 1.0, 0.69, 0.6)
 	gs.shadow_size = 8
 	_glow.add_theme_stylebox_override("panel", gs)
 	_glow.visible = false
 	add_child(_glow)
 
-	# Art, inset slightly so the rounded frame hides the corners.
+	# Art cell. Its rect is set in _apply_layout, under the name bar.
 	_art = TextureRect.new()
-	_fill(_art, 3)
+	_fill(_art, art_inset)
 	_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	add_child(_art)
 
 	_frozen = ColorRect.new()
-	_fill(_frozen, 3)
+	_fill(_frozen, art_inset)
 	_frozen.color = Color(0.5, 0.85, 1.0, 0.28)
 	_frozen.visible = false
 	add_child(_frozen)
 
-	# Frame texture, tinted per element.
+	# Optional decorative frame, over the art.
 	_frame = TextureRect.new()
 	_fill(_frame)
 	_frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -296,26 +349,30 @@ func _build() -> void:
 	_frame.texture = frame_texture
 	add_child(_frame)
 
-	# Name strip at the top.
-	_strip = Panel.new()
-	_strip.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_strip.offset_left = 4
-	_strip.offset_right = -4
-	_strip.offset_top = 4
-	_strip.offset_bottom = 24
-	_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_strip.add_theme_stylebox_override("panel", _box(Color(0, 0, 0, strip_opacity), 5))
-	add_child(_strip)
+	# THE ELEMENT BORDER. A transparent panel that only paints its border, so it needs no texture and always shows.
+	_border = Panel.new()
+	_fill(_border)
+	_border.add_theme_stylebox_override("panel", _box(Color(0, 0, 0, 0), border_radius, Color.WHITE, border_width))
+	add_child(_border)
+
+	# The name bar: its own strip across the top, ABOVE the art rather than over it.
+	_name_bar = Panel.new()
+	_name_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_name_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_name_bar.add_theme_stylebox_override("panel", _box(name_bar_color, 0))
+	add_child(_name_bar)
 
 	_name_label = _label(name_font_size)
 	_fill(_name_label)
-	_name_label.offset_left = 6
+	_name_label.offset_left = art_inset + 4.0
+	_name_label.offset_top = 2.0
 	_name_label.offset_right = -22
+	_name_label.offset_bottom = -2.0
 	_name_label.clip_text = true
 	_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_strip.add_child(_name_label)
+	_name_bar.add_child(_name_label)
 
-	# Small element dot at the right end of the strip.
+	# Small element dot at the right end of the bar.
 	_element_dot = Panel.new()
 	_element_dot.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 	_element_dot.offset_left = -17
@@ -324,15 +381,11 @@ func _build() -> void:
 	_element_dot.offset_bottom = 6
 	_element_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_element_dot.add_theme_stylebox_override("panel", _box(Color.WHITE, 6))
-	_strip.add_child(_element_dot)
+	_name_bar.add_child(_element_dot)
 
-	# Power / damage badge, bottom-right: "7000 | 0".
+	# Power / damage badge, bottom-right of the art cell: "7000 | 0".
 	_power_panel = Panel.new()
 	_power_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_power_panel.offset_left = -74
-	_power_panel.offset_right = -6
-	_power_panel.offset_top = -26
-	_power_panel.offset_bottom = -6
 	_power_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_power_panel.add_theme_stylebox_override("panel", _box(Color(0.05, 0.05, 0.1, 0.9), 6, Color.WHITE, 2))
 	_power_panel.visible = false
@@ -362,7 +415,7 @@ func _build() -> void:
 	_damage_label.text = "0"
 	row.add_child(_damage_label)
 
-	# Last, so it draws over everything including the frame.
+	# Last, so it draws over everything including the border.
 	_crop_debug = Control.new()
 	_fill(_crop_debug)
 	_crop_debug.visible = false
