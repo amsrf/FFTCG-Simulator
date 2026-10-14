@@ -67,6 +67,26 @@ func _ready() -> void:
 						fronts[idx].get("card_name"), hover_field.call("preview_visible")])
 				else:
 					print("[Shot] --hover-field %d is out of range (the board has %d)" % [idx, fronts.size()])
+		# --camera <name>: shoot THROUGH a named Camera3D in the scene instead of whichever one happens to be
+		# active. Installing a camera means answering "what will it actually see", and the honest way to answer
+		# that is to look through the candidate rather than to reason about its transform.
+		#
+		# Note game.tscn marks NEITHER of its two cameras `current`, so Godot activates the first in the tree and
+		# the second is inert. Setting `current` is also what makes a candidate switchable live in the running
+		# game from the editor's Remote tab, which is the fastest way to dial one in.
+		if _args.has("camera"):
+			await _settle(3)
+			var wanted: String = str(_args["camera"])
+			var chosen: Camera3D = game.find_child(wanted, true, false) as Camera3D
+			if chosen == null:
+				print("[Shot] --camera '%s' not found in the scene" % wanted)
+			else:
+				chosen.current = true
+				await _settle(2)
+				print("[Shot] shooting through '%s' | projection=%s size=%.3f fov=%.1f pos=%s" % [
+					chosen.name,
+					"orthographic" if chosen.projection == Camera3D.PROJECTION_ORTHOGONAL else "perspective",
+					chosen.size, chosen.fov, str(chosen.global_position)])
 		# --cam-zoom <f>: multiply the game's camera size (or fov) so a small detail can be inspected at
 		# full resolution. With a payment up, the camera also centres on the readout — zooming about the
 		# screen centre alone would push a readout that sits low on the screen straight out of frame.
