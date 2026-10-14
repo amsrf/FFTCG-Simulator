@@ -38,27 +38,11 @@ ambient_light_energy = 0.3
 reflected_light_source = 2
 ssr_fade_in = 0.0274516
 ssr_fade_out = 168.897
-; GLOW (bloom) — CONFIGURED, BUT THIS RENDERER IGNORES IT.
-;
-; The project runs gl_compatibility, which does not implement Environment glow at all. That is not a guess: it was
-; tested by rendering the game with glow enabled and looking at the result, which was "hard, crisp edges with zero
-; light spill into the surrounding board — exactly the expected behaviour for the Compatibility renderer". The
-; values below are therefore inert. They are kept because they are correct, cost nothing, and would start working
-; the day the project moves to Forward+.
-;
-; This matters for the crystals, and is why their paid state is an ADDITIVE SHELL (shaders/aura.gdshader) rather
-; than an emissive material waiting for bloom: additive geometry glows by being bright, so it needs no post-process.
-; The other lesson in this block still stands — emission is ADDED ON TOP of a lit surface, so pushing it far enough
-; to read as a glow clips a bright colour's channels and destroys its hue (the ice crystal went pure white at 1.7).
-;
-; glow_hdr_threshold sits just under 1 on purpose: it is what would stop the whole board blooming, so only the
-; brightest highlights and the paid crystals would bleed.
 glow_enabled = true
 glow_intensity = 1.2
-glow_strength = 1.0
 glow_bloom = 0.15
-glow_hdr_threshold = 0.9
 glow_blend_mode = 0
+glow_hdr_threshold = 0.9
 
 [sub_resource type="GDScript" id="GDScript_e8heu"]
 script/source = "extends Node3D
@@ -66,86 +50,6 @@ script/source = "extends Node3D
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
 	pass # Replace with function body."
-
-[sub_resource type="GDScript" id="GDScript_80cx4"]
-script/source = "extends Control
-
-@onready var input_field = $TextEdit
-@onready var output_log = $RichTextLabel
-
-var commands = {}
-
-func _ready():
-	# Basic commands
-	register_command(\"help\", \"Show available commands\", cmd_help)
-	register_command(\"block\", \"Mock opponent blocking\", cmd_block)
-	register_command(\"pass\", \"Mock opponent passing\", cmd_pass)
-	
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.1, 0.1, 0.2, 0.9)
-	panel_style.border_color = Color(0.3, 0.3, 0.4)
-	panel_style.border_width_left = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_bottom = 2
-	$Panel.add_theme_stylebox_override(\"panel\", panel_style)
-	
-	# Text styling)
-	output_log.add_theme_font_size_override(\"normal_font_size\", 16)
-	output_log.add_theme_color_override(\"default_color\", Color(0.8, 0.8, 1.0))
-	
-	#hide()  # Start hidden
-
-func _input(event):
-	if event.is_action_pressed(\"toggle_console\"):
-		visible = !visible
-		if visible:
-			input_field.grab_focus()
-
-func register_command(command_name, description, callback):
-	commands[command_name] = {
-		\"description\": description,
-		\"callback\": callback
-	}
-
-func _on_TextEdit_text_entered(new_text):
-	output_log.append_text(\"> \" + new_text + \"\\n\")
-	process_command(new_text)
-	input_field.clear()
-
-func process_command(command):
-	var parts = command.split(\" \", false)
-	var cmd = parts[0].to_lower()
-	
-	if commands.has(cmd):
-		commands[cmd].callback.call(parts.slice(1))
-	else:
-		output_log.append_text(\"Unknown command. Type 'help' for list.\\n\")
-
-# Command implementations
-func cmd_help(_args):
-	output_log.append_text(\"Available commands:\\n\")
-	for cmd in commands:
-		output_log.append_text(\"  %s - %s\\n\" % [cmd, commands[cmd].description])
-
-func cmd_block(args):
-	if args.size() == 0:
-		# Block with first available creature
-		var blockers = get_tree().get_first_node_in_group(\"game_manager\").get_available_blockers()
-		if blockers.size() > 0:
-			output_log.append_text(\"Opponent blocks with %s\\n\" % blockers[0].name)
-			# Call your game's block handling function here
-		else:
-			output_log.append_text(\"No available blockers\\n\")
-	else:
-		# Block with specific creature ID
-		output_log.append_text(\"Opponent blocks with creature %s\\n\" % args[0])
-		# Call your game's block handling function with specific creature
-
-func cmd_pass(_args):
-	output_log.append_text(\"Opponent chooses not to block\\n\")
-	# Call your game's pass handling function
-"
 
 [node name="Game" type="Node3D" unique_id=880871411]
 script = ExtResource("1_80nbo")
@@ -233,25 +137,7 @@ id = 66
 [node name="Assistant" type="Node3D" parent="." unique_id=8862097]
 script = ExtResource("10_hve3p")
 
-; THE BUTTON RACK — the single owner of where the match buttons sit. The three buttons are its
-; children and carry only their SLOT offset, which buys two things:
-;   * Confirm and PassPhase are the same slot BY CONSTRUCTION (both at the rack's origin, so neither
-;     even needs a transform line), which is the layout rule: the pass button takes Confirm's place
-;     and Cancel's slot is left empty;
-;   * moving the rack moves all three, so the shared position is one transform instead of three.
-; Before this, x was written into all three children by hand and they drifted apart the first time one
-; of them was edited on its own — which is exactly what happened.
-; x = -3.8: screen-right is world -x (the camera's basis.x is (-1, 0, 0)) and the camera is ORTHOGONAL
-; with a vertical extent of 5.766 m on a 1920x1080 viewport, so the visible width is 10.25 m. At -3.8
-; the 1.801 m button spans 78-96% of the width — a ~4% margin at the right edge.
-; Cancel keeps its own slot 0.42 along -z, where the button measures 0.345, leaving a 7.5 cm gap —
-; tight enough that the two read as one pair rather than two separate buttons.
-;
-; STAGGERED ENTRY. Cancel carries slide_in_delay = 0.1, so when a modal opens the second button starts
-; its slide a tenth of a second after the first instead of both moving at once. It is an instance
-; override (the knob is declared in scripts/gem_button.gd), so Confirm and PassPhase stay at 0 and the
-; stagger lives with the button that has a partner. Set it to 0 here for simultaneous arrival.
-[node name="ButtonRack" type="Node3D" parent="Assistant"]
+[node name="ButtonRack" type="Node3D" parent="Assistant" unique_id=1662856920]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.327, -2)
 
 [node name="ConfirmButton" parent="Assistant/ButtonRack" unique_id=1145933718 instance=ExtResource("11_mfdv2")]
@@ -259,8 +145,8 @@ visible = false
 
 [node name="CancelButton" parent="Assistant/ButtonRack" unique_id=1289540422 instance=ExtResource("11_mfdv2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.42)
-slide_in_delay = 0.1
 visible = false
+slide_in_delay = 0.1
 
 [node name="PassPhaseButton" parent="Assistant/ButtonRack" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
 visible = false
@@ -273,28 +159,6 @@ visible = false
 
 [node name="Player1" type="Node3D" parent="." unique_id=832380184]
 script = SubResource("GDScript_e8heu")
-
-[node name="Console" type="Control" parent="." unique_id=669105321]
-layout_mode = 3
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-script = SubResource("GDScript_80cx4")
-
-[node name="TextEdit" type="TextEdit" parent="Console" unique_id=317505732]
-layout_mode = 0
-offset_right = 8.0
-offset_bottom = 8.0
-
-[node name="RichTextLabel" type="RichTextLabel" parent="Console" unique_id=1957141772]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
-
-[node name="Panel" type="Panel" parent="Console" unique_id=16279872]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
 
 [node name="Opponent2" type="Node3D" parent="." unique_id=216244921]
 
