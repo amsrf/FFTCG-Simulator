@@ -142,12 +142,24 @@ func start_match(config: Dictionary) -> void:
 	# camera that is NOT one of the damage cameras, and it is made current here so scene order stops mattering.
 	var damage_names: Array = DAMAGE_CAMERAS.values()
 	for node in find_children("*", "Camera3D", true, false):
-		if not (str(node.name) in damage_names):
-			var board_cam: Camera3D = node as Camera3D
-			board_cam.current = true
-			_board_camera = board_cam
-			print("[Camera] board view is '%s'" % board_cam.name)
-			break
+		# A DAMAGE CAMERA IS IDENTIFIED BY WHERE IT IS, NOT BY ITS NAME. It lives inside a DamageZone, so any
+		# camera there is one. Names were tried first and failed twice — the node was built as
+		# "CameraPlayerDamage" while the code looked for "CameraDamagePlayer", and then renamed to plain "Camera"
+		# — whereas position is something the scene cannot get wrong by typing.
+		var walker: Node = node.get_parent()
+		var in_damage_zone: bool = false
+		while walker != null:
+			if str(walker.name) == "DamageZone":
+				in_damage_zone = true
+				break
+			walker = walker.get_parent()
+		if in_damage_zone:
+			continue
+		var board_cam: Camera3D = node as Camera3D
+		board_cam.current = true
+		_board_camera = board_cam
+		print("[Camera] board view is '%s'" % board_cam.name)
+		break
 
 	player_agent = LocalAgent.new()
 	player_agent.bind(self)
@@ -469,12 +481,21 @@ func _damage_slot_world(zone: Node3D, index: int) -> Vector3:
 func _zoom_to_damage(side: PlayerSide) -> void:
 	if side == null or match_over:
 		return
-	var which: String = "player" if side == player else "opponent"
-	var cam: Camera3D = find_child(str(DAMAGE_CAMERAS[which]), true, false) as Camera3D
-	if cam == null:
-		return
 	var zone: Node3D = side.get_node_or_null("DamageZone") as Node3D
 	if zone == null:
+		return
+	# THE CAMERA LIVES IN THE ZONE, and its NAME DOES NOT MATTER: whatever Camera3D sits inside this side's damage
+	# zone IS this side's damage camera. That is the arrangement the game uses, and position is something a scene
+	# cannot get wrong by typing the name differently. The old names remain as a fallback so a camera left at the
+	# scene root keeps working.
+	var cam: Camera3D = null
+	for child in zone.find_children("*", "Camera3D", true, false):
+		cam = child as Camera3D
+		break
+	if cam == null:
+		var which: String = "player" if side == player else "opponent"
+		cam = find_child(str(DAMAGE_CAMERAS[which]), true, false) as Camera3D
+	if cam == null:
 		return
 	if _board_camera == null or not is_instance_valid(_board_camera):
 		# NOT simply "whatever is currently active". The damage cameras live in the same scene, Godot activates

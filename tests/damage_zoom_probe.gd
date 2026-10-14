@@ -52,7 +52,15 @@ func _ready() -> void:
 	# A match must never depend on optional decoration, so this still matters — but it is conditional now,
 	# because game.tscn HAS one and asserting "no camera, therefore no zoom" against a scene with a camera
 	# would fail for the right reason and mean nothing.
-	var real_cam: Camera3D = game.find_child("CameraPlayerDamage", true, false) as Camera3D
+	# FOUND BY POSITION, like the game finds it: whatever Camera3D is inside the player's damage zone. The name is
+	# deliberately not consulted — the real one is called "Camera", and looking for "CameraPlayerDamage" is how this
+	# probe reported "no camera is built" while one was sitting right there in the zone.
+	var player_zone: Node3D = player_side.get_node_or_null("DamageZone")
+	var real_cam: Camera3D = null
+	if player_zone != null:
+		for c in player_zone.find_children("*", "Camera3D", true, false):
+			real_cam = c as Camera3D
+			break
 	if real_cam == null:
 		print("[DamageZoom] no damage camera is built - checking the graceful path")
 		player_side.take_damage(1)
