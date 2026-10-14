@@ -181,6 +181,10 @@ func assign_card_texture():
 
 		
 func _process(_delta):
+	# The tile is a snapshot of the card's state, and power/damage/tap change without any signal to hook, so it is refreshed
+	# here. The signature check inside makes this a string compare per card per frame rather than a rebuild.
+	if _tile_root != null and _tile_root.visible:
+		_refresh_tile()
 	if is_dragging:
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			is_dragging = false
@@ -459,6 +463,102 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## reparented and BEFORE the destination lays it out: it normalises rotation and
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
+# --- OPTIONAL TILE VISUAL (field only) ---------------------------------------
+## Show this card as a compact TILE on the field instead of the full card.
+##
+## THE CARD NODE STAYS THE GAME OBJECT. It keeps its id, power, damage, tap state, its Area3D and every rule — only the
+## VISUAL changes. Replacing the node would break targeting, clicks, blocking and the state rules, all of which read it.
+##
+## FIELD ONLY, deliberately: a tile is a battlefield space optimisation, and a card in hand or on the stack is read rather
+## than glanced at.
+##
+## A tile is a Control and a Control cannot live in a 3D scene, so it renders into a SubViewport and that texture goes on a
+## quad. tests/card_tile_preview.tscn demonstrates the same bridge.
+@export var use_tile_on_field: bool = false:
+	set(value):
+		use_tile_on_field = value
+		_apply_visual_mode()
+
+const TILE_SCENE := preload("res://card_tile.tscn")
+const TILE_CARD_VIEW := preload("res://scripts/card_view.gd")
+const TILE_VIEWPORT_SIZE := Vector2i(320, 224)
+## The card face in metres: the tile is stretched onto this quad, so it occupies exactly the space the card meshes did.
+const TILE_QUAD_SIZE := Vector2(0.429, 0.6)
+
+var _tile_root: Node3D = null
+var _tile_viewport: SubViewport = null
+var _tile_control = null
+var _tile_signature: String = ""
+
+
+func _build_tile_view() -> void:
+	if _tile_root != null:
+		return
+	_tile_viewport = SubViewport.new()
+	_tile_viewport.size = TILE_VIEWPORT_SIZE
+	_tile_viewport.transparent_bg = true
+	_tile_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_tile_viewport)
+
+	_tile_control = TILE_SCENE.instantiate()
+	_tile_viewport.add_child(_tile_control)
+
+	var quad := MeshInstance3D.new()
+	var mesh := QuadMesh.new()
+	mesh.size = TILE_QUAD_SIZE
+	quad.mesh = mesh
+	var tile_mat := StandardMaterial3D.new()
+	tile_mat.albedo_texture = _tile_viewport.get_texture()
+	# Unshaded: the tile is judged as drawn, not relit by whatever the board's lighting is doing.
+	tile_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	tile_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	tile_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	quad.material_override = tile_mat
+
+	_tile_root = Node3D.new()
+	_tile_root.name = "TileView"
+	_tile_root.add_child(quad)
+	# Flat in the board plane, matching the card meshes it replaces.
+	_tile_root.rotation = Vector3(-PI / 2.0, 0.0, 0.0)
+	_tile_root.visible = false
+	add_child(_tile_root)
+
+
+## Push the card's state into the tile. Idempotent and cheap: the signature compare comes first, so this is safe to call
+## every frame rather than threading a callback through power_change / suffer_damage / clear_damage / tap.
+func _refresh_tile() -> void:
+	if _tile_root == null or not _tile_root.visible or _tile_control == null:
+		return
+	var signature: String = "%s|%d|%d|%d|%s" % [card_name, power, accumulated_damage, id, str(tapped)]
+	if signature == _tile_signature:
+		return
+	_tile_signature = signature
+	var art: Texture2D = null
+	var path: String = TILE_CARD_VIEW.art_path(id)
+	if not path.is_empty():
+		art = load(path) as Texture2D
+	_tile_control.setup(art, card_name, str(element), type == "Forward", str(power), accumulated_damage)
+	# A tile is landscape and cannot be turned like a card, so dull reads as DIMMED rather than rotated.
+	_tile_control.set_dull(tapped)
+
+
+## Show the tile or the full card. Called on every zone change and whenever the flag flips.
+func _apply_visual_mode() -> void:
+	if not is_inside_tree():
+		return
+	var as_tile: bool = use_tile_on_field and current_zone == Zone.FIELD
+	if as_tile:
+		_build_tile_view()
+	if _tile_root != null:
+		_tile_root.visible = as_tile
+	hand_mesh.visible = not as_tile
+	field_mesh.visible = not as_tile
+	if power_label:
+		power_label.visible = not as_tile
+	if as_tile:
+		_refresh_tile()
+
+
 func enter_zone(zone: Zone) -> void:
 	current_zone = zone
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
@@ -469,6 +569,8 @@ func enter_zone(zone: Zone) -> void:
 	# orientation is decided; tap()/untap() aim at this absolute angle instead of offsetting whatever they find.
 	_upright_y = rotation_degrees.y
 	apply_zone_scale()
+	# The tile is a field-only visual, so the zone is what decides whether it shows.
+	_apply_visual_mode()
 	is_dragging = false
 	is_valid_target = false
 	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked

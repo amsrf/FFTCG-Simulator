@@ -42,6 +42,13 @@ signal card_activated_ability(cost:Dictionary)
 var phase: GlobalVariables.Phase:
 	get:
 		return get_parent().phase
+## Show cards on the FIELD as compact tiles instead of full cards.
+##
+## ONE SWITCH. Cards are instantiated from card.tscn at runtime, so a per-card Inspector value would be unreachable — the
+## Field owns the flag and pushes it into each card as it is placed. Set this false to get the full cards back.
+##
+## Field only: the hand and the stack keep full cards, because those are read rather than glanced at.
+@export var use_tiles_on_field: bool = true
 @export var selected_cards_for_mana_conversion: Array[Card] = []
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
@@ -122,6 +129,10 @@ func remove_card_from_mana_conversion(card:Card):
 
 
 func play_card(card, is_opponent: bool = false, animate = true) -> void:
+	# The Field owns the tile switch and a card is told as it lands, because cards are built from a scene at runtime and
+	# so cannot carry the setting themselves.
+	if card is Card:
+		card.use_tile_on_field = use_tiles_on_field
 	var trans = card.global_transform
 	card.reparent(self, false)
 	card.position = Vector3.ZERO
