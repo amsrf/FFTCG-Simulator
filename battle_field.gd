@@ -284,6 +284,15 @@ func play_card(card, is_opponent: bool = false, animate = true) -> void:
 	card.reparent(self, false)
 	card.position = Vector3.ZERO
 	card.global_transform = trans
+
+	# SUMMONING SICKNESS. A card that just entered the field cannot tap until its controller's next turn: it cannot
+	# attack, a Backup cannot be tapped for mana, and a tap-costed skill is closed. Haste — printed or granted —
+	# ignores it, and that single rule lives in Card.can_tap().
+	#
+	# SKIPPED FOR A SETUP BOARD (animate == false): pre-placed cards are meant to be playable from the first frame,
+	# and they were not "just played". Card.turn_end() decrements the status, so one turn is the right duration.
+	if animate:
+		card.add_status_effect("summoning_sickness", 1)
 	
 	var target_node
 	var target_array
@@ -388,6 +397,11 @@ func can_activate_now(card: Card) -> bool:
 	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
 		return false
 	if card.tapped:
+		return false
+	# SUMMONING SICKNESS CLOSES TAP-COSTED SKILLS TOO. can_tap() is the one place that knows the rule (sick and no
+	# Haste = no tap), and asking it here means the green availability ring and the activation agree: a card that
+	# just entered is simply not offered, rather than being offered and then refusing.
+	if not card.can_tap():
 		return false
 	if not "skill" in card.card_effects:
 		return false

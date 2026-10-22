@@ -145,6 +145,14 @@
 		"aura":[{"targets":{"type":"Forward","controller":"player"},"method":"power_change","value":1000}]
 	},
 
+	"16":{
+		"haste":true
+	},
+
+	"75":{
+		"haste":true
+	},
+
 	"95":{
 		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
 	}

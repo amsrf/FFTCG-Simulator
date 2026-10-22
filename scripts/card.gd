@@ -673,8 +673,24 @@ func declare_blocker():
 	]
 	emit_signal("execute_instructions", instructions)
 
+## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
+## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
+## what something gave it, and anything asking "can this tap" needs one answer.
+func has_haste() -> bool:
+	return card_effects.has("haste") or status_effects.has("haste")
+
+## CAN THIS CARD BE TAPPED AT ALL? Summoning sickness stops it, Haste ignores it, and an already-tapped card is
+## obviously out. EVERY cost that taps must ask THIS rather than reading `tapped` — attacking, and any skill with
+## a tap cost — or a card that entered this turn gets to act.
+func can_tap() -> bool:
+	if tapped:
+		return false
+	if status_effects.has("summoning_sickness") and not has_haste():
+		return false
+	return true
+
 func can_attack():
-	if(tapped):
+	if not can_tap():
 		return false
 	if(type != 'Forward'):
 		return false
