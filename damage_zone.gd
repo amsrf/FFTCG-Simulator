@@ -20,27 +20,46 @@ var grabbed_card_index = 0;
 func set_deck(deck_node: Node) -> void:
 	deck = deck_node
 
-## How far above its slot a damage card starts its fall, in metres, and how long the fall takes. See draw().
-const DROP_HEIGHT := 0.9
-const DROP_SECONDS := 0.35
-
 func draw(card):
 	add_card_to_tree(card)
 	update_card_positions(cards.size() - 1)
 
-	# THE DROP. A card entering the damage zone falls onto it from above — no arc, and nothing that passes below
-	# the board. The old path travelled through y = 0 to get from the deck to the slot; damage cards are drawn at
-	# 1.2x and the zone sits at y = 0.1, so the middle of that move was visibly UNDER the board and the card
-	# appeared to climb back out at the end.
-	var target_position: Vector3 = calculate_card_position(cards.size() - 1)
-	card.position = target_position + Vector3.UP * DROP_HEIGHT
-
+	# THE FLIGHT, AS IT ALWAYS WAS. One change only: the waypoints used to be hardcoded to y = 0, and the zone
+	# has since been lifted to y = 0.1, so the card spent a moment slightly UNDER the board mid-flight. They now
+	# follow the zone's own plane instead. Same shape, same timings, same easing otherwise.
 	var tween = create_tween()
-	# EASE_IN because a fall ACCELERATES: slow at the release, quickest at the landing.
-	tween.tween_property(card, "position", target_position, DROP_SECONDS) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	# The damage card's resting size, reached on the way down.
-	tween.parallel().tween_property(card, "scale", Vector3(1.2, 1.2, 1.2), DROP_SECONDS)
+	var path = $Path3D
+	var path_follow = $Path3D/PathFollow3D
+	var curve = Curve3D.new()
+	var target_position = calculate_card_position(cards.size() - 1)
+	var plane: float = target_position.y
+
+	# Add points to the curve
+	curve.add_point(card.position)  # Start point
+	curve.add_point(card.position + Vector3(0, 0, -0.1))
+	curve.add_point(Vector3(0, card.position.y / 2, -1))  # Mid point
+	curve.add_point(Vector3(target_position.x + 1.2, plane, -0.9))
+	curve.add_point(Vector3(target_position))
+	curve.bake_interval = 50
+	path.curve = curve
+
+	# Reset PathFollow3D progress
+	path_follow.progress_ratio = 0
+
+	# Configure PathFollow3D
+	path_follow.rotation_mode = PathFollow3D.ROTATION_NONE
+
+	# Reparent the card to PathFollow3D for the animation
+	card.reparent(path_follow)
+
+	# Animate the card along the path
+	tween.tween_property(path_follow, "progress_ratio", 1.0, 1.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.parallel().tween_property(card, "scale", Vector3(1.2, 1.2, 1.2), 1.3)
+	tween.parallel().tween_property(card, "rotation_degrees", Vector3.ZERO, 0.7)
+
+	# Reparent the card back to its original parent after the animation
+	tween.tween_callback(card.reparent.bind(self))
+	tween.tween_callback(path_follow.set.bind("progress_ratio", 0))  # Reset PathFollow3D progress
 
 func add_card_to_tree(card):
 	cards.append(card)
@@ -95,7 +114,10 @@ func calculate_card_position(i):
 	elif card_width != null:
 		base = -float(card_width) * 0.5
 	var x_offset = base + i * (card_width + card_spacing)
-	var y_offset = (i)*0.001
+	# A SMALL RISE PER CARD, so each new damage card lands visibly ON TOP of the previous one. It was 1 mm,
+	# which is not enough to separate overlapping cards at this zoom: with the cards stepping 0.13 m apart and
+	# drawn at 1.2x, the overlap edge was buried in the card behind it. 8 mm is still a gentle stack.
+	var y_offset = (i) * 0.008
 	return Vector3(x_offset, y_offset, 0)
 	
 func remove_card(card):
