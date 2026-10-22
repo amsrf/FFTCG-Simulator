@@ -679,6 +679,11 @@ func declare_blocker():
 func has_haste() -> bool:
 	return card_effects.has("haste") or status_effects.has("haste")
 
+## BRAVE: attacking does not dull this card, so it can attack and still block (or attack again). Same split as
+## Haste — printed "brave": true in card_effects.json, granted as a status named "brave".
+func is_brave() -> bool:
+	return card_effects.has("brave") or status_effects.has("brave")
+
 ## CAN THIS CARD BE TAPPED AT ALL? Summoning sickness stops it, Haste ignores it, and an already-tapped card is
 ## obviously out. EVERY cost that taps must ask THIS rather than reading `tapped` — attacking, and any skill with
 ## a tap cost — or a card that entered this turn gets to act.

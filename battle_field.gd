@@ -349,7 +349,15 @@ func _on_tween_finished(card: Card):
 	#request_target_confirmation.emit()
 	
 func execute_card_attack():
-	attacker_card.tap()
+	# DEFENCE IN DEPTH. Every caller already asks can_attack() — the human's click, the AI's choice, the blocker
+	# gate — but this is the one function that turns an attacker into an attack, so summoning sickness must not be
+	# bypassable by a future caller that forgets to ask. can_attack() is can_tap() plus "is a Forward".
+	if attacker_card == null or not attacker_card.can_attack():
+		return
+	# BRAVE does not dull to attack, which is what lets a Brave Forward attack and still block — and attack again on
+	# a later combat step the same turn.
+	if not attacker_card.is_brave():
+		attacker_card.tap()
 	execute_card_effect(attacker_card,'when_attack')
 	
 func end_phase_cleanup():
