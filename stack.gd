@@ -639,6 +639,13 @@ func _paid_for_card() -> Card:
 	return casting_card
 
 func _on_assistant_target_complete() -> void:
+	# AN EX BURST IS NOT A SKILL ACTIVATION. With no Summon parked and no skill proxy there is nothing to commit:
+	# the target belonged to a damage card's ex burst, which resolves itself and never touches this node. Without
+	# this guard the handler hid the buttons and emitted request_priority, which reads exactly like "the effect
+	# went to the stack" - and it never set the Game's _targets, so the ex burst's damage then resolved against
+	# nothing at all. That was both halves of the report.
+	if summon_casting_card == null and skill_activation_proxy == null:
+		return
 	if summon_casting_card != null:
 		_commit_summon_to_stack()
 		_shatter_paid_cost()      # the Summon is on the stack

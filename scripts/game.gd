@@ -616,11 +616,19 @@ func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 		# This cannot hang: request_target is called with allow_cancel = false, so there is no Cancel button and
 		# Confirm is the only exit.
 		await assistant.target_complete
+		# THE PICK COMES FROM THE FIELD. The stack path sets _targets when an effect RESOLVES, and an ex burst
+		# never resolves through there - so an `author: "target"` instruction had nothing to hit. Read the pick
+		# straight off the Field, which is where the targeting session lives.
+		_targets = field.targeting_picked.duplicate()
+		if _targets.is_empty() and field.target_card != null:
+			_targets = [field.target_card]
 
 	var instructions: Array = card.create_instruction_from_json(effect.get("instructions", []))
 	if instructions.is_empty():
 		return
 	card.execute_instructions.emit(instructions)
+	# The burst is spent; leave nothing behind for the next effect to inherit.
+	_targets = []
 
 
 func _end_damage_zoom() -> void:
