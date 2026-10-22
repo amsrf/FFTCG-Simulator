@@ -608,8 +608,14 @@ func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 	var criteria = effect.get("choose_target", null)
 	if criteria != null:
 		field.request_target(criteria, card, false, "Ability")
-		# WAIT for the pick. Without this the instructions would resolve against no target at all.
-		await field.target_complete
+		# TARGET_COMPLETE IS THE ASSISTANT'S, not the Field's. The split is: the Field owns the arrows and the
+		# selection state, the Assistant owns the buttons and the signals that report what the player did with
+		# them. Asking the Field for it is a runtime error, not a compile one - hence "Invalid access to property
+		# or key" rather than a parse failure.
+		#
+		# This cannot hang: request_target is called with allow_cancel = false, so there is no Cancel button and
+		# Confirm is the only exit.
+		await assistant.target_complete
 
 	var instructions: Array = card.create_instruction_from_json(effect.get("instructions", []))
 	if instructions.is_empty():
