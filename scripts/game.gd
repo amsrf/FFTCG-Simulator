@@ -495,6 +495,11 @@ const DAMAGE_CAMERAS := {
 ## The board view to come back to. Captured on the first zoom, because at that moment it IS the board view.
 var _board_camera: Camera3D = null
 var _damage_tween: Tween = null
+## Each damage camera's HAND-PLACED pose, remembered the first time it is used. The return leg must go back to
+## THIS, not to the board's pose: tweening a damage camera onto the board view parks it there, so the next zoom
+## reads its position from the board, computes a target beside the board, and the view never leaves the board
+## again. That is precisely "it zoomed once and then stopped".
+var _damage_home: Dictionary = {}
 
 
 ## The world point the NEXT damage card will occupy in `zone` — the same formula the zone uses for an incoming
@@ -544,10 +549,17 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 
 	var cards: Array = zone.get("cards")
 	var next_index: int = cards.size() if cards != null else 0
-	# The pose to land on: the camera's own hand-placed framing, shifted by the slot's drift from slot zero.
+	# THE CAMERA'S OWN POSE, REMEMBERED ON FIRST USE. Reading its LIVE position — which is what this did — works
+	# exactly once: the return leg parks the camera on the board view, so on the second zoom this would read the
+	# board's position and aim the shot at the board. The first zoom is the only moment the camera is guaranteed
+	# to still be in its hand-placed pose.
+	if not _damage_home.has(cam):
+		_damage_home[cam] = cam.global_transform
+	var home: Transform3D = _damage_home[cam]
+	# The pose to land on: the hand-placed framing, shifted by the slot's drift from slot zero.
 	var drift: Vector3 = _damage_slot_world(zone, next_index) - _damage_slot_world(zone, 0)
-	var target: Transform3D = cam.global_transform
-	target.origin = cam.global_position + drift
+	var target: Transform3D = home
+	target.origin = home.origin + drift
 
 	var board_pose: Transform3D = _board_camera.global_transform
 	if _damage_tween != null and _damage_tween.is_valid():
@@ -561,7 +573,10 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	_damage_tween.set_trans(Tween.TRANS_SINE)
 	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
 	_damage_tween.tween_interval(damage_zoom_hold_seconds)
-	_damage_tween.tween_property(cam, "global_transform", board_pose, damage_zoom_out_seconds).set_ease(Tween.EASE_IN)
+	# BACK TO ITS OWN POSE, not the board's. Ending on the board pose was half of the "works once" bug: it puts the
+	# board view back on screen (correct) but leaves THIS camera parked there, which poisons the next zoom's
+	# read-back. The handoff to the board view happens in the callback below; this just puts it back where it lives.
+	_damage_tween.tween_property(cam, "global_transform", home, damage_zoom_out_seconds).set_ease(Tween.EASE_IN)
 	_damage_tween.tween_callback(_end_damage_zoom)
 
 
