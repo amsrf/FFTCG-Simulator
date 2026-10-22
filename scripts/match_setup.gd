@@ -290,7 +290,10 @@ func _debug() -> Dictionary:
 		# TOP OF THE DECK IS IFRIT (4), which carries "ex_burst": "when_cast" — so the first damage the player
 		# takes pulls it off the deck and immediately runs its cast effect at 4000 damage. Test with T (opponent
 		# takes damage) and Y (player takes damage); Y is the one that puts Ifrit in the player's own zone.
-		"player_deck": [4] + [i for i in range(1, 51) if i != 4],
+		#
+		# Built from ranges rather than a comprehension: GDScript's array comprehension has no `if`, and the
+		# [i for i in ... if ...] form is a PARSE ERROR — which takes the whole autoload down, not just this line.
+		"player_deck": [4] + range(1, 4) + range(5, 51),
 		"opponent_deck": range(51, 101),
 		"player_field": [
 			{"id": 12, "tapped": false},
