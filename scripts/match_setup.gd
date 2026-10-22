@@ -302,6 +302,9 @@ func _debug() -> Dictionary:
 		"opponent_graveyard": [57, 58],
 		"opponent_damage": [59, 60],
 		"player_field": [
+			# 29 Red XIII carries printed First Strike, so a clash against anything without it takes two damage
+			# steps with a priority window between them.
+			{"id": 29, "tapped": false},
 			{"id": 12, "tapped": false},
 			{"id": 41, "tapped": false},
 			{"id": 32, "tapped": true},

@@ -684,6 +684,12 @@ func has_haste() -> bool:
 func is_brave() -> bool:
 	return card_effects.has("brave") or status_effects.has("brave")
 
+## FIRST STRIKE: this card deals its damage before a card without it. Printed "first_strike": true, or granted as
+## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
+## the question it asks.
+func is_first_strike() -> bool:
+	return card_effects.has("first_strike") or status_effects.has("first_strike")
+
 ## CAN THIS CARD BE TAPPED AT ALL? Summoning sickness stops it, Haste ignores it, and an already-tapped card is
 ## obviously out. EVERY cost that taps must ask THIS rather than reading `tapped` — attacking, and any skill with
 ## a tap cost — or a card that entered this turn gets to act.

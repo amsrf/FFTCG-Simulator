@@ -733,14 +733,85 @@ func set_blocker(card):
 	# BEFORE DAMAGE_RESOLUTION reads it.
 	field.blocker_card = card
 
+## One simultaneous damage step: both cards deal their power to each other. State-based actions are checked after,
+## because a card that died here must not deal damage in a later step.
 func clash_cards(card1:Card,card2:Card):
-	if card1.is_on_field() and card2.is_on_field():
+	if card1 != null and card2 != null and card1.is_on_field() and card2.is_on_field():
 		card1.suffer_damage(card2.power)
 		card2.suffer_damage(card1.power)
 		enforce_game_state_rules()
-	pass
-func clash_attacker_blocker():
-	clash_cards(field.attacker_card, field.blocker_card)
+
+## ONE HALF of a First Strike combat: only `striker` deals damage. The other card deals in its own step.
+func clash_step(striker: Card, other: Card) -> void:
+	if striker == null or other == null:
+		return
+	if not (striker.is_on_field() and other.is_on_field()):
+		return
+	other.suffer_damage(striker.power)
+	enforce_game_state_rules()
+
+## FIRST STRIKE.
+##
+## If exactly ONE of the two cards has it, combat is two damage steps with a PRIORITY ROUND between them. If both
+## have it or neither does, it is one simultaneous step. The second step happens only if both cards are still alive
+## after the first — hence the is_on_field() checks on either side of the priority window, since a player may cast
+## something during it.
+func clash_attacker_blocker() -> void:
+	var attacker: Card = field.attacker_card
+	var blocker: Card = field.blocker_card
+	if attacker == null or blocker == null:
+		return
+	var fs_attacker: bool = attacker.is_first_strike()
+	var fs_blocker: bool = blocker.is_first_strike()
+	if fs_attacker == fs_blocker:
+		# Both or neither: one simultaneous step, exactly as before.
+		clash_cards(attacker, blocker)
+		return
+
+	var striker: Card = attacker if fs_attacker else blocker
+	var other: Card = blocker if fs_attacker else attacker
+	print("[Clash] First Strike: %s deals first, then %s" % [striker.card_name, other.card_name])
+	clash_step(striker, other)
+	if not (striker.is_on_field() and other.is_on_field()):
+		return
+	# THE WINDOW BETWEEN THE STEPS. Round only — it must not advance the phase.
+	await priority_round_only()
+	if not (striker.is_on_field() and other.is_on_field()):
+		return
+	clash_step(other, striker)
+
+## A priority pass chain that does NOT advance the phase.
+##
+## priority() ends with next_phase(); a between-damage-step window must not, so this is the same loop with that tail
+## removed. KEEP THE TWO IN STEP if either changes — this is a deliberate copy rather than a refactor of the live
+## priority loop, because the loop is load-bearing and a variant is cheaper to reason about than a shared one
+## parametrised by "should I advance".
+func priority_round_only() -> void:
+	if _priority_lock:
+		print("[Priority] between-steps round skipped: one is already running")
+		return
+	_priority_lock = true
+	var holder: int = turn_owner
+	var passed_since_action: bool = false
+	while true:
+		priority_holder = holder
+		var acted: bool = await agent_for(holder).take_priority(holder)
+		if acted:
+			passed_since_action = false
+			holder = 3 - holder
+			continue
+		if not passed_since_action:
+			passed_since_action = true
+			holder = 3 - holder
+			continue
+		if stack.stack_length() > 0:
+			await stack.resolve_top_effect()
+			passed_since_action = false
+			holder = turn_owner
+			continue
+		break
+	_priority_lock = false
+	print("[Priority] between-steps round over")
 	
 	
 
@@ -873,7 +944,10 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			# A blocked attack clashes instead of damaging the player. This is
 			# the ONLY clash — Card.declare_blocker() just records the blocker.
 			if field.blocker_card != null:
-				clash_attacker_blocker()
+				# AWAITED: First Strike may open a priority window between its two damage steps, and that window
+				# must finish before this phase continues into its own priority round. Without the await the clash
+				# runs detached and two priority loops fight over _priority_lock.
+				await clash_attacker_blocker()
 			else:
 				cause_damage()
 			await priority()

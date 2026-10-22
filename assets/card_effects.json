@@ -149,6 +149,14 @@
 		"haste":true
 	},
 
+	"29":{
+		"first_strike":true
+	},
+
+	"87":{
+		"first_strike":true
+	},
+
 	"6":{
 		"brave":true
 	},
