@@ -20,6 +20,7 @@
 		]
 	},
 	"4":{
+		"ex_burst":"when_cast",
 		"when_cast":
 			{
 				"instructions":[{"name":"suffer_damage", "author":"target", "argument":[4000]}],

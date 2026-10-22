@@ -287,7 +287,10 @@ func _debug() -> Dictionary:
 		# Opening hand (Aerith 64 + Evoker 68 for the Zack conditional-power test).
 		"player_hand": [29, 30, 31, 32, 33, 6, 64, 68],
 		"opponent_hand": [52, 53, 54, 55, 56],
-		"player_deck": range(1, 51),
+		# TOP OF THE DECK IS IFRIT (4), which carries "ex_burst": "when_cast" — so the first damage the player
+		# takes pulls it off the deck and immediately runs its cast effect at 4000 damage. Test with T (opponent
+		# takes damage) and Y (player takes damage); Y is the one that puts Ifrit in the player's own zone.
+		"player_deck": [4] + [i for i in range(1, 51) if i != 4],
 		"opponent_deck": range(51, 101),
 		"player_field": [
 			{"id": 12, "tapped": false},

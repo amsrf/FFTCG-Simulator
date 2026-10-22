@@ -587,6 +587,36 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	_damage_tween.tween_callback(_end_damage_zoom)
 
 
+## Run a damage card's EX BURST.
+##
+## IMMEDIATELY means no stack object and no priority round: nobody can respond to it, and it does not wait behind
+## anything. The instructions go straight into the same instruction machine every other effect uses — what is
+## skipped is the stack, not the resolution.
+##
+## TARGETING IS THE NORMAL FLOW, and the source is the card sitting in the damage zone, so the arrow comes FROM
+## the damage card. There is no stack copy to point at here, because there is no stack object at all — that is the
+## whole feature. The await is what makes targeting work: the instructions must not run until a target is picked,
+## exactly like the stack-routed path resolves after its target rather than before it.
+func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	if not card.card_effects.has(keyword):
+		return
+	var effect: Dictionary = card.card_effects[keyword]
+	print("[ExBurst] %s -> '%s' (P%s)" % [card.card_name, keyword, 1 if side == player else 2])
+
+	var criteria = effect.get("choose_target", null)
+	if criteria != null:
+		field.request_target(criteria, card, false, "Ability")
+		# WAIT for the pick. Without this the instructions would resolve against no target at all.
+		await field.target_complete
+
+	var instructions: Array = card.create_instruction_from_json(effect.get("instructions", []))
+	if instructions.is_empty():
+		return
+	card.execute_instructions.emit(instructions)
+
+
 func _end_damage_zoom() -> void:
 	if _board_camera != null and is_instance_valid(_board_camera):
 		_board_camera.current = true
