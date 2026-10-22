@@ -286,6 +286,43 @@ func _input(event):
 		# Worth knowing: it counts toward the defeat total like any other damage. Seven presses of Y and you lose,
 		# which is correct rather than a bug — the debug key uses the real rules on purpose.
 		player.take_damage(1)
+	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_V:
+		_show_zone_view(player.damage_zone, "Damage Zone")
+	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_G:
+		_show_zone_view(player.graveyard, "Graveyard")
+
+
+## READ-ONLY VIEW of a zone's contents, in the same fan window the deck search uses — so a card reads the same way
+## wherever it is inspected, and there is no second viewer to drift from it.
+##
+## One helper for both zones because of an asymmetry that would bite if copied to two call sites: the damage zone
+## keeps its cards in `cards`, the graveyard in `graveyard_cards`.
+##
+## V = your damage zone, G = your graveyard. Left/right click on the zones themselves comes next; the keys make
+## this usable and testable now.
+func _show_zone_view(zone: Node, title: String) -> void:
+	if zone == null:
+		return
+	var raw: Variant = zone.get("cards")
+	if raw == null:
+		raw = zone.get("graveyard_cards")
+	if raw == null:
+		return
+	var ids: Array = []
+	for c in raw:
+		if c != null and is_instance_valid(c):
+			ids.append(int(c.id))
+	if ids.is_empty():
+		# An empty zone has nothing to show, and an empty window would look broken rather than empty.
+		print("[ZoneView] %s is empty" % title)
+		if $PhaseText:
+			$PhaseText.text = "%s — empty" % title
+		return
+	var window = DECK_SEARCH.instantiate()
+	add_child(window)
+	window.call("open_view", ids, "%s — %d card%s" % [title, ids.size(), "" if ids.size() == 1 else "s"])
+	print("[ZoneView] %s: %d cards" % [title, ids.size()])
+
 
 func _unhandled_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:

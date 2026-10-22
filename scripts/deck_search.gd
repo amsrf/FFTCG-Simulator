@@ -179,6 +179,30 @@ func _build() -> void:
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 
+## READ-ONLY VIEW of a zone's cards: the same fan, hover preview and look as the deck search, but nothing to
+## choose. Confirm is hidden and Cancel becomes Close, because this asks the player nothing.
+##
+## Sharing this window rather than writing a second viewer is the point: a card must read the same way wherever it
+## is inspected, and two viewers would drift apart within a week.
+func open_view(ids: Array, title: String) -> void:
+	var shown: Array = []
+	for id in ids:
+		shown.append(int(id))
+	# KEPT IN THE ZONE'S OWN ORDER — slot order is meaningful for damage — rather than sorted like a deck search.
+	_matching = shown
+	_page = 0
+	_title.text = title
+	_subtitle.text = "For checking what is in the zone. Nothing is being chosen."
+	var count_now: int = shown.size()
+	_status.text = "%d card%s. Point at one to read it." % [count_now, "" if count_now == 1 else "s"]
+	_rebuild_page()
+	_layout()
+	# AFTER _layout(), because that is what creates the buttons.
+	if _confirm != null:
+		_confirm.visible = false
+	if _cancel != null:
+		_cancel.text = "Close"
+
 ## Opens the window on `deck_ids`, showing ONLY the cards that satisfy `filter`.
 func open(deck_ids: Array, filter: Dictionary) -> void:
 	var matching: Array = []
