@@ -295,6 +295,12 @@ func _debug() -> Dictionary:
 		# [i for i in ... if ...] form is a PARSE ERROR — which takes the whole autoload down, not just this line.
 		"player_deck": [4] + range(1, 4) + range(5, 51),
 		"opponent_deck": range(51, 101),
+		# ZONES PRE-FILLED for testing the zone viewer: click one of these cards in-game, or press V / G.
+		# Distinct ids so a card in the graveyard cannot be confused with one in the damage zone.
+		"player_graveyard": [5, 6, 7],
+		"player_damage": [8, 9],
+		"opponent_graveyard": [57, 58],
+		"opponent_damage": [59, 60],
 		"player_field": [
 			{"id": 12, "tapped": false},
 			{"id": 41, "tapped": false},

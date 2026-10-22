@@ -190,6 +190,25 @@ func start_match(config: Dictionary) -> void:
 	_place_field_cards(opponent_field_cards, true)
 	_place_field_cards(player_field_cards, false)
 
+	# PRE-FILL THE ZONES for a test board, so the zone viewer (click a card in the zone, or press V / G) has
+	# something to show without playing a match first. add_card is the INSTANT path on purpose: a setup board
+	# should already be in place, not dropping cards in front of the player before the first frame.
+	for zone_setup in [
+			[config.get("player_graveyard", []), false, "Player", "Graveyard"],
+			[config.get("opponent_graveyard", []), true, "Opponent", "Graveyard"],
+			[config.get("player_damage", []), false, "Player", "DamageZone"],
+			[config.get("opponent_damage", []), true, "Opponent", "DamageZone"],
+	]:
+		var ids: Array = zone_setup[0]
+		var zone: Node = get_node_or_null("%s/%s" % [zone_setup[2], zone_setup[3]])
+		if zone == null:
+			continue
+		for id in ids:
+			var card = create_card(int(id), 'opponent' if zone_setup[1] else 'player')
+			# add_child FIRST: add_card reparents, and a node with no parent has no meaningful transform.
+			add_child(card)
+			zone.call("add_card", card)
+
 	match str(config.get("first_phase", "first_main")):
 		"active":
 			phase_index = 0
