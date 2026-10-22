@@ -114,5 +114,38 @@
 			{
 				"instructions":[{"name":"search_deck", "author":"game", "argument":[{"name":"Ovelia"}]}]
 			}
+	},
+
+	"21":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[{"name":"suffer_damage","author":"target","argument":[4000]}]
+		}
+	},
+
+	"57":{
+		"aura":[{"targets":{"type":"Forward","controller":"player","element":"氷"},"method":"power_change","value":1000}]
+	},
+
+	"65":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Backup","controller":"player"},
+			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
+		}
+	},
+
+	"67":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Backup","controller":"player"},
+			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
+		}
+	},
+
+	"83":{
+		"aura":[{"targets":{"type":"Forward","controller":"player"},"method":"power_change","value":1000}]
+	},
+
+	"95":{
+		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
 	}
 }
