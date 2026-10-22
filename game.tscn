@@ -81,7 +81,7 @@ transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.1
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 2.83598, -2.95784)
 
 [node name="DamageZone" parent="Player" unique_id=747574751 instance=ExtResource("14_215e1")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.56502, 0, -0.521555)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.56502, 0, -0.521555)
 
 [node name="Camera" type="Camera3D" parent="Player/DamageZone" unique_id=1402199374]
 transform = Transform3D(0.9989946, 0.043924663, -0.008969118, 0, 0.20006494, 0.97978264, 0.04483103, -0.97879755, 0.19986379, -0.35699987, 1.0298424, -0.39699882)
