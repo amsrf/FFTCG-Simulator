@@ -558,8 +558,15 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	var home: Transform3D = _damage_home[cam]
 	# The pose to land on: the hand-placed framing, shifted by the slot's drift from slot zero.
 	var drift: Vector3 = _damage_slot_world(zone, next_index) - _damage_slot_world(zone, 0)
+	var slot: Vector3 = _damage_slot_world(zone, next_index)
 	var target: Transform3D = home
 	target.origin = home.origin + drift
+	# TURN TO FACE THE SLOT. Translating alone only centres the shot if the hand-placed rotation happened to point
+	# at the first slot; as the row grows the camera would slide sideways while still looking where slot zero was.
+	# looking_at() aims the camera at the slot and leaves the position alone, and it takes the camera's own up
+	# vector so a deliberately rolled camera keeps its roll. Godot cameras look down -Z, which looking_at handles.
+	if target.origin.distance_to(slot) > 0.01:
+		target = target.looking_at(slot, home.basis.y)
 
 	var board_pose: Transform3D = _board_camera.global_transform
 	if _damage_tween != null and _damage_tween.is_valid():
