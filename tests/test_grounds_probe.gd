@@ -32,11 +32,29 @@ func _ready() -> void:
 	var names: Array = GROUNDS.names()
 	_expect(names.size() >= 4, "at least four grounds are registered (%d)" % names.size())
 
-	# Every preset the menu will show: the grounds plus the general matches.
+	# The MAIN MENU keeps its everyday presets; the grounds live on their own screen behind "Test Mode".
 	var presets: Array = MatchSetup.get_presets()
+	_expect(presets == ["custom", "ai", "standard", "debug"],
+		"the main menu presets are unchanged (%s)" % str(presets))
+	var grounds_listed: Array = MatchSetup.get_test_grounds()
 	for name in names:
-		_expect(presets.has(name), "'%s' is listed in the menu presets" % name)
+		_expect(grounds_listed.has(name), "'%s' is listed on the Test Mode screen" % name)
+		_expect(not presets.has(name), "and '%s' does NOT clutter the main menu" % name)
 		_expect(not MatchSetup.describe_preset(name).is_empty(), "and it describes itself")
+
+	# The Test Mode screen itself: one button per ground, built from the registry.
+	var menu_scene: PackedScene = load("res://test_grounds_menu.tscn")
+	_expect(menu_scene != null, "the Test Mode scene loads")
+	if menu_scene != null:
+		var menu: Control = menu_scene.instantiate()
+		add_child(menu)
+		await get_tree().process_frame
+		_expect(menu.call("ground_button_count") == names.size(),
+			"it shows one button per ground (%d of %d)" % [menu.call("ground_button_count"), names.size()])
+		_expect(str(menu.call("ground_button_text", 0)).begins_with("Ground:"),
+			"and the first button is labelled as a ground ('%s')" % menu.call("ground_button_text", 0))
+		menu.queue_free()
+		await get_tree().process_frame
 
 	for name in names:
 		var cfg: Dictionary = MatchSetup.build_config(name)

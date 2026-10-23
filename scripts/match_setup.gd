@@ -10,9 +10,10 @@ const GAME_SCENE := "res://game.tscn"
 const MENU_SCENE := "res://main_menu.tscn"
 const DECK_EDITOR_SCENE := "res://deck_editor.tscn"
 
-## One board per mechanic. Registered here so the menu lists them with everything else; see test_grounds.gd for the
-## boards themselves and the conventions they follow.
+## One board per mechanic. Registered here so the Test Mode screen can list them; see test_grounds.gd for the boards
+## themselves and the conventions they follow.
 const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const TEST_GROUNDS_MENU_SCENE := "res://test_grounds_menu.tscn"
 
 ## Where the deck editor writes. Same directory and same default name, so a deck saved in the
 ## editor is the deck the custom preset plays without anything else having to be kept in step.
@@ -32,9 +33,13 @@ var custom_deck_name: String = CUSTOM_DECK_NAME
 var editing_deck_name: String = ""
 
 func get_presets() -> Array:
-	# THE TEST GROUNDS COME FIRST. They are the boards you reach for while building a mechanic; the general matches
-	# sit below them.
-	return TEST_GROUNDS.names() + ["ai", "standard", "debug", "custom"]
+	# THE MAIN MENU IS UNCHANGED. Test grounds live behind their own "Test Mode" screen, so the everyday menu stays
+	# short and the mechanic-specific boards do not read as ways to start a normal match.
+	return ["custom", "ai", "standard", "debug"]
+
+## The boards listed on the Test Mode screen.
+func get_test_grounds() -> Array:
+	return TEST_GROUNDS.names()
 
 func describe_preset(preset: String) -> String:
 	if TEST_GROUNDS.has(preset):
@@ -114,6 +119,11 @@ func go_to_menu() -> void:
 func go_to_deck_picker() -> void:
 	config = {}
 	get_tree().change_scene_to_file(DECK_PICKER_SCENE)
+
+## The Test Mode screen: one board per mechanic, separate from the main menu.
+func go_to_test_grounds() -> void:
+	config = {}
+	get_tree().change_scene_to_file(TEST_GROUNDS_MENU_SCENE)
 
 ## Opens the editor on `name`. An EMPTY name means a brand new deck, and the editor starts blank — that is
 ## the difference between "edit this deck" and "create one", and it is carried by the name rather than a

@@ -39,6 +39,15 @@ func _ready() -> void:
 
 	box.add_child(HSeparator.new())
 
+	# TEST MODE gets its own screen: one board per mechanic. Keeping it out of the preset list above means the
+	# everyday menu stays the short list of ways to start a real match.
+	var test_button := Button.new()
+	test_button.text = "Test Mode"
+	test_button.custom_minimum_size = Vector2(460, 44)
+	test_button.tooltip_text = "Curated boards for testing one mechanic at a time"
+	test_button.pressed.connect(func(): MatchSetup.go_to_test_grounds())
+	box.add_child(test_button)
+
 	var deck_button := Button.new()
 	deck_button.text = "Deck Editor"
 	deck_button.custom_minimum_size = Vector2(460, 44)

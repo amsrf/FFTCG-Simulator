@@ -36,8 +36,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 
 ## Test Grounds (one board per mechanic)
 
-`scripts/test_grounds.gd` is a registry of curated boards, listed at the TOP of the main menu. Use these instead of
-the general `ai` preset whenever you are testing one mechanic: the `ai` board also casts Ifrit/Valefor, so the board
+`scripts/test_grounds.gd` is a registry of curated boards, reached from the main menu's **Test Mode** button
+(`test_grounds_menu.tscn`). The main menu itself is unchanged — the grounds are deliberately NOT presets there.
+Use these instead of the general `ai` preset whenever you are testing one mechanic: the `ai` board also casts Ifrit/Valefor, so the board
 changes under you.
 
 | ground | for | opponent |
