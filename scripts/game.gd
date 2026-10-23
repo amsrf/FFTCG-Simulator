@@ -61,8 +61,11 @@ var _targets = []
 ## player gets the hand-selection UI the S cost already uses; every other player is asked through its agent
 ## (choose_discard), so a RemoteAgent can answer it over the network later.
 func opponent_discards(count: int = 1) -> void:
-	var victim: int = 1 if _current_controller == "player" else 2
-	await discard_from(victim, count)
+	# THE VICTIM IS THE OTHER SEAT. "player" is P1 and "opponent" is P2, so a card controlled by P1 makes P2
+	# discard and vice versa. Getting this backwards is silent — the wrong hand loses a card and the human sees
+	# nothing at all, which is exactly how it shipped the first time.
+	var caster: int = 1 if _current_controller == "player" else 2
+	await discard_from(3 - caster, count)
 
 func discard_from(player_id: int, count: int = 1) -> void:
 	var owner_hand: Hand = hand_for(player_id)
