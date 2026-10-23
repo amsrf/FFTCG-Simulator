@@ -176,6 +176,20 @@ func power_change_targets(amount: int = 0, duration: int = 1) -> void:
 		return
 	_each_target("power_change", [amount, duration])
 
+## Buff EVERY member of the attacking party — "Chocobo and all the Forwards forming a party with it gain +3000 power".
+##
+## A party trigger has no chosen target: the card's own text says "a party", so the party currently attacking IS the
+## target set. Read at RESOLUTION, which is correct here — the trigger only queues while the attack is being
+## declared, and the party cannot change between then and the top of the stack.
+func power_change_party(amount: int = 0, duration: int = 1) -> void:
+	if amount == 0:
+		return
+	for card in field.party_members():
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			print("[Party] %s gains %+d power (until end of turn)" % [card.card_name, amount])
+			card.power_change(amount, duration)
+	enforce_game_state_rules()
+
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
 ## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
 func _apply_effect_block(card: Card) -> Dictionary:

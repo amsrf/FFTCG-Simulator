@@ -46,6 +46,8 @@ const ICE_B := 43        # Snow,   ice Forward — HAS a when-attack dull effect
 const BARD := 35         # Bard,   ice Forward 4000, no effects — passive, safe to attack with
 const DARK_KNIGHT := 55  # Dark Knight, ice Forward 8000, no effects — the intended blocker
 const FIRE := 12         # Zack,   fire Forward
+const CHOCOBO := 75      # Chocobo, wind Forward — "forms a party and attacks: party gains +3000"
+const HOPE := 82         # Hope,    wind Forward (the second half of the wind pair)
 const ZIDANE := 71       # cannot be chosen by the opponent's Summons/abilities
 const IFRIT := 4         # Summon: damage a Forward
 const BAHAMUT := 18      # Summon: fragile + big damage
@@ -62,13 +64,17 @@ static func clean() -> Dictionary:
 
 
 static func party_you_attack() -> Dictionary:
-	## PARTIES, attack side. You have an ice pair; the opponent has ice and fire Forwards to block with.
-	## The opponent is MOCK, so it never plays anything — the only thing that changes is your own attack.
+	## PARTIES, attack side. An ice pair AND a wind pair, so there are two legal parties to build; the opponent has
+	## ice and fire Forwards to block with. The opponent is MOCK, so it never plays anything — the only thing that
+	## changes is your own attack.
+	##
+	## The wind pair is Chocobo (75) + Hope (82): Chocobo's "forms a party and attacks" gives the whole party +3000.
 	var cfg: Dictionary = _base()
 	cfg["preset"] = "ground_party"
 	cfg["opponent_type"] = "mock"
 	cfg["player_field"] = [
 		{"id": ICE_A}, {"id": ICE_B}, {"id": FIRE},
+		{"id": CHOCOBO}, {"id": HOPE},
 		{"id": ICE_MANA}, {"id": ICE_MANA_2},
 	]
 	cfg["opponent_field"] = [{"id": ICE_A}, {"id": ICE_B}, {"id": FIRE}]

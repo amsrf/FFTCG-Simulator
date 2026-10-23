@@ -125,8 +125,15 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var field = game.get("field")
-	_expect(field.get_front_cards_for("player").size() == 3,
-		"the party ground starts with three player Forwards (%d)" % field.get_front_cards_for("player").size())
+	# Three ice/fire Forwards plus the Chocobo + Hope wind pair, so BOTH kinds of party can be built here.
+	var player_fronts: Array = field.get_front_cards_for("player")
+	_expect(player_fronts.size() == 5,
+		"the party ground starts with five player Forwards (%d)" % player_fronts.size())
+	var player_front_ids: Array = []
+	for c in player_fronts:
+		player_front_ids.append(c.id)
+	_expect(player_front_ids.has(GROUNDS.CHOCOBO) and player_front_ids.has(GROUNDS.HOPE),
+		"including the Chocobo + Hope wind pair, whose party trigger this ground is also for")
 	_expect(field.get_front_cards_for("opponent").size() == 3,
 		"and three opponent Forwards (%d)" % field.get_front_cards_for("opponent").size())
 	_expect(game.get("opponent_agent") != null, "the opponent agent was created")

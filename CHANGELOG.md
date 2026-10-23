@@ -4,6 +4,24 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Party Cards (1-075C, 1-076C)
+
+Both cards read "When <card> forms a party and attacks, <card> and all the Forwards forming a party with it gain +X
+power until the end of the turn."
+
+New keyword `when_party_attack`, deliberately separate from `when_attack`:
+- it fires only when TWO OR MORE members actually attacked (a party of one is an ordinary attack — the card says
+  "forms a party");
+- it fires per member, so each card's own effect resolves for itself;
+- the effect is `power_change_party(amount, duration)`, which buffs every current party member at RESOLUTION.
+
+  75 Chocobo (wind, 3, 4000, haste)  -> +3000 to the party
+  76 Chocobo (wind, 1, 3000)         -> +2000 to the party
+
+In the `party` test ground, so it can be seen by hand: the player now also has the Chocobo + Hope wind pair next to the
+ice pair. Probe measurement: Chocobo 4000 -> 7000, Hope 7000 -> 10000, and a lone Chocobo does not trigger.
+
+
 ### Test Grounds: one board per mechanic
 
 The `ai` preset is a general practice board, so testing a specific mechanic there means the AI also casts Ifrit and

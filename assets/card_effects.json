@@ -305,4 +305,20 @@
 			]
 		}
 	}
+,
+	"75":{
+		"haste": true,
+		"when_party_attack":{
+			"instructions":[
+				{"name":"power_change_party","author":"game","argument":[3000,1]}
+			]
+		}
+	},
+	"76":{
+		"when_party_attack":{
+			"instructions":[
+				{"name":"power_change_party","author":"game","argument":[2000,1]}
+			]
+		}
+	}
 }

@@ -34,6 +34,13 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - **The scripts are split across two folders:** `battle_field.gd`, `stack.gd`, `assistant.gd`, `power_display.gd` are at the **repo root**, while `game.gd`, `card.gd`, `hand.gd`, `player_side.gd` are in `scripts/`. `grep -r` for the filename rather than guessing a path — a wrong guess costs a round trip.
 - **Warnings arrive in batches.** The user runs Godot and pastes the warning list (`UNUSED_*`, `SHADOWED_VARIABLE`, `Case mismatch …`). Fix every line, then sweep for the same *class* (`grep` for other unused private vars, other case-mismatched `res://` paths) instead of waiting for the next run.
 
+## Party Triggers
+
+`when_party_attack` is NOT `when_attack`. It fires once per attacking member, but only when at least TWO members
+actually attacked — a single Forward is an ordinary attack, not a party. Its instruction is
+`power_change_party(amount, duration)`, which reads `Field.party_members()` at RESOLUTION (the party is still
+selected there; `reset_attacker()` only runs after the damage step).
+
 ## Test Grounds (one board per mechanic)
 
 `scripts/test_grounds.gd` is a registry of curated boards, reached from the main menu's **Test Mode** button

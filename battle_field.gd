@@ -369,6 +369,7 @@ func execute_card_attack():
 	var members: Array[Card] = attacking_party.duplicate()
 	if members.is_empty():
 		members.append(attacker_card)
+	var attacking: Array[Card] = []
 	for card in members:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
@@ -379,7 +380,16 @@ func execute_card_attack():
 		# on a later combat step the same turn. This is PER MEMBER, not per party.
 		if not card.is_brave():
 			card.tap()
+		attacking.append(card)
 		execute_card_effect(card, 'when_attack')
+
+	# "When <card> FORMS A PARTY AND ATTACKS..." — a different trigger from when_attack, and it needs a REAL party:
+	# two or more members actually attacked (a party of one is just an ordinary attack, and the card text says
+	# "forms a party"). Fired per member so each card's own effect resolves for itself; the effect acts on the whole
+	# party through power_change_party().
+	if attacking.size() >= 2:
+		for card in attacking:
+			execute_card_effect(card, 'when_party_attack')
 	
 func end_phase_cleanup():
 	# End Phase cleanup: remove all damage from every card on the field and

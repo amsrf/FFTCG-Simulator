@@ -156,6 +156,39 @@ func _ready() -> void:
 	_field.hide_block_arc()
 	_expect(_field.block_arrows.is_empty(), "hide_block_arc() disposes of them all")
 
+	# --- "when this card forms a party and attacks": Chocobo 75 / 76 ---------------------------------------
+	# Wind pair, because the Chocobos are wind: 75 (Chocobo, 4000, +3000 to the party) and 82 (Hope, wind Forward).
+	var choco: Card = _make_forward(75, "player")
+	var hope: Card = _make_forward(82, "player")
+	_field.reset_attacker()
+	_field.set_attacker(choco)
+	_field.add_party_member(hope)
+	var choco_before: int = choco.power
+	var hope_before: int = hope.power
+	_field.execute_card_attack()
+	var stack = _game.get("stack")
+	var guard: int = 0
+	while stack.stack_length() > 0 and guard < 8:
+		await stack.resolve_top_effect()
+		guard += 1
+	print("[Party] after the Chocobo party attack: Chocobo %d -> %d, Hope %d -> %d" % [
+		choco_before, choco.power, hope_before, hope.power])
+	_expect(choco.power == choco_before + 3000, "the Chocobo buffs ITSELF (+3000)")
+	_expect(hope.power == hope_before + 3000, "and every other Forwards forming the party with it")
+
+	# A party of ONE is not a party: the same card must not trigger it.
+	var solo: Card = _make_forward(75, "player")
+	_field.reset_attacker()
+	_field.set_attacker(solo)
+	var solo_before: int = solo.power
+	_field.execute_card_attack()
+	guard = 0
+	while stack.stack_length() > 0 and guard < 8:
+		await stack.resolve_top_effect()
+		guard += 1
+	_expect(solo.power == solo_before, "a lone Chocobo attacking does NOT trigger the party effect")
+
+
 	# --- unblocked party deals ONE damage (fresh pair again; the previous one may have broken) ------------------
 	var pair3: Array = _form_pair()
 	var m: Card = pair3[0]
