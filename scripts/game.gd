@@ -566,6 +566,70 @@ func _clean_instruction_stack():
 ## "search ... and if you do so, return Vanille" shape, where the second half must not happen after a cancel.
 var _last_action_succeeded: bool = true
 
+## CONDITION EVALUATION for `Instruction.condition`. Stringly-typed on purpose — the shapes cards ask for are still
+## being discovered, so this is a small parser plus predicates rather than a data structure:
+##
+##   ""                        unconditional (every instruction written before conditions existed)
+##   "if_last_succeeded"       the instruction immediately before this one reported success
+##   "if_last_did_not_succeed" ...or was SKIPPED / failed. Pair it with a guarded instruction above to get an
+##                             if/else: "deal 4000 if Brynhildr was cast, otherwise deal 2000".
+##   "cast_this_turn:<name>"   the ability's controller cast that card this turn (reads the turn ledger)
+##   "controls:<name|type>"    the ability's controller controls a card with that name, or of that type
+##
+## Unknown conditions are treated as TRUE and printed, so a typo shows up in the log instead of silently deleting an
+## effect — the failure mode that hurts least.
+func _condition_holds(condition: String) -> bool:
+	match condition:
+		"", "always":
+			return true
+		"if_last_succeeded":
+			return _last_action_succeeded
+		"if_last_did_not_succeed":
+			return not _last_action_succeeded
+	if condition.begins_with("cast_this_turn:"):
+		return cast_this_turn(condition.trim_prefix("cast_this_turn:").strip_edges(), _condition_owner())
+	if condition.begins_with("controls:"):
+		return _controls(condition.trim_prefix("controls:").strip_edges())
+	print("[Condition] unknown condition '%s' — treated as true" % condition)
+	return true
+
+## Whose perspective a condition is judged from: the controller of the ability being resolved. `_current_controller`
+## is set when the effect goes on the stack; fall back to the turn player if a condition is evaluated outside one.
+func _condition_owner() -> int:
+	if _current_controller == "player":
+		return 1
+	if _current_controller == "opponent":
+		return 2
+	return turn_owner
+
+## "controls:Laguna" (by name) or "controls:Forward"/"controls:Backup" (by type), for the ability's controller.
+func _controls(spec: String) -> bool:
+	var wanted: String = "player" if _condition_owner() == 1 else "opponent"
+	for card in field.get_all_cards():
+		if card.controller != wanted:
+			continue
+		if spec == "Forward" or spec == "Backup":
+			if card.type == spec:
+				return true
+		elif card.card_name == spec:
+			return true
+	return false
+
+## UNTAP EVERYTHING MATCHING CRITERIA — not just the chosen targets. "Activate all the Backups you control."
+## Deliberately separate from untap_targets(), whose scope is `_targets`; a card that says "all" must not depend on
+## what the player happened to pick.
+func untap_all_matching(criteria: Dictionary = {}) -> void:
+	for card in _cards_matching(criteria):
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.untap()
+
+## EACH PLAYER DISCARDS. The ability's controller chooses first, then the other player — the usual order for a
+## symmetric discard, and each side goes through its own agent so a human gets a picker and the AI picks its cheapest.
+func each_player_discards(count: int = 1) -> void:
+	var starter: int = 1 if _current_controller == "player" else 2
+	await discard_from(starter, count)
+	await discard_from(3 - starter, count)
+
 func _process_next_instruction() -> void:
 	if _current_instructions.is_empty():
 		# All instructions resolved: apply state-based actions so a card
@@ -576,9 +640,13 @@ func _process_next_instruction() -> void:
 	# CONDITIONAL GUARD. Checked BEFORE the instruction is resolved, and it consumes no state of its own: the flag is
 	# whatever the previous instruction left behind.
 	var next_instruction = _current_instructions[0]
-	if next_instruction.condition == "if_last_succeeded" and not _last_action_succeeded:
-		print("[Instruction] skipped ", next_instruction.action, " (the previous instruction did not succeed)")
+	if not _condition_holds(next_instruction.condition):
+		print("[Instruction] skipped ", next_instruction.action,
+			" (condition '%s' is false)" % next_instruction.condition)
 		_current_instructions.pop_front()
+		# A SKIPPED INSTRUCTION DID NOT SUCCEED. This is what makes `if_last_did_not_succeed` usable as the
+		# else-branch of the guarded instruction above it; without it the negation would read a stale `true`.
+		_last_action_succeeded = false
 		_process_next_instruction()
 		return
 
@@ -599,6 +667,11 @@ func _process_next_instruction() -> void:
 			args = instruction.value
 		else:
 			args.append(instruction.value)
+	# OPTIMISTIC SUCCESS, so `if_last_did_not_succeed` can act as an else-branch. A verb that RAN is treated as
+	# having done something unless it says otherwise (search_deck sets false on a cancel); a verb that was SKIPPED
+	# already wrote false. Without this line an unguarded instruction would leave the latch at the chain-start
+	# `false` and the else-branch would run on top of it.
+	_last_action_succeeded = true
 	# AWAITED, so an action that suspends for a player decision — search_deck's window — genuinely holds up
 	# the rest of the instruction list rather than letting the game run on behind it. Awaiting a plain
 	# method's return value is a no-op, so actions that do not suspend cost nothing for this. It does make

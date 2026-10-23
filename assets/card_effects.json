@@ -202,7 +202,10 @@
 	"43":{
 		"when_attack":{
 			"choose_target":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[{"name":"dull_targets","author":"game","argument":[]}]
+			"instructions":[
+				{"name":"dull_targets","author":"game","argument":[]},
+				{"name":"add_status_to_targets","author":"game","argument":["frozen", 1],"condition":"cast_this_turn:Shiva"}
+			]
 		}
 	},
 
@@ -267,6 +270,38 @@
 			"instructions":[
 				{"name":"search_deck","author":"game","argument":[{"name":"Hecatoncheir"}, "removed"]},
 				{"name":"return_from_break_zone","author":"game","argument":[true],"condition":"if_last_succeeded"}
+			]
+		}
+	},
+
+	"13":{
+		"skill":[{
+			"cost":{},
+			"tap":true,
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[
+				{"name":"damage_targets","author":"game","argument":[4000],"condition":"cast_this_turn:Brynhildr"},
+				{"name":"damage_targets","author":"game","argument":[2000],"condition":"if_last_did_not_succeed"}
+			]
+		}]
+	},
+
+	"82":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Backup","controller":"player"},
+			"instructions":[
+				{"name":"untap_all_matching","author":"game","argument":[{"is_type":"Backup","controller":"player"}],"condition":"cast_this_turn:Alexander"},
+				{"name":"untap_targets","author":"game","argument":[],"condition":"if_last_did_not_succeed"}
+			]
+		}
+	},
+
+	"42":{
+		"conditional_power":[{"condition":{"check_controller":"player","is_named":"Laguna"},"value":3000}],
+		"when_enter_field":{
+			"instructions":[
+				{"name":"each_player_discards","author":"game","argument":[1]},
+				{"name":"opponent_discards","author":"game","argument":[1],"condition":"controls:Laguna"}
 			]
 		}
 	}
