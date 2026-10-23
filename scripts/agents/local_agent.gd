@@ -35,6 +35,21 @@ func decide_blocker(_player_id: int, attacker: Card) -> Card:
 	var field: Field = game.field
 	return field.blocker_card
 
+## The blocker's power divided across the party it blocked. The human chooses in the distribution window; the rules
+## layer only awaits the answer, exactly as it awaits decide_blocker().
+##
+## Loaded by PATH, not by class name: this scene is new and the headless class cache does not know it.
+const PARTY_SPLIT := preload("res://party_split.tscn")
+
+func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Array:
+	if party.is_empty():
+		return []
+	var window = PARTY_SPLIT.instantiate()
+	game.add_child(window)
+	window.open(party, total)
+	var split: Array = await window.finished
+	return split
+
 ## "Your opponent discards 1 card from their hand." A DISCARD is the owner's choice, so this is the human's answer:
 ## the same hand-selection UI the S cost uses, with any card legal.
 ##
