@@ -182,6 +182,13 @@
 		}
 	},
 
+	"62":{
+		"apply_effect":{"is_type":"Forward"},
+		"when_cast":{
+			"instructions":[{"name":"return_targets_to_hand","author":"game","argument":[]}]
+		}
+	},
+
 	"43":{
 		"when_attack":{
 			"choose_target":{"is_type":"Forward","controller":"opponent"},

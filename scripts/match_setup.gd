@@ -66,15 +66,19 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 				{"id": 32, "tapped": false},   # Chemist (ice) — mana for a 2nd play
 				{"id": 3, "tapped": false},    # Red Mage (fire Backup)
 				{"id": 71, "tapped": false},   # Zidane (Forward 3000)
+				# FIVE WIND SOURCES. 62 Valefor is a wind Summon costing 5, and the AI can only pay from
+				# untapped Backups — without these it could never cast the card this board exists to show.
+				{"id": 68, "tapped": false},   # Evoker (wind Backup, cost 1)
+				{"id": 68, "tapped": false},
+				{"id": 68, "tapped": false},
+				{"id": 68, "tapped": false},
+				{"id": 68, "tapped": false},
 			]
-			# Ifrit first (Summon, fire, cost 1) so the AI casts a Summon and
-			# picks a target, and still has ice mana left for a Forward; then
-			# Dark Knight x2 (cost 3/4), Summoner (cost 3), Hades (Summon,
-			# cost 5 — deliberately unaffordable, to prove the AI declines it
-			# instead of starting a payment it cannot finish).
+			# 62 Valefor FIRST: "Return all Forwards to their owners' hands" — no target to pick, so the AI
+			# casts it on its first priority and the player watches their Forwards come back to hand.
 			# 33 Argath is a cost-2 Forward whose ETB makes ITS OPPONENT discard 1 — so the AI playing it is how
 			# the human's discard UI gets exercised.
-			cfg["opponent_hand"] = [33, 4, 55, 53, 54]
+			cfg["opponent_hand"] = [62, 33, 4, 55, 53]
 		"debug":
 			cfg = _debug()
 		_:
