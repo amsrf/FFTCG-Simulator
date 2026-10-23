@@ -62,7 +62,9 @@ func _ready() -> void:
 	_field.set_blocker_card(first)
 	_expect(_field.blocker_card == first, "clicking a card selects it as the blocker")
 	_expect(first.ring_selected(), "the selected blocker turns orange")
-	var arrow = _field.block_arrow
+	# A single attacker still produces exactly one arc; a party produces one per member (see party_probe).
+	var arrow = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	_expect(_field.block_arrows.size() == 1, "a single-attacker block draws exactly ONE arc")
 	_expect(arrow != null and arrow.is_aiming, "selecting a blocker draws an arc")
 	if arrow != null:
 		var start: Vector3 = first.get_global_face_centre()
@@ -90,8 +92,11 @@ func _ready() -> void:
 	_expect(not first.ring_selected(), "the previous blocker is no longer orange")
 	_expect(second.ring_selected(), "the new blocker is orange")
 	_expect(_field.blocker_card == second, "the new blocker is the selected one")
-	if arrow != null:
-		_expect(arrow.start_pos.distance_to(second.get_global_face_centre()) < 0.01,
+	# The arcs are recreated on every selection, so the earlier `arrow` node has been freed — read the new ones.
+	_expect(_field.block_arrows.size() == 1, "reselecting keeps exactly one arc for a single attacker")
+	var moved = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	if moved != null:
+		_expect(moved.start_pos.distance_to(second.get_global_face_centre()) < 0.01,
 			"the arc moved to the new blocker's centre")
 
 	# Clicking the same card again deselects.
@@ -128,16 +133,18 @@ func _ready() -> void:
 	var their_blocker: Card = their_attacker  # any of their untapped Forwards will do
 	_field.show_block_arc(their_blocker)
 	print("[BlockProbe] opponent blocks with %s" % their_blocker.card_name)
-	_expect(arrow != null and arrow.is_aiming, "the opponent's pick draws an arc for us to see")
-	if arrow != null:
-		_expect(arrow.start_pos.distance_to(their_blocker.get_global_face_centre()) < 0.01,
+	# show_block_arc() recreates the arcs, so the node captured above is gone — read the fresh one.
+	var their_arrow = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	_expect(their_arrow != null and their_arrow.is_aiming, "the opponent's pick draws an arc for us to see")
+	if their_arrow != null:
+		_expect(their_arrow.start_pos.distance_to(their_blocker.get_global_face_centre()) < 0.01,
 			"their arc starts at their blocker's centre")
 	_expect(_marked().is_empty(),
 		"no blue ring is used for the opponent's pick — that cue means \"your choice\"")
 
 	# And the whole thing is cleared when the combat's blocker resets.
 	_field.reset_blocker()
-	_expect(arrow == null or not arrow.is_aiming, "reset_blocker() hides the arc")
+	_expect(_field.block_arrows.is_empty(), "reset_blocker() disposes of every arc")
 	_expect(not their_blocker.ring_selected(), "reset_blocker() clears any orange")
 
 	_report()

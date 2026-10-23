@@ -15,10 +15,10 @@ var attacker_card: Card = null
 ## instructions finish, which is before DAMAGE_RESOLUTION reads it.
 var blocker_card: Card = null
 var arrow: BallisticArrow
-## A SEPARATE arrow for the combat's block link. The targeting arrow above belongs to a
-## targeting session and follows the mouse; sharing one instance would let either one
-## re-aim or hide the other.
-var block_arrow: BallisticArrow = null
+## SEPARATE arrows for the combat's block links. The targeting arrow above belongs to a targeting session and follows
+## the mouse; sharing instances would let either one re-aim or hide the other. A block against a PARTY needs one arc
+## per member, so this is a list rather than a single arrow.
+var block_arrows: Array = []
 ## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
 var targeting_allow_cancel: bool = false
 ## MULTI-TARGET SESSIONS. `choose_target` may carry a "count" (default 1). At 1 nothing below changes: one pick, one arc,
@@ -1231,28 +1231,43 @@ func hide_review_link() -> void:
 ## Static by design: both cards are already on the field and neither moves while the
 ## declaration is open, so this aims once and locks. That is the opposite of the targeting
 ## arrow, which follows the mouse and a card that may still be tweening into the stack.
+## ONE ARC PER PARTY MEMBER. When the attacker is a party, the block is not a single link: the blocker's power is
+## being divided across every member, so each of them gets an arc from the blocker's face centre. A party of one (the
+## ordinary attack) still produces exactly one arc, so this is the same call for both cases.
+##
+## Static by design: both cards are already on the field and neither moves while the declaration is open, so each arc
+## aims once and locks.
 func show_block_arc(blocker: Card) -> void:
+	hide_block_arc()
 	if blocker == null or attacker_card == null:
-		hide_block_arc()
 		return
-	if block_arrow == null or not is_instance_valid(block_arrow):
-		block_arrow = ballistic_arrow_scene.instantiate()
-		add_child(block_arrow)
+	var targets: Array = party_members()
+	if targets.is_empty():
+		targets = [attacker_card]
+	for member in targets:
+		if member == null or not is_instance_valid(member):
+			continue
+		var arc: BallisticArrow = ballistic_arrow_scene.instantiate()
+		add_child(arc)
 		# Adjacent cards are the common case for a block, and the default floor exists to
 		# stop a dot being drawn for a near-zero targeting drag.
-		block_arrow.min_distance = 0.15
+		arc.min_distance = 0.15
 		# A block joins the two battle rows, so its chord runs up the screen. Bowing along
 		# screen-up would put the arch along the chord (a 1.54 m path for an 0.85 m span);
 		# perpendicular instead makes it a sideways link. Kept shallow — this is a link
 		# between two cards, not a shot.
-		block_arrow.bow_perpendicular = true
-		block_arrow.peak_ratio = 0.22
-	block_arrow.set_is_aiming(true, blocker.get_global_face_centre())
-	block_arrow.lock_arc(attacker_card.get_global_face_centre())
+		arc.bow_perpendicular = true
+		arc.peak_ratio = 0.22
+		arc.set_is_aiming(true, blocker.get_global_face_centre())
+		arc.lock_arc(member.get_global_face_centre())
+		block_arrows.append(arc)
 
 func hide_block_arc() -> void:
-	if block_arrow != null and is_instance_valid(block_arrow):
-		block_arrow.set_is_aiming(false)
+	for arc in block_arrows:
+		if arc != null and is_instance_valid(arc):
+			arc.set_is_aiming(false)
+			arc.queue_free()
+	block_arrows.clear()
 
 func reset_blocker():
 	# The blocker may have broken in the clash, so only clear the marker while it

@@ -136,6 +136,26 @@ func _ready() -> void:
 		"the blocker's power is fully distributed across the party")
 	_expect(p.accumulated_damage > 0 and q.accumulated_damage > 0, "and both members took a share")
 
+	# --- one block arc PER party member ---------------------------------------------------------------------
+	var pair4: Array = _form_pair()
+	var blocker_arc: Card = _make_forward(ICE_A, "opponent")
+	_field.show_block_arc(blocker_arc)
+	_expect(_field.block_arrows.size() == 2,
+		"blocking a two-member party draws TWO arcs (%d)" % _field.block_arrows.size())
+	var hits: int = 0
+	for arc in _field.block_arrows:
+		for member in pair4:
+			if arc.locked_target.distance_to(member.get_global_face_centre()) < 0.01:
+				hits += 1
+	_expect(hits == 2, "each arc lands on a different party member (%d matched)" % hits)
+	var from_blocker: bool = true
+	for arc in _field.block_arrows:
+		if arc.start_pos.distance_to(blocker_arc.get_global_face_centre()) >= 0.01:
+			from_blocker = false
+	_expect(from_blocker, "and every arc starts at the blocker's centre")
+	_field.hide_block_arc()
+	_expect(_field.block_arrows.is_empty(), "hide_block_arc() disposes of them all")
+
 	# --- unblocked party deals ONE damage (fresh pair again; the previous one may have broken) ------------------
 	var pair3: Array = _form_pair()
 	var m: Card = pair3[0]
