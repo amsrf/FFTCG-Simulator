@@ -1233,10 +1233,12 @@ func remove_targets_from_game(_argument = null) -> void:
 		_send_card_to_removed(card)
 
 func put_card_into_graveyard(card: Card) -> void:
-	# Removal that is not a break (e.g. power reduced to 0). No break-zone
-	# triggers fire and the "unbreakable" status does not apply.
+	# Removal that is NOT a break (e.g. power reduced to 0). The "unbreakable" status does not apply, because the
+	# card did not break — but it still ARRIVES in the Break Zone, so `when_enter_break_from_field` fires and
+	# `when_break` does not. That difference is carried by the flag, not by a separate code path.
 	if not card.is_on_field():
 		return
+	card.broken = false
 	card.untap()
 	field.remove_card(card)
 	_send_card_to_graveyard(card)
@@ -1246,16 +1248,27 @@ func break_card(card: Card):
 		return
 	if 'unbreakable' in card.status_effects:
 		return
-	# Trigger "when this card is put from the field into the break zone"
-	# effects before the card leaves the field.
-	#
-	# BUT NOT WHEN IT IS EXILED: fragile replaces the move to the Break Zone entirely, so the card was never "put
-	# into the Break Zone" and the trigger must not fire. That is the whole difference between exiling and burying.
+	# MARK IT, then move it. The flag is what distinguishes a BREAK from an ordinary removal, and it is set here
+	# because this is the only function that knows the damage reached the power.
+	card.broken = true
 	card.untap()
 	field.remove_card(card)
-	var exiled: bool = _send_card_to_graveyard(card)
-	if not exiled:
-		card.on_break()
+	_send_card_to_graveyard(card)
+
+## Fired BY THE BREAK ZONE once a card has arrived in it and been laid out — never from here, and never while the
+## card is still on the field. Both keywords go on the stack, in this order, so `when_break` resolves second.
+##
+## `when_enter_break_from_field` fires for ANY card that came from the field (broken or not); `when_break` only for
+## one that actually broke. An exiled card fires neither, because it never reaches this pile.
+func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	if card.card_effects.has("when_enter_break_from_field"):
+		print("[BreakZone] ", card.card_name, " -> when_enter_break_from_field")
+		field.add_card_effect_to_stack.emit(card.id, "when_enter_break_from_field", card)
+	if was_broken and card.card_effects.has("when_break"):
+		print("[BreakZone] ", card.card_name, " -> when_break")
+		field.add_card_effect_to_stack.emit(card.id, "when_break", card)
 
 func pop_stack():
 	var card = stack.pop_stack()

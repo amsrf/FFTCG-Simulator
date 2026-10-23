@@ -592,8 +592,10 @@ func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.
 	return accumulated_damage >= power
 	
-func on_break():
-	pass
+## TRUE WHEN THIS CARD BROKE (damage reached its power), false when it merely left play. Set by whoever moves it,
+## read and cleared by the Break Zone once the card has ARRIVED — the trigger fires from the pile, not from the
+## field, because a card has not "been put into the Break Zone" until it is actually there.
+var broken: bool = false
 
 func has_zero_power() -> bool:
 	# Power of 0 or less is NOT a break: the card is put into the Graveyard.

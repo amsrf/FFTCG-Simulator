@@ -15,12 +15,32 @@ var randomness_range = Vector3(0.015, 0.005, 0.015)
 @export var zone: Card.Zone = Card.Zone.GRAVEYARD
 		
 func add_card(card):
+	# READ THE ORIGIN BEFORE MOVING IT. These two triggers are specifically "put FROM THE FIELD into the Break Zone",
+	# so a card discarded from hand or milled from the deck must not fire them, and the pile is the only place that
+	# can still see where the card came from.
+	var from_field: bool = card.current_zone == Card.Zone.FIELD
+	var was_broken: bool = card.broken
+
 	graveyard_cards.append(card)
 	card.reparent(self, false)
 	# Normalise the look BEFORE placing it. (The old version only set position,
 	# so the card kept whatever it was wearing in the zone it came from.)
 	card.enter_zone(zone)
 	update_card_positions()
+
+	# THE PILE INCITES THE CARD, once the card is IN it. That ordering is the rule: the effect is added to the stack
+	# after the card has touched the Break Zone, never while it is still on the field.
+	#
+	# The Removed pile shares this scene, so `zone` is what separates "arrived in the Break Zone" from "exiled".
+	if zone != Card.Zone.GRAVEYARD or not from_field:
+		card.broken = false
+		return
+	card.broken = false
+	var host: Node = null
+	if get_parent() != null:
+		host = get_parent().get_parent()
+	if host != null and host.has_method("trigger_break_zone_keywords"):
+		host.call("trigger_break_zone_keywords", card, was_broken)
 
 ## Lay the pile out, newest on top.
 ##
