@@ -1074,22 +1074,28 @@ func element_set(card: Card) -> Array:
 func is_party() -> bool:
 	return attacking_party.size() >= 2
 
+## The members of the current attack. FALLS BACK to the lone `attacker_card`: callers (and probes) have always been
+## able to set that field directly, and a single attacker is a party of one — it must not need formation to fight.
 func party_members() -> Array[Card]:
+	if attacking_party.is_empty() and attacker_card != null:
+		var one: Array[Card] = [attacker_card]
+		return one
 	return attacking_party
 
 ## Sum of the members' CURRENT power — read at the moment of damage, like a single attacker's power is.
 func party_power() -> int:
 	var total: int = 0
-	for card in attacking_party:
+	for card in party_members():
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			total += card.power
 	return total
 
 ## "If ALL members of a Party have Pre-emptive Strike, then the Party has it. Otherwise it does not."
 func party_has_first_strike() -> bool:
-	if attacking_party.is_empty():
+	var members: Array[Card] = party_members()
+	if members.is_empty():
 		return false
-	for card in attacking_party:
+	for card in members:
 		if card == null or not is_instance_valid(card) or not card.is_first_strike():
 			return false
 	return true
