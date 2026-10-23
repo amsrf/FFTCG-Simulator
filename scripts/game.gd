@@ -494,8 +494,17 @@ func create_card(id, controller):
 	return card
 
 func _execute_instructions(instructions: Array[Instruction]) -> void:
+	# FRESH CHAIN? Asked BEFORE the concatenation, because that is the only moment the answer exists.
+	#
+	# A `condition: "if_last_succeeded"` instruction may only read the instruction immediately before it IN THIS
+	# CHAIN. Without this reset the flag survives from an earlier effect's search and "if you do so" would wrongly
+	# run. Only a genuinely empty queue counts as fresh: triggered abilities PREPEND their instructions mid-chain,
+	# and a naive reset would wipe a flag the current chain still needs.
+	var fresh_chain: bool = _current_instructions.is_empty()
 	# Concatenate arrays (new instructions go in front)
 	_current_instructions = instructions + _current_instructions
+	if fresh_chain:
+		_last_action_succeeded = false
 	_process_next_instruction()
 	if(_current_instructions.is_empty()):
 		_clean_instruction_stack()
