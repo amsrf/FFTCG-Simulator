@@ -10,6 +10,10 @@ extends Node3D
 @onready var stack : Stack = $Stack
 @onready var player_graveyard = $Player/Graveyard
 @onready var opponent_graveyard = $Opponent/Graveyard
+## REMOVED FROM THE GAME. A separate pile from the Break Zone on purpose: nothing that looks for a card in the
+## Break Zone may find one here, and vice versa. Same scene, different exported `zone`.
+@onready var player_removed = $Player/Removed
+@onready var opponent_removed = $Opponent/Removed
 @onready var opponent_front_row_card = $Field/OpponentFrontrowCard
 @onready var opponent_damage_zone = $Opponent/DamageZone
 @onready var select_arrow: BallisticArrow  = $BallisticArrow
@@ -1197,6 +1201,23 @@ func _send_card_to_graveyard(card: Card) -> void:
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
+
+func _send_card_to_removed(card: Card) -> void:
+	if card.controller == "player":
+		player_removed.add_card(card)
+	else:
+		opponent_removed.add_card(card)
+
+## REMOVE FROM THE GAME. "Your opponent removes it from the game." Unlike a break or a discard, this is NOT a
+## Graveyard event: the card leaves play and nothing that watches the Break Zone sees it.
+func remove_targets_from_game(_argument = null) -> void:
+	for card in _targets:
+		if card == null or not is_instance_valid(card):
+			continue
+		print("[RemoveFromGame] ", card.card_name)
+		if card.is_on_field():
+			field.remove_card(card)
+		_send_card_to_removed(card)
 
 func put_card_into_graveyard(card: Card) -> void:
 	# Removal that is not a break (e.g. power reduced to 0). No break-zone

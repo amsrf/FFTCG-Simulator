@@ -9,13 +9,17 @@ extends Node3D
 var card_offset = Vector3(0, 0.005, 0)
 var randomness_range = Vector3(0.015, 0.005, 0.015)
 @export var graveyard_cards = []
+## Which zone a card is in once it lands here. The Break Zone and "removed from the game" are the same KIND of pile
+## but not the same place, and the difference matters: a card removed from the game must not be findable by anything
+## that looks in the Break Zone. Defaults to GRAVEYARD so the existing nodes keep working untouched.
+@export var zone: Card.Zone = Card.Zone.GRAVEYARD
 		
 func add_card(card):
 	graveyard_cards.append(card)
 	card.reparent(self, false)
 	# Normalise the look BEFORE placing it. (The old version only set position,
 	# so the card kept whatever it was wearing in the zone it came from.)
-	card.enter_zone(Card.Zone.GRAVEYARD)
+	card.enter_zone(zone)
 	update_card_positions()
 
 ## Lay the pile out, newest on top.

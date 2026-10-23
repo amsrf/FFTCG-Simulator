@@ -395,7 +395,9 @@ func hide_power_display() -> void:
 ## which UI is shown) is derived from this, so there is ONE place deciding how a
 ## card looks — instead of every zone transition leaving the previous zone's
 ## transform, scale and readout on the card.
-enum Zone { NONE, DECK, HAND, FIELD, STACK, GRAVEYARD, DAMAGE }
+## REMOVED is appended, never inserted: the numbers are written into saved scenes and printed by probes, so existing
+## values must not shift.
+enum Zone { NONE, DECK, HAND, FIELD, STACK, GRAVEYARD, DAMAGE, REMOVED }
 
 ## Cards read correctly in this project when turned a half turn about Y relative
 ## to the identity frame. The Hand, Stack, Graveyard, Deck and FocusCard scene
@@ -448,6 +450,9 @@ const ZONE_PRESENTATION := {
 	# WORLD. See STACK_CONTAINER_SCALE.
 	Zone.STACK:     {"scale": STACK_CARD_SCALE / STACK_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	Zone.GRAVEYARD: {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	# Removed from the game looks exactly like the Break Zone: a plain untilted card with no readout. It gets its own
+	# zone value so the viewer can tell the two piles apart and so nothing can "leave the Break Zone" out of it.
+	Zone.REMOVED:   {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	# TODO: the damage-zone node is identity like the Field, so by this rule it
 	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
 	# the OPPONENT's damage zone is authored with a +90 deg frame instead.
