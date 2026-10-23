@@ -34,3 +34,24 @@ func decide_blocker(_player_id: int, attacker: Card) -> Card:
 	await assistant.advance_blocker_declaration_step
 	var field: Field = game.field
 	return field.blocker_card
+
+## "Your opponent discards 1 card from their hand." A DISCARD is the owner's choice, so this is the human's answer:
+## the same hand-selection UI the S cost uses, with any card legal.
+##
+## This lives here rather than in Game on purpose. The rules layer asks the seat that owns the hand and gets a card
+## back; whether that seat is a person at this keyboard, an AI, or a remote opponent is the agent's business. Once
+## a RemoteAgent exists it implements this same method and the rules layer does not change at all.
+func choose_discard(player_id: int, _cards: Array) -> Card:
+	var hand: Hand = game.hand_for(player_id)
+	if hand == null:
+		return null
+	var assistant: Assistant = game.assistant
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	hand.begin_choose_card({})
+	assistant.show_choose_card_buttons("Discard", "Cancel")
+	var play: bool = await assistant.choose_card_finished
+	var chosen: Card = hand.selected_card_for_effect
+	hand.end_choose_card()
+	assistant.hide_buttons()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	return chosen if play else null

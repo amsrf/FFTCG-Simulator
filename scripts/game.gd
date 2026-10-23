@@ -75,30 +75,19 @@ func discard_from(player_id: int, count: int = 1) -> void:
 		if owner_hand.cards.is_empty():
 			print("[Discard] P%d has no cards to discard" % player_id)
 			return
+		# ASK THE OWNER, whoever they are. Game does not know or care whether that player is the human at this
+		# keyboard, an AI, or a remote opponent — LocalAgent draws a UI, AIAgent picks heuristically, and a future
+		# RemoteAgent answers over the network. Special-casing LocalAgent here would have baked this machine's
+		# setup into the rules layer, which is the thing the seam exists to prevent.
 		var agent: Agent = agent_for(player_id)
-		var picked: Card = null
-		if agent is LocalAgent:
-			picked = await _choose_discard_locally(owner_hand)
-		elif agent != null and agent.has_method("choose_discard"):
-			picked = await agent.choose_discard(player_id, owner_hand.cards)
+		if agent == null:
+			return
+		var picked: Card = await agent.choose_discard(player_id, owner_hand.cards)
 		if picked == null:
-			# Cancelled locally, or a mock with no opinion. Nothing more to do.
+			# Cancelled locally, or an agent with no opinion. Nothing more to do.
 			return
 		print("[Discard] P%d discards %s" % [player_id, picked.card_name])
 		owner_hand.discard_card(picked)
-
-## The local human's pick, through the same UI the S cost uses: the hand enters choose mode, the card is ringed, and
-## Discard/Cancel resolve it. `{}` means any card is legal.
-func _choose_discard_locally(owner_hand: Hand) -> Card:
-	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
-	owner_hand.begin_choose_card({})
-	assistant.show_choose_card_buttons("Discard", "Cancel")
-	var play: bool = await assistant.choose_card_finished
-	var chosen: Card = owner_hand.selected_card_for_effect
-	owner_hand.end_choose_card()
-	assistant.hide_buttons()
-	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
-	return chosen if play else null
 
 func _each_target(action: String, argument: Array = []) -> void:
 	for card in _targets:

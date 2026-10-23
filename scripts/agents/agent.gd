@@ -61,3 +61,15 @@ func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void
 ## Pick a card from hand for a "may"/"must" choose-card effect. "Drive" shape.
 func choose_card_in_hand(_owner_id: int, _criteria: Dictionary, _required: bool) -> void:
 	await _settle()
+
+## Pick which card this player discards from their own hand. "Pull" shape: return the card, or null to discard
+## nothing.
+##
+## A discard is the OWNER'S choice, which is why this is a seam rather than something the effect decides. The rules
+## layer asks the seat that owns the hand and takes whatever comes back — LocalAgent opens the hand UI, AIAgent
+## picks heuristically, and a RemoteAgent answers over the network. None of that is visible to Game.
+##
+## Returning null is always safe: the caller stops discarding and carries on.
+func choose_discard(_owner_id: int, _cards: Array) -> Card:
+	await _settle()
+	return null
