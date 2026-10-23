@@ -41,8 +41,10 @@ static func _base() -> Dictionary:
 
 
 ## Card ids used below, named so the grounds read as rules rather than numbers.
-const ICE_A := 41        # Squall, ice Forward
-const ICE_B := 43        # Snow,   ice Forward (also has a when-attack dull effect)
+const ICE_A := 41        # Squall, ice Forward, no effects
+const ICE_B := 43        # Snow,   ice Forward — HAS a when-attack dull effect, so not for the blocking ground
+const BARD := 35         # Bard,   ice Forward 4000, no effects — passive, safe to attack with
+const DARK_KNIGHT := 55  # Dark Knight, ice Forward 8000, no effects — the intended blocker
 const FIRE := 12         # Zack,   fire Forward
 const ZIDANE := 71       # cannot be chosen by the opponent's Summons/abilities
 const IFRIT := 4         # Summon: damage a Forward
@@ -78,12 +80,17 @@ static func party_ai_attacks() -> Dictionary:
 	## PARTIES, blocking side. The AI holds an ice pair and an EMPTY HAND, so all it does is attack as a party —
 	## which is what opens the damage-distribution window when you block it.
 	##
+	## THE PAIR IS PASSIVE ON PURPOSE. It used to be Squall + Snow, and Snow's "when attacks, dull an opponent's
+	## Forward" dulled the only Forward you had left — so the ground whose whole point is blocking you made
+	## unblockable. Bard (4000) and Squall (6000) both have no effects at all.
+	##
 	## Pass your turn once: the AI draws, does nothing in its main phase, then declares the party.
 	var cfg: Dictionary = _base()
 	cfg["preset"] = "ground_party_ai"
 	cfg["opponent_type"] = "ai"
-	cfg["player_field"] = [{"id": FIRE}, {"id": ICE_MANA}, {"id": ICE_MANA_2}]
-	cfg["opponent_field"] = [{"id": ICE_A}, {"id": ICE_B}]
+	# Dark Knight (8000) is the intended blocker; Zack is a second option. Mana for the Backups is not needed here.
+	cfg["player_field"] = [{"id": DARK_KNIGHT}, {"id": FIRE}, {"id": ICE_MANA}, {"id": ICE_MANA_2}]
+	cfg["opponent_field"] = [{"id": BARD}, {"id": ICE_A}]
 	cfg["opponent_hand"] = []          # no Ifrit, no Valefor — only the party
 	return cfg
 
@@ -119,7 +126,7 @@ const GROUNDS := {
 	},
 	"party_ai": {
 		"title": "Ground: Parties (AI attacks, you block)",
-		"blurb": "The AI has an ice pair and an EMPTY hand: pass once, it attacks as a party. Block it to open the damage window.",
+		"blurb": "Bard + Squall (no triggers) and an EMPTY hand: pass once, it attacks as a party. Block with Dark Knight to open the damage window.",
 	},
 	"summons": {
 		"title": "Ground: Summons & target protection",

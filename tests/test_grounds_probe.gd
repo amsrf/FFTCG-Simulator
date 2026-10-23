@@ -85,9 +85,27 @@ func _ready() -> void:
 	var ai_ids: Array = []
 	for e in blocking["opponent_field"]:
 		ai_ids.append(int(e["id"]))
-	_expect(ai_ids.has(GROUNDS.ICE_A) and ai_ids.has(GROUNDS.ICE_B),
-		"the blocking ground gives the AI the ice pair")
+	_expect(ai_ids.has(GROUNDS.BARD) and ai_ids.has(GROUNDS.ICE_A),
+		"the blocking ground gives the AI an ice pair")
+	_expect(not ai_ids.has(GROUNDS.ICE_B),
+		"and NOT Snow — its when-attack dull would disable the very blocker this ground exists to test")
 	_expect(blocking["opponent_hand"].is_empty(), "and an empty hand, so it only attacks")
+
+	# THE ACTUAL REGRESSION GUARD: no card the AI attacks with may have a when-attack trigger, and the player must
+	# still have a Forward able to block once the party is declared.
+	var attackers_are_passive: bool = true
+	for id in ai_ids:
+		var effects: Dictionary = CardDatabase.card_effects.get(str(int(id)), {})
+		if effects.has("when_attack"):
+			attackers_are_passive = false
+			push_error("[Grounds] the blocking ground's attacker %d has a when_attack effect" % int(id))
+	_expect(attackers_are_passive, "no AI attacker has a when-attack trigger that could dull the blocker")
+
+	var blocking_player_ids: Array = []
+	for e in blocking["player_field"]:
+		blocking_player_ids.append(int(e["id"]))
+	_expect(blocking_player_ids.has(GROUNDS.DARK_KNIGHT),
+		"and the player has Dark Knight (8000) as a real blocker")
 
 	var summons: Dictionary = GROUNDS.summons_and_targeting()
 	_expect(summons["opponent_hand"].has(GROUNDS.IFRIT), "the summons ground gives the AI Ifrit")
@@ -114,6 +132,35 @@ func _ready() -> void:
 	_expect(game.get("opponent_agent") != null, "the opponent agent was created")
 	_expect(not (game.get("opponent_agent") is AIAgent),
 		"the party ground's opponent is MOCK, so it will not act while you test")
+
+	# --- the blocking ground, end to end -------------------------------------------------------------------
+	# Boot it, let the real AI declare, execute the attack, and assert the player still has a Forward that can
+	# block. This is the regression the ground was fixed for: Snow's when-attack dull used to leave none.
+	game.queue_free()
+	await get_tree().process_frame
+	MatchSetup.config = MatchSetup.build_config("party_ai")
+	var blocking_game = GAME_SCENE.instantiate()
+	add_child(blocking_game)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var bfield = blocking_game.get("field")
+	var ai = blocking_game.get("opponent_agent")
+	_expect(ai is AIAgent, "the blocking ground's opponent is the AI")
+	var declared: Array = await ai.decide_attackers(2)
+	_expect(declared.size() >= 2, "the AI declares a party there (%d members)" % declared.size())
+	bfield.reset_attacker()
+	if not declared.is_empty():
+		bfield.set_attacker(declared[0])
+		for i in range(1, declared.size()):
+			bfield.add_party_member(declared[i])
+		bfield.execute_card_attack()
+	var blockable: int = 0
+	for c in bfield.get_front_cards_for("player"):
+		if bfield.can_block(c):
+			blockable += 1
+	print("[Grounds] after the AI's party attack, %d player Forward(s) can still block: %s" % [
+		blockable, str(bfield.get_front_cards_for("player").map(func(c): return "%s(tapped=%s)" % [c.card_name, c.tapped]))])
+	_expect(blockable > 0, "and you can still block it — the ground's whole purpose")
 
 	print("[Grounds] %d checks | failures: %d" % [_checks, _fails])
 	print("[Grounds] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
