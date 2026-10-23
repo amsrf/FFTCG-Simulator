@@ -730,6 +730,11 @@ func can_tap() -> bool:
 func can_attack():
 	if not can_tap():
 		return false
+	# "IT CANNOT ATTACK THIS TURN" is a separate restriction from cannot-tap: the card may still be dulled to pay
+	# costs, it just may not declare an attack. Checking it here (rather than inside can_tap) keeps the two apart,
+	# and every consumer — the click handler, the AI's attacker pick, the attack button — already goes through this.
+	if status_effects.has("cannot_attack"):
+		return false
 	if(type != 'Forward'):
 		return false
 	return true

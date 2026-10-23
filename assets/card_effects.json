@@ -253,6 +253,15 @@
 		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
 	},
 
+	"49":{
+		"skill":[{
+			"cost":{"氷":1, "neutral":1},
+			"tap":true,
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[{"name":"add_status_effect","author":"target","argument":["cannot_attack", 1]}]
+		}]
+	},
+
 	"93":{
 		"when_enter_break_from_field":{
 			"instructions":[
