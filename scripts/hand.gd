@@ -53,16 +53,17 @@ signal effect_card_selection_changed(has_selection: bool)
 ## essentially in place.
 @export_range(0.5, 1.0, 0.01) var return_land_fraction: float = 0.85
 
-## Bring a card that is leaving the field into THIS hand.
+## Start bringing a card from the field into THIS hand, and RETURN THE TWEEN so it can be joined.
 ##
-## The card joins `cards` at the LANDING, not at the start, so it never participates in the layout maths while it is
-## still flying. The destination still has to be computed up front, so it is computed with the card temporarily in
-## the list and `ignore` set — that gives the right slot without the layout moving the card itself.
+## One chained tween, not two: a joinable animation has to be a single awaitable, or a caller doing Promise.all on
+## five cards would have to track five pairs. The landing callback is a step INSIDE the chain, which is why the
+## slide is split at return_land_fraction rather than scheduled by a second tween.
 ##
-## Awaited by the instruction, so the effect does not carry on while a card is in limbo between zones.
-func return_card(card: Card) -> void:
+## MULTI-TARGET: the caller starts every card's tween before awaiting any of them (see Game.return_targets_to_hand),
+## so they fly at the same time instead of one after another.
+func begin_return_card(card: Card) -> Tween:
 	if card == null or not is_instance_valid(card):
-		return
+		return null
 
 	var index: int = cards.size()
 	cards.append(card)
@@ -86,22 +87,23 @@ func return_card(card: Card) -> void:
 		toward_camera = global_transform.basis.inverse() * cam.global_transform.basis.z.normalized()
 	var stage: Vector3 = destination + toward_camera * return_stage_lift
 
-	# PHASE 1 — grow to hand size and rise into the hand's plane.
-	var grow: Tween = create_tween()
-	grow.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	grow.tween_property(card, "position", stage, return_grow_seconds)
-	grow.parallel().tween_property(card, "scale", Vector3.ONE * hand_scale, return_grow_seconds)
-	grow.parallel().tween_property(card, "rotation", Vector3.ZERO, return_grow_seconds)
-	await grow.finished
+	var t: Tween = create_tween()
+	t.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-	# PHASE 2 — slide into the slot, joining the hand just before it arrives.
-	var slide: Tween = create_tween()
-	slide.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	slide.tween_property(card, "position", destination, return_move_seconds)
-	var land: Tween = create_tween()
-	land.tween_interval(return_move_seconds * return_land_fraction)
-	land.tween_callback(_land_returned.bind(card))
-	await slide.finished
+	# PHASE 1 — grow to hand size and rise into the hand's plane.
+	t.tween_property(card, "position", stage, return_grow_seconds)
+	t.parallel().tween_property(card, "scale", Vector3.ONE * hand_scale, return_grow_seconds)
+	t.parallel().tween_property(card, "rotation", Vector3.ZERO, return_grow_seconds)
+
+	# PHASE 2 — slide in, joining the hand at return_land_fraction of the way in and carrying on to the slot.
+	var land_fraction: float = clampf(return_land_fraction, 0.5, 1.0)
+	var before: float = return_move_seconds * land_fraction
+	var after: float = maxf(0.01, return_move_seconds * (1.0 - land_fraction))
+	var mid: Vector3 = stage.lerp(destination, land_fraction)
+	t.tween_property(card, "position", mid, before)
+	t.tween_callback(_land_returned.bind(card))
+	t.tween_property(card, "position", destination, after)
+	return t
 
 ## The card is home: it becomes a real hand card, so dragging, hovering and the fan all apply to it.
 func _land_returned(card: Card) -> void:

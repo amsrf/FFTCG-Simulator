@@ -62,16 +62,31 @@ func _ready() -> void:
 	var played: bool = await _game.play_card_for(2, valefor)
 	_expect(played, "the AI paid for and played Valefor")
 
+	# The hands must GAIN the Forwards, not lose them: measure from after the cast, when Valefor has left the AI's
+	# hand. Landing is what puts a card into hand.cards, so this waits for the animations to actually finish.
+	var p_start: int = player_hand.cards.size()
+	var a_start: int = ai_hand.cards.size()
+
 	# The Summon is a stack object now; resolve it.
+	var t0: int = Time.get_ticks_msec()
 	await stack.resolve_top_effect()
-	# POLL IN WALL CLOCK, not frames. Each card returned awaits Hand.return_card, which is ~0.6 s of TWEEN time —
-	# and headless frames run far faster than real time, so counting frames samples the animation mid-flight and
-	# reports "only one card moved" while the rest are still in transit.
+
+	# POLL IN WALL CLOCK, not frames. Headless frames run far faster than real time, so counting frames samples the
+	# animation mid-flight. And wait for the HANDS to fill, not for the FIELD to empty: every card leaves the field
+	# on the same frame now that the animations are concurrent, so an "is the field empty" test would pass instantly
+	# and prove nothing.
 	var waited: float = 0.0
-	while waited < 8.0 and (not _forwards("player").is_empty() or not _forwards("opponent").is_empty()):
-		await get_tree().create_timer(0.1).timeout
-		waited += 0.1
-	print("[Valefor] settled after %.1f s of animation time" % waited)
+	while waited < 8.0 and (player_hand.cards.size() < p_start + mine or ai_hand.cards.size() < a_start + theirs):
+		await get_tree().create_timer(0.05).timeout
+		waited += 0.05
+	var elapsed_ms: int = Time.get_ticks_msec() - t0
+	print("[Valefor] all %d cards landed after %d ms" % [mine + theirs, elapsed_ms])
+
+	# CONCURRENCY, MEASURED. Each return is ~0.6 s; five in sequence is ~3 s. If they overlap this stays near one
+	# card's worth of time. 1.5 s is comfortably between the two and tolerant of slow frames.
+	_expect(elapsed_ms < 1500,
+		"the returns OVERLAP rather than running end to end (%d ms for %d cards, serial would be ~3000 ms)" % [
+			elapsed_ms, mine + theirs])
 
 	_expect(_forwards("player").is_empty(),
 		"every player Forward left the field (%d left)" % _forwards("player").size())

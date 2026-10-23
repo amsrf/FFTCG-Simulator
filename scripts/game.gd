@@ -128,14 +128,24 @@ func break_targets(_argument = null) -> void:
 			print("[Break] ", card.card_name)
 			break_card(card)
 
+## Promise.all() for animations. Preloaded by path rather than referenced by class name: a class_name added since the
+## editor last scanned is not in the global cache during a headless run, and this project has been bitten by that
+## three times.
+const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
+
 ## RETURN TO ITS OWNER'S HAND. "Return the Backup to its owner's hand." / "Return it to its owner's hand."
 ##
-## The hand animates it (Hand.return_card): grow to hand size, rise into the hand's plane, slide into the slot, and
-## join the hand just before arriving. This AWAITS that, so the effect cannot resolve further while the card is
-## between zones — the same reason the character-play path awaits its shatter.
+## MULTIPLE CARDS ANIMATE AT THE SAME TIME. Every card's tween is STARTED in the loop and the batch is awaited once
+## afterwards — the Godot spelling of Promise.all(). Awaiting inside the loop would put five 0.6 s animations end to
+## end, which is what this used to do.
+##
+## The logical changes still happen immediately (field.remove_card before the loop moves on), so a follow-up
+## instruction and a state-based check both see the correct board while the cards are still flying. Only the
+## presentation lags, and the effect does not resolve until every animation has finished.
 ##
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
 func return_targets_to_hand(_argument = null) -> void:
+	var batch = ANIMATION_BATCH.new()
 	for card in _targets:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
@@ -144,7 +154,10 @@ func return_targets_to_hand(_argument = null) -> void:
 			continue
 		print("[ReturnToHand] ", card.card_name)
 		field.remove_card(card)
-		await owner_hand.return_card(card)
+		# STARTS it; do not await here.
+		batch.add(owner_hand.begin_return_card(card))
+	batch.close()
+	await batch.wait()
 
 ## POWER TO EVERY TARGET. "All the Forwards you control gain +1000 power until end of turn."
 ##
