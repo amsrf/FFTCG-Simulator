@@ -113,6 +113,21 @@ func damage_targets(amount: int = 0) -> void:
 		return
 	_each_target("suffer_damage", [amount])
 
+## BREAK every target. "Choose 1 Forward. Break it." — 17 cards in the first hundred say this and none could be
+## expressed until now.
+##
+## This does NOT go through _each_target, and the reason is not stylistic: breaking is a GAME operation, not a Card
+## method. break_card() owns the whole path — the unbreakable guard, untapping, leaving the field, the Graveyard,
+## and the "put from the field into the Break Zone" trigger — and none of that could be reached by calling a Card
+## method through the shared loop. So this is its own walk, and it is short because break_card() does the work.
+##
+## is_on_field() is checked per card, so a card already broken earlier in the loop cannot be broken twice.
+func break_targets(_argument = null) -> void:
+	for card in _targets:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			print("[Break] ", card.card_name)
+			break_card(card)
+
 ## POWER TO EVERY TARGET. "All the Forwards you control gain +1000 power until end of turn."
 ##
 ## duration follows Card.power_change: -1 is permanent, N is N turns, so the card data carries it rather than this
