@@ -7,8 +7,8 @@ All notable changes to the FF TCG Simulator project.
 ### Test Grounds: one board per mechanic
 
 The `ai` preset is a general practice board, so testing a specific mechanic there means the AI also casts Ifrit and
-Valefor and the board changes mid-test. `scripts/test_grounds.gd` is a registry of narrow boards, listed at the top of
-the main menu:
+Valefor and the board changes mid-test. `scripts/test_grounds.gd` is a registry of narrow boards, reached from the main menu's **Test Mode** button
+(`test_grounds_menu.tscn`); the main menu itself keeps its four everyday presets:
 
 - `party` — ice pair on both sides, opponent MOCK (never acts): form a party and attack.
 - `party_ai` — the AI has an ice pair and an EMPTY hand, so it only attacks; block it to open the distribution window.
