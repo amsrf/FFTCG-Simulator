@@ -189,6 +189,16 @@
 		}
 	},
 
+	"18":{
+		"when_cast":{
+			"choose_target":{"is_type":"Forward","controller":"opponent","count":2},
+			"instructions":[
+				{"name":"add_status_to_targets","author":"game","argument":["fragile", 1]},
+				{"name":"damage_targets","author":"game","argument":[10000]}
+			]
+		}
+	},
+
 	"43":{
 		"when_attack":{
 			"choose_target":{"is_type":"Forward","controller":"opponent"},

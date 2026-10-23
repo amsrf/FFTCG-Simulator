@@ -1196,11 +1196,24 @@ func enforce_game_state_rules() -> void:
 	for card in field.get_breakable_cards():
 		break_card(card)
 
-func _send_card_to_graveyard(card: Card) -> void:
+## THE FIELD -> BREAK ZONE CHOKE POINT, and therefore the place where a REPLACEMENT effect belongs.
+##
+## Returns true when the card was EXILED instead of buried, so the caller knows the Break Zone event did not happen.
+##
+## FRAGILE ("if they are put from the field into the Break Zone this turn, remove them from the game instead") has to
+## intercept the transition itself — the card never reaches the Break Zone, so nothing that watches for a card
+## arriving there can see it. Implementing it as a trigger that reacts afterwards would be a different (wrong) rule.
+func _send_card_to_graveyard(card: Card) -> bool:
+	if card.status_effects.has("fragile"):
+		print("[Fragile] %s is removed from the game instead" % card.card_name)
+		card.status_effects.erase("fragile")
+		_send_card_to_removed(card)
+		return true
 	if card.controller == "player":
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
+	return false
 
 func _send_card_to_removed(card: Card) -> void:
 	if card.controller == "player":
@@ -1235,10 +1248,14 @@ func break_card(card: Card):
 		return
 	# Trigger "when this card is put from the field into the break zone"
 	# effects before the card leaves the field.
+	#
+	# BUT NOT WHEN IT IS EXILED: fragile replaces the move to the Break Zone entirely, so the card was never "put
+	# into the Break Zone" and the trigger must not fire. That is the whole difference between exiling and burying.
 	card.untap()
 	field.remove_card(card)
-	_send_card_to_graveyard(card)
-	card.on_break()
+	var exiled: bool = _send_card_to_graveyard(card)
+	if not exiled:
+		card.on_break()
 
 func pop_stack():
 	var card = stack.pop_stack()
