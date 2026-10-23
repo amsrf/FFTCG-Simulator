@@ -244,6 +244,10 @@ func cast_card():
 		# Summons stay on the stack and resolve as effects. Resolution
 		# (game._on_stack_execute_card_effect) sends them to the graveyard.
 		casting_card.key_word_effect = "when_cast"
+		# HISTORY AT THE CAST, not at resolution: "if you have cast X this turn" becomes true the moment the card is
+		# played, and a Summon that is invalidated before it resolves was still cast.
+		get_parent().record_action("Casted %s" % casting_card.card_name, [],
+			1 if casting_card.controller == "player" else 2)
 	else:
 		# Character cards go straight to the field: they are never stack objects,
 		# so nothing is popped and no stack slot is consumed. play_card() needs

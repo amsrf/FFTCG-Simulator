@@ -391,7 +391,7 @@ func _place_field_cards(cards: Array, is_opponent: bool) -> void:
 		var card = create_card(int(card_data.get("id", 0)), 'opponent' if is_opponent else 'player')
 		opponent_front_row_card.get_parent().add_child(card)
 		card.transform = opponent_front_row_card.transform
-		field.play_card(card, is_opponent, false)
+		field.play_card(card, is_opponent, false, false)
 		if card_data.get("tapped", false):
 			card.tap()
 
@@ -508,7 +508,54 @@ func _execute_instructions(instructions: Array[Instruction]) -> void:
 	_process_next_instruction()
 	if(_current_instructions.is_empty()):
 		_clean_instruction_stack()
-	
+
+## TURN HISTORY. Deliberately a plain ledger, not a rules engine: `turn_history[turn_number]` is the list of things
+## that happened during that turn, in order, so a condition can ask "have I cast Alexander this turn?".
+##
+## Each entry: { actor: 1|2, activity: String, targets: Array }. `activity` is a short human-readable line ("Casted
+## Ifrit", "Forward Squall was played") and doubles as the key that lookups match on — stringly-typed on purpose for
+## now, because the shapes of what cards ask for are still unknown. When they become clearer, replace the strings with
+## an enum plus a data dictionary rather than growing this into a query language.
+##
+## Turns are KEPT, not cleared: the array for an old turn costs nothing and "this turn" is a filter, not a deletion.
+var turn_number: int = 1
+var turn_history: Dictionary = {}
+
+func record_action(activity: String, targets: Array = [], actor: int = 0) -> void:
+	# actor 0 = "whoever's turn it is", which is right for anything the turn player initiates. Effects that fire on
+	# their own (a triggered ability during the opponent's turn) should pass their controller explicitly.
+	var who: int = actor if actor != 0 else turn_owner
+	if not turn_history.has(turn_number):
+		turn_history[turn_number] = []
+	turn_history[turn_number].append({
+		"actor": who,
+		"activity": activity,
+		"targets": targets.duplicate(),
+	})
+	print("[History] T%d P%s: %s" % [turn_number, who, activity])
+
+func actions_this_turn() -> Array:
+	return turn_history.get(turn_number, [])
+
+## "If you have cast [X] this turn" — owner_id 0 means either player.
+func cast_this_turn(card_name: String, owner_id: int = 0) -> bool:
+	var wanted: String = "Casted %s" % card_name
+	for entry in actions_this_turn():
+		if str(entry.get("activity", "")) == wanted:
+			if owner_id == 0 or int(entry.get("actor", 0)) == owner_id:
+				return true
+	return false
+
+## "If a Forward was played this turn" (any Forward), used by effects that count plays rather than a named card.
+func played_this_turn(type_name: String, owner_id: int = 0) -> bool:
+	for entry in actions_this_turn():
+		var activity: String = str(entry.get("activity", ""))
+		if not activity.begins_with("%s " % type_name) or not activity.ends_with(" was played"):
+			continue
+		if owner_id == 0 or int(entry.get("actor", 0)) == owner_id:
+			return true
+	return false
+
 func _clean_instruction_stack():
 	_current_source_card = null
 	_current_attacker_card = null
@@ -1015,6 +1062,9 @@ func next_phase():
 		phase_index = 0
 		# Hand the turn over. The new turn owner untaps and draws in ACTIVE/DRAW.
 		turn_owner = 3 - turn_owner
+		# THE TURN BOUNDARY, and the only place turn_number moves. `actions_this_turn()` is a filter on
+		# turn_number, so this is what makes "this turn" mean this turn.
+		turn_number += 1
 		print("Turn completed — now P%s (%s)" % [turn_owner, controller_for(turn_owner)])
 
 	# Enter new phase

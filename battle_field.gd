@@ -279,11 +279,19 @@ func remove_card_from_mana_conversion(card:Card):
 	selected_cards_for_mana_has_changed.emit(-1,card.element)
 
 
-func play_card(card, is_opponent: bool = false, animate = true) -> void:
+func play_card(card, is_opponent: bool = false, animate = true, record: bool = true) -> void:
 	var trans = card.global_transform
 	card.reparent(self, false)
 	card.position = Vector3.ZERO
 	card.global_transform = trans
+
+	# HISTORY. Recorded here because this is where a Character actually reaches the field — the "was played" event —
+	# and `record` is false for the SETUP BOARD, where pre-placed cards were not played at all. Returning a card to
+	# the field (Vanille) also lands here; it is logged as played, which is a known simplification.
+	if record:
+		var controller_name: String = card.controller
+		var owner_id: int = 1 if controller_name == "player" else 2
+		get_parent().record_action("%s %s was played" % [card.type, card.card_name], [], owner_id)
 
 	# SUMMONING SICKNESS. A card that just entered the field cannot tap until its controller's next turn: it cannot
 	# attack, a Backup cannot be tapped for mana, and a tap-costed skill is closed. Haste — printed or granted —
