@@ -74,6 +74,29 @@ func _ready() -> void:
 	print("[Removed] graveyard at %s · removed at %s" % [
 		str(grave.global_position), str(removed.global_position)])
 
+	# --- INSPECTABLE WITH EITHER BUTTON ------------------------------------------------------------------
+	# The pile window is a new child of Game, so "did it open" is a child count. Both buttons must do it: left is the
+	# normal click, and right-click on a PILE card is special-cased in card_area_3d.gd because right-click elsewhere
+	# means "focus", not "open".
+	var area = card.get_node("CardArea3D")
+
+	var before_left: int = _game.get_child_count()
+	card._on_card_area_3d_card_grabbed(null)
+	await get_tree().process_frame
+	_expect(_game.get_child_count() > before_left, "LEFT click on a removed card opens the zone window")
+	for child in _game.get_children():
+		if child is CanvasLayer and child.get_child_count() > 0:
+			child.queue_free()
+	await get_tree().process_frame
+
+	var right := InputEventMouseButton.new()
+	right.button_index = MOUSE_BUTTON_RIGHT
+	right.pressed = true
+	var before_right: int = _game.get_child_count()
+	area._on_input_event(null, right, Vector3.ZERO, Vector3.UP, 0)
+	await get_tree().process_frame
+	_expect(_game.get_child_count() > before_right, "RIGHT click on a removed card opens it too")
+
 	print("[Removed] %d checks | failures: %d" % [_checks, _fails])
 	print("[Removed] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

@@ -283,20 +283,23 @@ func set_state_based_on_parent():
 		current_state = null
 			
 func _on_card_area_3d_card_grabbed(_card: Variant):
-	# A CARD IN THE DAMAGE ZONE OR THE GRAVEYARD IS LOOKED AT, NOT PLAYED. Clicking one opens the same fan window
-	# the deck search uses, so the player can check what is in the zone. It returns WITHOUT touching current_state:
-	# damage and graveyard cards have no drag or tap behaviour to run, and starting one would be a no-op that also
-	# swallowed the click.
+	# A CARD IN A PILE IS LOOKED AT, NOT PLAYED. Clicking one opens the same fan window the deck search uses, so the
+	# player can check what is in the zone. It returns WITHOUT touching current_state: pile cards have no drag or tap
+	# behaviour to run, and starting one would be a no-op that also swallowed the click.
 	#
 	# The host is two levels up — card -> zone -> Player -> Game — and it is duck-typed, so a card parented
 	# anywhere else simply does nothing rather than erroring.
-	if current_zone == Zone.DAMAGE or current_zone == Zone.GRAVEYARD:
+	if current_zone == Zone.DAMAGE or current_zone == Zone.GRAVEYARD or current_zone == Zone.REMOVED:
 		var zone: Node = get_parent()
 		var host: Node = null
 		if zone != null and zone.get_parent() != null:
 			host = zone.get_parent().get_parent()
 		if host != null and host.has_method("_show_zone_view"):
-			var title: String = "Damage Zone" if current_zone == Zone.DAMAGE else "Graveyard"
+			var title: String = "Graveyard"
+			if current_zone == Zone.DAMAGE:
+				title = "Damage Zone"
+			elif current_zone == Zone.REMOVED:
+				title = "Removed from the Game"
 			host.call("_show_zone_view", zone, title)
 		return
 	if current_state :
