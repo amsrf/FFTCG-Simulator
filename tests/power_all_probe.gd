@@ -63,6 +63,38 @@ func _ready() -> void:
 	_field.remove_card(b)
 	await get_tree().process_frame
 
+	# --- SINGLE target, through the real dispatch path ---------------------------------------------------
+	# "author": "target" resolves to _targets[0], and the instruction is dispatched as
+	# executor.callv(action, argument). So Card.power_change is reachable with NO new instruction code — the
+	# pair was already a working vocabulary and I had wrongly listed it as missing. This drives the actual
+	# signal → instruction queue route rather than calling power_change directly.
+	var solo: Card = _new_card(41, 5000)
+	_game.set("_targets", [solo])
+	print("[PowerAll] connections on execute_instructions: %d | _targets=%d | source=%s" % [
+		solo.execute_instructions.get_connections().size(),
+		(_game.get("_targets") as Array).size(),
+		str(_game.get("_current_source_card"))])
+	# TYPED, because the handler is declared Array[Instruction]. Emitting an untyped Array is a conversion the
+	# signal will refuse, and it does so without reaching the handler.
+	var typed: Array[Instruction] = [Instruction.new("power_change", "target", [1000, 1])]
+	solo.execute_instructions.emit(typed)
+	for _i in range(6):
+		await get_tree().process_frame
+		if solo.power == 6000:
+			break
+	_expect(solo.power == 6000,
+		"author 'target' + power_change buffs ONE card through the real dispatch path (now %d)" % solo.power)
+	_game.set("_targets", [solo])
+	var typed2: Array[Instruction] = [Instruction.new("power_change", "target", [-2000, 1])]
+	solo.execute_instructions.emit(typed2)
+	for _i in range(6):
+		await get_tree().process_frame
+		if solo.power == 4000:
+			break
+	_expect(solo.power == 4000, "and a negative amount debuffs through the same route (now %d)" % solo.power)
+	_field.remove_card(solo)
+	await get_tree().process_frame
+
 	# --- the data wiring: card 7 ------------------------------------------------------------------------
 	var entry: Dictionary = CardDatabase.card_effects.get("7", {})
 	_expect(entry.has("apply_effect"), "card 7 carries apply_effect at the TOP level, where an ETB reads it")
