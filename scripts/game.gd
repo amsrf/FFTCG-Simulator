@@ -46,12 +46,19 @@ var _targets = []
 ## keeps the JSON readable: a card says dull_targets or damage_targets, not each_target("tap").
 ##
 ## is_on_field() is required rather than defensive: an effect that resolves after a card died must not call into it.
-func _each_target(action: String, argument: Array = [], settle: bool = false) -> void:
+##
+## STATE-BASED ACTIONS RUN AFTER ALL TARGETS, ALWAYS. There used to be a `settle` flag, on the assumption that only
+## damage could kill. That is wrong: conditional_power already exists and is_tapped is already a criteria method, so
+## a card like "tapped cards lose 3000 power" makes TAPPING lethal. Every verb has to settle; the flag only invited
+## someone to add a verb and forget it.
+##
+## Once, outside the loop — never inside: a card destroyed by the first target must still receive the effect as
+## that target, not vanish mid-iteration and change what the rest take.
+func _each_target(action: String, argument: Array = []) -> void:
 	for card in _targets:
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			card.callv(action, argument)
-	if settle:
-		enforce_game_state_rules()
+	enforce_game_state_rules()
 
 func untap_targets(_argument = null) -> void:
 	_each_target("untap")
@@ -66,13 +73,10 @@ func dull_targets(_argument = null) -> void:
 ## DAMAGE TO EVERY TARGET. This is what "deal 3000 damage to all the Forwards opponent controls" needed: the target
 ## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
 ## it could only ever hit one card.
-##
-## Settle once at the END, not per card, so a card destroyed by its own damage cannot change what the rest take.
 func damage_targets(amount: int = 0) -> void:
 	if amount <= 0:
 		return
-	_each_target("suffer_damage", [amount], true)
-	enforce_game_state_rules()
+	_each_target("suffer_damage", [amount])
 
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
 ## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
