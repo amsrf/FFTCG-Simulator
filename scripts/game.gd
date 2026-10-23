@@ -778,6 +778,13 @@ func set_blocker(card):
 	# _current_blocker_card as soon as these instructions finish, which happens
 	# BEFORE DAMAGE_RESOLUTION reads it.
 	field.blocker_card = card
+	# AND MARK THE CARD ITSELF. is_blocking — the criteria behind "choose a blocking Forward" — reads the card's own
+	# status, and only Field.set_blocker_card() (the human's CLICK selection) used to set it. So a blocker declared
+	# by anyone other than a clicking human, the AI included, was never "blocking" to any card effect, and effects
+	# that target a blocking Forward found nothing. The declaration is the moment the block becomes true for both
+	# sides, so it belongs here. Field.reset_blocker() clears it at the end of combat.
+	if card != null and is_instance_valid(card):
+		card.set_blocker_status(true)
 
 ## One simultaneous damage step: both cards deal their power to each other. State-based actions are checked after,
 ## because a card that died here must not deal damage in a later step.

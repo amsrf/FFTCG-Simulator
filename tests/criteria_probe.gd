@@ -58,6 +58,22 @@ func _ready() -> void:
 	_expect(bystander.matches_criteria({"is_attacking": false}),
 		"a card outside combat is not attacking")
 
+	# --- DECLARING a block must mark the card, whoever declared it ---------------------------------------
+	# This is the bug the user hit: the status was only set by the human's CLICK selection, so an AI-declared
+	# blocker was never "blocking" and effects targeting a blocking Forward found nothing. Game.set_blocker() is
+	# the declaration for both sides, so it must be the one that marks the card.
+	var ai_blocker: Card = _new_card()
+	ai_blocker.status_effects.clear()
+	_expect(not ai_blocker.is_blocking(), "a fresh card is not blocking")
+	_game.set_blocker(ai_blocker)
+	_expect(ai_blocker.is_blocking(),
+		"set_blocker() marks the card — an AI/summoned block goes through here, not through the click handler")
+	_expect(ai_blocker.matches_criteria({"is_type": "Forward", "is_blocking": true}),
+		"so card 100's 'blocking Forward' block now matches it")
+	_field.reset_blocker()
+	_expect(not ai_blocker.is_blocking(), "and reset_blocker() clears it at the end of combat")
+	_field.remove_card(ai_blocker)
+
 	# --- is_tapped now honours its argument -------------------------------------------------------------
 	attacker.tap()
 	_expect(attacker.matches_criteria({"is_tapped": true}), "{is_tapped: true} finds a tapped card")
