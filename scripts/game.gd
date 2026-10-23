@@ -39,38 +39,39 @@ var _targets = []
 ## effect card's own list when its instructions run (see _on_stack_execute_card_effect). It deliberately does NOT read
 ## `Field.targeting_picked` any more — that is the targeting UI's state, and another session can overwrite it before the
 ## effect resolves. The effect carries what it was given; nothing has to go looking for it afterwards.
-func untap_targets(_argument = null) -> void:
+## THE ONE LOOP. Every "do X to all of them" instruction is the same walk over _targets, so the walk lives here
+## once and the instructions below are just verbs. Adding a verb is one line, not another copy of the loop.
+##
+## `action` is a Card method name, and `argument` is what to pass it — both come from the card data, which is what
+## keeps the JSON readable: a card says dull_targets or damage_targets, not each_target("tap").
+##
+## is_on_field() is required rather than defensive: an effect that resolves after a card died must not call into it.
+func _each_target(action: String, argument: Array = [], settle: bool = false) -> void:
 	for card in _targets:
-		if card != null and is_instance_valid(card):
-			card.untap()
-			print("[Untap] ", card.card_name)
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.callv(action, argument)
+	if settle:
+		enforce_game_state_rules()
 
-## DULL. The counterpart of untap_targets, and the instruction most of the first 100 cards were waiting for:
-## "Dull it", "Dull all Forwards", "Dull it and Freeze it". It is also what Freeze needs in order to be applied
-## by a real card rather than only by a probe.
+func untap_targets(_argument = null) -> void:
+	_each_target("untap")
+
+## DULL. "Dull it", "Dull all Forwards", "Dull it and Freeze it".
 ##
 ## It deliberately does NOT go through Card.can_tap(): dulling is not a tap COST, it is the effect. A Frozen card,
 ## a summoning-sick card and a card that was just activated can all still be dulled by an opponent's effect.
 func dull_targets(_argument = null) -> void:
-	for card in _targets:
-		if card != null and is_instance_valid(card):
-			card.tap()
-			print("[Dull] ", card.card_name)
+	_each_target("tap")
 
-## DAMAGE TO EVERY TARGET. The missing half of "all matching": apply_effect already fills _targets with every card
-## that matches, and untap_targets / dull_targets already loop over it — but suffer_damage is a CARD method reached
-## through `author: "target"`, so it can only ever hit one card. This is the loop, and it is what "deal 3000 damage
-## to all the Forwards opponent controls" needs.
+## DAMAGE TO EVERY TARGET. This is what "deal 3000 damage to all the Forwards opponent controls" needed: the target
+## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
+## it could only ever hit one card.
 ##
-## State-based actions are enforced ONCE at the end rather than per card, so a card destroyed by its own damage
-## cannot change what the rest of the set takes.
+## Settle once at the END, not per card, so a card destroyed by its own damage cannot change what the rest take.
 func damage_targets(amount: int = 0) -> void:
 	if amount <= 0:
 		return
-	for card in _targets:
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			card.suffer_damage(amount)
-			print("[DamageAll] %s takes %d" % [card.card_name, amount])
+	_each_target("suffer_damage", [amount], true)
 	enforce_game_state_rules()
 
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
