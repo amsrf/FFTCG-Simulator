@@ -157,6 +157,18 @@
 		"first_strike":true
 	},
 
+	"54":{
+		"skill":[{"tap":true, "cost":{"氷":2},
+			"apply_effect":{"is_type":"Forward","controller":"opponent"},
+			"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]}]
+	},
+
+	"66":{
+		"skill":[{"tap":true, "cost":{},
+			"apply_effect":{"is_type":"Forward","controller":"opponent"},
+			"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]}]
+	},
+
 	"38":{
 		"ex_burst":"when_cast",
 		"when_cast":{

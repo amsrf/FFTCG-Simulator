@@ -57,6 +57,22 @@ func dull_targets(_argument = null) -> void:
 			card.tap()
 			print("[Dull] ", card.card_name)
 
+## DAMAGE TO EVERY TARGET. The missing half of "all matching": apply_effect already fills _targets with every card
+## that matches, and untap_targets / dull_targets already loop over it — but suffer_damage is a CARD method reached
+## through `author: "target"`, so it can only ever hit one card. This is the loop, and it is what "deal 3000 damage
+## to all the Forwards opponent controls" needs.
+##
+## State-based actions are enforced ONCE at the end rather than per card, so a card destroyed by its own damage
+## cannot change what the rest of the set takes.
+func damage_targets(amount: int = 0) -> void:
+	if amount <= 0:
+		return
+	for card in _targets:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.suffer_damage(amount)
+			print("[DamageAll] %s takes %d" % [card.card_name, amount])
+	enforce_game_state_rules()
+
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
 ## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
 func _apply_effect_block(card: Card) -> Dictionary:
