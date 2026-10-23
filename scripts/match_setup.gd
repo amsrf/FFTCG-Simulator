@@ -310,6 +310,11 @@ func _debug() -> Dictionary:
 			{"id": 32, "tapped": true},
 			{"id": 31, "tapped": false},
 			{"id": 3, "tapped": false},
+			# 100 Black Belt: tap + 1 EARTH to give a BLOCKING Forward +1000 until end of turn. It needs the Earth
+			# Backup beside it or the skill can never be paid for — the other Backups here are Ice and Fire, and an
+			# Earth cost cannot be paid with them.
+			{"id": 100, "tapped": false},
+			{"id": 105, "tapped": false},
 			],
 		"opponent_field": [
 			{"id": 41, "tapped": false},
