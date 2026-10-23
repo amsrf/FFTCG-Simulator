@@ -4,6 +4,26 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Test Grounds: one board per mechanic
+
+The `ai` preset is a general practice board, so testing a specific mechanic there means the AI also casts Ifrit and
+Valefor and the board changes mid-test. `scripts/test_grounds.gd` is a registry of narrow boards, listed at the top of
+the main menu:
+
+- `party` — ice pair on both sides, opponent MOCK (never acts): form a party and attack.
+- `party_ai` — the AI has an ice pair and an EMPTY hand, so it only attacks; block it to open the distribution window.
+- `summons` — the AI holds Ifrit; Zidane is on your board to show target protection.
+- `break_zone` — you hold Bahamut and mana; fragile + 10000 exiles instead of breaking.
+- `clean` — empty board and hands, seeded decks.
+
+Conventions are documented in AGENTS.md: mock when you drive, ai when the other seat must act, empty opponent hand
+unless the mechanic needs it, decks from id 101 so board ids never collide, no shuffle and seed 0.
+
+`tests/test_grounds_probe.tscn` (42 checks) validates that every registered ground is listed, describes itself, uses
+real card ids, and actually boots the board it claims — the party ground is instantiated for real and asserted to have
+three Forwards a side and a MOCK opponent.
+
+
 ### Removed Zones, Fragile, Break-Zone Triggers, and the 1–100 Batch (2026-10-23)
 
 **The board gained the zone the rules were missing, and the Break Zone learned when to speak.**

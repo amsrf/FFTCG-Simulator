@@ -10,6 +10,10 @@ const GAME_SCENE := "res://game.tscn"
 const MENU_SCENE := "res://main_menu.tscn"
 const DECK_EDITOR_SCENE := "res://deck_editor.tscn"
 
+## One board per mechanic. Registered here so the menu lists them with everything else; see test_grounds.gd for the
+## boards themselves and the conventions they follow.
+const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+
 ## Where the deck editor writes. Same directory and same default name, so a deck saved in the
 ## editor is the deck the custom preset plays without anything else having to be kept in step.
 const DECK_DIR := "user://decks"
@@ -28,9 +32,13 @@ var custom_deck_name: String = CUSTOM_DECK_NAME
 var editing_deck_name: String = ""
 
 func get_presets() -> Array:
-	return ["custom", "ai", "standard", "debug"]
+	# THE TEST GROUNDS COME FIRST. They are the boards you reach for while building a mechanic; the general matches
+	# sit below them.
+	return TEST_GROUNDS.names() + ["ai", "standard", "debug", "custom"]
 
 func describe_preset(preset: String) -> String:
+	if TEST_GROUNDS.has(preset):
+		return "%s  —  %s" % [TEST_GROUNDS.title(preset), TEST_GROUNDS.blurb(preset)]
 	match preset:
 		"custom":
 			return "Custom Deck  (both players - saved in the Deck Editor)"
@@ -45,6 +53,12 @@ func describe_preset(preset: String) -> String:
 
 func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 	var cfg: Dictionary
+	if TEST_GROUNDS.has(preset):
+		# A ground is a preset with a curated board; `overrides` still applies on top.
+		cfg = TEST_GROUNDS.config(preset)
+		for key in overrides:
+			cfg[key] = overrides[key]
+		return cfg
 	match preset:
 		"custom":
 			cfg = _custom()

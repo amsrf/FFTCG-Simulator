@@ -1,0 +1,173 @@
+extends RefCounted
+## TEST GROUNDS — one board per mechanic, so a feature can be exercised without unrelated cards doing things.
+##
+## The problem this solves: the `ai` preset is a general practice board, so testing PARTIES there means the AI also
+## casts Ifrit and Valefor, and the board changes under you. Each ground below is deliberately narrow — the cards
+## that matter, mana only where a cost must be paid, and an opponent that does NOT act unless the mechanic needs it.
+##
+## Each entry is { title, blurb, config }. `config` is the same dictionary MatchSetup.start_match() consumes, so a
+## ground is just a preset with a curated board.
+##
+## CONVENTIONS:
+##   * `opponent_type: "mock"` = the AI passes priority, never plays, never attacks. Use it when YOU are the one
+##     exercising the mechanic and you do not want the opponent moving.
+##   * `opponent_type: "ai"` = the AI plays and attacks. Use it when the mechanic needs the OTHER seat to act.
+##   * Decks start at id 101 so a ground's board cards (usually ids 1-100) are never also in a deck.
+##   * No shuffle and seed 0: a ground is the same board every time.
+
+const PLAYER_DECK_START := 101
+const OPPONENT_DECK_START := 141
+const DECK_SIZE := 30
+
+
+static func _base() -> Dictionary:
+	return {
+		"preset": "",
+		"opponent_type": "mock",
+		"player_deck": range(PLAYER_DECK_START, PLAYER_DECK_START + DECK_SIZE),
+		"opponent_deck": range(OPPONENT_DECK_START, OPPONENT_DECK_START + DECK_SIZE),
+		"player_hand": [],
+		"opponent_hand": [],
+		"player_field": [],
+		"opponent_field": [],
+		"player_graveyard": [],
+		"opponent_graveyard": [],
+		"player_damage": [],
+		"opponent_damage": [],
+		"first_phase": "first_main",
+		"seed": 0,
+		"shuffle": false,
+	}
+
+
+## Card ids used below, named so the grounds read as rules rather than numbers.
+const ICE_A := 41        # Squall, ice Forward
+const ICE_B := 43        # Snow,   ice Forward (also has a when-attack dull effect)
+const FIRE := 12         # Zack,   fire Forward
+const ZIDANE := 71       # cannot be chosen by the opponent's Summons/abilities
+const IFRIT := 4         # Summon: damage a Forward
+const BAHAMUT := 18      # Summon: fragile + big damage
+const FIRE_MANA := 3     # Red Mage, fire Backup
+const ICE_MANA := 31     # Chemist, ice Backup
+const ICE_MANA_2 := 32   # Chemist, ice Backup
+
+
+static func clean() -> Dictionary:
+	## An empty board and no hands: the blank slate, for when a mechanic needs a setup built by hand.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_clean"
+	return cfg
+
+
+static func party_you_attack() -> Dictionary:
+	## PARTIES, attack side. You have an ice pair; the opponent has ice and fire Forwards to block with.
+	## The opponent is MOCK, so it never plays anything — the only thing that changes is your own attack.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_party"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [
+		{"id": ICE_A}, {"id": ICE_B}, {"id": FIRE},
+		{"id": ICE_MANA}, {"id": ICE_MANA_2},
+	]
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": ICE_B}, {"id": FIRE}]
+	cfg["opponent_hand"] = []          # nothing to cast, so no Summons mid-test
+	return cfg
+
+
+static func party_ai_attacks() -> Dictionary:
+	## PARTIES, blocking side. The AI holds an ice pair and an EMPTY HAND, so all it does is attack as a party —
+	## which is what opens the damage-distribution window when you block it.
+	##
+	## Pass your turn once: the AI draws, does nothing in its main phase, then declares the party.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_party_ai"
+	cfg["opponent_type"] = "ai"
+	cfg["player_field"] = [{"id": FIRE}, {"id": ICE_MANA}, {"id": ICE_MANA_2}]
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": ICE_B}]
+	cfg["opponent_hand"] = []          # no Ifrit, no Valefor — only the party
+	return cfg
+
+
+static func summons_and_targeting() -> Dictionary:
+	## SUMMONS. The AI has one Ifrit and the mana for it; you have Zidane, who cannot be chosen by the opponent's
+	## Summons or abilities. Watch the AI struggle to find a legal target.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_summons"
+	cfg["opponent_type"] = "ai"
+	cfg["player_field"] = [{"id": ZIDANE}, {"id": FIRE}]
+	cfg["opponent_field"] = [{"id": FIRE_MANA}, {"id": ICE_MANA}, {"id": ICE_MANA_2}]
+	cfg["opponent_hand"] = [IFRIT]
+	return cfg
+
+
+static func break_zone() -> Dictionary:
+	## THE BREAK ZONE. You hold Bahamut and enough mana; the opponent has two Forwards. Casting it applies fragile
+	## and deals 10000 — both Forwards are EXILED instead of broken, so the Break Zone stays empty.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_break_zone"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": FIRE_MANA}, {"id": ICE_MANA}, {"id": ICE_MANA_2}, {"id": 68}]
+	cfg["player_hand"] = [BAHAMUT]
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": ICE_B}]
+	return cfg
+
+
+const GROUNDS := {
+	"party": {
+		"title": "Ground: Parties (you attack)",
+		"blurb": "Ice pair on both sides. Click Squall then Snow to form a party, then attack. Opponent is passive.",
+	},
+	"party_ai": {
+		"title": "Ground: Parties (AI attacks, you block)",
+		"blurb": "The AI has an ice pair and an EMPTY hand: pass once, it attacks as a party. Block it to open the damage window.",
+	},
+	"summons": {
+		"title": "Ground: Summons & target protection",
+		"blurb": "The AI holds Ifrit; your Zidane cannot be chosen by it. Watch who it can target.",
+	},
+	"break_zone": {
+		"title": "Ground: Break Zone & fragile",
+		"blurb": "You hold Bahamut and mana. Cast it: fragile + 10000 exiles the targets instead of breaking them.",
+	},
+	"clean": {
+		"title": "Ground: Empty board",
+		"blurb": "No cards in play, no hands, seeded decks. A blank slate for setting things up by hand.",
+	},
+}
+
+## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
+## dispatch is a plain match. Adding a ground means adding an entry to GROUNDS and one arm below.
+static func config(name: String) -> Dictionary:
+	match name:
+		"party":
+			return party_you_attack()
+		"party_ai":
+			return party_ai_attacks()
+		"summons":
+			return summons_and_targeting()
+		"break_zone":
+			return break_zone()
+		"clean":
+			return clean()
+		_:
+			push_warning("[TestGrounds] no such ground '%s'" % name)
+			return clean()
+
+
+static func names() -> Array:
+	return GROUNDS.keys()
+
+
+static func has(name: String) -> bool:
+	return GROUNDS.has(name)
+
+
+static func title(name: String) -> String:
+	return str(GROUNDS.get(name, {}).get("title", name))
+
+
+static func blurb(name: String) -> String:
+	return str(GROUNDS.get(name, {}).get("blurb", ""))
+
+
+

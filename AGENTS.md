@@ -34,6 +34,28 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - **The scripts are split across two folders:** `battle_field.gd`, `stack.gd`, `assistant.gd`, `power_display.gd` are at the **repo root**, while `game.gd`, `card.gd`, `hand.gd`, `player_side.gd` are in `scripts/`. `grep -r` for the filename rather than guessing a path — a wrong guess costs a round trip.
 - **Warnings arrive in batches.** The user runs Godot and pastes the warning list (`UNUSED_*`, `SHADOWED_VARIABLE`, `Case mismatch …`). Fix every line, then sweep for the same *class* (`grep` for other unused private vars, other case-mismatched `res://` paths) instead of waiting for the next run.
 
+## Test Grounds (one board per mechanic)
+
+`scripts/test_grounds.gd` is a registry of curated boards, listed at the TOP of the main menu. Use these instead of
+the general `ai` preset whenever you are testing one mechanic: the `ai` board also casts Ifrit/Valefor, so the board
+changes under you.
+
+| ground | for | opponent |
+|---|---|---|
+| `party` | forming/attacking with a party (ice pair on both sides) | **mock** — never plays or attacks |
+| `party_ai` | blocking a party, which opens the damage-distribution window | **ai** — ice pair, EMPTY hand, so it only attacks |
+| `summons` | Summons + target protection (Zidane vs Ifrit) | ai, holds Ifrit |
+| `break_zone` | fragile/exile (you hold Bahamut + mana) | mock |
+| `clean` | empty board, empty hands, seeded decks | mock |
+
+Conventions when adding one: `opponent_type: "mock"` when YOU drive the mechanic; `"ai"` when the other seat must act;
+give the opponent an **empty hand** unless the mechanic needs it to cast; decks start at id 101 so board cards
+(1-100) never collide; no shuffle, seed 0 — a ground must be identical every time.
+
+Adding a ground = one entry in `GROUNDS` + one arm in `config()` (a Dictionary of Callables is not a constant
+expression in GDScript). `tests/test_grounds_probe.tscn` validates every registered ground, so a typo'd id or a
+missing key fails loudly.
+
 ## Build / Test / Run
 
 **Preferred: the headless probe** (see *Running Godot* above for the one allowed command). It is the fastest check and needs no editor and no clicking:
