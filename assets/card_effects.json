@@ -251,5 +251,14 @@
 
 	"95":{
 		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
+	},
+
+	"93":{
+		"when_enter_break_from_field":{
+			"instructions":[
+				{"name":"search_deck","author":"game","argument":[{"name":"Hecatoncheir"}, "removed"]},
+				{"name":"return_from_break_zone","author":"game","argument":[true],"condition":"if_last_succeeded"}
+			]
+		}
 	}
 }

@@ -506,11 +506,24 @@ func _clean_instruction_stack():
 	_current_blocker_card = null
 	_targets = []
 
+## Whether the instruction that just ran accomplished something. Read by `condition: "if_last_succeeded"` — the
+## "search ... and if you do so, return Vanille" shape, where the second half must not happen after a cancel.
+var _last_action_succeeded: bool = true
+
 func _process_next_instruction() -> void:
 	if _current_instructions.is_empty():
 		# All instructions resolved: apply state-based actions so a card
 		# whose accumulated damage has reached its power is broken now.
 		enforce_game_state_rules()
+		return
+
+	# CONDITIONAL GUARD. Checked BEFORE the instruction is resolved, and it consumes no state of its own: the flag is
+	# whatever the previous instruction left behind.
+	var next_instruction = _current_instructions[0]
+	if next_instruction.condition == "if_last_succeeded" and not _last_action_succeeded:
+		print("[Instruction] skipped ", next_instruction.action, " (the previous instruction did not succeed)")
+		_current_instructions.pop_front()
+		_process_next_instruction()
 		return
 
 	var instruction = _current_instructions.pop_front()
@@ -1425,9 +1438,16 @@ func _on_field_blocker_changed() -> void:
 ## The order is the spec, and it matters: the chosen card goes to the TOP of the deck, is drawn from there,
 ## and only THEN is the deck shuffled. Drawing before shuffling is what makes "taken from the deck" literally
 ## true rather than a card appearing from nowhere.
-func search_deck(filter: Dictionary) -> void:
+## SEARCH THE DECK. `destination` decides where the found card goes, because the same search text appears with
+## different endings: "add it to your hand" (the default), "remove it from the game" (Vanille), and cards that put
+## the card back on top.
+##
+## Sets _last_action_succeeded so `condition: "if_last_succeeded"` can act on "and if you do so". A cancelled search
+## counts as not succeeding, which is the whole point of that guard.
+func search_deck(filter: Dictionary, destination: String = "hand") -> void:
 	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
 	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.
+	_last_action_succeeded = false
 	var deck_node = $Player/Deck
 	var hand_node: Hand = $Player/Hand
 	if deck_node == null or hand_node == null:
@@ -1448,8 +1468,6 @@ func search_deck(filter: Dictionary) -> void:
 	if chosen == DECK_SEARCH_SCRIPT.CHOOSE_NONE:
 		return
 
-	# The deck's array order IS the deck: the front is the next card drawn, so "top" and "front" are the same
-	# end of it. Put the found card there before drawing, rather than drawing and then claiming it was on top.
 	var found: Card = null
 	for card in deck_node.deck_cards:
 		if card.id == chosen:
@@ -1460,10 +1478,47 @@ func search_deck(filter: Dictionary) -> void:
 		# a player error — say so instead of silently doing nothing.
 		push_warning("[Game] search_deck picked %d, which is not in the deck" % chosen)
 		return
+
 	deck_node.deck_cards.erase(found)
-	deck_node.deck_cards.push_front(found)
-	hand_node.draw(deck_node.deck_cards.pop_front())
+	match destination:
+		"removed":
+			print("[Search] ", found.card_name, " is removed from the game")
+			_send_card_to_removed(found)
+		"graveyard":
+			_send_card_to_graveyard(found)
+		"top":
+			# The deck's array order IS the deck, so the front is the next card drawn.
+			deck_node.deck_cards.push_front(found)
+		_:
+			# "hand" — the default, and what every existing search card uses.
+			hand_node.draw(found)
 	shuffle_deck(deck_node)
+	_last_action_succeeded = true
+
+## RETURN THE SOURCE CARD FROM THE BREAK ZONE TO THE FIELD.
+##
+## "If you do so, return Vanille onto the field dull." The card that comes back is the ability's own source, which is
+## reachable as _current_source_card even though it is sitting in the pile. It leaves that pile first so the two
+## lists never both own it.
+##
+## The zone change runs BEFORE it is placed, so it arrives with the field's scale, rotation and readout rather than
+## whatever it was wearing in the pile — the same order Graveyard.add_card uses in the other direction.
+func return_from_break_zone(tapped: bool = true) -> void:
+	var card: Card = _current_source_card
+	if card == null or not is_instance_valid(card):
+		return
+	var home = null
+	if card.controller == "player":
+		home = player_graveyard
+	else:
+		home = opponent_graveyard
+	if home != null and home.graveyard_cards.has(card):
+		home.graveyard_cards.erase(card)
+	print("[ReturnFromBreakZone] ", card.card_name)
+	field.play_card(card, card.controller != "player")
+	card.broken = false
+	if tapped:
+		card.tap()
 
 ## Fisher-Yates with a dedicated RNG. NOT `Array.shuffle()`, which uses the global generator and so cannot be
 ## reproduced from a seed — the same reason MatchSetup hand-rolls its own.
