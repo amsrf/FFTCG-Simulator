@@ -46,6 +46,36 @@ func decide_blocker(_player_id: int, _attacker: Card) -> Card:
 	await _settle()
 	return null
 
+## How a BLOCKER's power is divided across the members of the party it blocked, in 1000-point increments, summing to
+## `total`. One entry per party member, in party order.
+##
+## Default is the greedy split: chunks of 1000 go to the strongest member first, then the next, and round again if
+## there is enough damage — which maximises the chance of breaking something. `LocalAgent` will override this with
+## the arrow window (up/down per card) so the human can choose; until then a human gets the same greedy answer as
+## the AI rather than an unanswerable prompt.
+func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Array:
+	await _settle()
+	return greedy_party_split(party, total)
+
+func greedy_party_split(party: Array, total: int) -> Array:
+	var out: Array = []
+	if party.is_empty():
+		return out
+	out.resize(party.size())
+	out.fill(0)
+	var order: Array = []
+	for i in range(party.size()):
+		order.append(i)
+	order.sort_custom(func(a, b): return party[a].power > party[b].power)
+	var left: int = maxi(total, 0)
+	var k: int = 0
+	while left > 0:
+		var chunk: int = mini(1000, left)
+		out[order[k % order.size()]] += chunk
+		left -= chunk
+		k += 1
+	return out
+
 ## Pay `cost` ({element: amount, "neutral": n}) for the card being played, and
 ## return whether it is covered. Only used for non-local players — the human
 ## pays by selecting cards in the payment modal instead.

@@ -362,11 +362,22 @@ func execute_card_attack():
 	# bypassable by a future caller that forgets to ask. can_attack() is can_tap() plus "is a Forward".
 	if attacker_card == null or not attacker_card.can_attack():
 		return
-	# BRAVE does not dull to attack, which is what lets a Brave Forward attack and still block — and attack again on
-	# a later combat step the same turn.
-	if not attacker_card.is_brave():
-		attacker_card.tap()
-	execute_card_effect(attacker_card,'when_attack')
+	# A PARTY attacks with every member. Each one dulls unless it is Brave, and each one's "when attacks" triggers —
+	# they attacked, even if only the party as a whole deals damage.
+	var members: Array[Card] = attacking_party.duplicate()
+	if members.is_empty():
+		members.append(attacker_card)
+	for card in members:
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		# A member that became unable to attack after formation simply does not attack; it cannot veto the party.
+		if not card.can_attack():
+			continue
+		# BRAVE does not dull to attack, which is what lets a Brave Forward attack and still block — and attack again
+		# on a later combat step the same turn. This is PER MEMBER, not per party.
+		if not card.is_brave():
+			card.tap()
+		execute_card_effect(card, 'when_attack')
 	
 func end_phase_cleanup():
 	# End Phase cleanup: remove all damage from every card on the field and
@@ -857,6 +868,13 @@ func remove_card(card):
 	opponent_back_cards.erase(card)
 	recompute_conditional_power()
 	refresh_auras()
+	# A member leaving the field leaves the party; fewer than two members disbands it. Done here because every way
+	# off the field (break, exile, return, effect) ends in remove_card, so no caller has to remember.
+	#
+	# drop_party_member() first, unconditionally: this runs BEFORE the card's zone changes, so a field check would
+	# still say FIELD and the departing card would stay in the party. prune_party() then clears any other stale ones.
+	drop_party_member(card)
+	prune_party()
 
 ## Conditional continuous effects ("if you control X, this gains power").
 ## Re-evaluated only when the field composition changes: play_card/remove_card.
@@ -987,19 +1005,136 @@ func _tap_selected_cards():
 	for c in selected_cards_for_mana_conversion:
 		c.tap()
 		
+## THE ATTACKING PARTY, always including `attacker_card` as its first member. A party of one is just a normal attack,
+## so every consumer can keep reading `attacker_card` and only the combat maths has to look here.
+##
+## Formation rule (from the rules): clicking another Forward while one is already selected JOINS THE PARTY if it is
+## the same element; a different element does nothing. There is no "replace the attacker" any more — deselect first.
+var attacking_party: Array[Card] = []
+
 func set_attacker(card:Card):
-	if(attacker_card == null):
+	if card == null:
+		return
+	if attacker_card == null:
 		attacker_card = card
 		attacker_card.set_attacker_status(true)
-	elif(attacker_card == card):
-		attacker_card.set_attacker_status(false)
-		attacker_card = null
-	elif(attacker_card != card):
-		attacker_card.set_attacker_status(false)
-		attacker_card = card
-		attacker_card.set_attacker_status(true)
+		attacking_party.clear()
+		attacking_party.append(card)
+	elif attacker_card == card:
+		# Clicking the primary again clears the whole formation.
+		reset_attacker()
+		attacker_changed.emit()
+		return
+	elif attacking_party.has(card):
+		# A non-primary member: clicking it again drops it from the party.
+		remove_party_member(card)
+		return
+	elif add_party_member(card):
+		pass
+	# else: different element or cannot attack — DO NOTHING, per the party rules.
 	attacker_changed.emit()
+
+## Join `card` to the current attack. Returns false when the rules say it cannot: it must be able to attack, it must
+## not already be in the party, and it must share the primary's ELEMENT SET (identical, so a mono-element Forward
+## cannot join a multi-element one).
+func add_party_member(card: Card) -> bool:
+	if attacker_card == null or card == null:
+		return false
+	if card == attacker_card or attacking_party.has(card):
+		return false
+	if not card.can_attack():
+		return false
+	if not same_element_as_primary(card):
+		return false
+	attacking_party.append(card)
+	card.set_attacker_status(true)
+	print("[Party] %s joins %s (%d members)" % [card.card_name, attacker_card.card_name, attacking_party.size()])
+	return true
+
+func remove_party_member(card: Card) -> void:
+	if card == null or card == attacker_card or not attacking_party.has(card):
+		return
+	attacking_party.erase(card)
+	if is_instance_valid(card):
+		card.set_attacker_status(false)
+	print("[Party] %s leaves (%d members)" % [card.card_name, attacking_party.size()])
+
+func same_element_as_primary(card: Card) -> bool:
+	if attacker_card == null:
+		return false
+	return element_set(card) == element_set(attacker_card)
+
+## `element` is an Array on some cards and a bare String on others, so normalise before comparing.
+func element_set(card: Card) -> Array:
+	var raw = card.element
+	var out: Array = raw if raw is Array else [raw]
+	out.sort()
+	return out
+
+func is_party() -> bool:
+	return attacking_party.size() >= 2
+
+func party_members() -> Array[Card]:
+	return attacking_party
+
+## Sum of the members' CURRENT power — read at the moment of damage, like a single attacker's power is.
+func party_power() -> int:
+	var total: int = 0
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			total += card.power
+	return total
+
+## "If ALL members of a Party have Pre-emptive Strike, then the Party has it. Otherwise it does not."
+func party_has_first_strike() -> bool:
+	if attacking_party.is_empty():
+		return false
+	for card in attacking_party:
+		if card == null or not is_instance_valid(card) or not card.is_first_strike():
+			return false
+	return true
+
+## Drop members that have left the field; a party of fewer than two disbands.
+##
+## The REMAINING member keeps attacking as a normal single attack — the rules disband the party, not the attack — so
+## `attacker_card` is moved to it rather than the whole combat being cancelled.
+func prune_party() -> void:
+	if attacking_party.is_empty():
+		return
+	var alive: Array[Card] = []
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			alive.append(card)
+		elif card != null and is_instance_valid(card):
+			card.set_attacker_status(false)
+	attacking_party = alive
+	_disband_if_too_small()
+
+## A card is leaving the field. Drop it WITHOUT asking `is_on_field()`: remove_card() runs before the zone actually
+## changes (the pile sets it), so a field check there still says FIELD and the "departed" member stayed in the party.
+func drop_party_member(card: Card) -> void:
+	if card == null or not attacking_party.has(card):
+		return
+	attacking_party.erase(card)
+	if is_instance_valid(card):
+		card.set_attacker_status(false)
+	_disband_if_too_small()
+
+func _disband_if_too_small() -> void:
+	if attacking_party.size() >= 2:
+		return
+	print("[Party] disbands (%d member(s) left)" % attacking_party.size())
+	if attacking_party.is_empty():
+		attacker_card = null
+	elif not attacking_party.has(attacker_card):
+		attacker_card = attacking_party[0]
+
 func reset_attacker():
+	# Clear the markers on EVERY member, not just the primary, or a disbanded party leaves "attacking" rings behind.
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.set_attacker_status(false)
+	attacking_party.clear()
 	attacker_card = null
 
 ## Select/deselect a blocker for the current combat (human input only).

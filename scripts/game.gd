@@ -1037,28 +1037,90 @@ func clash_step(striker: Card, other: Card) -> void:
 ## after the first — hence the is_on_field() checks on either side of the priority window, since a player may cast
 ## something during it.
 func clash_attacker_blocker() -> void:
-	var attacker: Card = field.attacker_card
 	var blocker: Card = field.blocker_card
-	if attacker == null or blocker == null:
+	if blocker == null or field.party_members().is_empty():
 		return
-	var fs_attacker: bool = attacker.is_first_strike()
-	var fs_blocker: bool = blocker.is_first_strike()
-	if fs_attacker == fs_blocker:
-		# Both or neither: one simultaneous step, exactly as before.
-		clash_cards(attacker, blocker)
+	# A PARTY has First Strike only if EVERY member does; a party of one is just the old single-attacker rule.
+	var party_fs: bool = field.party_has_first_strike()
+	var blocker_fs: bool = blocker.is_first_strike()
+	if party_fs == blocker_fs:
+		# SIMULTANEOUS. Both damage assignments are made before ANY state-based action runs: settling in between
+		# would break a blocker that died first and rob it of its damage, which is exactly what the first version of
+		# this did (party dealt, blocker broke, blocker dealt nothing).
+		var party_total: int = field.party_power()
+		var at_once: Array = await _blocker_split(blocker)
+		if party_total > 0 and blocker.is_on_field():
+			print("[Combat] party deals %d to %s" % [party_total, blocker.card_name])
+			blocker.suffer_damage(party_total)
+		_apply_blocker_split(at_once)
+		enforce_game_state_rules()
 		return
 
-	var striker: Card = attacker if fs_attacker else blocker
-	var other: Card = blocker if fs_attacker else attacker
-	print("[Clash] First Strike: %s deals first, then %s" % [striker.card_name, other.card_name])
-	clash_step(striker, other)
-	if not (striker.is_on_field() and other.is_on_field()):
+	# Otherwise the side with First Strike deals first, the other answers only if still alive.
+	if party_fs:
+		_apply_party_damage(blocker)
+		if not _combat_still_live(blocker):
+			return
+		await priority_round_only()
+		if not _combat_still_live(blocker):
+			return
+		_apply_blocker_split(await _blocker_split(blocker))
+		enforce_game_state_rules()
+	else:
+		_apply_blocker_split(await _blocker_split(blocker))
+		enforce_game_state_rules()
+		if not _combat_still_live(blocker):
+			return
+		await priority_round_only()
+		if not _combat_still_live(blocker):
+			return
+		_apply_party_damage(blocker)
+
+## Both sides still in the fight? The blocker can die to First Strike, and so can every member of the party.
+func _combat_still_live(blocker: Card) -> bool:
+	return blocker != null and blocker.is_on_field() and not field.party_members().is_empty()
+
+## THE PARTY'S DAMAGE: the SUM of its members' power, to the blocker. A party of one is just that card's power, so
+## this covers the single-attacker case too. Settles immediately — only call it when this is its own damage step.
+func _apply_party_damage(blocker: Card) -> void:
+	if blocker == null or not blocker.is_on_field():
 		return
-	# THE WINDOW BETWEEN THE STEPS. Round only — it must not advance the phase.
-	await priority_round_only()
-	if not (striker.is_on_field() and other.is_on_field()):
+	var total: int = field.party_power()
+	if total <= 0:
 		return
-	clash_step(other, striker)
+	print("[Combat] party deals %d to %s" % [total, blocker.card_name])
+	blocker.suffer_damage(total)
+	enforce_game_state_rules()
+
+## How the blocker's power is divided across the party, WITHOUT applying it. Split out so the simultaneous step can
+## compute both sides and then apply them together — and so the human's arrow window can be awaited before any
+## damage lands.
+func _blocker_split(blocker: Card) -> Array:
+	if blocker == null or not blocker.is_on_field():
+		return []
+	var members: Array = field.party_members()
+	if members.is_empty():
+		return []
+	if members.size() == 1:
+		return [blocker.power]
+	var owner_id: int = 1 if blocker.controller == "player" else 2
+	var split: Array = await agent_for(owner_id).choose_party_damage_split(owner_id, members, blocker.power)
+	print("[Combat] %s distributes %d across %d: %s" % [
+		blocker.card_name, blocker.power, members.size(), str(split)])
+	return split
+
+## Apply a split produced by _blocker_split(). No settle — the caller decides when state-based actions run.
+func _apply_blocker_split(split: Array) -> void:
+	var members: Array = field.party_members()
+	for i in range(mini(split.size(), members.size())):
+		var card: Card = members[i]
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var amount: int = int(split[i])
+		if amount <= 0:
+			continue
+		card.suffer_damage(amount)
+
 
 ## A priority pass chain that does NOT advance the phase.
 ##
