@@ -366,4 +366,67 @@
 			]
 		}
 	}
+,
+	"523":{
+		"when_party_attack":{
+			"instructions":[
+				{"name":"opponent_discards","author":"game","argument":[1]}
+			]
+		}
+	},
+	"719":{
+		"when_party_attack":{
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[
+				{"name":"return_targets_to_hand","author":"game","argument":[]}
+			]
+		}
+	},
+	"1879":{
+		"when_party_attack":{
+			"choose_target":{"is_character":true},
+			"instructions":[
+				{"name":"dull_targets","author":"game","argument":[]},
+				{"name":"add_status_to_targets","author":"game","argument":["frozen",1]}
+			]
+		}
+	},
+	"3261":{
+		"when_party_attack":{
+			"condition":"party_has_named:King of Eblan",
+			"choose_target":{"is_type":"Forward","controller":"opponent"},
+			"instructions":[
+				{"name":"damage_targets","author":"game","argument":[5000]}
+			]
+		}
+	},
+	"3023":{
+		"when_party_attack":{
+			"condition":"party_has_named:Yuri",
+			"choose_target":{"is_type_any":["Forward","Monster"]},
+			"instructions":[
+				{"name":"break_targets","author":"game","argument":[]}
+			]
+		}
+	},
+	"154":{
+		"when_enter_field":{
+			"instructions":[
+				{"name":"draw_cards","author":"game","argument":[1]}
+			]
+		},
+		"when_party_attack":{
+			"instructions":[
+				{"name":"draw_cards","author":"game","argument":[1]},
+				{"name":"controller_discards","author":"game","argument":[1]}
+			]
+		}
+	},
+	"173":{
+		"when_party_attack":{
+			"instructions":[
+				{"name":"draw_cards","author":"game","argument":[1]}
+			]
+		}
+	}
 }

@@ -4,6 +4,39 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Party Cards, group C (trigger-only cards)
+
+Seven cards whose party trigger needed no new instruction, plus the two small pieces they leaned on.
+
+New trigger-level condition, checked in `Field.execute_card_effect()` **before** anything is queued:
+`"condition": "party_has_named:<name>"` — for "when <card> forms a party WITH X and attacks". Instruction conditions
+could not do this job: a conditional trigger would still pick a target and queue an empty effect.
+
+New predicates: `Card.is_character()` (Forward/Backup/Monster) and `Card.is_type_any([...])` (the criteria vocabulary
+is AND-only, and card text says "Forward or Monster"). NOTE: criteria predicates are called with ONE argument, so
+`is_character(_want = true)` — a zero-arg predicate is an invalid call and every candidate silently becomes illegal.
+
+| card | effect | trigger |
+|---|---|---|
+| 523 Gunbreaker | opponent discards 1 | `when_party_attack` |
+| 719 Tonogiri | choose 1 Forward, return to hand | `when_party_attack` + target |
+| 1879 Red Mage | choose 1 Character, dull + freeze | `when_party_attack` + target |
+| 3261 Queen of Eblan | party WITH King of Eblan → 5000 to an opponent Forward | `when_party_attack` + `party_has_named` |
+| 3023 Chelinka | party WITH Yuri → break a Forward/Monster | `when_party_attack` + `party_has_named` |
+| 154 Vaan | ETB draw 1; party attack → draw 1 then discard 1 | new `controller_discards` |
+| 173 Mime | party attack → draw 1 | `when_party_attack` |
+
+`controller_discards(count)` is the mirror of `opponent_discards()` and goes through the agent seam.
+
+NEW PROBE tests/party_cards_probe.tscn, 10 checks / 0 failures: Mime draws; Gunbreaker's opponent discards; Queen deals
+5000 with King and does NOT trigger without him; Chelinka breaks; Tonogiri returns to the OWNER's hand; Red Mage dulls
+and freezes. `resolve_top_effect()` returning does NOT mean an async instruction has finished — the return-to-hand tween
+lands about a second later, so that check waits.
+
+DEFERRED: 1788 Yuri needs a "select 1 of 2" modal; 173 Mime's Attack-Phase element naming is unimplemented (the party
+draw is done).
+
+
 ### Party Cards, group 1 (the "watching the party" triggers)
 
 Cards whose text says "a party you control" are not members of it — Celestia and Andoria are Backups. They need triggers

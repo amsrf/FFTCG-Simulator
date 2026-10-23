@@ -36,6 +36,20 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 
 ## Party Triggers
 
+**Criteria predicates take exactly ONE argument.** `matches_criteria` calls every key with `callv(name, [value])`, so a
+predicate declared `func is_character() -> bool` is an invalid call, every candidate becomes illegal, and targeting
+silently finds nothing. Declare `func is_character(_want = true) -> bool` even when the value is unused.
+
+**Trigger-level vs instruction-level conditions.** `when_*` blocks may carry `"condition": "..."`, evaluated in
+`Field.execute_card_effect()` before the effect is queued. Use it when the condition decides whether the ability
+happens at all — a conditional trigger that still selects a target and resolves an empty effect is wrong. Instruction
+conditions are for "do A, and only if it worked do B". `party_has_named:<name>` is the party-with-X condition.
+
+**`resolve_top_effect()` is not a completion barrier for async instructions.** It empties the stack, but the
+instruction pump keeps running fire-and-forget; an instruction that awaits an animation (return to hand) lands later.
+Probes asserting animation-driven results must wait.
+
+
 There are THREE party triggers, and picking the wrong one silently does nothing:
 
 | keyword | when | fired by |

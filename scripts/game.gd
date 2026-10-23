@@ -71,6 +71,12 @@ func opponent_discards(count: int = 1) -> void:
 	var caster: int = 1 if _current_controller == "player" else 2
 	await discard_from(3 - caster, count)
 
+## The caster discards — "draw 1 card then discard 1 card from your hand" (Vaan). The mirror of opponent_discards(),
+## and it goes through the same agent seam, so a human picks from their hand and the AI picks its cheapest.
+func controller_discards(count: int = 1) -> void:
+	var caster: int = 1 if _current_controller == "player" else 2
+	await discard_from(caster, count)
+
 func discard_from(player_id: int, count: int = 1) -> void:
 	var owner_hand: Hand = hand_for(player_id)
 	if owner_hand == null:
@@ -622,6 +628,14 @@ func _condition_holds(condition: String) -> bool:
 		return cast_this_turn(condition.trim_prefix("cast_this_turn:").strip_edges(), _condition_owner())
 	if condition.begins_with("controls:"):
 		return _controls(condition.trim_prefix("controls:").strip_edges())
+	# "forms a party WITH <name> and attacks" (Queen of Eblan + King of Eblan, Chelinka + Yuri). Judged against the
+	# party that is currently attacking, because a party only exists while it attacks.
+	if condition.begins_with("party_has_named:"):
+		var wanted_name: String = condition.trim_prefix("party_has_named:").strip_edges()
+		for member in field.party_members():
+			if member != null and is_instance_valid(member) and member.card_name == wanted_name:
+				return true
+		return false
 	print("[Condition] unknown condition '%s' — treated as true" % condition)
 	return true
 

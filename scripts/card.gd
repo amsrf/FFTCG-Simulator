@@ -1166,6 +1166,22 @@ func set_target(value):
 func is_type(ntype:String) -> bool:
 	return self.type == ntype
 
+## "Character" is any card that lives on the field as a unit: Forward, Backup or Monster. Card text says it
+## constantly ("choose 1 Character"), so it gets a predicate rather than repeating the list in every criteria block.
+##
+## IT TAKES AN ARGUMENT even though it needs none: `matches_criteria` calls every predicate as `callv(name, [value])`,
+## so a zero-argument predicate is an invalid call and every candidate silently becomes illegal.
+func is_character(_want = true) -> bool:
+	return type in ["Forward", "Backup", "Monster"]
+
+## One criterion, several accepted types: {"is_type_any": ["Forward", "Monster"]} — because the criteria vocabulary is
+## AND-only and card text often says "Forward or Monster".
+func is_type_any(types) -> bool:
+	for t in types:
+		if is_type(str(t)):
+			return true
+	return false
+
 func is_cost_lower_than(value: int) -> bool:
 	return cost < value
 

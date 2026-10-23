@@ -405,6 +405,14 @@ func trigger_party_attacks(controller: String) -> void:
 		if card.is_key_word_in_card_effect("when_party_attacks"):
 			execute_card_effect(card, "when_party_attacks")
 
+## Trigger-level conditions are evaluated by Game, because that is where the condition vocabulary lives
+## (controls:, cast_this_turn:, party_has_named:). Field forwards rather than keeping a second copy of the rules.
+func _trigger_condition_holds(condition: String) -> bool:
+	var host: Node = get_parent()
+	if host == null or not host.has_method("_condition_holds"):
+		return true
+	return bool(host.call("_condition_holds", condition))
+
 ## Fire "a party you control dealt damage to the opponent" (Andoria, Boko).
 func trigger_party_deals_damage(controller: String) -> void:
 	for card in get_all_cards():
@@ -578,6 +586,12 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 	
 func execute_card_effect(card,keyword):
 	if( not card.is_key_word_in_card_effect(keyword)):
+		return
+	# A TRIGGER-LEVEL CONDITION, checked BEFORE anything is put on the stack. Instruction conditions cannot do this
+	# job: a conditional triggered ability would still choose a target and queue an empty effect. "When <card> forms a
+	# party WITH X and attacks" is the case that needs it.
+	var trigger_condition: String = str(card.card_effects.get(keyword, {}).get("condition", ""))
+	if trigger_condition != "" and not _trigger_condition_holds(trigger_condition):
 		return
 	add_card_effect_to_stack.emit(card.id,keyword,card)
 	# Most elegant single-line solution
