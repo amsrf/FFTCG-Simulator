@@ -78,6 +78,19 @@ func damage_targets(amount: int = 0) -> void:
 		return
 	_each_target("suffer_damage", [amount])
 
+## POWER TO EVERY TARGET. "All the Forwards you control gain +1000 power until end of turn."
+##
+## duration follows Card.power_change: -1 is permanent, N is N turns, so the card data carries it rather than this
+## function having an opinion. A negative amount debuffs, which is the same call with a minus in front.
+##
+## The loop settles state-based actions afterwards like every other verb — which is exactly right here, because a
+## power REDUCTION can put a card at 0 and move it to the Graveyard, and that check must happen before the next
+## instruction sees the board.
+func power_change_targets(amount: int = 0, duration: int = 1) -> void:
+	if amount == 0:
+		return
+	_each_target("power_change", [amount, duration])
+
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
 ## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
 func _apply_effect_block(card: Card) -> Dictionary:

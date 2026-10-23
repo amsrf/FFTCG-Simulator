@@ -157,6 +157,13 @@
 		"first_strike":true
 	},
 
+	"7":{
+		"apply_effect":{"is_type":"Forward","controller":"player"},
+		"when_enter_field":{
+			"instructions":[{"name":"power_change_targets","author":"game","argument":[1000, 1]}]
+		}
+	},
+
 	"54":{
 		"skill":[{"tap":true, "cost":{"氷":2},
 			"apply_effect":{"is_type":"Forward","controller":"opponent"},
