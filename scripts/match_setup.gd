@@ -72,7 +72,9 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			# Dark Knight x2 (cost 3/4), Summoner (cost 3), Hades (Summon,
 			# cost 5 — deliberately unaffordable, to prove the AI declines it
 			# instead of starting a payment it cannot finish).
-			cfg["opponent_hand"] = [4, 55, 53, 54, 52]
+			# 33 Argath is a cost-2 Forward whose ETB makes ITS OPPONENT discard 1 — so the AI playing it is how
+			# the human's discard UI gets exercised.
+			cfg["opponent_hand"] = [33, 4, 55, 53, 54]
 		"debug":
 			cfg = _debug()
 		_:

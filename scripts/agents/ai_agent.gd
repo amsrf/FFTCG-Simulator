@@ -189,3 +189,17 @@ func choose_target(owner_id: int, _source: Card, _criteria: Dictionary) -> void:
 	print("[AIAgent] P%s chose target %s" % [owner_id, chosen.card_name])
 	field.set_target_card(chosen)
 	game.assistant.on_target_complete()
+
+## "Your opponent discards 1 card from their hand." The DISCARDER chooses, so this asks the side that owns the hand.
+## The AI keeps its cheapest card: it is a weak heuristic, but discarding the most expensive thing it holds would be
+## strictly worse, and a stable rule is better than a random one while the rest of the effect system is still thin.
+func choose_discard(player_id: int, cards: Array) -> Card:
+	await _settle()
+	var cheapest: Card = null
+	for card in cards:
+		if card == null:
+			continue
+		if cheapest == null or int(card.cost) < int(cheapest.cost):
+			cheapest = card
+	print("[AIAgent] P%s discards %s (cheapest)" % [player_id, cheapest.card_name if cheapest != null else "nothing"])
+	return cheapest

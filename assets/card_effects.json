@@ -170,6 +170,18 @@
 			"instructions":[{"name":"power_change","author":"target","argument":[1000, 1]}]}]
 	},
 
+	"33":{
+		"when_enter_field":{
+			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
+		}
+	},
+
+	"51":{
+		"when_enter_field":{
+			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
+		}
+	},
+
 	"43":{
 		"when_attack":{
 			"choose_target":{"is_type":"Forward","controller":"opponent"},
