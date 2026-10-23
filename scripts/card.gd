@@ -1216,9 +1216,20 @@ func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 		return true
 	return false
 
-func is_tapped(_args = null) -> bool:
-	return self.tapped
-	
+## Criteria predicates. A criteria key becomes a Card method called with the block's value, so
+## {"is_tapped": false} and {"is_tapped": true} must both mean what they say — the old version ignored its argument
+## and returned tapped-ness either way, which would silently pick the opposite set.
+func is_tapped(want: bool = true) -> bool:
+	return self.tapped == want
+
+## "a blocking Forward" / "an attacking Forward". Both keys are already maintained by
+## set_attacker_status() and set_blocker_status(), and both expire at turn_end like any other status.
+func is_attacking(want: bool = true) -> bool:
+	return status_effects.has("attacking") == want
+
+func is_blocking(want: bool = true) -> bool:
+	return status_effects.has("blocking") == want
+
 func set_attacker_status(is_attacking: bool):
 	if(is_attacking):
 		status_effects['attacking'] = 1
