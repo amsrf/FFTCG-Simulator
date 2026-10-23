@@ -560,6 +560,11 @@ func resolve_top_effect() -> void:
 	if cards.is_empty():
 		return
 	var card: Card = cards.pop_back()
+	# CLOSE THE GAP. A card leaving the stack is the same event as a card leaving the hand: the remaining fan has to
+	# reflow, or every resolved effect leaves a hole where its card used to be. Same call the skill-proxy teardown
+	# above already makes, and it also refreshes the hover/review link (update_card_positions ends with
+	# refresh_target_display).
+	update_card_positions()
 	if card == skill_activation_proxy:
 		skill_activation_proxy = null
 		skill_mana_deferred_until_target_confirm = false
