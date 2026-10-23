@@ -62,7 +62,7 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			cfg["opponent_field"] = [
 				{"id": 41, "tapped": false},   # Squall (ice Forward 6000)
 				{"id": 43, "tapped": false},   # Snow (ice Forward) — SAME ELEMENT as Squall, so the AI can form a
-				                               # two-member ice party and the human's distribution window is reachable
+											   # two-member ice party and the human's distribution window is reachable
 				{"id": 31, "tapped": false},   # Chemist (ice Backup)
 				{"id": 32, "tapped": false},   # Chemist (ice Backup)
 				{"id": 32, "tapped": false},   # Chemist (ice) — mana for a 2nd play

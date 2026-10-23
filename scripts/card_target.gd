@@ -65,8 +65,17 @@ static func _matches_exclusion(card: Card, exclusion: Variant, source: Card) -> 
 		return matches(card, exclusion, source)
 	return false
 
-## "your"/"their" are read RELATIVE TO THE SOURCE, because that is how the cards read ("your Fire Forwards"). The literal
-## side names keep working for an effect that says them outright.
+## "your"/"their" AND "opponent" are read RELATIVE TO THE SOURCE, because that is how the cards read ("your Fire
+## Forwards", "choose 1 Forward opponent controls"). The literal side names keep working for an effect that says them
+## outright.
+##
+## "opponent" MUST be relative: it used to fall through to the literal branch, which meant the string "opponent"
+## matched the P2 cards. From the human caster that is accidentally right, but when the AI cast a "dull an opponent's
+## Forward" effect it resolved to its OWN Forwards — the card dulled itself. Any card that says "opponent" is written
+## from its controller's point of view, so resolve it the same way as "theirs".
+##
+## With no source there is nothing to be relative to, so "opponent" falls back to the literal side name (P2), which is
+## what effect criteria outside a resolution — apply_effect snapshots, probes — have always meant.
 static func _controller_matches(card: Card, wanted: String, source: Card) -> bool:
 	var mine: String = source.controller if source != null else ""
 	var theirs: String = "opponent" if mine == "player" else "player"
@@ -75,6 +84,10 @@ static func _controller_matches(card: Card, wanted: String, source: Card) -> boo
 			return source != null and card.controller == mine
 		"theirs", "their":
 			return source != null and card.controller == theirs
+		"opponent", "opponents", "enemy":
+			if source == null:
+				return card.controller == "opponent"
+			return card.controller == theirs
 		"self":
 			return card == source
 		_:
