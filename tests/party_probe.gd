@@ -188,6 +188,46 @@ func _ready() -> void:
 		guard += 1
 	_expect(solo.power == solo_before, "a lone Chocobo attacking does NOT trigger the party effect")
 
+	# --- "when a party you control DEALS DAMAGE" (Andoria 2795) ---------------------------------------------
+	# Damage, not attack: an unblocked party hitting the opponent. Andoria is a Backup watching the party.
+	_field.set("blocker_card", null)
+	var andoria: Card = _make_forward(2795, "player")
+	var hand_before: int = _game.get("hand").cards.size()
+	_form_pair()
+	_field.execute_card_attack()
+	_game.call("cause_attacking_damage")
+	guard = 0
+	while stack.stack_length() > 0 and guard < 12:
+		await stack.resolve_top_effect()
+		guard += 1
+	await get_tree().process_frame
+	print("[Party] hand after the party damage trigger: %d -> %d (Andoria=%s)" % [
+		hand_before, _game.get("hand").cards.size(), andoria.card_name])
+	_expect(_game.get("hand").cards.size() == hand_before + 1,
+		"a party dealing damage draws a card (Andoria)")
+
+	# --- "when a party you control ATTACKS" (Celestia 2808, Gippal 554) --------------------------------------
+	_field.set("blocker_card", null)
+	var celestia: Card = _make_forward(2808, "player")   # Backup: +1000 to the party
+	var gippal: Card = _make_forward(554, "player")      # Forward: +5000 to the party, and party members get Brave
+	var buff_pair: Array = _form_pair()
+	var b1: Card = buff_pair[0]
+	var b2: Card = buff_pair[1]
+	var b1_before: int = b1.power
+	var b2_before: int = b2.power
+	_field.execute_card_attack()
+	guard = 0
+	while stack.stack_length() > 0 and guard < 16:
+		await stack.resolve_top_effect()
+		guard += 1
+	print("[Party] after Celestia + Gippal: %s %d -> %d, %s %d -> %d (tapped %s/%s)" % [
+		b1.card_name, b1_before, b1.power, b2.card_name, b2_before, b2.power, b1.tapped, b2.tapped])
+	_expect(b1.power == b1_before + 6000 and b2.power == b2_before + 6000,
+		"Celestia (+1000) and Gippal (+5000) both buff every party member")
+	_expect(not b1.tapped and not b2.tapped,
+		"Gippal's \"party members gain Brave\" keeps the whole party from dulling")
+
+
 
 	# --- unblocked party deals ONE damage (fresh pair again; the previous one may have broken) ------------------
 	var pair3: Array = _form_pair()

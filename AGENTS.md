@@ -36,10 +36,20 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 
 ## Party Triggers
 
-`when_party_attack` is NOT `when_attack`. It fires once per attacking member, but only when at least TWO members
-actually attacked — a single Forward is an ordinary attack, not a party. Its instruction is
-`power_change_party(amount, duration)`, which reads `Field.party_members()` at RESOLUTION (the party is still
-selected there; `reset_attacker()` only runs after the damage step).
+There are THREE party triggers, and picking the wrong one silently does nothing:
+
+| keyword | when | fired by |
+|---|---|---|
+| `when_party_attack` | THIS card is in the party and it attacked (≥2 members) | `Field.execute_card_attack`, per member |
+| `when_party_attacks` | a party you control attacked (any card you control may watch) | `Field.trigger_party_attacks` |
+| `when_party_deals_damage` | a party you control dealt player damage (unblocked only) | `Game.cause_attacking_damage` |
+
+Use `when_party_attacks` for Backups and bystanders ("when a party you control attacks"); `when_party_attack` only for
+text that says "when THIS card forms a party and attacks". Both need a REAL party (≥2 attacking members).
+
+`power_change_party(amount, duration)` reads `Field.party_members()` at RESOLUTION (the party is still selected;
+`reset_attacker()` only runs after the damage step). `party_brave: true` on a card grants Brave to its controller's
+party members through `Card.is_brave()` → `Field.party_grants_brave()`.
 
 ## Test Grounds (one board per mechanic)
 

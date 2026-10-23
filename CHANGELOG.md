@@ -4,6 +4,32 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Party Cards, group 1 (the "watching the party" triggers)
+
+Cards whose text says "a party you control" are not members of it — Celestia and Andoria are Backups. They need triggers
+broader than `when_party_attack` (this card formed a party), so two were added, both fired for every card that side
+controls:
+
+- `when_party_attacks` — a party you control attacked (fired from `Field.execute_card_attack`)
+- `when_party_deals_damage` — a party you control dealt damage to the opponent (fired from `Game.cause_attacking_damage`,
+  only for an unblocked attack)
+
+New instruction `draw_cards(count)`, and Gippal's static "the Forwards forming a party you control gain Brave" is now
+read by `Card.is_brave()` through `Field.party_grants_brave()`.
+
+| card | effect | implemented |
+|---|---|---|
+| 2588 Chocobo (4-062C) | party +3000 | `when_party_attack` |
+| 2808 Celestia (5-134R) | party +1000 | `when_party_attacks` |
+| 554 Gippal (12-058C) | party +5000, party members gain Brave | `when_party_attacks` + `party_brave` |
+| 2795 Andoria (5-121R) | party deals damage → draw 1 | `when_party_deals_damage` |
+| 549 Boko (12-053C) | party deals damage → draw 1 | `when_party_deals_damage` |
+| 583 Mid Previa (12-087H) | party attacks → 8000 damage to an active opponent Forward | `when_party_attacks` + choose_target |
+
+Probe (party_probe, 32 checks): hand 8 → 9 after a party hit; Squall 6000 → 12000 and Snow 3000 → 9000 from Celestia +
+Gippal; and the party does not dull because of Gippal.
+
+
 ### Party Cards (1-075C, 1-076C)
 
 Both cards read "When <card> forms a party and attacks, <card> and all the Forwards forming a party with it gain +X

@@ -701,9 +701,14 @@ func has_haste() -> bool:
 	return card_effects.has("haste") or status_effects.has("haste")
 
 ## BRAVE: attacking does not dull this card, so it can attack and still block (or attack again). Same split as
-## Haste — printed "brave": true in card_effects.json, granted as a status named "brave".
+## Brave — printed "brave": true in card_effects.json, granted as a status named "brave", or granted by a party effect
+## on the field ("The Forwards forming a party you control gain Brave", Gippal). The Field is the only thing that knows
+## who is currently in a party, so it is asked rather than duplicating the rule here.
 func is_brave() -> bool:
-	return card_effects.has("brave") or status_effects.has("brave")
+	if card_effects.has("brave") or status_effects.has("brave"):
+		return true
+	var host: Node = get_parent()
+	return host != null and host.has_method("party_grants_brave") and host.call("party_grants_brave", self)
 
 ## FIRST STRIKE: this card deals its damage before a card without it. Printed "first_strike": true, or granted as
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers

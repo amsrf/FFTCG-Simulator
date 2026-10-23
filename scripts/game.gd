@@ -176,6 +176,20 @@ func power_change_targets(amount: int = 0, duration: int = 1) -> void:
 		return
 	_each_target("power_change", [amount, duration])
 
+## Draw `count` cards for the effect's controller. The generic "draw" instruction — every draw in the card pool goes
+## through here so the empty-deck rule lives in one place.
+func draw_cards(count: int = 1) -> void:
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var d = deck if owner_id == 1 else opponent_deck
+	var h: Hand = hand_for(owner_id)
+	if d == null or h == null:
+		return
+	for _i in range(maxi(0, count)):
+		if d.deck_cards.is_empty():
+			return
+		print("[Draw] P%d draws 1" % owner_id)
+		h.draw(d.deck_cards.pop_front())
+
 ## Buff EVERY member of the attacking party — "Chocobo and all the Forwards forming a party with it gain +3000 power".
 ##
 ## A party trigger has no chosen target: the card's own text says "a party", so the party currently attacking IS the
@@ -796,6 +810,10 @@ func cause_damage_to_player(player_argument):
 func cause_attacking_damage():
 	if field.blocker_card == null:
 		cause_damage()
+		# "When a party you control deals damage to your opponent" (Andoria, Boko). Only an UNBLOCKED attack deals
+		# player damage, and only a real party has the trigger.
+		if field.is_party():
+			field.trigger_party_deals_damage(controller_for(turn_owner))
 
 ## A side took damage. Checking the threshold here means every damage source —
 ## attacks and effects alike — shares one win condition.

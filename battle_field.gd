@@ -390,6 +390,40 @@ func execute_card_attack():
 	if attacking.size() >= 2:
 		for card in attacking:
 			execute_card_effect(card, 'when_party_attack')
+		# AND the wider trigger: "when A PARTY YOU CONTROL attacks" — for cards that are watching the party rather
+		# than riding in it (Celestia and Gippal are Backups/Forwards that may not be members at all).
+		trigger_party_attacks(attacker_card.controller)
+
+## Fire "a party you control attacked" for every card that side controls. Members already got their own
+## `when_party_attack`; this is the watcher form, so both shapes exist and neither has to guess.
+func trigger_party_attacks(controller: String) -> void:
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller != controller:
+			continue
+		if card.is_key_word_in_card_effect("when_party_attacks"):
+			execute_card_effect(card, "when_party_attacks")
+
+## Fire "a party you control dealt damage to the opponent" (Andoria, Boko).
+func trigger_party_deals_damage(controller: String) -> void:
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller != controller:
+			continue
+		if card.is_key_word_in_card_effect("when_party_deals_damage"):
+			execute_card_effect(card, "when_party_deals_damage")
+
+## "The Forwards forming a party you control gain Brave" (Gippal). Asked by Card.is_brave(), because that is the
+## predicate the attack path already reads per member.
+func party_grants_brave(card: Card) -> bool:
+	if card == null or attacking_party.size() < 2 or not attacking_party.has(card):
+		return false
+	for c in get_all_cards():
+		if c != null and is_instance_valid(c) and c.controller == card.controller and c.card_effects.has("party_brave"):
+			return true
+	return false
 	
 func end_phase_cleanup():
 	# End Phase cleanup: remove all damage from every card on the field and

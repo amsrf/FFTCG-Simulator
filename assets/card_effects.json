@@ -321,4 +321,49 @@
 			]
 		}
 	}
+,
+	"2588":{
+		"when_party_attack":{
+			"instructions":[
+				{"name":"power_change_party","author":"game","argument":[3000,1]}
+			]
+		}
+	},
+	"2808":{
+		"when_party_attacks":{
+			"instructions":[
+				{"name":"power_change_party","author":"game","argument":[1000,1]}
+			]
+		}
+	},
+	"554":{
+		"party_brave": true,
+		"when_party_attacks":{
+			"instructions":[
+				{"name":"power_change_party","author":"game","argument":[5000,1]}
+			]
+		}
+	},
+	"2795":{
+		"when_party_deals_damage":{
+			"instructions":[
+				{"name":"draw_cards","author":"game","argument":[1]}
+			]
+		}
+	},
+	"549":{
+		"when_party_deals_damage":{
+			"instructions":[
+				{"name":"draw_cards","author":"game","argument":[1]}
+			]
+		}
+	},
+	"583":{
+		"when_party_attacks":{
+			"choose_target":{"is_type":"Forward","controller":"opponent","is_tapped":false},
+			"instructions":[
+				{"name":"damage_targets","author":"game","argument":[8000]}
+			]
+		}
+	}
 }
