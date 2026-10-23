@@ -40,6 +40,83 @@ signal effect_card_selection_changed(has_selection: bool)
 @onready var stack: Stack = get_node("../../Stack") as Stack
 @onready var field: Field = get_node("../../Field") as Field
 
+## RETURNING A CARD FROM THE FIELD. Two phases, tuned in the Inspector:
+##   1. grow into the hand's size and rise into its plane — deliberately quick, because the card should look like it
+##      has left the board rather than drift across it
+##   2. slide into its slot at the end of the row; it joins the hand near the end of that slide
+@export var return_grow_seconds: float = 0.2
+@export var return_move_seconds: float = 0.4
+## How far toward the camera the staging point sits, in metres. Without it phase 2 is a flat slide and the card
+## scrapes along the other hand cards.
+@export var return_stage_lift: float = 0.10
+## Fraction of the slide at which the card actually joins `cards`, so the layout takes over only once it is
+## essentially in place.
+@export_range(0.5, 1.0, 0.01) var return_land_fraction: float = 0.85
+
+## Bring a card that is leaving the field into THIS hand.
+##
+## The card joins `cards` at the LANDING, not at the start, so it never participates in the layout maths while it is
+## still flying. The destination still has to be computed up front, so it is computed with the card temporarily in
+## the list and `ignore` set — that gives the right slot without the layout moving the card itself.
+##
+## Awaited by the instruction, so the effect does not carry on while a card is in limbo between zones.
+func return_card(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+
+	var index: int = cards.size()
+	cards.append(card)
+	update_card_positions(index)
+	var destination: Vector3 = calculate_card_position(index)
+	cards.erase(card)
+
+	# Keep the card's world pose across the reparent, or it teleports to the hand's origin on the first frame.
+	var trans: Transform3D = card.global_transform
+	if card.get_parent() != null:
+		card.reparent(self, false)
+	else:
+		add_child(card)
+	card.global_transform = trans
+
+	# Staging point: the slot, lifted toward the camera. Phase 2 is then a visible slide into the row rather than a
+	# scale change that happens to translate.
+	var toward_camera: Vector3 = Vector3.UP
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		toward_camera = global_transform.basis.inverse() * cam.global_transform.basis.z.normalized()
+	var stage: Vector3 = destination + toward_camera * return_stage_lift
+
+	# PHASE 1 — grow to hand size and rise into the hand's plane.
+	var grow: Tween = create_tween()
+	grow.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	grow.tween_property(card, "position", stage, return_grow_seconds)
+	grow.parallel().tween_property(card, "scale", Vector3.ONE * hand_scale, return_grow_seconds)
+	grow.parallel().tween_property(card, "rotation", Vector3.ZERO, return_grow_seconds)
+	await grow.finished
+
+	# PHASE 2 — slide into the slot, joining the hand just before it arrives.
+	var slide: Tween = create_tween()
+	slide.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	slide.tween_property(card, "position", destination, return_move_seconds)
+	var land: Tween = create_tween()
+	land.tween_interval(return_move_seconds * return_land_fraction)
+	land.tween_callback(_land_returned.bind(card))
+	await slide.finished
+
+## The card is home: it becomes a real hand card, so dragging, hovering and the fan all apply to it.
+func _land_returned(card: Card) -> void:
+	if card == null or not is_instance_valid(card) or cards.has(card):
+		return
+	cards.append(card)
+	card.index = cards.size() - 1
+	var area = card.get_node_or_null("CardArea3D")
+	if area != null and area.has_signal("card_released") and not area.card_released.is_connected(Callable(self, "_on_card_released")):
+		area.connect("card_released", Callable(self, "_on_card_released"))
+	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
+		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
+	card.enter_zone(Card.Zone.HAND)
+	update_card_positions()
+
 func draw(card):
 	add_card_to_tree(card)
 	update_card_positions(cards.size() - 1)
