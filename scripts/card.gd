@@ -610,20 +610,25 @@ func turn_end():
 		if s == "frozen":
 			continue
 		var dur = status_effects[s]
-		if dur is int:
-			dur -= 1
-			if dur <= 0:
+		# JSON NUMBERS ARRIVE AS FLOAT. `dur is int` is false for a duration parsed out of card_effects.json, so a
+		# status applied from card data never decremented and never expired — Red Mage's block_disabled, for one,
+		# was permanent. Both numeric kinds count down; anything else (a marker with no number) is left alone.
+		if dur is int or dur is float:
+			var left: int = int(dur) - 1
+			if left <= 0:
 				status_effects.erase(s)
 			else:
-				status_effects[s] = dur
+				status_effects[s] = left
 
 	var remaining_buffs: Array = []
 	for p in power_array:
 		var dur = p[1]
-		if dur is int and dur > 0:
-			dur -= 1
-			if dur > 0:
-				p[1] = dur
+		# Same float trap: "+1000 until end of turn" from the card data is a duration of 1.0, so the old `is int`
+		# test skipped it and the power never came back down.
+		if (dur is int or dur is float) and int(dur) > 0:
+			var left: int = int(dur) - 1
+			if left > 0:
+				p[1] = left
 				remaining_buffs.append(p)
 			else:
 				power -= p[0]

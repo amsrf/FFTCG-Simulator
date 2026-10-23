@@ -44,6 +44,24 @@ func _ready() -> void:
 	_field = _game.get("field")
 	var db = CardDatabase.card_database
 
+	# --- the duration AS JSON DELIVERS IT: a float ------------------------------------------------------
+	# Every number in card_effects.json parses as a float, and Card.power_change() takes untyped arguments, so a
+	# one-turn buff arrives as 1.0. turn_end() tested `dur is int`, which is FALSE for 1.0 — the buff never
+	# decremented and the power never came back. The int literals above passed while the real card did not, which
+	# is why this case is written with the exact shape the data uses.
+	var f: Card = _new_card(41, 5000)
+	f.power_change(1000.0, 1.0)
+	_expect(f.power == 6000, "a FLOAT duration applies (now %d)" % f.power)
+	f.turn_end()
+	_expect(f.power == 5000,
+		"and a float duration still wears off — this is the case the user hit (now %d)" % f.power)
+	f.add_status_effect("block_disabled", 1.0)
+	f.turn_end()
+	_expect(not f.status_effects.has("block_disabled"),
+		"a float-duration STATUS expires too (it used to be permanent)")
+	_field.remove_card(f)
+	await get_tree().process_frame
+
 	# --- the instruction: every target, and it wears off ------------------------------------------------
 	var a: Card = _new_card(41, 5000)
 	var b: Card = _new_card(41, 3000)
