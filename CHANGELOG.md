@@ -4,6 +4,55 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Removed Zones, Fragile, Break-Zone Triggers, and the 1–100 Batch (2026-10-23)
+
+**The board gained the zone the rules were missing, and the Break Zone learned when to speak.**
+
+- **Removed from the game is a real zone now.** `Card.Zone.REMOVED` (appended, never inserted — the numbers appear
+  in scenes and probes), a `zone` export on `Graveyard` so the same pile scene can be either pile, and
+  `Game.player_removed` / `opponent_removed` + `remove_targets_from_game()`. A card exiled there is invisible to
+  anything watching the Break Zone, which is the entire point.
+- **Layout:** the Break Zones moved outboard of their own decks (player `(4.45, 0.25, -2.0)`, opponent
+  `(-4.7, 0.25, 2.0)`) and the removed piles took the slots they vacated. Both piles are scaled **1.4** to match the
+  Deck — the board camera is **orthographic**, so distance changes apparent size by exactly zero and only the
+  container scale mattered (1.2 vs 1.4 was the ~14% that read as "smaller").
+- **Both mouse buttons inspect a pile.** Right-click already emitted `focus_card`; pile cards now also emit
+  `card_grabbed`, so left and right both open the zone window. The window titles the removed pile
+  "Removed from the Game".
+- **Fragile** (`status_effects["fragile"]`) is a **replacement effect**, not a trigger: `_send_card_to_graveyard()`
+  — the choke point both field→graveyard paths already used — redirects to the removed pile and returns `true`.
+  `break_card()` therefore skips `on_break()` when the card was exiled, which is the "no death triggers" half.
+  Bahamut `1-018L` applies it **before** its own damage, or the damage would break the cards first.
+- **The Break Zone incites the card, after the card is in it.** `Graveyard.add_card()` reads `from_field` and
+  `was_broken` *before* moving a card, lays the pile out, clears the flag, then calls
+  `Game.trigger_break_zone_keywords()`. `when_enter_break_from_field` fires for any card arriving from the field;
+  `when_break` only when it actually broke. `Card.on_break()` (an empty stub) is **deleted**. This closed a real
+  hole: power-0 removals previously fired no field→Break Zone trigger at all.
+- **`search_deck(filter, destination)`** — `hand` (default), `top`, `removed`, `graveyard` — and it reports success.
+  **`Instruction.condition`** ("if_last_succeeded") gives the effect language its first branch; the flag is reset
+  per chain (`fresh_chain`) so a later effect cannot read an earlier search's success.
+- **Vanille `1-093H`**: search Hecatoncheir → exile it → *if you did so* return Vanille to the field dull.
+  `return_from_break_zone()` removes the card from the pile **before** `play_card()`, so it arrives with the field's
+  scale, rotation and readout.
+- **`cannot_attack`** (Time Mage `1-049C`) lives in `Card.can_attack()`, **not** `can_tap()`: the Forward can still
+  be dulled to pay costs, it just cannot declare an attack. Every consumer already asks `can_attack()`.
+- **Animations can now overlap.** `scripts/animation_batch.gd` is `Promise.all()` for Godot (start every tween, join
+  once, never hang, never abort), and animating actions **return their tween** — `Hand.return_card()` became
+  `begin_return_card() -> Tween` built as one chained tween. Five returned Forwards land in **487 ms** instead of
+  ~3000 ms serially.
+- **The stack fan reflows when a card resolves**, matching the hand: `resolve_top_effect()` now calls
+  `update_card_positions()` after popping.
+
+**Probes added:** `removed_zone`, `fragile`, `break_zone`, `vanille`, `cannot_attack` (14 checks), all green
+alongside the existing suite.
+
+**Where the 1–100 batch stands:** 37 entries, 7 vanilla, ~56 to write. Every engine gap that was cheap is closed.
+Two structural ones remain — **conditionals** (effects that check board state, e.g. "if you control a Forward") and
+**party** (counting units) — after which the rest is data entry. Two known limitations are recorded rather than
+fixed: `search_deck()` still reads `$Player/Deck` and `$Player/Hand` (local player only), and `_auras` is keyed by
+instance id, so two auras on one card would collide.
+
+
 **Session summary.** Started from "there is no scene routing, no opponent turns, and no way to win a game". Now: a menu boots into a configurable match; turns alternate; both sides act through an `Agent` seam (human UI today, AI today, a networked player later); the AI plays cards, attacks with tap-economy judgement and blocks; the human can block; and a match ends at 7 damage. The biggest structural win was separating "parked" (awaiting its cost) from "legally on the stack" — that conflation was the root of a whole class of bugs. Along the way the `GlobalVariables` god-object was reduced to presentation state + input mode, and the leftover editor junk was swept out.
 
 The session ended on presentation and tooling: the targeting cue became a **CSS-modelled glow ring** with a distance-graded fade and an orange selected state, the targeting arrow was **rebuilt from scratch** as a generated ribbon plus real arrowhead (with the origin finally coming from the right object — the effect card in the stack), and — the change most likely to matter long term — **Godot can now be run headlessly against a probe**, so geometry, wiring and invariants are verified with printed numbers instead of being described by eye. Taste still needs eyes; almost everything else no longer does.
