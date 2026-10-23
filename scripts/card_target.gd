@@ -41,7 +41,10 @@ static func matches(card: Card, block: Dictionary, source: Card = null) -> bool:
 			if (card == source) != bool(block[key]):
 				return false
 			continue
-		if name == "controller":
+		# `check_controller` is the older spelling of the same rule, used by `conditional_power` conditions ("if you
+		# control Aerith"). It is routed HERE, not to Card.check_controller(), because that method only sees the
+		# CANDIDATE card and cannot know whose point of view "you" is.
+		if name == "controller" or name == "check_controller":
 			if not _controller_matches(card, str(block[key]), source):
 				return false
 			continue
@@ -82,6 +85,13 @@ static func _controller_matches(card: Card, wanted: String, source: Card) -> boo
 	match wanted:
 		"mine", "your", "yours":
 			return source != null and card.controller == mine
+		# "player" IS ALSO WRITTEN FROM THE CASTER'S POINT OF VIEW in this project's card data ("if you control
+		# Aerith", "activate all the Backups you control"). Resolve it relative when we know the source, and fall back
+		# to the literal P1 seat when we do not (snapshots and probes), which is what it used to mean everywhere.
+		"player":
+			if source == null:
+				return card.controller == "player"
+			return card.controller == mine
 		"theirs", "their":
 			return source != null and card.controller == theirs
 		"opponent", "opponents", "enemy":

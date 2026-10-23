@@ -194,10 +194,14 @@ func _apply_effect_block(card: Card) -> Dictionary:
 
 ## Every card on the field matching `block`, in field order — the same evaluator choose_target uses, so an apply_effect
 ## block and a choose_target block mean the same thing by the same keys.
-func _cards_matching(block: Dictionary) -> Array:
+##
+## `source` is WHO the criteria are read from, and it defaults to the effect being resolved — because "your"/"player"
+## mean the caster, not a fixed seat. Without it an AI-resolved "all the Backups you control" would hit ours.
+func _cards_matching(block: Dictionary, source: Card = null) -> Array:
+	var from: Card = source if source != null else _current_source_card
 	var found: Array = []
 	for c in field.get_all_cards():
-		if c != null and is_instance_valid(c) and c.matches_criteria(block):
+		if c != null and is_instance_valid(c) and c.matches_criteria(block, from):
 			found.append(c)
 	return found
 

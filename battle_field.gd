@@ -252,7 +252,9 @@ func activate_aura_in_field(aura:AuraValue):
 const CARD_TARGET := preload("res://scripts/card_target.gd")
 
 func add_aura_to_card(aura: AuraValue, card: Card):
-	if not CARD_TARGET.matches(card, aura.targets):
+	# `aura.source` is the card GRANTING the aura, so "your Fire Forwards" is read from its controller — not from a
+	# fixed seat. An AI-owned aura would otherwise buff the human's board.
+	if not CARD_TARGET.matches(card, aura.targets, aura.source):
 		return
 	if aura.granted.has(card):
 		return
@@ -902,18 +904,21 @@ func recompute_conditional_power() -> void:
 		var source: Card = effect["source"]
 		if source == null or not is_instance_valid(source) or not source.is_inside_tree():
 			continue
-		var desired: int = int(effect["value"]) if _condition_met(effect["condition"]) else 0
+		var desired: int = int(effect["value"]) if _condition_met(effect["condition"], source) else 0
 		if desired != source.current_conditional_bonus:
 			source.power += desired - source.current_conditional_bonus
 			source.current_conditional_bonus = desired
 			if source.power_label:
 				source.power_label.changePower(source.power)
 
-func _condition_met(condition: Dictionary) -> bool:
+## Is the condition true FOR THIS SOURCE CARD? The source is the card that owns the conditional ("if you control
+## Aerith" belongs to Zack), because "you" means its controller — without it the criteria would be read literally
+## against a fixed seat, which is the bug that made an AI-owned card check the human's board.
+func _condition_met(condition: Dictionary, source: Card = null) -> bool:
 	if condition.is_empty():
 		return false
 	for card in get_all_cards():
-		if card.matches_criteria(condition):
+		if card.matches_criteria(condition, source):
 			return true
 	return false
 

@@ -72,6 +72,43 @@ func _ready() -> void:
 	# Clean the flags so the assertion messages above cannot be confused by leftovers.
 	_field.reset_targets()
 
+	# --- conditional_power's "check_controller" reads from the CONDITIONAL'S OWNER ---------------------------------
+	# "If you control Aerith" belongs to the card that prints it, so an AI-owned copy must look at the AI's board.
+	var human_aerith: Card = _on_field(64, "player")
+	var condition: Dictionary = {"check_controller": "player", "is_named": "Aerith"}
+	_expect(bool(_field.call("_condition_met", condition, human_aerith)),
+		"for a HUMAN-owned source, the condition sees the human's Aerith")
+	# The AI-owned source is `theirs` (Snow); `mine` is the human's card and would trivially see its own Aerith.
+	_expect(not bool(_field.call("_condition_met", condition, theirs)),
+		"for the AI-owned source, it does NOT see the human's Aerith")
+
+	var ai_aerith: Card = _on_field(64, "opponent")
+	_expect(bool(_field.call("_condition_met", condition, theirs)),
+		"once the AI controls its own Aerith, the AI-owned condition is true")
+
+	# --- "all the Backups you control" from an AI source -------------------------------------------------------
+	var ai_matches: Array = _game.call("_cards_matching",
+		{"is_type": "Forward", "controller": "player"}, theirs)
+	var human_matches: Array = _game.call("_cards_matching",
+		{"is_type": "Forward", "controller": "player"}, mine)
+	_expect(ai_matches.has(theirs) and not ai_matches.has(mine),
+		"criteria resolved from an AI source match the AI's cards")
+	_expect(human_matches.has(mine) and not human_matches.has(theirs),
+		"and from a human source they match the human's")
+
+	# --- an AI-owned AURA buffs its own side -------------------------------------------------------------------
+	var mine_before: int = mine.power
+	var theirs_before: int = theirs.power
+	var aura = _field.call("add_aura",
+		{"method": "power_change", "targets": {"is_type": "Forward", "controller": "player"}, "value": 1000},
+		theirs)
+	_field.call("add_aura_to_card", aura, mine)
+	_field.call("add_aura_to_card", aura, theirs)
+	_expect(theirs.power == theirs_before + 1000,
+		"an AI-owned aura buffs the AI's Forward (%d -> %d)" % [theirs_before, theirs.power])
+	_expect(mine.power == mine_before,
+		"and not the human's (%d -> %d)" % [mine_before, mine.power])
+
 	print("[Who] %d checks | failures: %d" % [_checks, _fails])
 	print("[Who] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
