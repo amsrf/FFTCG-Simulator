@@ -57,6 +57,20 @@ func _ready() -> void:
 	# --- the two piles are physically apart -------------------------------------------------------------
 	var gap: float = removed.global_position.distance_to(grave.global_position)
 	_expect(gap > 1.0, "the two piles are in different places on the board (%.2f m apart)" % gap)
+
+	# --- SAME APPARENT SIZE AS A DECK CARD ---------------------------------------------------------------
+	# The camera is orthographic, so distance from it changes NOTHING about apparent size: the only thing that makes
+	# a pile look small is its container's scale. The Graveyard used to sit at 1.2 while the Deck sits at 1.4, which
+	# is exactly the ~14% the user noticed.
+	var deck = _game.get_node("Player/Deck")
+	var deck_scale: float = deck.global_transform.basis.get_scale().x
+	var grave_scale: float = grave.global_transform.basis.get_scale().x
+	var removed_scale: float = removed.global_transform.basis.get_scale().x
+	print("[Removed] deck %.2f · graveyard %.2f · removed %.2f" % [deck_scale, grave_scale, removed_scale])
+	_expect(absf(grave_scale - deck_scale) < 0.01,
+		"graveyard cards are the same size as deck cards (%.2f vs %.2f)" % [grave_scale, deck_scale])
+	_expect(absf(removed_scale - deck_scale) < 0.01,
+		"and so are removed cards (%.2f vs %.2f)" % [removed_scale, deck_scale])
 	print("[Removed] graveyard at %s · removed at %s" % [
 		str(grave.global_position), str(removed.global_position)])
 

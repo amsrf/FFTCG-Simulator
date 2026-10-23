@@ -87,10 +87,10 @@ transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.33584, 0.1, -0.521555)
 transform = Transform3D(0.9989946, 0.043924663, -0.008969118, 0, 0.20006494, 0.97978264, 0.04483103, -0.97879755, 0.19986379, -0.35699987, 1.0298424, -0.39699882)
 
 [node name="Graveyard" parent="Player" unique_id=1914532016 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.2, 0, -1.81195e-07, 0, 1.2, 0, 1.81195e-07, 0, -1.2, 4.45, 0.25, -2.0)
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 4.45, 0.25, -2.0)
 
 [node name="Removed" parent="Player" instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.2, 0, -1.81195e-07, 0, 1.2, 0, 1.81195e-07, 0, -1.2, -3.5, 0.25, -1.4)
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, -3.5, 0.25, -1.4)
 zone = 7
 
 [node name="Opponent" type="Node3D" parent="." unique_id=94115156]
@@ -108,10 +108,10 @@ mirror_presentation = true
 transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.597, 0.1, 0.579)
 
 [node name="Graveyard" parent="Opponent" unique_id=53191200 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.2, 0, -1.04907e-07, 0, 1.2, 0, 1.04907e-07, 0, -1.2, -4.7, 0.25, 2.0)
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -4.7, 0.25, 2.0)
 
 [node name="Removed" parent="Opponent" instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.2, 0, -1.04907e-07, 0, 1.2, 0, 1.04907e-07, 0, -1.2, 3.5, 0.25, 1.4)
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, 3.5, 0.25, 1.4)
 zone = 7
 
 [node name="Hand#Card" parent="." unique_id=291750902 instance=ExtResource("2_e2o6t")]
