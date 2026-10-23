@@ -562,6 +562,20 @@ func untap_cards_for(controller_name: String) -> void:
 	# Active Phase untaps only the turn player's cards.
 	var cards: Array[Card] = (front_cards + back_cards) if controller_name == "player" else (opponent_front_cards + opponent_back_cards)
 	for card in cards:
+		# FROZEN: "does not activate during its controller's next Active Phase."
+		#
+		# The status is CONSUMED here rather than counted down in turn_end(). A duration would be the wrong clock:
+		# turn_end() ticks every card once per turn regardless of who owns it, so a freeze applied on the victim's
+		# OWN turn would expire before their next Active Phase, and the same keyword would behave differently
+		# depending on when it was applied. Consuming it at the untap it denies is exact in both directions, and it
+		# does not stack - being Frozen twice still skips one Phase, because the second erase is a no-op.
+		#
+		# It does NOT block untap_targets(): "Activate" effects still work on a Frozen card. Freeze denies the
+		# Active Phase, not activation.
+		if card.status_effects.has("frozen"):
+			card.status_effects.erase("frozen")
+			print("[Freeze] %s does not activate" % card.card_name)
+			continue
 		card.untap()
 		
 func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):

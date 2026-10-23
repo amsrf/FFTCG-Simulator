@@ -157,6 +157,17 @@
 		"first_strike":true
 	},
 
+	"38":{
+		"ex_burst":"when_cast",
+		"when_cast":{
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[
+				{"name":"dull_targets", "author":"game", "argument":[]},
+				{"name":"add_status_to_targets", "author":"game", "argument":["frozen", 1]}
+			]
+		}
+	},
+
 	"6":{
 		"brave":true
 	},

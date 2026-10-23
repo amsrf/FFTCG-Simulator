@@ -604,6 +604,11 @@ func turn_end():
 	# End Phase cleanup for this card: expire "until end of turn" status
 	# effects and temporary power modifiers, then remove all damage.
 	for s in status_effects.keys():
+		# FROZEN IS NOT A COUNTDOWN. It is spent by the Active Phase it denies (Field.untap_cards_for), and the
+		# Active Phase comes before its controller's End Phase — so decrementing it here could only ever remove it
+		# early, never late. Any number stored for it is a formality; skipping it keeps that from being load-bearing.
+		if s == "frozen":
+			continue
 		var dur = status_effects[s]
 		if dur is int:
 			dur -= 1
@@ -689,6 +694,12 @@ func is_brave() -> bool:
 ## the question it asks.
 func is_first_strike() -> bool:
 	return card_effects.has("first_strike") or status_effects.has("first_strike")
+
+## FROZEN: does not activate during its controller's next Active Phase. Granted only - no card prints Freeze, they
+## all say "Freeze it" - so unlike Haste, Brave and First Strike there is no printed half. The status is CONSUMED
+## by the Active Phase untap it denies (see Field.untap_cards_for), not counted down in turn_end().
+func is_frozen() -> bool:
+	return status_effects.has("frozen")
 
 ## CAN THIS CARD BE TAPPED AT ALL? Summoning sickness stops it, Haste ignores it, and an already-tapped card is
 ## obviously out. EVERY cost that taps must ask THIS rather than reading `tapped` — attacking, and any skill with

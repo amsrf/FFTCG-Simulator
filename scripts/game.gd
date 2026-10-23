@@ -45,6 +45,18 @@ func untap_targets(_argument = null) -> void:
 			card.untap()
 			print("[Untap] ", card.card_name)
 
+## DULL. The counterpart of untap_targets, and the instruction most of the first 100 cards were waiting for:
+## "Dull it", "Dull all Forwards", "Dull it and Freeze it". It is also what Freeze needs in order to be applied
+## by a real card rather than only by a probe.
+##
+## It deliberately does NOT go through Card.can_tap(): dulling is not a tap COST, it is the effect. A Frozen card,
+## a summoning-sick card and a card that was just activated can all still be dulled by an opponent's effect.
+func dull_targets(_argument = null) -> void:
+	for card in _targets:
+		if card != null and is_instance_valid(card):
+			card.tap()
+			print("[Dull] ", card.card_name)
+
 ## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
 ## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
 func _apply_effect_block(card: Card) -> Dictionary:
