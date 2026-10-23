@@ -158,6 +158,50 @@ func decide_attacker(player_id: int) -> Card:
 			best = card
 	return best
 
+## ATTACK AS A PARTY when two or more untapped Forwards share an element. A party deals the SUM of its members'
+## power to a blocker, so sending two 6000 Forwards as a party is how the AI punches through something neither could
+## break alone — and it is also what exercises the human blocker's distribution window.
+##
+## Simple and deterministic on purpose: the largest same-element group wins, ties broken by total power, and that
+## whole group goes. Anything else falls back to the single-attacker heuristic.
+func decide_attackers(player_id: int) -> Array:
+	var mine: Array[Card] = _untapped_forwards(player_id)
+	if mine.size() < 2:
+		return await super.decide_attackers(player_id)
+
+	var groups: Dictionary = {}
+	for card in mine:
+		var key: String = _element_key(card)
+		if not groups.has(key):
+			groups[key] = []
+		groups[key].append(card)
+
+	var best: Array = []
+	var best_power: int = -1
+	for key in groups:
+		var group: Array = groups[key]
+		var total: int = 0
+		for c in group:
+			total += c.power
+		if group.size() > best.size() or (group.size() == best.size() and total > best_power):
+			best = group
+			best_power = total
+
+	if best.size() < 2:
+		return await super.decide_attackers(player_id)
+
+	best.sort_custom(func(a, b): return a.power > b.power)
+	print("[AI] attacking with a %d-member party (%s)" % [best.size(), _element_key(best[0])])
+	return best
+
+## Element identity for party formation: the SORTED element set, so a mono card cannot silently party with a
+## multi-element one that merely contains its element.
+func _element_key(card: Card) -> String:
+	var raw = card.element
+	var parts: Array = raw if raw is Array else [raw]
+	parts.sort()
+	return "|".join(parts)
+
 func decide_blocker(player_id: int, attacker: Card) -> Card:
 	# Blocking with a strictly bigger Forward is free: the blocker takes the
 	# attacker's power as damage (less than its own) and breaks the attacker.

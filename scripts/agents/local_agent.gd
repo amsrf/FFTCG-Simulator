@@ -23,6 +23,15 @@ func decide_attacker(_player_id: int) -> Card:
 	var field: Field = game.field
 	return field.attacker_card
 
+## The human's whole formation: they may have built a party by clicking, so the answer is the party as it stands —
+## which for a single click is a list of one.
+func decide_attackers(_player_id: int) -> Array:
+	var assistant: Assistant = game.assistant
+	assistant.set_declare_attack_button('No Attack')
+	await assistant.advance_attack_declaration_step
+	var field: Field = game.field
+	return field.party_members().duplicate()
+
 func decide_blocker(_player_id: int, attacker: Card) -> Card:
 	# The human selects a blocker by clicking their own untapped Forwards (the
 	# button label flips to "Block" once something is selected) and the button

@@ -1241,12 +1241,16 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			if local_attack:
 				GlobalVariables.push_modal(GlobalVariables.Player_Mode.ATTACKING)
 				assistant.set_declare_attack_button('No Attack')
-			var attacker: Card = await attacker_agent.decide_attacker(turn_owner)
+			# A PARTY IS A LIST. The human's clicks already formed theirs; the AI's list has to be applied. Both go
+			# through the same rebuild so there is one definition of "what is attacking".
+			var attackers: Array = await attacker_agent.decide_attackers(turn_owner)
 			if local_attack:
 				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.ATTACKING)
-			if attacker != null:
-				if field.attacker_card != attacker:
-					field.set_attacker(attacker)
+			field.reset_attacker()
+			if not attackers.is_empty() and attackers[0] != null:
+				field.set_attacker(attackers[0])
+				for i in range(1, attackers.size()):
+					field.add_party_member(attackers[i])
 				field.execute_card_attack()
 			await priority()
 			#await declare_attacker()

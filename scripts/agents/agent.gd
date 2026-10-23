@@ -41,6 +41,16 @@ func decide_attacker(_player_id: int) -> Card:
 	await _settle()
 	return null
 
+## The attackers this player declares, in party order. A single attack is a list of one, so every caller can treat
+## parties and single attacks the same way. The default forwards decide_attacker(), which keeps MockAgent and any
+## future agent working without knowing about parties.
+func decide_attackers(player_id: int) -> Array:
+	var one: Card = await decide_attacker(player_id)
+	var out: Array = []
+	if one != null:
+		out.append(one)
+	return out
+
 ## Return the blocker to declare, or null to not block.
 func decide_blocker(_player_id: int, _attacker: Card) -> Card:
 	await _settle()
