@@ -60,6 +60,7 @@ const MILL_RIKKU := 89   # Rikku: skill 風+dull mills 1; S skill 風+dull mills
 const MILL_THIEF := 69   # Thief, Forward: enters the field -> opponent mills 1
 const MILL_THIEF_BACKUP := 70  # Thief, Backup: same ETB, already on the board here
 const SUMMONER := 53     # Summoner: 《Ice》, put itself into the Break Zone: cancel a Summon on the STACK
+const CECIL := 108       # Cecil: "When you receive damage, choose 1 Forward opponent controls. You may deal it 5000 damage."
 
 
 static func clean() -> Dictionary:
@@ -191,6 +192,20 @@ static func counter_summon() -> Dictionary:
 	return cfg
 
 
+static func cecil_damage() -> Dictionary:
+	## 108 CECIL. Press Y to take 1 damage; Cecil's event trigger asks whether to deal 5000 to an opponent Forward.
+	## The three opponent Forwards are deliberately sturdy (6000/7000/8000) so 5000 shows as accumulated damage
+	## rather than immediately breaking the target.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_cecil"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": CECIL}]
+	cfg["player_hand"] = []
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": 47}, {"id": DARK_KNIGHT}]
+	cfg["opponent_hand"] = []
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -224,6 +239,10 @@ const GROUNDS := {
 		"title": "Ground: Counter a Summon (targeting the stack)",
 		"blurb": "Cast the Ifrit in your hand at Squall and confirm. While it waits on the stack, click Summoner, pay the ice, then click the Ifrit ON THE STACK: it is cancelled and Squall takes no damage.",
 	},
+	"cecil": {
+		"title": "Ground: Cecil 108 (damage received)",
+		"blurb": "Press Y to take 1 damage. Cecil may deal 5000 to one opponent Forward: Confirm, then click a target. All three opponent Forwards survive the hit.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -246,6 +265,8 @@ static func config(name: String) -> Dictionary:
 			return terra_cost()
 		"counter":
 			return counter_summon()
+		"cecil":
+			return cecil_damage()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()

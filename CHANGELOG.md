@@ -31,8 +31,10 @@ Cards:
 * **215 Lenne** — when the opponent casts a Summon, untap her.
 * **213 Tidus** — its Yuna-leaves trigger draws 2; only the “Brave while you control Yuna” condition still needs code.
 
-`tests/event_triggers_probe.gd` (12 checks). Boot 0 errors; full suite green.
-Coverage: 99 implemented / 4 vanilla / 14 needs code.
+`tests/event_triggers_probe.gd` (12 checks). Test Mode now has a **Cecil 108** ground: press Y to take damage, then
+Confirm and pick one of three sturdy opponent Forwards.
+
+Boot 0 errors; full suite green. Coverage: 99 implemented / 4 vanilla / 14 needs code.
 
 
 ### B4a: Counted Cost Reductions and Filtered Cost Aura (177, 187, 210, 213)

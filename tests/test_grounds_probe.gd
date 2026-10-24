@@ -144,6 +144,16 @@ func _ready() -> void:
 	_expect(counter["opponent_type"] == "mock",
 		"the opponent is passive, so the stack only changes when you say so")
 
+	# --- the Cecil 108 ground: damage received -> optional 5000 ---------------------------------------------
+	var cecil: Dictionary = GROUNDS.cecil_damage()
+	var cecil_field: Array = []
+	for e in cecil["player_field"]:
+		cecil_field.append(int(e["id"]))
+	_expect(cecil_field.has(GROUNDS.CECIL), "the Cecil ground puts Cecil 108 on your board")
+	_expect(cecil["opponent_field"].size() == 3, "with three opponent Forwards to choose from")
+	_expect(cecil["opponent_type"] == "mock", "the opponent is passive, so only your Y key causes damage")
+	_expect(cecil["player_deck"].size() >= 7, "the deck has enough cards for repeated Y presses")
+
 	# --- boot one for real -------------------------------------------------------------------------------
 	# The party ground is the one that must not move on its own, so it is the most useful smoke test.
 	MatchSetup.config = MatchSetup.build_config("party")
