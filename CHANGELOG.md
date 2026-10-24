@@ -4,6 +4,31 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Auron's protection: a query, not a status (card 2)
+
+"The Backups you control cannot be broken by your opponent's Summons or abilities" is now a CONTINUOUS field query,
+`Field.is_protected_from_break(card, source_controller, source_kind)`, asked from `break_card()`:
+
+```json
+"2": { "protects": { "targets": {"is_type": "Backup", "controller": "player"},
+                     "from": "opponent", "by": ["Summon", "Ability"] } }
+```
+
+Why not a status on each Backup: the protected set changes (a Backup that arrives later must be covered with no
+refresh, one that leaves needs no cleanup), the status would still need the cause to be passed in, and Backups are not
+the only future user of this rule.
+
+To make the cause available, damage now records it: `Card.last_damage_kind` / `last_damage_controller`, set by
+`suffer_damage(damage, kind, controller)` (empty kind = combat, which also clears a stale record). The state-based
+sweep passes those into `break_card()`, so a break caused later by Summon damage asks the same question as an explicit
+"break it". `damage_targets`, `damage_forward` and `break_targets` pass `_effect_kind()` ("Summon" when the source is a
+Summon, otherwise "Ability") and `_current_controller`.
+
+Coverage: **58 implemented / 7 plain / 35 to do**. New probe `protection_probe` (12 checks): the full matrix
+(opponent Summon/Ability blocked, own ability allowed, combat not covered, Backups only, opponent's Backups only),
+`break_card()` refusing, a Backup that enters later already covered, and damage recording its cause.
+
+
 ### Bloodfest: divide damage among chosen targets (Yuffie 85)
 
 The S ability is complete: **choose up to 3 Forwards → Confirm → distribute 6000 damage in 1000-point steps →

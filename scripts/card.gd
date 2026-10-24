@@ -578,16 +578,24 @@ func untap():
 	print("  position: ", position)
 # Call this before/after animations	'''
 	
-func suffer_damage(damage: int):
+## WHO/WHAT dealt the most recent damage. The state-based break happens later, in a sweep that cannot see the source,
+## so the damage records it here and the sweep asks the same protection question an explicit break does.
+## An empty kind means COMBAT damage — nobody's Summon or ability — which is also what clears a stale record.
+var last_damage_kind: String = ""
+var last_damage_controller: String = ""
+
+func suffer_damage(damage: int, source_kind: String = "", source_controller: String = ""):
 	# Damage accumulates; the card breaks once the total reaches its current
 	# power (enforced by Game.enforce_game_state_rules()).
+	last_damage_kind = source_kind
+	last_damage_controller = source_controller
 	accumulated_damage += damage
 	if power_label:
 		power_label.changeAccumulatedDamage(accumulated_damage)
 
-func take_damage(damage: int):
+func take_damage(damage: int, source_kind: String = "", source_controller: String = ""):
 	# Alias kept for effect data that uses the "take_damage" instruction.
-	suffer_damage(damage)
+	suffer_damage(damage, source_kind, source_controller)
 
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.

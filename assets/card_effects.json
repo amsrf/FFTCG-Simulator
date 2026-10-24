@@ -565,4 +565,12 @@
 	"86":{
 		"cannot_be_blocked_by":{"min_cost":3}
 	}
+,
+	"2":{
+		"protects":{
+			"targets":{"is_type":"Backup","controller":"player"},
+			"from":"opponent",
+			"by":["Summon","Ability"]
+		}
+	}
 }

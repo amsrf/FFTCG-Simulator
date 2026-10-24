@@ -43,6 +43,19 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Break Protection (Auron)
+
+Protection is a CONTINUOUS QUERY, not a status stamped on each protected card:
+`Field.is_protected_from_break(card, source_controller, source_kind)`, asked at the top of `break_card()`. The rule
+lives on the protector as `"protects": {"targets": {...}, "from": "opponent", "by": ["Summon","Ability"]}`, with
+`targets` read from the protector's perspective. Late arrivals are covered for free; nothing needs cleanup.
+
+**The break must know its cause.** `Card.suffer_damage(damage, kind, controller)` records `last_damage_kind` /
+`last_damage_controller` (empty kind = combat, which also clears a stale record), and the state-based sweep passes them
+into `break_card()`. `damage_targets` / `damage_forward` / `break_targets` pass `_effect_kind()` ("Summon" if the
+source card is a Summon, else "Ability") and `_current_controller`. Any NEW damage path must do the same or protection
+will silently not apply to it.
+
 ## Divide Damage
 
 "Divide N damage among them as you like" is a `divide_damage` instruction, but the PLAYER'S CHOICE happens **before

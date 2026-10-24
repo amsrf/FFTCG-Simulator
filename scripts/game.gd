@@ -162,7 +162,12 @@ func dull_targets(_argument = null) -> void:
 func damage_targets(amount: int = 0) -> void:
 	if amount <= 0:
 		return
-	_each_target("suffer_damage", [amount])
+	# THE CAUSE GOES WITH THE DAMAGE. Protection like Auron's is judged when the break happens — possibly later, in
+	# the state-based sweep — so each card records who dealt this and with what.
+	for card in _targets:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.suffer_damage(amount, _effect_kind(), _current_controller)
+	enforce_game_state_rules()
 
 ## BREAK every target. "Choose 1 Forward. Break it." — 17 cards in the first hundred say this and none could be
 ## expressed until now.
@@ -177,7 +182,14 @@ func break_targets(_argument = null) -> void:
 	for card in _targets:
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			print("[Break] ", card.card_name)
-			break_card(card)
+			break_card(card, _current_controller, _effect_kind())
+
+## "Summon" when the effect's source card IS a Summon, otherwise "Ability". Used to describe a break/damage's cause so
+## protection rules like "cannot be broken by opponent's Summons or abilities" can tell the difference.
+func _effect_kind() -> String:
+	if _current_source_card != null and is_instance_valid(_current_source_card) and _current_source_card.type == "Summon":
+		return "Summon"
+	return "Ability"
 
 ## Promise.all() for animations. Preloaded by path rather than referenced by class name: a class_name added since the
 ## editor last scanned is not in the global cache during a headless run, and this project has been bitten by that
@@ -1096,7 +1108,7 @@ func damage_player(amount: int = 1) -> void:
 
 func damage_forward(damage):
 	var card: Card = _targets[0]
-	card.suffer_damage(damage)
+	card.suffer_damage(damage, _effect_kind(), _current_controller)
 	enforce_game_state_rules()
 	
 func set_attacker(card):
@@ -1506,8 +1518,10 @@ func enforce_game_state_rules() -> void:
 	for card in field.get_zero_power_cards():
 		put_card_into_graveyard(card)
 	# 2) Accumulated damage greater than current power: the card is broken.
+	# THE SWEEP HAS NO IDEA WHAT DEALT THE DAMAGE, so the card carries it (Card.last_damage_kind/controller) and the
+	# same protection question an explicit break asks can be answered here too.
 	for card in field.get_breakable_cards():
-		break_card(card)
+		break_card(card, card.last_damage_controller, card.last_damage_kind)
 
 ## THE FIELD -> BREAK ZONE CHOKE POINT, and therefore the place where a REPLACEMENT effect belongs.
 ##
@@ -1556,10 +1570,16 @@ func put_card_into_graveyard(card: Card) -> void:
 	field.remove_card(card)
 	_send_card_to_graveyard(card)
 
-func break_card(card: Card):
+## Break `card`. `source_kind`/`source_controller` describe the CAUSE ("Summon"/"Ability" and who controlled it), so
+## continuous protection rules can be asked before anything moves; the state-based sweep passes the card's recorded
+## last damage source, and combat passes an empty kind.
+func break_card(card: Card, source_controller: String = "", source_kind: String = ""):
 	if not card.is_on_field():
 		return
 	if 'unbreakable' in card.status_effects:
+		return
+	if field.is_protected_from_break(card, source_controller, source_kind):
+		print("[Protect] %s cannot be broken by that effect" % card.card_name)
 		return
 	# MARK IT, then move it. The flag is what distinguishes a BREAK from an ordinary removal, and it is set here
 	# because this is the only function that knows the damage reached the power.

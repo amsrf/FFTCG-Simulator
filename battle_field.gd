@@ -1274,6 +1274,45 @@ func set_blockable(controller: String, enabled: bool) -> void:
 ##
 ## The status expires on its own: Card.turn_end() decrements it, so "this turn" is enforced by construction and there is
 ## no second place that has to remember to take it off.
+## "The Backups you control cannot be broken by your opponent's Summons or abilities" (Auron).
+##
+## A CONTINUOUS rule, asked at the moment of the break — no per-card statuses. That matters because the protected set
+## changes: a Backup that arrives later is covered with no refresh, and one that leaves needs no cleanup. The cost is
+## that whoever asks must know the cause, which is why damage records its source on the card.
+##
+## Data on the protector:
+##   "protects": {"targets": {"is_type": "Backup", "controller": "player"},
+##                "from": "opponent", "by": ["Summon", "Ability"]}
+## `targets` is read from the PROTECTOR's perspective, and `by` may be omitted to mean any effect.
+func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
+	if card == null or source_kind.is_empty():
+		# An empty kind is combat damage — no Summon or ability to be protected from.
+		return false
+	for protector in get_all_cards():
+		if protector == null or not is_instance_valid(protector):
+			continue
+		var rules = protector.card_effects.get("protects", [])
+		if rules is Dictionary:
+			rules = [rules]
+		if not (rules is Array):
+			continue
+		for rule in rules:
+			if not (rule is Dictionary):
+				continue
+			var targets: Dictionary = rule.get("targets", {})
+			if not card.matches_criteria(targets, protector):
+				continue
+			var scope: String = str(rule.get("from", ""))
+			if scope == "opponent" and source_controller == protector.controller:
+				continue
+			if (scope == "own" or scope == "controller") and source_controller != protector.controller:
+				continue
+			var kinds: Array = rule.get("by", [])
+			if not kinds.is_empty() and not (source_kind in kinds):
+				continue
+			return true
+	return false
+
 func can_block(card: Card) -> bool:
 	if card == null:
 		return false
