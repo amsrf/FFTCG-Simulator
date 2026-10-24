@@ -11,13 +11,13 @@ extends RefCounted
 ## Field keeps thin forwarders (`effective_cost`, `modify_damage`, `is_protected_from_being_chosen`,
 ## `is_protected_from_break`) so existing call sites and probes do not care where the implementation lives.
 
-var game: Node = null
+## The BOARD this rulebook reads. No Game reference: these queries only need the cards, and keeping the dependency to
+## one object is what makes the layer honestly separable.
 var field: Node = null
 
 
-func bind(game_root: Node) -> void:
-	game = game_root
-	field = game_root.get("field")
+func bind(board: Node) -> void:
+	field = board
 
 
 func _cards() -> Array:

@@ -6,8 +6,8 @@ All notable changes to the FF TCG Simulator project.
 
 ### Rules split out of Field
 
-The four CONTINUOUS-EFFECT QUERIES now live in `scripts/rules.gd`, owned by `Game` as `rules` and bound before
-`start_match`:
+The four CONTINUOUS-EFFECT QUERIES now live in `scripts/rules.gd`, owned by the BOARD as `Field.rules` and bound in
+`Field._ready`:
 
 ```
 effective_cost(card)

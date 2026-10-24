@@ -45,7 +45,8 @@ Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_
 
 ## Rules live in scripts/rules.gd, not in Field
 
-`Game.rules` owns the CONTINUOUS-EFFECT QUERIES: `effective_cost`, `modify_damage`,
+`Field.rules` owns the CONTINUOUS-EFFECT QUERIES (created in `Field._ready`, bound to the board, NO Game
+reference): `effective_cost`, `modify_damage`,
 `is_protected_from_being_chosen`, `is_protected_from_break`. Field keeps one-line forwarders so callers and probes are
 unchanged. Registration and stateful ledgers (`_auras`, `_power_per_effects`, `_conditional_effects`) still live on
 Field, because it is the only thing that knows when a card enters or leaves.

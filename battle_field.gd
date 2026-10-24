@@ -3,6 +3,15 @@ class_name Field
 
 
 const CARD_CHARGE = 1
+const RULES := preload("res://scripts/rules.gd")
+## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
+## work as soon as the board exists and never depend on the parent's initialisation order.
+var rules = null
+
+func _ready() -> void:
+	rules = RULES.new()
+	rules.bind(self)
+
 var front_cards: Array[Card] = []
 var back_cards: Array[Card] = []
 var opponent_front_cards: Array[Card] = []
@@ -1393,19 +1402,19 @@ func set_blockable(controller: String, enabled: bool) -> void:
 ## ("all the Backups") still hits the card, because it was never chosen.
 ##
 ##   "shields": {"targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon", "Ability"]}
-## The rules that read the board live in scripts/rules.gd (Game owns the instance as `rules`). These forwarders keep
-## the Field API stable for every existing caller and probe, so moving a rule out is a one-line change here.
+## The rules that read the board live in scripts/rules.gd, owned by this node as `rules`. These forwarders keep the
+## Field API stable for every existing caller and probe, so moving a rule out is a one-line change here.
 func effective_cost(card: Card) -> Dictionary:
-	return get_parent().rules.effective_cost(card)
+	return rules.effective_cost(card)
 
 func is_protected_from_being_chosen(card: Card, source: Card, source_kind: String) -> bool:
-	return get_parent().rules.is_protected_from_being_chosen(card, source, source_kind)
+	return rules.is_protected_from_being_chosen(card, source, source_kind)
 
 func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
-	return get_parent().rules.is_protected_from_break(card, source_controller, source_kind)
+	return rules.is_protected_from_break(card, source_controller, source_kind)
 
 func modify_damage(source: Card, target: Card, amount: int) -> int:
-	return get_parent().rules.modify_damage(source, target, amount)
+	return rules.modify_damage(source, target, amount)
 
 func can_block(card: Card) -> bool:
 	if card == null:

@@ -41,10 +41,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	var field = game.get("field")
-	var rules = game.get("rules")
-	_expect(rules != null, "Game owns a Rules instance")
-	_expect(rules.field == field, "bound to the board")
-	_expect(rules.game == game, "and to the match")
+	var rules = field.get("rules")
+	_expect(rules != null, "the FIELD owns a Rules instance")
+	_expect(rules.field == field, "bound to that board")
+	_expect(rules.get("game") == null, "and it holds no Game reference — the queries only need the cards")
 
 	var cards: Dictionary = {}
 	for c in field.get_all_cards():
