@@ -631,7 +631,23 @@
 		]
 	}
 ,
-	"5":{"damage_double":{"is_type":"Forward","min_cost":4}}
+	"5": {
+		"damage_modifiers": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"is_cost_at_least": 4
+				},
+				"conditions": [
+					{
+						"source_is_self": true
+					}
+				],
+				"operation": "multiply",
+				"value": 2
+			}
+		]
+	}
 ,
 	"9":{
 		"conditional_power":[{"condition":{"is_type":"Forward","controller":"player","is_category":"VII","exclude":{"is_named":"Cloud"}},"value":2000}],
@@ -2636,16 +2652,86 @@
 					}
 				]
 			}
+		],
+		"damage_modifiers": [
+			{
+				"targets": {
+					"is_source": true
+				},
+				"conditions": [
+					{
+						"status": "next_damage_zero"
+					}
+				],
+				"operation": "set",
+				"value": 0,
+				"consume_status": "next_damage_zero"
+			}
 		]
 	},
 	"165": {
-		"party_damage_zero": true
+		"damage_modifiers": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"exclude": {
+						"is_source": true
+					}
+				},
+				"conditions": [
+					{
+						"in_party_with_self": true
+					}
+				],
+				"operation": "set",
+				"value": 0
+			}
+		]
 	},
 	"166": {
-		"party_damage_zero": true
+		"damage_modifiers": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"exclude": {
+						"is_source": true
+					}
+				},
+				"conditions": [
+					{
+						"in_party_with_self": true
+					}
+				],
+				"operation": "set",
+				"value": 0
+			}
+		]
 	},
 	"171": {
-		"damage_zero_if_below_power": true
+		"damage_modifiers": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"controller": "player"
+				},
+				"conditions": [
+					{
+						"compare_values": {
+							"left": {
+								"context": "amount"
+							},
+							"op": "lt",
+							"right": {
+								"context": "target",
+								"property": "power"
+							}
+						}
+					}
+				],
+				"operation": "set",
+				"value": 0
+			}
+		]
 	},
 	"176": {
 		"ex_burst": "when_enter_field",
@@ -2662,5 +2748,181 @@
 			]
 		},
 		"break_zone_exile": true
+	},
+	"_definitions": {
+		"about": "Machine-readable reference for this file. Keys beginning with _ are documentation, not card ids.",
+		"context": {
+			"what": "A generic dictionary built by the event being evaluated. Value refs read it by key.",
+			"event_keys": {
+				"self": "The card whose rule/condition is being evaluated.",
+				"source": "The card that caused the event (damage source, effect source, ...); may be null.",
+				"target": "The card affected by the event.",
+				"amount": "Current damage amount; updated after each damage modifier.",
+				"source_kind": "Summon or Ability when the caller knows it.",
+				"source_controller": "Controller of the event source when known."
+			},
+			"value_ref": {
+				"literal": "A number, string or bool is used as-is.",
+				"raw": "{\"context\": \"amount\"} reads context.amount.",
+				"card": "{\"context\": \"target\", \"property\": \"power\"} reads a whitelisted Card property."
+			},
+			"card_properties": [
+				"power",
+				"cost",
+				"accumulated_damage",
+				"tapped",
+				"card_name",
+				"type",
+				"controller"
+			]
+		},
+		"damage_modifiers": {
+			"what": "Replacement effects applied before damage lands. Every rule on every card on the field is asked.",
+			"fields": {
+				"targets": "CardTarget criteria; evaluated with the rule owner as source.",
+				"conditions": "One block or an array of blocks; all must be true.",
+				"operation": "set | multiply | add | subtract.",
+				"value": "Number or a value ref.",
+				"consume_status": "Optional status erased from the target when the rule applies."
+			},
+			"operations": {
+				"set": "Replace the current amount.",
+				"multiply": "current * value, rounded to int.",
+				"add": "current + value.",
+				"subtract": "max(0, current - value)."
+			}
+		},
+		"conditions": {
+			"compare_values": "Object {left, op, right}; op is eq, neq, lt, lte, gt or gte.",
+			"source_is_self": "source == self. Use for 'if this card deals damage'.",
+			"in_party_with_self": "target and self are both members of the current attacking party.",
+			"status": "target.status_effects has this status.",
+			"source_kind": "String or array matched against source_kind."
+		},
+		"targets": {
+			"is_type": "Exact card type: Forward, Backup, Summon, Monster.",
+			"is_type_any": "Array of accepted types.",
+			"is_element": "Element key, e.g. 火, 氷, 風, 土, 雷, 水, 光, 闇.",
+			"is_named": "Exact card name.",
+			"is_job": "Job contains this string (case-insensitive); all_jobs matches every job.",
+			"is_cost_at_least": "cost >= value.",
+			"is_cost_at_most": "cost <= value.",
+			"is_cost_lower_than": "cost < value.",
+			"is_tapped": "Card is dulled/tapped.",
+			"is_damaged": "Card has accumulated damage.",
+			"is_attacking": "Card has the attacking status.",
+			"is_blocking": "Card has the blocking status.",
+			"is_character": "Type is Forward, Backup or Monster.",
+			"controller": "player / opponent, or mine / yours / theirs relative to the rule source.",
+			"check_controller": "Legacy spelling routed through the same controller rule.",
+			"exclude": "A criteria block, or array of blocks, that the card must NOT match.",
+			"is_source": "The candidate is the rule/effect source.",
+			"count": "Number of targets for a targeting session.",
+			"in": "Target domain: field (default) or stack."
+		},
+		"triggers": {
+			"when_enter_field": "When this card enters the field.",
+			"when_attack": "When this card attacks.",
+			"when_cast": "When this card is cast.",
+			"when_blocks": "When this card is declared as a blocker.",
+			"when_blocked": "When this card is blocked.",
+			"when_chosen": "When this card is chosen by an opponent's Summon or ability.",
+			"when_cause_damage_to_player": "When this card deals damage to a player.",
+			"when_enter_break_from_field": "When this card is put from the field into the Break Zone.",
+			"when_break": "When this card is broken.",
+			"when_party_attack": "When this card forms a party and attacks.",
+			"when_party_attacks": "When a party you control attacks.",
+			"when_party_deals_damage": "When a party you control deals damage to the opponent.",
+			"ex_burst": "Effect resolved when this card becomes damage; value names the trigger to execute.",
+			"skill": "Activated abilities; see skill_fields.",
+			"aura": "Continuous effect; method is power_change or grant_status.",
+			"conditional_power": "Self power bonus while a condition holds.",
+			"power_per": "Power per matching card or per point of damage received.",
+			"protects": "Prevents cards matching targets from being broken by the given causes.",
+			"shields": "Prevents cards matching targets from being chosen by the given causes.",
+			"cost_aura": "Modifies the cost of matching cards.",
+			"self_cost": "Modifies this card's own cost while a condition holds.",
+			"damage_modifiers": "Damage replacement effects; see damage_modifiers.",
+			"on_character_enter": "Static rule applied when a Character enters the field.",
+			"on_causing_damage_to_forward": "Rider attached to a Forward damaged by this card.",
+			"break_zone_exile": "While on the field, Characters put into the Break Zone may be exiled instead.",
+			"cannot_be_chosen": "Printed protection from being chosen.",
+			"cannot_be_blocked_by": "Printed restriction on which Forwards may block this card.",
+			"cannot_block": "Printed restriction on which Forwards this card may block.",
+			"haste": "Printed Haste.",
+			"brave": "Printed Brave.",
+			"first_strike": "Printed First Strike.",
+			"party_brave": "This card grants Brave to party members while it is in the party.",
+			"all_jobs": "This card counts as every job.",
+			"activated_ability": "Non-tap activated ability data.",
+			"ex_burst_disabler": "Damage from this card suppresses EX Burst.",
+			"apply_effect": "Top-level target set for the trigger or skill; used by mass instructions."
+		},
+		"skill_fields": {
+			"cost": "Mana cost by element plus neutral.",
+			"tap": "Dull the source as part of the cost.",
+			"s_cost": "Discard a card with the same name as part of the cost.",
+			"sacrifice": "Put a matching card, or is_source, into the Break Zone as a cost.",
+			"discard": "Discard N cards as a cost.",
+			"only_your_turn": "Can be activated only during its controller's turn.",
+			"only_if_blocking": "Can be activated only while the source is blocking.",
+			"text": "Human-readable ability text for the choice window.",
+			"apply_effect": "Target set for the skill's instructions.",
+			"choose_target": "Targeting criteria; may be a staged array.",
+			"instructions": "Instruction list resolved on the stack."
+		},
+		"instructions": {
+			"add_status_effect": "Add a status to the source card.",
+			"add_status_to_targets": "Add a status to every chosen target.",
+			"break_targets": "Break every chosen target.",
+			"break_zone_to_hand": "Choose a card in the Break Zone and add it to hand.",
+			"cancel_targets": "Remove chosen cards from the stack.",
+			"cast_summon_for_free": "Cast a Summon from hand without paying.",
+			"controller_discards": "The effect's controller discards N.",
+			"damage_targets": "Deal N damage to every chosen target.",
+			"discard_cards": "Discard N cards from the effect controller's hand.",
+			"divide_damage": "Apply the split chosen for the selected targets.",
+			"double_power": "Double the source card's power.",
+			"draw_cards": "Draw N cards.",
+			"dull_targets": "Dull/tap every chosen target.",
+			"each_player_discards": "Each player discards N.",
+			"extra_attacks_from_damage": "Allow extra attacks equal to damage taken.",
+			"look_top_may_bottom": "Look at the top card; may put it on the bottom.",
+			"may_play_for_free": "May play a matching card for free.",
+			"opponent_discards": "The opponent of the effect controller discards N.",
+			"opponent_mills": "The opponent of the effect controller mills N.",
+			"play_from_break_zone": "Choose a matching Break Zone card and play it.",
+			"play_from_hand": "Choose a matching hand card and play it.",
+			"power_change": "Change the source or target's power.",
+			"power_change_matching": "Change power of all cards matching criteria.",
+			"power_change_party": "Change power of all party members.",
+			"power_change_targets": "Change power of every chosen target.",
+			"power_change_targets_if_blocking": "Change power; different amount while blocking.",
+			"put_hand_card_on_bottom": "Choose a hand card and put it on the bottom of the deck.",
+			"return_from_break_zone": "Return the source from the Break Zone to the field.",
+			"return_targets_to_hand": "Return every chosen target to its owner's hand.",
+			"search_deck": "Search the deck with a filter; destination is optional.",
+			"set_extra_attacks": "Set the source's extra attacks.",
+			"suffer_damage": "Make the source card suffer damage.",
+			"take_damage": "A side takes N damage.",
+			"take_damage_to_controller": "Damage the source's controller.",
+			"tap": "Dull/tap the source card.",
+			"untap_all_matching": "Untap all cards matching criteria.",
+			"untap_targets": "Untap every chosen target."
+		},
+		"statuses": {
+			"summoning_sickness": "Cannot tap until the next Active Phase.",
+			"frozen": "Does not activate in the next Active Phase.",
+			"skip_next_active": "Skips the next Active Phase and is consumed.",
+			"next_damage_zero": "The next damage dealt to this card becomes 0.",
+			"cannot_attack": "Cannot attack until it expires.",
+			"block_disabled": "Cannot block.",
+			"cannot_be_chosen": "Granted protection from being chosen.",
+			"first_strike": "Granted First Strike.",
+			"brave": "Granted Brave.",
+			"haste": "Granted Haste.",
+			"fragile": "Exiled instead of entering the Break Zone.",
+			"raines_mark": "Cid Raines' on-break discard rider."
+		}
 	}
 }

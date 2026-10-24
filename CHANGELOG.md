@@ -4,10 +4,46 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Generic Damage Modifiers: context, compare_values and definitions
+
+`Rules.modify_damage()` is now the one damage-modifier pipeline. It reads `damage_modifiers` from every card on the
+field and applies them before `suffer_damage`:
+
+```json
+"damage_modifiers": [{
+  "targets": {...},
+  "conditions": [...],
+  "operation": "set|multiply|add|subtract",
+  "value": 0,
+  "consume_status": "optional"
+}]
+```
+
+This replaces three one-off mechanisms:
+
+* `damage_double` (Warrior of Light 5) becomes a `multiply` rule.
+* `party_damage_zero` (165/166 Knight) becomes a `set 0` rule with `in_party_with_self`.
+* `damage_zero_if_below_power` (171 Minwu) becomes a `set 0` rule with `compare_values`.
+
+The generic CONTEXT passed to every rule is a dictionary: `self` (rule owner), `source` (card that caused the event,
+may be null), `target` (card affected), `amount` (current damage, updated after each modifier), plus `source_kind` and
+`source_controller`. Values are read with `{"context": "amount"}` or
+`{"context": "target", "property": "power"}`; only whitelisted Card properties are readable. `compare_values` supports
+`eq`, `neq`, `lt`, `lte`, `gt`, `gte`. Named conditions remain for relations that are not numeric comparisons:
+`source_is_self`, `in_party_with_self`, `status`, `source_kind`.
+
+`card_effects.json` now carries a top-level `_definitions` object documenting context, damage modifiers, conditions,
+targets, trigger keywords, skill fields, every instruction used in the file, and status markers. The data probe skips
+`_` keys and validates modifier operations/conditions.
+
+`tests/damage_modifiers_probe.gd` (12 checks) covers all four operations, literal and context comparisons, Card
+property references, `source_is_self`, status gating and `consume_status`. The B2, WoL and rules probes are unchanged
+in behavior.
+
+
 ### B2: Damage Prevention and Yuna's Exile (160, 165, 166, 171, 176)
 
-Damage prevention is now a layer in `Field.cause_damage`, applied after `Rules.modify_damage` (doubling) and before
-`suffer_damage`:
+The B2 prevention cards now use the generic damage-modifier pipeline described above:
 
 * **160 Gordon** — a `next_damage_zero` status, consumed by the damage it prevents or expiring in `turn_end()`.
 * **165/166 Knight** — if the target Forward is in a party with a Knight, the OTHER members take 0. Live

@@ -1619,8 +1619,8 @@ func is_protected_from_being_chosen(card: Card, source: Card, source_kind: Strin
 func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
 	return rules.is_protected_from_break(card, source_controller, source_kind)
 
-func modify_damage(source: Card, target: Card, amount: int) -> int:
-	return rules.modify_damage(source, target, amount)
+func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "") -> int:
+	return rules.modify_damage(source, target, amount, source_kind, source_controller)
 
 ## THE ONE PLACE DAMAGE LANDS. Effect damage, combat, party damage and first-strike steps all come through here, so
 ## "when this card deals damage to a Forward, ..." riders are applied at the same moment on every path rather than
@@ -1630,54 +1630,11 @@ func cause_damage(target: Card, amount: int, source: Card = null, source_kind: S
 		return 0
 	if source != null and not is_instance_valid(source):
 		source = null
-	var dealt: int = modify_damage(source, target, amount)
-	dealt = _prevent_damage(target, dealt)
+	var dealt: int = modify_damage(source, target, amount, source_kind, source_controller)
 	target.suffer_damage(dealt, source_kind, source_controller, source)
 	if source != null and dealt > 0 and target.is_on_field() and target.type == "Forward":
 		_apply_damage_caused_riders(source, target)
 	return dealt
-
-## DAMAGE PREVENTION, in a fixed order. Every one of these is a live status/board query: a protector leaving the field
-## stops applying immediately, and nothing has to be unregistered. Applied AFTER damage doubling, so the question is
-## about the amount that would actually be dealt.
-func _prevent_damage(target: Card, amount: int) -> int:
-	if amount <= 0:
-		return amount
-	# 160 Gordon: a one-shot shield. Consumed by the damage it prevents, or expires at end of turn via turn_end().
-	if target.status_effects.has("next_damage_zero"):
-		target.status_effects.erase("next_damage_zero")
-		print("[Prevent] %s's next damage becomes 0" % target.card_name)
-		return 0
-	if target.type != "Forward":
-		return amount
-	# 165/166 Knight: the OTHER Forwards in its party are protected. Knight itself is not (it is not "with Knight").
-	if _party_guard_active(target):
-		print("[Prevent] %s is protected by Knight" % target.card_name)
-		return 0
-	# 171 Minwu: a Forward you control that would take LESS than its current power takes nothing.
-	if _minwu_guard_active(target, amount):
-		print("[Prevent] %s takes no damage below its power (Minwu)" % target.card_name)
-		return 0
-	return amount
-
-func _party_guard_active(target: Card) -> bool:
-	var members: Array = party_members()
-	if members.size() < 2 or not members.has(target):
-		return false
-	for member in members:
-		if member != null and member != target and member.is_on_field() \
-				and member.card_effects.has("party_damage_zero"):
-			return true
-	return false
-
-func _minwu_guard_active(target: Card, amount: int) -> bool:
-	if amount >= target.power:
-		return false
-	for card in get_all_cards():
-		if card != null and card.controller == target.controller \
-				and card.card_effects.has("damage_zero_if_below_power"):
-			return true
-	return false
 
 ## "When the Forward that took damage from Cid Highwind is put from the field into the Break Zone on the same turn, ..."
 ## (Cid 72/73).

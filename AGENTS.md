@@ -132,17 +132,33 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
-### Damage prevention is a layer in Field.cause_damage
+### Damage modifiers: one pipeline, one context
 
-Prevention runs after `Rules.modify_damage` (doubling) and before `suffer_damage`. Do NOT add a direct
-`card.suffer_damage()` call anywhere: it bypasses 160/165/166/171. `divide_damage` and the party-to-blocker hit were
-routed through `Field.cause_damage` for this reason.
+`Rules.modify_damage()` is the only place damage is modified. It scans `damage_modifiers` on every card on the field,
+then applies `set` / `multiply` / `add` / `subtract` before `suffer_damage`. `damage_double`, `party_damage_zero` and
+`damage_zero_if_below_power` are gone; do not reintroduce per-card booleans for damage.
 
-* `next_damage_zero` is consumed by the damage it prevents, or expires in `turn_end()`.
-* `party_damage_zero` protects the OTHER members of the current party; Knight is not protected by its own rule.
-* `damage_zero_if_below_power` is a live query over the target's controller's field, using current power.
-* Yuna 176's `break_zone_exile` is auto-accepted (known simplification: the "may" would need an async pre-break step);
-  it is gated on `current_zone == FIELD`, so unique-name duplicates from hand/stack are not exiled.
+The CONTEXT is a generic dictionary built at the damage event:
+
+* `self` — the card whose rule is being evaluated
+* `source` — the card that caused the damage (may be null)
+* `target` — the card receiving it
+* `amount` — the current amount, updated after each modifier
+* `source_kind`, `source_controller` — when known
+
+`targets` is evaluated with `self` as source, so `is_source` means “target == this card” and `controller: "player"`
+means “same controller as this card”. Conditions are a list of blocks; all must be true. Numeric relations use
+`compare_values` with value refs (`{"context": "amount"}`, `{"context": "target", "property": "power"}`). Named
+conditions are only for non-numeric relations: `source_is_self`, `in_party_with_self`, `status`, `source_kind`.
+
+Do NOT add a direct `card.suffer_damage()` call anywhere: it bypasses modifiers. `divide_damage` and the party-to-blocker
+hit were routed through `Field.cause_damage` for this reason.
+
+Yuna 176's `break_zone_exile` is auto-accepted (known simplification: the “may” would need an async pre-break step);
+it is gated on `current_zone == FIELD`, so unique-name duplicates from hand/stack are not exiled.
+
+`assets/card_effects.json` carries a top-level `_definitions` object documenting the context, modifier schema,
+conditions, targets, triggers, skill fields, instructions and statuses. Update it when adding new vocabulary.
 
 B1 introduced these primitives; use them rather than adding one-off code:
 

@@ -154,24 +154,199 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 	return false
 
 
-## Damage modifiers applied BEFORE the damage lands, so a doubled hit counts as one hit for the break check.
+## DAMAGE MODIFIERS, applied BEFORE the damage lands, so a doubled or prevented hit is one event for the break check.
 ##
-##   "damage_double": {"is_type": "Forward", "min_cost": 4}      (Warrior of Light 5)
+## A card may carry:
 ##
-## `min_cost` is a rule field here rather than a Card predicate, so it is stripped before the criteria are evaluated —
-## leaving it in would make matches_criteria() call a method named min_cost and refuse every target.
-func modify_damage(source: Card, target: Card, amount: int) -> int:
-	if source == null or target == null or amount <= 0:
+##   "damage_modifiers": [{
+##       "targets": {...},                 CardTarget criteria; evaluated with THIS card as source
+##       "conditions": [...],              named predicates or {"compare_values": {...}}
+##       "operation": "set|multiply|add|subtract",
+##       "value": 0,                       literal or a context reference
+##       "consume_status": "..."           optional status erased when the rule applies
+##   }]
+##
+## Every rule on every card on the field is asked. The CONTEXT is a generic dictionary:
+##   self              the card whose rule is being evaluated
+##   source            the card that caused the damage (may be null)
+##   target            the card receiving it
+##   amount            the CURRENT amount, updated after each modifier
+##   source_kind       "Summon"/"Ability"/"" from the caller
+##   source_controller the controller of the damage source, if known
+##
+## `targets` is evaluated with `self` as the source, so `is_source` means "target == this card" and
+## `controller: "player"` means "the same controller as this card". Numeric relations go through
+## `compare_values`; see _condition_holds() for the named predicates.
+func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "") -> int:
+	if target == null or not is_instance_valid(target) or amount <= 0:
 		return amount
-	var rule = source.card_effects.get("damage_double", null)
-	if not (rule is Dictionary):
-		return amount
-	var minimum: int = int(rule.get("min_cost", -1))
-	if minimum >= 0 and int(target.cost) < minimum:
-		return amount
-	var criteria: Dictionary = rule.duplicate()
-	criteria.erase("min_cost")
-	if not criteria.is_empty() and not target.matches_criteria(criteria, source):
-		return amount
-	print("[Damage] %s doubles its %d damage to %s" % [source.card_name, amount, target.card_name])
-	return amount * 2
+	var current: int = amount
+	var context: Dictionary = {
+		"amount": current,
+		"source": source,
+		"target": target,
+		"source_kind": source_kind,
+		"source_controller": source_controller,
+	}
+	for owner in _cards():
+		if owner == null or not is_instance_valid(owner):
+			continue
+		context["self"] = owner
+		var rules = owner.card_effects.get("damage_modifiers", [])
+		if rules is Dictionary:
+			rules = [rules]
+		if not (rules is Array):
+			continue
+		for rule in rules:
+			if not (rule is Dictionary):
+				continue
+			if not _damage_modifier_applies(rule, owner, context):
+				continue
+			var operation: String = str(rule.get("operation", ""))
+			var value: Variant = _resolve_value(rule.get("value", 0), context)
+			var next: int = _apply_damage_operation(current, operation, value)
+			if next != current:
+				print("[DamageMod] %s %s -> %d (%s)" % [owner.card_name, operation, next, target.card_name])
+			current = next
+			context["amount"] = current
+			if rule.has("consume_status"):
+				target.status_effects.erase(str(rule["consume_status"]))
+			if current <= 0:
+				return 0
+	return current
+
+func _damage_modifier_applies(rule: Dictionary, owner: Card, context: Dictionary) -> bool:
+	var target: Card = context.get("target")
+	if target == null or not is_instance_valid(target):
+		return false
+	if not target.matches_criteria(rule.get("targets", {}), owner):
+		return false
+	return _conditions_hold(rule.get("conditions", []), context)
+
+func _conditions_hold(conditions: Variant, context: Dictionary) -> bool:
+	if conditions is Dictionary:
+		conditions = [conditions]
+	if conditions == null:
+		return true
+	if not (conditions is Array):
+		push_warning("[DamageMod] conditions must be a block or an array of blocks")
+		return false
+	for condition in conditions:
+		if not (condition is Dictionary) or not _condition_holds(condition, context):
+			return false
+	return true
+
+func _condition_holds(condition: Dictionary, context: Dictionary) -> bool:
+	if condition.has("compare_values"):
+		var comparison: Dictionary = condition["compare_values"]
+		var left: Variant = _resolve_value(comparison.get("left"), context)
+		var right: Variant = _resolve_value(comparison.get("right"), context)
+		return _compare(left, str(comparison.get("op", "")), right)
+	if condition.has("source_is_self"):
+		return bool(condition["source_is_self"]) == (context.get("source") == context.get("self"))
+	if condition.has("in_party_with_self"):
+		var members: Array = field.party_members() if field != null else []
+		var together: bool = members.has(context.get("self")) and members.has(context.get("target"))
+		return together == bool(condition["in_party_with_self"])
+	if condition.has("status"):
+		var target: Card = context.get("target")
+		return target != null and is_instance_valid(target) \
+			and target.status_effects.has(str(condition["status"]))
+	if condition.has("source_kind"):
+		var wanted: Variant = condition["source_kind"]
+		var actual: String = str(context.get("source_kind", ""))
+		if wanted is Array:
+			return wanted.has(actual)
+		return actual == str(wanted)
+	push_warning("[DamageMod] unknown condition key '%s'" % str(condition.keys()))
+	return false
+
+## Read a value reference. A literal number/string/bool is returned as-is; a dictionary names a CONTEXT key:
+##   {"context": "amount"}                       -> the current damage
+##   {"context": "target", "property": "power"}  -> the target's current power
+##   {"context": "self", "property": "cost"}     -> the rule owner's cost
+## The `property` form only works on Card-valued context entries, and only for the whitelist below.
+func _resolve_value(ref: Variant, context: Dictionary) -> Variant:
+	if ref is int or ref is float or ref is bool or ref is String:
+		return ref
+	if ref == null:
+		return null
+	if not (ref is Dictionary):
+		push_warning("[DamageMod] a value must be a literal or a context reference")
+		return null
+	var key: String = str(ref.get("context", ""))
+	if key.is_empty() or not context.has(key):
+		push_warning("[DamageMod] unknown context key '%s'" % key)
+		return null
+	var value: Variant = context[key]
+	var prop: String = str(ref.get("property", ""))
+	if prop.is_empty():
+		return value
+	if not (value is Card):
+		push_warning("[DamageMod] context '%s' is not a Card; cannot read .%s" % [key, prop])
+		return null
+	return _card_value(value, prop)
+
+func _card_value(card: Card, prop: String) -> Variant:
+	match prop:
+		"power":
+			return card.power
+		"cost":
+			return int(card.cost)
+		"accumulated_damage":
+			return card.accumulated_damage
+		"tapped":
+			return card.tapped
+		"card_name":
+			return card.card_name
+		"type":
+			return card.type
+		"controller":
+			return card.controller
+		_:
+			push_warning("[DamageMod] unknown Card property '%s'" % prop)
+			return null
+
+func _compare(left: Variant, op: String, right: Variant) -> bool:
+	if left == null or right == null:
+		return false
+	match op:
+		"eq":
+			return left == right
+		"neq":
+			return left != right
+		"lt", "lte", "gt", "gte":
+			if not ((left is int or left is float) and (right is int or right is float)):
+				push_warning("[DamageMod] '%s' needs two numbers" % op)
+				return false
+			var a: float = float(left)
+			var b: float = float(right)
+			match op:
+				"lt":
+					return a < b
+				"lte":
+					return a <= b
+				"gt":
+					return a > b
+				_:
+					return a >= b
+		_:
+			push_warning("[DamageMod] unknown comparison operator '%s'" % op)
+			return false
+
+func _apply_damage_operation(current: int, operation: String, value: Variant) -> int:
+	if not (value is int or value is float):
+		push_warning("[DamageMod] operation '%s' needs a numeric value" % operation)
+		return current
+	match operation:
+		"set":
+			return int(value)
+		"multiply":
+			return int(round(float(current) * float(value)))
+		"add":
+			return current + int(value)
+		"subtract":
+			return maxi(0, current - int(value))
+		_:
+			push_warning("[DamageMod] unknown operation '%s'" % operation)
+			return current

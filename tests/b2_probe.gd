@@ -41,11 +41,14 @@ func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(effects.get("160", {}).get("skill", [{}])[0].get("instructions", [{}])[0].get("argument", [""])[0]
 		== "next_damage_zero", "Gordon 160 grants a one-shot damage shield")
-	_expect(bool(effects.get("165", {}).get("party_damage_zero", false))
-		and bool(effects.get("166", {}).get("party_damage_zero", false)),
-		"both Knights carry the party guard")
-	_expect(bool(effects.get("171", {}).get("damage_zero_if_below_power", false)),
-		"Minwu 171 carries the below-power guard")
+	_expect(effects.get("160", {}).get("damage_modifiers", [{}])[0].get("consume_status") == "next_damage_zero",
+		"and its damage modifier consumes that status")
+	_expect(effects.get("165", {}).get("damage_modifiers", [{}])[0].get("operation") == "set"
+		and effects.get("166", {}).get("damage_modifiers", [{}])[0].get("operation") == "set",
+		"both Knights carry a generic damage modifier")
+	_expect(effects.get("171", {}).get("damage_modifiers", [{}])[0]
+		.get("conditions", [{}])[0].has("compare_values"),
+		"Minwu 171 uses the generic compare_values condition")
 	var yuna: Dictionary = effects.get("176", {})
 	_expect(yuna.get("ex_burst") == "when_enter_field"
 		and yuna.get("when_enter_field", {}).get("choose_target", {}).get("is_type") == "Forward"

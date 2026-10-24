@@ -70,6 +70,8 @@ func _ready() -> void:
 	var bad: Array = []
 	var instructions: int = 0
 	for key in effects.keys():
+		if str(key).begins_with("_"):
+			continue
 		if not (str(key).is_valid_int() and int(key) >= 1 and int(key) <= db.size()):
 			bad.append("%s: key is not a card id" % str(key))
 			continue
@@ -83,8 +85,48 @@ func _ready() -> void:
 			var target = _executors[who]
 			if target == null or not target.has_method(what):
 				bad.append("%s: '%s' has no method '%s'" % [key, who, what])
+	_expect(effects.has("_definitions"), "the JSON carries its own definitions block")
 	_expect(instructions > 0, "the file contains instructions to validate (%d)" % instructions)
 	_expect(bad.is_empty(), "every instruction name resolves to a real method %s" % ("" if bad.is_empty() else str(bad)))
+
+	# --- validate damage_modifiers ------------------------------------------------------------------------
+	var bad_mods: Array = []
+	var allowed_ops: Array = ["set", "multiply", "add", "subtract"]
+	var allowed_compare_ops: Array = ["eq", "neq", "lt", "lte", "gt", "gte"]
+	var allowed_conditions: Array = ["compare_values", "source_is_self", "in_party_with_self",
+		"status", "source_kind"]
+	for key in effects.keys():
+		if str(key).begins_with("_"):
+			continue
+		for modifier in _damage_modifiers_in(effects[key]):
+			if not (modifier is Dictionary):
+				bad_mods.append("%s: damage modifier is not an object" % str(key))
+				continue
+			var operation: String = str(modifier.get("operation", ""))
+			if not allowed_ops.has(operation):
+				bad_mods.append("%s: unknown damage operation '%s'" % [str(key), operation])
+			var conditions = modifier.get("conditions", [])
+			if conditions is Dictionary:
+				conditions = [conditions]
+			if conditions is Array:
+				for condition in conditions:
+					if not (condition is Dictionary):
+						bad_mods.append("%s: condition is not an object" % str(key))
+						continue
+					var known: bool = false
+					for name in allowed_conditions:
+						if condition.has(name):
+							known = true
+					if not known:
+						bad_mods.append("%s: unknown condition %s" % [str(key), str(condition.keys())])
+					if condition.has("compare_values"):
+						var comparison: Dictionary = condition["compare_values"]
+						if not allowed_compare_ops.has(str(comparison.get("op", ""))):
+							bad_mods.append("%s: bad comparison op '%s'" % [str(key), str(comparison.get("op", ""))])
+						if not comparison.has("left") or not comparison.has("right"):
+							bad_mods.append("%s: compare_values needs left and right" % str(key))
+	_expect(bad_mods.is_empty(), "damage_modifiers are well formed %s" % ("" if bad_mods.is_empty() else str(bad_mods)))
+
 
 	print("[Effects] %d checks | failures: %d" % [_checks, _fails])
 	print("[Effects] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
@@ -102,4 +144,18 @@ func _instructions_in(node) -> Array:
 	elif node is Array:
 		for v in node:
 			found.append_array(_instructions_in(v))
+	return found
+
+
+## Every `damage_modifiers` array anywhere in a card entry.
+func _damage_modifiers_in(node) -> Array:
+	var found: Array = []
+	if node is Dictionary:
+		if node.has("damage_modifiers") and node["damage_modifiers"] is Array:
+			found.append_array(node["damage_modifiers"])
+		for v in node.values():
+			found.append_array(_damage_modifiers_in(v))
+	elif node is Array:
+		for v in node:
+			found.append_array(_damage_modifiers_in(v))
 	return found

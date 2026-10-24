@@ -70,8 +70,6 @@ BLOCK = r'''
 
 path = 'assets/card_effects.json'
 text = open(path, encoding='utf-8').read().rstrip()
-if '"9"' in text and '"damage_double"' in text:
-    pass
 if '"is_category"' in text:
     raise SystemExit('block already applied')
 index = text.rfind('}')
