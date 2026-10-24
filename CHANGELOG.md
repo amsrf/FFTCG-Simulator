@@ -4,6 +4,30 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Choosing Between Abilities (skill picker modal)
+
+A card with more than one `skill` entry (Rikku 89: her normal mill and her S ability) now opens a modal instead of
+spawning 3D "Skill" buttons beside the card.
+
+* Each ability is a selectable container showing its own text; the selected one takes an accent border
+  (orange, the same one the game uses for "you picked this").
+* Confirm is disabled until something is selected; Cancel — and Escape — exits with no activation.
+* An ability whose cost cannot be paid right now (an S ability with no matching card in hand) is **shown disabled**
+  rather than hidden, and cannot be selected.
+* `Field.begin_skill_activation(card)` with no index means "ask"; one ability still activates directly. The modal is
+  awaited through the agent seam (`Agent.choose_skill`), so a RemoteAgent gets the same decision for free.
+* Nothing is tapped or paid before the choice: Cancel leaves the card untapped and the stack empty.
+
+Skill texts come from an optional `"text"` key on each skill definition; without it a readable fallback is built from
+the cost and the first instruction, so new data is never blank.
+
+`can_activate_now()` now offers a card if ANY of its abilities is payable, instead of assuming a single first entry.
+
+NEW PROBE tests/skill_choice_probe.tscn (22 checks): container count, no initial selection, disabled Confirm, the
+accent border moving between containers, Confirm reporting the index, Cancel reporting -1, unpayable entries disabled,
+the real entry point opening the picker with nothing spent, and a single-ability card skipping it.
+
+
 ### Test Mode: the Mill ground
 
 A curated board under **Test Mode**, so the mill animation and the three mill cards can be driven by hand:

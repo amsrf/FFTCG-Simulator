@@ -113,3 +113,13 @@ func choose_card_in_hand(_owner_id: int, _criteria: Dictionary, _required: bool)
 func choose_discard(_owner_id: int, _cards: Array) -> Card:
 	await _settle()
 	return null
+
+## Pick WHICH ability to activate when a card has 2+ entries in its `skill` array. "Pull" shape: returns the index,
+## or -1 to cancel. `usable[i]` is false for an entry whose cost cannot be paid right now (an S ability with no
+## matching card in hand), so an agent never has to re-derive that.
+func choose_skill(_player_id: int, _card: Card, _skills: Array, usable: Array = []) -> int:
+	await _settle()
+	for i in range(usable.size()):
+		if bool(usable[i]):
+			return i
+	return 0 if usable.is_empty() else -1

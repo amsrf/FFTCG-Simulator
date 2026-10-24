@@ -247,3 +247,13 @@ func choose_discard(player_id: int, cards: Array) -> Card:
 			cheapest = card
 	print("[AIAgent] P%s discards %s (cheapest)" % [player_id, cheapest.card_name if cheapest != null else "nothing"])
 	return cheapest
+
+## Two abilities: take the first one it can pay for. Enough while the AI still plays from untapped Backups only; a
+## future heuristic can weigh the effects instead.
+func choose_skill(player_id: int, card: Card, skills: Array, usable: Array = []) -> int:
+	await _settle()
+	for i in range(usable.size()):
+		if bool(usable[i]):
+			print("[AIAgent] P%s picks ability %d of %s" % [player_id, i, card.card_name])
+			return i
+	return -1

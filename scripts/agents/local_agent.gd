@@ -79,3 +79,16 @@ func choose_discard(player_id: int, _cards: Array) -> Card:
 	assistant.hide_buttons()
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	return chosen if play else null
+
+const SKILL_CHOICE := preload("res://skill_choice.tscn")
+
+## Which ability? A modal listing each ability's text. The human selects a container, Confirm commits, Cancel (-1)
+## abandons the activation — and nothing has been tapped or paid at that point.
+func choose_skill(_player_id: int, card: Card, skills: Array, usable: Array = []) -> int:
+	if card == null or skills.size() <= 1:
+		return 0
+	var window = SKILL_CHOICE.instantiate()
+	game.add_child(window)
+	window.call("open", card, skills, usable)
+	var index: int = await window.finished
+	return index

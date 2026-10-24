@@ -445,10 +445,9 @@ func try_activate_from_field(card: Card) -> void:
 	var skills: Array = card.card_effects["skill"]
 	if skills.is_empty():
 		return
-	if skills.size() == 1:
-		begin_skill_activation(card, 0)
-	else:
-		card.show_actions()
+	# ONE ENTRY POINT. A single ability activates immediately; two or more open the skill picker modal, which shows
+	# each ability's text (see scripts/skill_choice.gd). The old 3D "Skill" buttons are no longer used for this.
+	begin_skill_activation(card, -1)
 
 ## True while the LOCAL player holds the window. Holding a card you *could* activate is not the
 ## same as being allowed to activate it: while the OPPONENT holds priority the input mode is
@@ -494,10 +493,13 @@ func can_activate_now(card: Card) -> bool:
 	# just taps and nothing happens". Checking here means the card is simply not offered (no green ring), and
 	# begin_skill_activation() refuses it for the same reason, so the tap never happens.
 	#
-	# Every card in the data has exactly one skill, so the one that would be activated is the first.
-	if bool(skills[0].get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
-		return false
-	return true
+	# ONE USABLE ABILITY IS ENOUGH for the card to be offered. With several abilities the card is available if ANY of
+	# them can be paid; the unpayable ones are shown disabled in the picker rather than hiding the card entirely.
+	for def in skills:
+		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
+			continue
+		return true
+	return false
 
 ## Green ring: "you may activate this right now" — your cards only, and gone the moment a modal
 ## takes the moment away. It is DERIVED state with many causes (the input mode, a card's tapped
@@ -517,11 +519,35 @@ func refresh_available_effects() -> void:
 	for card in get_all_cards():
 		card.set_available_highlight(can_activate_now(card))
 
-func begin_skill_activation(card: Card, skill_index: int = 0) -> void:
+## Activate an ability. `skill_index < 0` means ASK: one ability activates directly, two or more open the picker
+## modal and wait for the choice. Explicit indexes stay supported (probes, and any future "activate ability N").
+func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	if not can_activate_now(card):
 		return
 	var skills: Array = card.card_effects["skill"]
-	if skill_index < 0 or skill_index >= skills.size():
+	if skills.is_empty():
+		return
+	if skill_index < 0:
+		skill_index = 0
+		if skills.size() > 1:
+			# WHICH ENTRIES ARE PAYABLE RIGHT NOW. An S ability needs a card of the same name in hand; the picker
+			# shows it disabled instead of letting the player pick an activation that can only abort.
+			var usable: Array = []
+			for def in skills:
+				var can_pay: bool = not bool(def.get("s_cost", false)) \
+					or hand.has_card_matching_criteria({"is_named": card.card_name})
+				usable.append(can_pay)
+			var owner_id: int = 1 if card.controller == "player" else 2
+			var agent: Agent = get_parent().agent_for(owner_id)
+			if agent == null:
+				return
+			skill_index = await agent.choose_skill(owner_id, card, skills, usable)
+			# The picker is awaited, so anything could have happened behind it. Re-check before spending anything.
+			if not can_activate_now(card):
+				return
+		if skill_index < 0:
+			return
+	if skill_index >= skills.size():
 		return
 	if not stack.add_skill_activation_proxy(card, skill_index):
 		return

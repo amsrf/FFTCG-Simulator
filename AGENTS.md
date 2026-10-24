@@ -43,6 +43,18 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Multiple Abilities on One Card
+
+`card_effects["skill"]` is a list. `Field.begin_skill_activation(card)` with a NEGATIVE index means "ask the owner":
+one entry activates directly, 2+ open `skill_choice.tscn` through `Agent.choose_skill(player_id, card, skills,
+usable)`. An explicit index still bypasses the picker.
+
+`usable[i]` is false when an ability's cost cannot be paid right now (an S ability needs a card of the same name in
+hand). The picker shows those disabled; `can_activate_now()` offers the card if ANY entry is usable. Nothing is tapped
+or paid before the choice is confirmed.
+
+Give each skill a `"text"` key for the picker; otherwise it falls back to a cost + instruction summary.
+
 ## Card Effect Data Traps
 
 **`apply_effect` placement.** On a TRIGGER (`when_enter_field`, `when_cast`, `when_attack`, ...) it must be TOP-LEVEL,

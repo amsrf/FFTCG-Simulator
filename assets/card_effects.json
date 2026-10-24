@@ -529,12 +529,14 @@
 			{
 				"cost":{"風":1},
 				"tap":true,
+				"text":"《風》《Dull》 Your opponent puts 1 card from the top of their deck into the Break Zone.",
 				"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
 			},
 			{
 				"s_cost":true,
 				"cost":{"風":1},
 				"tap":true,
+				"text":"《S》《風》《Dull》 Your opponent puts the top 2 cards of their deck into the Break Zone. You draw 1 card.",
 				"instructions":[
 					{"name":"opponent_mills","author":"game","argument":[2]},
 					{"name":"draw_cards","author":"game","argument":[1]}
