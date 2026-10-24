@@ -37,11 +37,11 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 ## Mill
 
 `mill_player(player_id, count)` / `opponent_mills(count)` own the RULE; `Graveyard.draw(card)` owns the ANIMATION, and
-the loops `await` it, so a mill N is N sequential flights (measured 1516 ms for 3 x 0.5 s). Deck cards are children of
+the loops `await` it, so a mill N is N sequential flights (each flight 1.0 s, so ~3 s for a mill 3). Deck cards are children of
 the Deck node, so the flight starts from the card's real global position; the card is reparented into the pile BEFORE
 it moves, which is what makes it face-up at Break Zone size during the flight rather than popping at the end.
 
-Knobs (per node, Inspector): `mill_seconds` 0.5, `mill_arc_height` 0.45 m, `mill_ease`.
+Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
 ## Card Effect Data Traps
 

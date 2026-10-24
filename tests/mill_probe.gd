@@ -73,7 +73,7 @@ func _ready() -> void:
 	# The setup path does not fire ETB; the probe triggers it as a real play would.
 	_field.execute_card_effect(thief, "when_enter_field")
 	await _game.get("stack").resolve_top_effect()
-	await get_tree().create_timer(0.9).timeout      # one mill animation
+	await get_tree().create_timer(1.4).timeout      # one mill animation (mill_seconds is 1.0)
 	print("[Mill] Thief ETB: opponent deck %d -> %d, pile %d -> %d" % [
 		opp_deck_before, opp_deck.deck_cards.size(), opp_pile_before, pile.graveyard_cards.size()])
 	_expect(opp_deck.deck_cards.size() == opp_deck_before - 1, "Thief (69): the opponent mills 1")

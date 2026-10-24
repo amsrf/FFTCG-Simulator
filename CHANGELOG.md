@@ -20,13 +20,13 @@ tap, the opponent cannot act, and one real `mill_player(2, 1)` takes a card off 
 
 `mill_player(player_id, count)` + `opponent_mills(count)` — the instruction, and the animation, live in one place:
 `Graveyard.draw(card)` lifts the top card off the deck and carries it to the pile on a quadratic Bezier whose control
-point is the MIDPOINT of the two centres raised by `mill_arc_height`. 0.5 s per card.
+point is the MIDPOINT of the two centres raised by `mill_arc_height`. 1.0 s per card.
 
 The mill calls are AWAITED one at a time, so "mill 3" is three separate flights rather than a blur: measured
-**1516 ms for 3 cards**. The card is moved into the pile's frame before it flies, so it reads face-up at Break Zone
+**~3000 ms for 3 cards**. The card is moved into the pile's frame before it flies, so it reads face-up at Break Zone
 size for the whole arc instead of popping on landing.
 
-Tuning lives on each Graveyard node: `mill_seconds` (0.5), `mill_arc_height` (0.45 m, first guess) and `mill_ease`.
+Tuning lives on each Graveyard node: `mill_seconds` (1.0), `mill_arc_height` (0.9 m) and `mill_ease`.
 
 Cards: 69 Thief + 70 Thief (ETB → opponent mills 1), 89 Rikku (skill 風+dull → mill 1; S skill 風+dull → mill 2,
 draw 1). Deferred: 72/73 Cid Highwind's "the Forward this damaged goes to the Break Zone this turn" needs damage

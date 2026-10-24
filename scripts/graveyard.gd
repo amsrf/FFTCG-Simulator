@@ -18,10 +18,11 @@ var randomness_range = Vector3(0.015, 0.005, 0.015)
 ##
 ## One card per call and each call is awaitable, so "mill 3" runs three of these one after another instead of three
 ## cards moving at once. That is deliberate: the milled cards should read as a sequence.
-@export var mill_seconds: float = 0.5
-## How far the arc rises above the MIDPOINT of the two centres, in metres. A first guess, meant to be tuned by eye:
-## the camera is nearly top-down, so most of this reads as a lift toward the viewer with a little screen travel.
-@export var mill_arc_height: float = 0.45
+## Doubled once already (0.5 -> 1.0) after seeing it in play.
+@export var mill_seconds: float = 1.0
+## How far the arc rises above the MIDPOINT of the two centres, in metres. The camera is nearly top-down, so most of
+## this reads as a lift toward the viewer with a little screen travel. Doubled once already (0.45 -> 0.9).
+@export var mill_arc_height: float = 0.9
 @export var mill_ease: Tween.EaseType = Tween.EASE_IN_OUT
 
 ## Animate `card` (still parented to the Deck) into the pile, then add it.
