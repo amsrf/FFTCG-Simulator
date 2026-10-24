@@ -26,6 +26,15 @@ Nothing about the cancelled Summon executes — the probe uses Ifrit and asserts
 
 Coverage: **81 implemented / 7 plain / 12 to do**. New probe `counter_summon_probe` (13 checks).
 
+Test ground **"Counter a Summon"** (Test Mode → `counter`): you hold Ifrit, fire mana, Summoner and one ice Backup.
+
+1. Cast Ifrit at the opponent's Squall and CONFIRM the target — it waits on the stack.
+2. While it is still there, click Summoner (green ring) and pay the ice.
+3. The session asks for a card ON THE STACK: click the Ifrit and confirm.
+
+Ifrit is cancelled, Squall takes no damage, and the Ifrit goes to your Break Zone. Countering your own Summon is legal
+and keeps the demo to one turn and one seat.
+
 
 ### Self-sacrifice costs (10 Black Mage, 36 Bard, 88 Archer)
 

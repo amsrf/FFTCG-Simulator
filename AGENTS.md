@@ -239,6 +239,9 @@ changes under you.
 | `party_ai` | blocking a party, which opens the damage-distribution window | **ai** — ice pair, EMPTY hand, so it only attacks |
 | `summons` | Summons + target protection (Zidane vs Ifrit) | ai, holds Ifrit |
 | `break_zone` | fragile/exile (you hold Bahamut + mana) | mock |
+| `mill` | milling (Rikku/Thief + wind mana) | mock |
+| `terra` | Summon surcharge + Terra's own protection | mock |
+| `counter` | countering a Summon — target the Ifrit ON the stack with Summoner | mock (you cast the Ifrit yourself) |
 | `clean` | empty board, empty hands, seeded decks | mock |
 
 Conventions when adding one: `opponent_type: "mock"` when YOU drive the mechanic; `"ai"` when the other seat must act;

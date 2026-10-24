@@ -132,6 +132,18 @@ func _ready() -> void:
 	_expect(mill["opponent_deck"].size() >= 10,
 		"the opponent's deck is long enough to watch several mills (%d)" % mill["opponent_deck"].size())
 
+	# --- the counter ground: everything needed for the loop, on one side ------------------------------------
+	var counter: Dictionary = GROUNDS.counter_summon()
+	var counter_field: Array = []
+	for e in counter["player_field"]:
+		counter_field.append(int(e["id"]))
+	_expect(counter_field.has(GROUNDS.SUMMONER), "the counter ground puts Summoner on your board")
+	_expect(counter["player_hand"].has(GROUNDS.IFRIT), "and Ifrit in hand, to cast and then counter")
+	_expect(counter_field.has(GROUNDS.FIRE_MANA), "with fire mana to cast it")
+	_expect(counter_field.has(GROUNDS.ICE_MANA), "and ice mana to pay the counter")
+	_expect(counter["opponent_type"] == "mock",
+		"the opponent is passive, so the stack only changes when you say so")
+
 	# --- boot one for real -------------------------------------------------------------------------------
 	# The party ground is the one that must not move on its own, so it is the most useful smoke test.
 	MatchSetup.config = MatchSetup.build_config("party")

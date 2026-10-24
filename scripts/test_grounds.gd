@@ -59,6 +59,7 @@ const WIND_MANA := 68    # Evoker, wind Backup — pays for Thief / Rikku
 const MILL_RIKKU := 89   # Rikku: skill 風+dull mills 1; S skill 風+dull mills 2 and draws 1
 const MILL_THIEF := 69   # Thief, Forward: enters the field -> opponent mills 1
 const MILL_THIEF_BACKUP := 70  # Thief, Backup: same ETB, already on the board here
+const SUMMONER := 53     # Summoner: 《Ice》, put itself into the Break Zone: cancel a Summon on the STACK
 
 
 static func clean() -> Dictionary:
@@ -171,6 +172,25 @@ static func mill() -> Dictionary:
 	return cfg
 
 
+static func counter_summon() -> Dictionary:
+	## COUNTERING A SUMMON. You hold the Ifrit and the mana to cast it, plus Summoner (53) and one ice Backup.
+	##
+	## The whole loop happens on your own turn, in one priority chain:
+	##   1. cast Ifrit at the opponent's Squall and CONFIRM the target — it waits on the stack;
+	##   2. while it is still there, click Summoner (green ring) and pay the ice;
+	##   3. the targeting session now asks for a card ON THE STACK: click the Ifrit and confirm.
+	## Ifrit is removed without resolving (Squall takes no damage) and goes to your Break Zone.
+	##
+	## Countering your own Summon is legal and is the point here: it keeps the demo to one turn and one seat.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_counter"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": SUMMONER}, {"id": FIRE_MANA}, {"id": ICE_MANA}, {"id": FIRE}]
+	cfg["player_hand"] = [IFRIT]
+	cfg["opponent_field"] = [{"id": ICE_A}]
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -200,6 +220,10 @@ const GROUNDS := {
 		"title": "Ground: Terra (Summon cost +1 for you)",
 		"blurb": "The opponent has Terra, so your Summons cost 1 more. Play Ifrit and target Squall: the cost row shows 1 fire + 1 wild (2 mana), not the single fire it costs on an empty board.",
 	},
+	"counter": {
+		"title": "Ground: Counter a Summon (targeting the stack)",
+		"blurb": "Cast the Ifrit in your hand at Squall and confirm. While it waits on the stack, click Summoner, pay the ice, then click the Ifrit ON THE STACK: it is cancelled and Squall takes no damage.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -220,6 +244,8 @@ static func config(name: String) -> Dictionary:
 			return mill()
 		"terra":
 			return terra_cost()
+		"counter":
+			return counter_summon()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()
