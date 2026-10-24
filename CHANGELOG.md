@@ -4,6 +4,29 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Activated abilities (22 Firion, 84 Y'shtola, 96 Mystic)
+
+They turned out to need almost no engine: an activated ability is an ordinary `skill` entry with **no `s_cost`** and
+either no `tap` or `tap: true`. The existing gate, picker, proxy and resolution already handled all of that, so 22 and
+84 are pure data:
+
+```json
+"skill": [{"cost": {"neutral": 1}, "instructions": [{"name": "add_status_effect", "author": "card", ...}]}]
+"skill": [{"tap": true, "cost": {}, ...}]
+```
+
+**96 Mystic** needed one new cost shape, `"sacrifice": {"is_type": "Backup", "controller": "player"}`: the owner picks
+which Backup goes to the Break Zone, chosen through a new agent seam `choose_sacrifice()` (LocalAgent reuses the card
+picker; the base agent takes the cheapest). The pick is paid at ACTIVATION like the S discard; cancelling it aborts the
+whole activation and clears the proxy. `can_activate_now` and the ability picker both treat "nothing to sacrifice" as
+unavailable.
+
+Coverage: **77 implemented / 7 plain / 16 to do**. New probes: `activated_probe` (17 checks: gate, both cards' data,
+First Strike, +1000 power, 1000 damage through real targeting, dull closes the gate) and `sacrifice_probe` (9 checks:
+one Backup leaves, one arrives in the Break Zone, the ability resolves to 6000, and it is closed with nothing to
+sacrifice).
+
+
 ### Rules split out of Field
 
 The four CONTINUOUS-EFFECT QUERIES now live in `scripts/rules.gd`, owned by the BOARD as `Field.rules` and bound in

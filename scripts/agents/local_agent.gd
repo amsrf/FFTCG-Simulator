@@ -49,6 +49,7 @@ func decide_blocker(_player_id: int, attacker: Card) -> Card:
 ##
 ## Loaded by PATH, not by class name: this scene is new and the headless class cache does not know it.
 const PARTY_SPLIT := preload("res://party_split.tscn")
+const DECK_SEARCH := preload("res://deck_search.tscn")
 
 func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Array:
 	if party.is_empty():
@@ -104,3 +105,21 @@ func choose_damage_split(_player_id: int, cards: Array, total: int) -> Array:
 	window.open(cards, total)
 	var split: Array = await window.finished
 	return split
+
+## The human picks which Backup to put into the Break Zone. Reuses the card-picker window from the deck search — a fan
+## of cards with art, Confirm and Cancel — because it is already the "choose one card" UI in this project.
+func choose_sacrifice(_player_id: int, candidates: Array) -> Card:
+	if candidates.is_empty():
+		return null
+	var ids: Array = []
+	for c in candidates:
+		if c != null and is_instance_valid(c):
+			ids.append(c.id)
+	var window = DECK_SEARCH.instantiate()
+	game.add_child(window)
+	window.call("open", ids, {})
+	var chosen: int = await window.finished
+	for c in candidates:
+		if c != null and is_instance_valid(c) and c.id == chosen:
+			return c
+	return null

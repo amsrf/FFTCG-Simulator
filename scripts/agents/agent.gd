@@ -131,3 +131,15 @@ func choose_skill(_player_id: int, _card: Card, _skills: Array, usable: Array = 
 		if bool(usable[i]):
 			return i
 	return 0 if usable.is_empty() else -1
+
+## "Put 1 Backup into the Break Zone" as a COST (Mystic 96). The owner picks, so this is a pull-shaped seam like
+## choose_discard. The default is the cheapest card, which is also what a simple AI wants.
+func choose_sacrifice(_player_id: int, candidates: Array) -> Card:
+	await _settle()
+	var best: Card = null
+	for c in candidates:
+		if c == null or not is_instance_valid(c):
+			continue
+		if best == null or int(c.cost) < int(best.cost):
+			best = c
+	return best

@@ -43,6 +43,19 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Abilities: one vocabulary, three costs
+
+Every non-S ability is a `skill` entry. The differences are only in the cost keys:
+
+  "cost": {"neutral": 2}        mana
+  "tap": true                   dull as part of the cost
+  "s_cost": true                discard a card with the same name (hand picker)
+  "sacrifice": {"is_type":"Backup","controller":"player"}   put one of your cards into the Break Zone
+
+Sacrifice is chosen by the OWNER through `Agent.choose_sacrifice()` (LocalAgent opens the card picker; the base agent
+takes the cheapest) and is paid at activation. Aborting it clears the proxy. A skill whose sacrifice has no candidates
+is not offered by `can_activate_now`, so the green ring and the picker agree.
+
 ## Rules live in scripts/rules.gd, not in Field
 
 `Field.rules` owns the CONTINUOUS-EFFECT QUERIES (created in `Field._ready`, bound to the board, NO Game

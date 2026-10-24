@@ -696,4 +696,58 @@
 		"ex_burst":"when_enter_field",
 		"when_enter_field":{"instructions":[{"name":"untap_all_matching","author":"game","argument":[{"is_character":true,"controller":"player","is_element":"風"}]}]}
 	}
+,
+	"22":{
+		"skill":[
+			{
+				"cost":{"neutral":1},
+				"text":"《1》: Firion gains First Strike until the end of the turn.",
+				"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]
+			},
+			{
+				"cost":{"neutral":1},
+				"text":"《1》: Firion gains Brave until the end of the turn.",
+				"instructions":[{"name":"add_status_effect","author":"card","argument":["brave",1]}]
+			},
+			{
+				"cost":{"neutral":2},
+				"text":"《2》: Choose 1 Forward. Deal it 1000 damage.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
+			},
+			{
+				"cost":{"neutral":2},
+				"text":"《2》: Firion gains +1000 power until the end of the turn.",
+				"instructions":[{"name":"power_change","author":"card","argument":[1000,1]}]
+			}
+		]
+	},
+	"84":{
+		"skill":[
+			{
+				"cost":{"風":1},
+				"text":"《Wind》: Choose 1 Forward. Deal it 1000 damage.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
+			},
+			{
+				"tap":true,
+				"cost":{},
+				"text":"《Dull》: Choose 1 Forward. Deal it 2000 damage.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
+			}
+		]
+	}
+,
+	"96":{
+		"skill":[
+			{
+				"sacrifice":{"is_type":"Backup","controller":"player"},
+				"cost":{},
+				"text":"Put 1 Backup into the Break Zone: Mystic gains +3000 power until the end of the turn.",
+				"instructions":[{"name":"power_change","author":"card","argument":[3000,1]}]
+			}
+		]
+	}
 }

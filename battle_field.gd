@@ -511,8 +511,20 @@ func can_activate_now(card: Card) -> bool:
 	for def in skills:
 		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
+		# A sacrifice cost with nothing to sacrifice is not an available ability either.
+		if def.has("sacrifice") and _sacrifice_candidates(def["sacrifice"], card).is_empty():
+			continue
 		return true
 	return false
+
+## Cards that could be paid for a `"sacrifice": {...}` skill cost. Criteria are read from the SOURCE's perspective, so
+## `controller: "player"` means the activating card's controller.
+func _sacrifice_candidates(criteria: Dictionary, source: Card) -> Array:
+	var out: Array = []
+	for c in get_all_cards():
+		if c != null and is_instance_valid(c) and c.matches_criteria(criteria, source):
+			out.append(c)
+	return out
 
 ## Green ring: "you may activate this right now" — your cards only, and gone the moment a modal
 ## takes the moment away. It is DERIVED state with many causes (the input mode, a card's tapped
@@ -549,6 +561,8 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			for def in skills:
 				var can_pay: bool = not bool(def.get("s_cost", false)) \
 					or hand.has_card_matching_criteria({"is_named": card.card_name})
+				if can_pay and def.has("sacrifice"):
+					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
 				usable.append(can_pay)
 			var owner_id: int = 1 if card.controller == "player" else 2
 			var agent: Agent = get_parent().agent_for(owner_id)
@@ -579,6 +593,21 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	# activation commits.
 	if def.get("tap", false) and not card.tapped:
 		card.tap()
+	# PUT-INTO-THE-BREAK-ZONE COST (Mystic 96). Paid at activation like the S discard, and chosen by the owner through
+	# the agent seam, so the human gets a picker and the AI picks for itself. A cancelled pick aborts the whole
+	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
+	var sacrifice: Dictionary = def.get("sacrifice", {})
+	if not sacrifice.is_empty():
+		var owner_id: int = 1 if card.controller == "player" else 2
+		var candidates: Array = _sacrifice_candidates(sacrifice, card)
+		var picked: Card = null
+		if not candidates.is_empty():
+			picked = await get_parent().agent_for(owner_id).choose_sacrifice(owner_id, candidates)
+		if picked == null:
+			stack.call("_clear_skill_proxy")
+			return
+		print("[Sacrifice] %s -> Break Zone" % picked.card_name)
+		get_parent().put_card_into_graveyard(picked)
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
 		# source, then the regular mana payment step follows.
