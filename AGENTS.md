@@ -43,6 +43,18 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Costs Are a Board Question
+
+`Card.get_cost()` is the PRINTED cost. The cost actually paid is `Field.effective_cost(card)`: printed plus every
+matching `"cost_aura": {"for": "Summon", "from": "opponent", "delta": 1}`, applied to the neutral part and floored at 0
+(so a negative delta is a reduction).
+
+There are exactly TWO readers and they must agree: `Assistant._on_hand_charge_start` (sets `mana_cost`, which drives
+the crystal row, `remaining_cost`, `can_pay_cost`, `pay_cost`) and `AIAgent._can_afford`. If you add a third cost
+reader — a new agent, a preview — it must call `effective_cost()` too, or it will believe a surcharged Summon is cheap.
+
+Cost is LOCKED when the payment opens; a modifier leaving the field mid-payment does not refund.
+
 ## Choice Shields (Dajh, Serah)
 
 A "cannot be chosen" rule can be SELF-PRINTED (`Card.can_be_chosen_by`, Zidane) or GRANTED to another card

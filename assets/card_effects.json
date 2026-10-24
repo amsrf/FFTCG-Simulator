@@ -588,4 +588,9 @@
 			"by":["Ability"]
 		}
 	}
+,
+	"46":{
+		"cost_aura":{"for":"Summon","from":"opponent","delta":1},
+		"cannot_be_chosen":{"sources":["Summon"],"controller":"opponent"}
+	}
 }

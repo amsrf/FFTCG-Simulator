@@ -4,6 +4,30 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Cost modifiers: Terra 46
+
+"Your opponent's Summons cost 1 more" (and "Terra cannot be chosen by opponent's Summons") is implemented.
+
+`Card.get_cost()` stays the PRINTED cost; the board answers separately:
+
+```gdscript
+Field.effective_cost(card)   # printed cost + every matching "cost_aura"
+"cost_aura": {"for": "Summon", "from": "opponent", "delta": 1}
+```
+
+`delta` goes on the NEUTRAL part (any element may pay it) and the result is floored at 0, so a negative delta is
+already a cost REDUCTION (Fang's "Bahamut costs 2 less"). `from` is read from the aura card's perspective, so a Terra
+on your own side does nothing; two opponent Terras stack to +2.
+
+Only two places read a cost, and both now ask the same function: `Assistant._on_hand_charge_start` (which sets
+`mana_cost`, and therefore the crystal row, `remaining_cost()`, `can_pay_cost()` and `pay_cost()`) and
+`AIAgent._can_afford`. Nothing else needs to know modifiers exist.
+
+Coverage: **61 implemented / 7 plain / 32 to do**. New probe `cost_aura_probe` (11 checks): printed vs effective, own
+Terra neutral, opponent's +1 neutral, the payment modal's `mana_cost`, the AI refusing with one source and accepting
+with two, two Terras stacking, a Forward untouched, and Terra untargetable by the opponent's Summons.
+
+
 ### Choice shields: Dajh 17 and Serah 45
 
 "The Card Name Sazh you control cannot be chosen by your opponent's Summons or abilities" and Serah's Snow version are

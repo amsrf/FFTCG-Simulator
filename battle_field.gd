@@ -1299,6 +1299,47 @@ func set_blockable(controller: String, enabled: bool) -> void:
 ## ("all the Backups") still hits the card, because it was never chosen.
 ##
 ##   "shields": {"targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon", "Ability"]}
+## The cost ACTUALLY paid for `card`, after the board's modifiers. `Card.get_cost()` stays the printed cost; only the
+## field knows what is in play.
+##
+## Data on the modifier's source:
+##   "cost_aura": {"for": "Summon", "from": "opponent", "delta": 1}
+## `from` is read from the aura card's perspective, and `delta` is added to the NEUTRAL part of the cost (any element
+## may pay it). A negative delta is a reduction (Fang's "Bahamut costs 2 less") and the result is floored at 0.
+##
+## One function, because there are exactly two cost readers — the payment modal and the AI's affordability check — and
+## they must agree.
+func effective_cost(card: Card) -> Dictionary:
+	var paid: Dictionary = card.get_cost()
+	var delta: int = 0
+	for source in get_all_cards():
+		if source == null or not is_instance_valid(source):
+			continue
+		var rules = source.card_effects.get("cost_aura", [])
+		if rules is Dictionary:
+			rules = [rules]
+		if not (rules is Array):
+			continue
+		for rule in rules:
+			if not (rule is Dictionary):
+				continue
+			var for_type: String = str(rule.get("for", ""))
+			if for_type != "" and card.type != for_type:
+				continue
+			var scope: String = str(rule.get("from", ""))
+			if scope == "opponent" and card.controller == source.controller:
+				continue
+			if (scope == "own" or scope == "controller") and card.controller != source.controller:
+				continue
+			delta += int(rule.get("delta", 0))
+	if delta != 0:
+		var neutral: int = maxi(0, int(paid.get("neutral", 0)) + delta)
+		if neutral > 0:
+			paid["neutral"] = neutral
+		else:
+			paid.erase("neutral")
+	return paid
+
 func is_protected_from_being_chosen(card: Card, source: Card, source_kind: String) -> bool:
 	if card == null or source == null:
 		return false

@@ -56,7 +56,10 @@ func _can_afford(card: Card, player_id: int) -> bool:
 	# finish (a cancelled payment is avoidable churn). Each untapped Backup
 	# produces 1 of its own element; element keys come from the same source as
 	# Card.get_cost(), so they match.
-	var element_cost: Dictionary = card.get_cost()
+	#
+	# The board's modifiers count too (Terra raises the opponent's Summons by 1), so this asks the same
+	# Field.effective_cost() the payment modal uses — otherwise the AI believes a Summon is cheaper than it is.
+	var element_cost: Dictionary = game.field.effective_cost(card)
 	var mana: Dictionary = {}
 	for backup in game.field.get_back_cards_for(game.controller_for(player_id)):
 		if backup.tapped:

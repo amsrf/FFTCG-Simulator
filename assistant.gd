@@ -351,7 +351,11 @@ func commit_cost_readout(target_card: Card = null) -> void:
 	_hide_cost_readout()
 
 func _on_hand_charge_start(card: Card) -> void:
-	mana_cost = card.get_cost()
+	# THE BOARD DECIDES THE COST, not just the card: Terra raises the cost of the opponent's Summons by 1. The
+	# surcharge is baked into this dictionary, so the crystal row, remaining_cost(), can_pay_cost() and pay_cost() all
+	# follow without knowing that modifiers exist.
+	var board = get_parent().get("field")
+	mana_cost = board.effective_cost(card) if board != null else card.get_cost()
 	show_modal("Confirm", "Cancel",
 		func(): on_charge_complete(),
 		func(): on_charge_cancelled(),
