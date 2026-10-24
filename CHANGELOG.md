@@ -14,7 +14,7 @@ damage and the blocker's split. A dealer can therefore attach a rider without an
 "on_causing_damage_to_forward": {
   "status": "cid_verdict",
   "duration": 1,
-  "on_break": [ {"name": "opponent_mills", "author": "game", "argument": [2]} ]
+  "on_enter_break_zone": [ {"name": "opponent_mills", "author": "game", "argument": [2]} ]
 }
 ```
 
@@ -23,7 +23,10 @@ not a bare number. That is the key decision: it survives Cid leaving play, it re
 later, and it is one-turn for free — `Card.turn_end()` now expires payload statuses as well as numeric ones.
 
 When the marked card reaches the Break Zone, the same choke point as the printed Break Zone keywords
-(`trigger_break_zone_keywords`, gated to field → Break Zone) runs the payload ONCE and erases it.
+(`trigger_break_zone_keywords`, gated to field → Break Zone) runs the payload ONCE and erases it. It fires for ANY
+move from the field into the Break Zone — BROKEN OR NOT (an effect removal, a sacrificed Backup, power reaching 0).
+The card wording is "put from the field into the Break Zone", not "breaks", so this is gated on the ARRIVAL, not on
+the break flag. `when_break` stays break-only.
 
 72 also gets its S ability: 《S》《Dull》 → opponent mills 2.
 

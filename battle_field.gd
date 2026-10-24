@@ -1580,8 +1580,8 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 		if status.is_empty():
 			continue
 		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller}
-		if rule.has("on_break"):
-			payload["on_break"] = rule["on_break"]
+		if rule.has("on_enter_break_zone"):
+			payload["on_enter_break_zone"] = rule["on_enter_break_zone"]
 		print("[Damage] %s marks %s (%s)" % [source.card_name, target.card_name, status])
 		target.add_status_effect(status, payload)
 

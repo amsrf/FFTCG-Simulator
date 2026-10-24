@@ -1646,17 +1646,17 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
 	# damaged card, so it fires here — the same choke point as the printed keywords, and only for cards arriving FROM
 	# THE FIELD (Graveyard.add_card gates that call).
-	_trigger_status_break_effects(card)
+	_trigger_status_break_zone_effects(card)
 
 ## Runs the one-shot trigger a status carries when its card reaches the Break Zone (see
 ## Field._apply_damage_caused_riders). The status is erased first, so the trigger cannot run twice, and the controller
 ## recorded with it is restored around the chain so "your opponent mills" still means the right player.
-func _trigger_status_break_effects(card: Card) -> void:
+func _trigger_status_break_zone_effects(card: Card) -> void:
 	for status in card.status_effects.keys():
 		var payload = card.status_effects[status]
-		if not (payload is Dictionary) or not payload.has("on_break"):
+		if not (payload is Dictionary) or not payload.has("on_enter_break_zone"):
 			continue
-		var entries: Array = payload["on_break"]
+		var entries: Array = payload["on_enter_break_zone"]
 		card.status_effects.erase(status)
 		var instructions: Array[Instruction] = []
 		for entry in entries:

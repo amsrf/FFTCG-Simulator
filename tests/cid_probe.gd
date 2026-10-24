@@ -13,6 +13,7 @@ const CID := 72
 const SQUALL := 41
 const SNOW := 43
 const CHEMIST := 31
+const TERRA := 47
 
 var _checks: int = 0
 var _fails: int = 0
@@ -50,7 +51,7 @@ func _wait_for_deck(target: int) -> void:
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"player_field": [{"id": CID}],
-		"opponent_field": [{"id": SQUALL}, {"id": SNOW}, {"id": CHEMIST}],
+		"opponent_field": [{"id": SQUALL}, {"id": SNOW}, {"id": CHEMIST}, {"id": TERRA}],
 		"player_deck": range(101, 131),
 		"opponent_deck": range(141, 171),
 	})
@@ -99,6 +100,21 @@ func _ready() -> void:
 		await get_tree().create_timer(0.1).timeout
 	print("[Cid] deck after the expired-mark break: %d (was %d)" % [_deck_size(), deck_now])
 	_expect(_deck_size() == deck_now, "so breaking it later mills nothing")
+
+	# --- NOT a break: "put from the field into the Break Zone" -----------------------------------------------
+	# The card does NOT say "breaks". A Forward removed by an effect, or one whose power reaches 0, still entered the
+	# Break Zone, so the rider must still fire — and  must stay false, which is what keeps when_break silent.
+	var terra: Card = _card(TERRA)
+	var deck_before_put: int = _deck_size()
+	_field.cause_damage(terra, 1000, cid, "", "player")
+	_expect(terra.status_effects.has("cid_verdict"), "Terra is marked")
+	_game.call("put_card_into_graveyard", terra)
+	await _wait_for_deck(deck_before_put - 2)
+	print("[Cid] put (not broken): on field=%s broken=%s deck %d -> %d" % [
+		str(terra.is_on_field()), str(terra.broken), deck_before_put, _deck_size()])
+	_expect(not terra.is_on_field(), "it left the field")
+	_expect(terra.broken == false, "without being marked as BROKEN")
+	_expect(_deck_size() == deck_before_put - 2, "and the rider still milled 2 on entering the Break Zone")
 
 	print("[Cid] %d checks | failures: %d" % [_checks, _fails])
 	print("[Cid] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

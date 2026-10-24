@@ -96,10 +96,11 @@ applies `modify_damage`, lands the damage, and runs the dealer's `on_causing_dam
 (effect damage, combat, first strike, party damage, blocker split) already uses it; a new damage path must too or
 riders silently stop applying.
 
-A status can be a DICTIONARY payload: `{duration, controller, on_break}`. `Card.turn_end()` expires it like a number,
-and `Game.trigger_break_zone_keywords()` runs `on_break` once when the card reaches the Break Zone from the field. Use
-this shape when a trigger has to remember something about the card it is attached to (Cid 72/73's "the Forward that
-took damage from Cid").
+A status can be a DICTIONARY payload: `{duration, controller, on_enter_break_zone}`. `Card.turn_end()` expires it
+like a number, and `Game.trigger_break_zone_keywords()` runs `on_enter_break_zone` once when the card reaches the
+Break Zone FROM THE FIELD. It fires whether or not the card BROKE — the card text says "put from the field into the
+Break Zone", so do not gate this on `broken`; `when_break` is the break-only keyword. Use this shape when a trigger has
+to remember something about the card it is attached to (Cid 72/73's "the Forward that took damage from Cid").
 
 ## Rules live in scripts/rules.gd, not in Field
 

@@ -838,7 +838,7 @@
 		"on_causing_damage_to_forward":{
 			"status":"cid_verdict",
 			"duration":1,
-			"on_break":[{"name":"opponent_mills","author":"game","argument":[2]}]
+			"on_enter_break_zone":[{"name":"opponent_mills","author":"game","argument":[2]}]
 		},
 		"skill":[
 			{
@@ -854,7 +854,7 @@
 		"on_causing_damage_to_forward":{
 			"status":"cid_verdict",
 			"duration":1,
-			"on_break":[{"name":"opponent_mills","author":"game","argument":[2]}]
+			"on_enter_break_zone":[{"name":"opponent_mills","author":"game","argument":[2]}]
 		}
 	}
 }
