@@ -346,7 +346,14 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/absorb_ring.gdshader"),
 ]
 
+const RULES := preload("res://scripts/rules.gd")
+## Continuous-effect QUERIES (cost, damage, choose/break protection), split out of Field so the board does not keep
+## growing. Created before start_match, because Field's forwarders reach it as soon as cards are placed.
+var rules = null
+
 func _ready():
+	rules = RULES.new()
+	rules.bind(self)
 	start_match(MatchSetup.resolve_config())
 
 ## Forces each effect shader to compile by putting a 1-pixel quad using it on screen for one frame. The quads free

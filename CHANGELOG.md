@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Rules split out of Field
+
+The four CONTINUOUS-EFFECT QUERIES now live in `scripts/rules.gd`, owned by `Game` as `rules` and bound before
+`start_match`:
+
+```
+effective_cost(card)
+modify_damage(source, target, amount)
+is_protected_from_being_chosen(card, source, kind)
+is_protected_from_break(card, controller, kind)
+```
+
+Field keeps one-line forwarders, so every existing caller and probe is unchanged — and `rules_probe` asserts the
+forwarders and the direct calls return the same answers. Registration and the stateful ledgers (`auras`, `power_per`)
+stay on Field, which is the only thing that knows when a card enters or leaves.
+
+Why: Field had grown into the board AND the rulebook, and precedence ("double, then add, then floor at 0") was
+implicit in whichever function ran first. The queries are pure reads over the cards, so they move without risk; the
+next step is to move the ledgers once they settle.
+
+New probe `rules_probe` (12 checks).
+
 ### Warrior of Light + the data-only cards (batch 6)
 
 **5 Warrior of Light** doubles its damage to a Forward of cost 4 or more. Damage now records the DEALING card

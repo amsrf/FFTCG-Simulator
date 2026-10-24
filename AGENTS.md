@@ -43,7 +43,16 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
-## Damage, its dealer, and its modifiers
+## Rules live in scripts/rules.gd, not in Field
+
+`Game.rules` owns the CONTINUOUS-EFFECT QUERIES: `effective_cost`, `modify_damage`,
+`is_protected_from_being_chosen`, `is_protected_from_break`. Field keeps one-line forwarders so callers and probes are
+unchanged. Registration and stateful ledgers (`_auras`, `_power_per_effects`, `_conditional_effects`) still live on
+Field, because it is the only thing that knows when a card enters or leaves.
+
+When adding a NEW rule, put the query in `scripts/rules.gd` and register/broadcast from Field. Do not add another
+scan-and-answer method to `battle_field.gd`.
+
 
 `Card.suffer_damage(damage, kind, controller, source_card)` records BOTH the cause (Summon/Ability/combat) and the
 DEALING card. `Field.modify_damage(source, target, amount)` runs before the damage is applied (Warrior of Light
