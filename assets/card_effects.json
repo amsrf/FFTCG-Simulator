@@ -750,4 +750,40 @@
 			}
 		]
 	}
+,
+	"10":{
+		"skill":[
+			{
+				"cost":{"火":1},
+				"tap":true,
+				"sacrifice":{"is_source":true},
+				"text":"《Fire》《Dull》, put Black Mage into the Break Zone: Choose 1 Forward. Deal it 4000 damage.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[4000]}]
+			}
+		]
+	},
+	"36":{
+		"skill":[
+			{
+				"cost":{"氷":1},
+				"tap":true,
+				"sacrifice":{"is_source":true},
+				"text":"《Ice》《Dull》, put Bard into the Break Zone: Your opponent discards 1 card from their hand.",
+				"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
+			}
+		]
+	},
+	"88":{
+		"skill":[
+			{
+				"cost":{"風":2},
+				"tap":true,
+				"sacrifice":{"is_source":true},
+				"text":"《Wind》《Wind》《Dull》, put Archer into the Break Zone: Choose 1 Backup of cost 3 or less. Break it.",
+				"choose_target":{"is_type":"Backup","is_cost_at_most":3},
+				"instructions":[{"name":"break_targets","author":"game","argument":[]}]
+			}
+		]
+	}
 }

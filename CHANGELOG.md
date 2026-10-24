@@ -4,6 +4,27 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Self-sacrifice costs (10 Black Mage, 36 Bard, 88 Archer)
+
+"Put THIS card into the Break Zone" is the same `sacrifice` key with the source as the target — no picker, because
+there is nothing to choose:
+
+```json
+"sacrifice": {"is_source": true}
+```
+
+The card leaves the field at ACTIVATION, before payment, and the ability still resolves from the stack with its own
+source already in the Break Zone. `is_source` is already understood by the shared target-block evaluator, so the
+criteria do the work; the activation branch only skips the agent call. `can_activate_now` needs no special case: the
+source always matches, so the cost is always payable.
+
+Added `is_cost_at_most` for Archer's "a Backup of cost 3 or less".
+
+Coverage: **80 implemented / 7 plain / 13 to do**. New probe `self_sacrifice_probe` (14 checks): activation puts the
+source in the Break Zone, the mana still opens target selection, Black Mage resolves for 4000, and Archer breaks a
+cost-1 Backup.
+
+
 ### Activated abilities (22 Firion, 84 Y'shtola, 96 Mystic)
 
 They turned out to need almost no engine: an activated ability is an ordinary `skill` entry with **no `s_cost`** and

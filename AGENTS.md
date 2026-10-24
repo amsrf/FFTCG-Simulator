@@ -51,6 +51,7 @@ Every non-S ability is a `skill` entry. The differences are only in the cost key
   "tap": true                   dull as part of the cost
   "s_cost": true                discard a card with the same name (hand picker)
   "sacrifice": {"is_type":"Backup","controller":"player"}   put one of your cards into the Break Zone
+  "sacrifice": {"is_source": true}                          put THIS card into the Break Zone (no picker)
 
 Sacrifice is chosen by the OWNER through `Agent.choose_sacrifice()` (LocalAgent opens the card picker; the base agent
 takes the cheapest) and is paid at activation. Aborting it clears the proxy. A skill whose sacrifice has no candidates

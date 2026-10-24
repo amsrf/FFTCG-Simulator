@@ -599,10 +599,14 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	var sacrifice: Dictionary = def.get("sacrifice", {})
 	if not sacrifice.is_empty():
 		var owner_id: int = 1 if card.controller == "player" else 2
-		var candidates: Array = _sacrifice_candidates(sacrifice, card)
 		var picked: Card = null
-		if not candidates.is_empty():
-			picked = await get_parent().agent_for(owner_id).choose_sacrifice(owner_id, candidates)
+		if bool(sacrifice.get("is_source", false)):
+			# "Put THIS card into the Break Zone" — no choice to make, and no reason to ask an agent.
+			picked = card if card.matches_criteria(sacrifice, card) else null
+		else:
+			var candidates: Array = _sacrifice_candidates(sacrifice, card)
+			if not candidates.is_empty():
+				picked = await get_parent().agent_for(owner_id).choose_sacrifice(owner_id, candidates)
 		if picked == null:
 			stack.call("_clear_skill_proxy")
 			return

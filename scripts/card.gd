@@ -1232,6 +1232,10 @@ func is_cost_lower_than(value: int) -> bool:
 func is_cost_at_least(value: int) -> bool:
 	return int(cost) >= int(value)
 
+## "a Backup of cost 3 or less" (Archer 1-088C).
+func is_cost_at_most(value: int) -> bool:
+	return int(cost) <= int(value)
+
 ## "[Category (VII)]" (Cloud 1-009C). Checks the card's categories from the database; a card can have several.
 func is_category(value: String) -> bool:
 	var data: Dictionary = CardDatabase.card_database[id - 1]
