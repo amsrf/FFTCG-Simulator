@@ -320,6 +320,10 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	register_conditional_effects(card)
 	recompute_conditional_power()
 	register_card_auras(card)
+	register_power_per(card)
+	# A card ENTERING can change a count for someone already in play (Jecht counts the opponent's Forwards), and
+	# register_power_per only recomputes this card's own rules.
+	recompute_power_per()
 	
 	# Calculate position
 	var target_position = target_node.position
@@ -957,12 +961,14 @@ func clear_targeted_highlights() -> void:
 func remove_card(card):
 	unregister_conditional_effects(card)
 	unregister_card_auras(card)
+	unregister_power_per(card)
 	front_cards.erase(card)
 	back_cards.erase(card)
 	opponent_front_cards.erase(card)
 	opponent_back_cards.erase(card)
 	recompute_conditional_power()
 	refresh_auras()
+	recompute_power_per()
 	# A member leaving the field leaves the party; fewer than two members disbands it. Done here because every way
 	# off the field (break, exile, return, effect) ends in remove_card, so no caller has to remember.
 	#
@@ -991,6 +997,89 @@ func unregister_conditional_effects(card: Card) -> void:
 		card.current_conditional_bonus = 0
 		if card.power_label:
 			card.power_label.changePower(card.power)
+
+## CONTINUOUS, COUNT-BASED POWER. "For each point of damage you have received, +1000" (Dark Knight 92, Gabranth 98)
+## and "for each Forward your opponent controls, +1000" (Jecht 15).
+##
+## Same ledger idea as conditional_power: remember what each rule currently GRANTS and apply only the difference, so
+## temporary buffs and auras living in `power` are never recomputed away. The count itself is read live from the board
+## — there is no counter to keep in sync — so the only duty is to recompute when a count can change: a card entering
+## or leaving the field, and a player taking damage.
+##
+##   "power_per": {"count": {"is_type": "Forward", "controller": "opponent"}, "value": 1000}
+##   "power_per": {"count": "damage_received", "value": 1000, "brave_at": 6}
+##
+## `brave_at` is optional: once the count reaches it, the card gains Brave (status, one turn, refreshed by the same
+## recompute), and loses it if the count drops back below.
+var _power_per_effects: Array = []
+
+func register_power_per(card: Card) -> void:
+	if not ("power_per" in card.card_effects):
+		return
+	var rules = card.card_effects["power_per"]
+	if rules is Dictionary:
+		rules = [rules]
+	if not (rules is Array):
+		return
+	for rule in rules:
+		if not (rule is Dictionary):
+			continue
+		_power_per_effects.append({
+			"source": card,
+			"count": rule.get("count", ""),
+			"value": int(rule.get("value", 0)),
+			"brave_at": int(rule.get("brave_at", -1)),
+			"granted": 0,
+			"brave_granted": false,
+		})
+	recompute_power_per()
+
+func unregister_power_per(card: Card) -> void:
+	for rule in _power_per_effects:
+		if rule["source"] == card and is_instance_valid(card):
+			var granted: int = int(rule["granted"])
+			if granted != 0:
+				card.power_change(-granted, -1)
+	_power_per_effects = _power_per_effects.filter(func(r): return r["source"] != card)
+
+func recompute_power_per() -> void:
+	for rule in _power_per_effects:
+		var source: Card = rule["source"]
+		if source == null or not is_instance_valid(source) or not source.is_on_field():
+			continue
+		var n: int = _power_per_count(rule["count"], source)
+		var desired: int = n * int(rule["value"])
+		if desired != int(rule["granted"]):
+			source.power_change(desired - int(rule["granted"]), -1)
+			rule["granted"] = desired
+		var threshold: int = int(rule["brave_at"])
+		if threshold > 0:
+			var should: bool = n >= threshold
+			# Only touch the status the RULE granted: a printed Brave lives in card_effects and must not be erased
+			# here, and neither should a status some other effect put there.
+			if should != bool(rule["brave_granted"]):
+				if should:
+					source.add_status_effect("brave", 1)
+				else:
+					source.status_effects.erase("brave")
+				rule["brave_granted"] = should
+
+## How many things a power_per rule counts. "damage_received" is the cards in its controller's damage zone; anything
+## else is a criteria block counted against the board.
+func _power_per_count(counter, source: Card) -> int:
+	if counter is String and counter == "damage_received":
+		var game: Node = get_parent()
+		if game == null or not game.has_method("side_for"):
+			return 0
+		var side = game.call("side_for", 1 if source.controller == "player" else 2)
+		return side.damage_count() if side != null else 0
+	if counter is Dictionary:
+		var total: int = 0
+		for card in get_all_cards():
+			if card.matches_criteria(counter, source):
+				total += 1
+		return total
+	return 0
 
 func recompute_conditional_power() -> void:
 	for effect in _conditional_effects:

@@ -1,0 +1,101 @@
+extends Node
+## TERRA 47 probe — data-only card:
+##   ETB: choose up to 2 DULL Forwards the opponent controls, 4000 damage each
+##   《Ice》: choose 1 dull Forward, 1000 damage
+##
+## The point of this probe is that the criteria do the work: `is_tapped` picks the legal set, `count` allows "up to 2",
+## and `damage_targets` applies to all of them at once.
+
+const GAME_SCENE := preload("res://game.tscn")
+
+const TERRA := 47
+const SQUALL := 41          # dulled: legal
+const SNOW := 43            # active: NOT legal
+const KNIGHT_55 := 55       # dulled: legal
+const ICE_MANA := 31
+
+var _checks: int = 0
+var _fails: int = 0
+var _game: Node = null
+var _field = null
+
+
+func _expect(ok: bool, what: String) -> void:
+	_checks += 1
+	if ok:
+		print("[Terra47] ok   %s" % what)
+	else:
+		_fails += 1
+		print("[Terra47] FAIL %s" % what)
+
+
+func _card(id: int) -> Card:
+	for c in _field.get_all_cards():
+		if c.id == id:
+			return c
+	return null
+
+
+func _ready() -> void:
+	MatchSetup.config = MatchSetup.build_config("clean", {
+		"player_field": [{"id": TERRA}, {"id": ICE_MANA}],
+		"opponent_field": [
+			{"id": SQUALL, "tapped": true},
+			{"id": SNOW, "tapped": false},
+			{"id": KNIGHT_55, "tapped": true},
+		],
+		"player_deck": range(101, 131),
+		"opponent_deck": range(141, 171),
+	})
+	_game = GAME_SCENE.instantiate()
+	add_child(_game)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_field = _game.get("field")
+
+	var terra: Card = _card(TERRA)
+	var squall: Card = _card(SQUALL)
+	var snow: Card = _card(SNOW)
+	var knight: Card = _card(KNIGHT_55)
+
+	var etb: Dictionary = terra.card_effects.get("when_enter_field", {})
+	_expect(int(etb.get("choose_target", {}).get("count", 1)) == 2, "the ETB allows up to 2 targets")
+	_expect(bool(etb.get("choose_target", {}).get("is_tapped", false)), "and only DULL Forwards")
+
+	# --- the ETB, end to end ------------------------------------------------------------------------------
+	_field.execute_card_effect(terra, "when_enter_field")
+	await get_tree().process_frame
+	_expect(GlobalVariables.get_player_mode() == GlobalVariables.Player_mode_TARGET \
+			if false else GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET,
+		"the ETB opens a targeting session")
+	_expect(squall.is_valid_target, "a dull Forward is a legal target")
+	_expect(not snow.is_valid_target, "an active Forward is not")
+	_field.set_target_card(squall)
+	_field.set_target_card(knight)
+	await get_tree().process_frame
+	_game.get("assistant").call("on_target_complete")
+	await get_tree().process_frame
+	var stack = _game.get("stack")
+	await stack.resolve_top_effect()
+	await get_tree().process_frame
+	print("[Terra47] after ETB: Squall %d, Snow %d, Dark Knight %d" % [
+		squall.accumulated_damage, snow.accumulated_damage, knight.accumulated_damage])
+	_expect(squall.accumulated_damage == 4000, "the first dull Forward takes 4000")
+	_expect(knight.accumulated_damage == 4000, "the second dull Forward takes 4000")
+	_expect(snow.accumulated_damage == 0, "the active Forward takes nothing")
+	_expect(not snow.is_on_field() or snow.accumulated_damage == 0, "and is untouched")
+
+	# --- the skill's data ---------------------------------------------------------------------------------
+	var skills: Array = terra.card_effects.get("skill", [])
+	_expect(skills.size() == 1, "Terra has her one skill")
+	if skills.size() == 1:
+		var skill: Dictionary = skills[0]
+		# JSON numbers arrive as floats, so compare the VALUE, not the dictionary (1.0 != 1 for dict equality).
+		_expect(int(skill.get("cost", {}).get("氷", 0)) == 1, "it costs one ice")
+		_expect(not bool(skill.get("tap", false)), "and does not dull her")
+		_expect(bool(skill.get("choose_target", {}).get("is_tapped", false)), "it targets a dull Forward")
+		_expect(int(skill.get("instructions", [{}])[0].get("argument", [0])[0]) == 1000, "for 1000 damage")
+
+	print("[Terra47] %d checks | failures: %d" % [_checks, _fails])
+	print("[Terra47] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
+	get_tree().quit()

@@ -899,6 +899,10 @@ func _on_player_side_damaged(side: PlayerSide) -> void:
 	# THE ZOOM RUNS FOR EVERY HIT, so it is called BEFORE the guard below — that guard returns early for
 	# ordinary damage and only lets a defeat through, so hooking after it would zoom only on the losing blow.
 	_zoom_to_damage(side)
+	# "For each point of damage you have received" (Dark Knight, Gabranth): the damage zone just grew, so every
+	# count-based power rule has to be re-evaluated — on BOTH sides' cards, since one player's damage feeds their own
+	# cards only, but the recompute is cheap and idempotent.
+	field.recompute_power_per()
 	if match_over or not side.is_defeated():
 		return
 	# Compare against the node, like side_for(), so there is only one definition

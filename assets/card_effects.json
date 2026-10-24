@@ -593,4 +593,39 @@
 		"cost_aura":{"for":"Summon","from":"opponent","delta":1},
 		"cannot_be_chosen":{"sources":["Summon"],"controller":"opponent"}
 	}
+,
+	"15":{
+		"power_per":{"count":{"is_type":"Forward","controller":"opponent"},"value":1000},
+		"skill":[
+			{
+				"s_cost":true,
+				"cost":{"火":1,"neutral":2},
+				"tap":true,
+				"text":"Ultimate Jecht Shot 《S》《火》《2》《Dull》: Choose 1 Forward. Break it.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"break_targets","author":"game","argument":[]}]
+			}
+		]
+	},
+	"92":{
+		"power_per":{"count":"damage_received","value":1000}
+	},
+	"98":{
+		"power_per":{"count":"damage_received","value":1000,"brave_at":6}
+	}
+,
+	"47":{
+		"when_enter_field":{
+			"choose_target":{"is_type":"Forward","controller":"opponent","is_tapped":true,"count":2},
+			"instructions":[{"name":"damage_targets","author":"game","argument":[4000]}]
+		},
+		"skill":[
+			{
+				"cost":{"氷":1},
+				"text":"《Ice》: Choose 1 dull Forward. Deal it 1000 damage.",
+				"choose_target":{"is_type":"Forward","is_tapped":true},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
+			}
+		]
+	}
 }

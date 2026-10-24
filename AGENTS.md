@@ -43,6 +43,18 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## power_per: continuous, count-based power
+
+`power_per` (Jecht, Dark Knight, Gabranth) is the counted sibling of `conditional_power`. Each rule stores what it
+currently GRANTS and applies only the difference — never recompute `power` from its base, or temporary buffs and auras
+are erased. The count is read live: a criteria block counted over the board, or `"damage_received"` = the controller's
+damage zone size.
+
+Recompute points: `Field.play_card`, `Field.remove_card`, and `Game._on_player_side_damaged`. `brave_at` toggles Brave
+on the same pass and tracks `brave_granted` so it only removes the status it put there.
+
+JSON numbers are FLOATS: `{"氷": 1.0}` is not `==` to `{"氷": 1}` as a Dictionary. Compare `int(...)` of the value.
+
 ## Costs Are a Board Question
 
 `Card.get_cost()` is the PRINTED cost. The cost actually paid is `Field.effective_cost(card)`: printed plus every

@@ -4,6 +4,29 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Count-Based Power (batch 5)
+
+**15 Jecht** (+1000 per Forward the opponent controls; S: 1 fire + 2 neutral + dull → break a Forward),
+**92 Dark Knight** and **98 Gabranth** (+1000 per point of damage you have received; Gabranth also gains Brave at 6+),
+and **47 Terra** (ETB: up to 2 dull opponent's Forwards, 4000 each; 《氷》: 1 dull Forward, 1000 — pure data).
+
+`power_per` is the continuous, count-based sibling of `conditional_power`:
+
+```json
+"power_per": {"count": {"is_type": "Forward", "controller": "opponent"}, "value": 1000}
+"power_per": {"count": "damage_received", "value": 1000, "brave_at": 6}
+```
+
+The rule remembers what it currently GRANTS and applies only the difference, so recomputing never erases a temporary
+buff or an aura living in `power`. The count is read LIVE from the board (criteria count, or the controller's damage
+zone), so there is no counter that can drift. Recomputed when a card enters or leaves the field and when a player takes
+damage; `brave_at` toggles a Brave status on the same recompute, tracking whether THIS rule granted it.
+
+Coverage: **65 implemented / 7 plain / 28 to do**. New probes: `power_per_probe` (15 checks — Jecht up/down with the
+opponent's board, damage scaling, a +2000 buff surviving a recompute, Brave at 6, clean unregister) and
+`terra47_probe` (14 checks — dull-only targeting, up-to-2, per-target 4000, skill data).
+
+
 ### Test ground: Terra (Summon cost +1)
 
 Test Mode → "Ground: Terra (Summon cost +1 for you)". The opponent has Terra and you hold Ifrit with two fire
