@@ -4,6 +4,38 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### "You may" is a real choice — Squall 41, Leon 60, Vaan 63
+
+The last three cards needed one shared idea: **may is decided at resolution, after targets are locked**, and it is a
+decision the player can decline.
+
+* `may` on an instruction, plus `may_by` and `may_prompt`. The gate sits in `_process_next_instruction`, at the moment
+  the instruction is reached: the controller's agent is asked (or the OPPONENT's, with `may_by: "opponent"`).
+* A refusal is a normal no-op: the rest of the chain continues and `if_last_did_not_succeed` sees it, so an else-branch
+  can key off it.
+* `LocalAgent.confirm_optional()` shows **Confirm** and **Refuse**. The short prompt is the CONFIRM BUTTON'S TEXT
+  ("Deal 6000", "Play a Character"), which is the only message surface the rack has — and it keeps the buttons short.
+
+Card work:
+
+* **41 Squall** — `when_blocks` and `when_blocked`, both queued at the DECLARATION (the single moment both become
+  true; a party means every member is blocked), choose 1 Forward, `may` deal 6000. Renzokuken is an S ability with an
+  ice mana cost and grants Squall First Strike until end of turn.
+* **60 Leon** — the OPPONENT decides (`may_by`), and the free play comes from THEIR hand (`play_from_hand(..., "opponent")`).
+* **63 Vaan** — may play a Wind Forward of cost 3 or less from hand; when it attacks, choose up to 2 Backups you
+  control and activate them.
+
+`Game.play_from_hand(criteria, by)` plays for free (no cost — the text says PLAY, not CAST), through the same search
+window (`Agent.choose_hand_card_to_play`), and `Hand.remove_for_play()` stops the hand owning the card before
+`Field.play_card()` takes it. The returning card is reset by `Card.reset_for_field_arrival()`.
+
+New probe `may_probe` (26 checks): accept and decline on a bare instruction, Squall's 6000 with both answers, the
+block declaration firing `when_blocked`, both free-play cases (controller and opponent), the two-Backup attack
+trigger, Renzokuken's self First Strike, and the real Confirm/Refuse buttons appearing and clearing.
+
+**Card coverage for ids 1-100 is complete: 93 implemented / 7 with no text / 0 to do.**
+
+
 ### The Break Zone search: Devout 48 / 77
 
 The deck search window now serves a second zone — literally the same scene and the same fan, with an optional

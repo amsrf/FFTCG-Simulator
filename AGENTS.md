@@ -117,6 +117,21 @@ session is CONFIRMED, not when rings are clicked. Three conditions:
 The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
 ability must land on top of the Summon/ability that caused it, so it resolves first.
 
+## "May" is an instruction flag, decided at resolution
+
+`may: true` on an instruction makes the controller choose when the instruction is REACHED — after targets are locked,
+which is the rule. `may_by: "opponent"` gives the choice to the other player (Leon 60); `may_prompt` is the confirm
+button's text. A refusal skips the instruction, sets `_last_action_succeeded = false`, and the chain continues.
+
+`LocalAgent.confirm_optional()` shows Confirm / Refuse through Assistant.show_modal. Answers live on members, not
+lambdas — GDScript lambdas capture locals by value.
+
+Block triggers are queued by `Game.set_blocker()`: the blocker's `when_blocks`, and `when_blocked` for EVERY attacking
+party member. Declaration is the single moment both become true.
+
+`play_from_hand` plays for free — no mana, no charge; call `Hand.remove_for_play()` and then
+`Card.reset_for_field_arrival()` before `Field.play_card()`.
+
 ## Damage goes through Field.cause_damage
 
 Do NOT call `card.suffer_damage()` for game damage. `Field.cause_damage(target, amount, source, kind, controller)`

@@ -885,4 +885,45 @@
 			]
 		}
 	}
+,
+	"41":{
+		"when_blocks":{
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[
+				{"name":"damage_targets","author":"game","argument":[6000],"may":true,"may_prompt":"Deal 6000"}
+			]
+		},
+		"when_blocked":{
+			"choose_target":{"is_type":"Forward"},
+			"instructions":[
+				{"name":"damage_targets","author":"game","argument":[6000],"may":true,"may_prompt":"Deal 6000"}
+			]
+		},
+		"skill":[
+			{
+				"s_cost":true,
+				"cost":{"氷":1},
+				"text":"Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn.",
+				"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]
+			}
+		]
+	},
+	"60":{
+		"when_enter_field":{
+			"instructions":[
+				{"name":"play_from_hand","author":"game","argument":[{"is_character":true},"opponent"],"may":true,"may_by":"opponent","may_prompt":"Play a Character"}
+			]
+		}
+	},
+	"63":{
+		"when_enter_field":{
+			"instructions":[
+				{"name":"play_from_hand","author":"game","argument":[{"is_type":"Forward","element":"風","is_cost_lower_than":4}],"may":true,"may_prompt":"Play a Forward"}
+			]
+		},
+		"when_attack":{
+			"choose_target":{"is_type":"Backup","controller":"player","count":2},
+			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
+		}
+	}
 }

@@ -118,6 +118,17 @@ func choose_card_in_hand(_owner_id: int, _criteria: Dictionary, _required: bool)
 ## picks heuristically, and a RemoteAgent answers over the network. None of that is visible to Game.
 ##
 ## Returning null is always safe: the caller stops discarding and carries on.
+## "YOU MAY ..." The instruction asks its controller (or the opponent, for Leon 60) when it is reached.
+## Default TRUE: an AI or a mock takes every optional effect, and nothing can hang waiting for one.
+func confirm_optional(_player_id: int, _prompt: String) -> bool:
+	await _settle()
+	return true
+
+## Choose a card from HAND to play for free (Vaan 63, Leon 60). Returns a card id, or -1.
+func choose_hand_card_to_play(_owner_id: int, ids: Array, _filter: Dictionary) -> int:
+	await _settle()
+	return int(ids[0]) if not ids.is_empty() else -1
+
 ## CHOOSE A CARD FROM A ZONE (the Break Zone, for Devout 48/77). Returns a card id, or -1 for "none".
 ## The default takes the first: an AI or a mock can always answer, so an instruction awaiting this can never hang.
 func choose_break_zone_card(_owner_id: int, ids: Array, _filter: Dictionary) -> int:

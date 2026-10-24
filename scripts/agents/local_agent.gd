@@ -66,6 +66,41 @@ func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Arr
 ## This lives here rather than in Game on purpose. The rules layer asks the seat that owns the hand and gets a card
 ## back; whether that seat is a person at this keyboard, an AI, or a remote opponent is the agent's business. Once
 ## a RemoteAgent exists it implements this same method and the rules layer does not change at all.
+## CONFIRM / REFUSE for a "you may" instruction. The confirm button carries the short prompt ("Deal 6000"), so the
+## player can see what they are agreeing to; Refuse is the cancel button.
+##
+## The answers live on MEMBERS because GDScript lambdas capture locals by value — assigning to a local inside the
+## callback would never reach this function.
+var _optional_answer: bool = false
+var _optional_settled: bool = false
+
+func confirm_optional(_player_id: int, prompt: String) -> bool:
+	var assistant: Assistant = game.assistant
+	_optional_settled = false
+	_optional_answer = false
+	var text: String = prompt if prompt != "" else "Confirm"
+	assistant.show_modal(text, "Refuse",
+		func():
+			_optional_answer = true
+			_optional_settled = true,
+		func():
+			_optional_answer = false
+			_optional_settled = true,
+		true, true)
+	while not _optional_settled:
+		await game.get_tree().process_frame
+	assistant.hide_buttons()
+	return _optional_answer
+
+## Free play from hand — the same window, over the hand instead of a zone.
+func choose_hand_card_to_play(_owner_id: int, ids: Array, filter: Dictionary) -> int:
+	if ids.is_empty():
+		return -1
+	var window = DECK_SEARCH.instantiate()
+	game.add_child(window)
+	window.open(ids, filter, "Choose a card in your hand to play.")
+	return await window.finished
+
 ## THE BREAK ZONE SEARCH IS THE DECK SEARCH. Same fan, same hover preview, same look — only the cards and the
 ## subtitle differ, which is exactly what the window was built to allow.
 func choose_break_zone_card(_owner_id: int, ids: Array, filter: Dictionary) -> int:

@@ -816,6 +816,12 @@ func remove_card_for_free_play(card: Card) -> void:
 	cards.erase(card)
 	update_card_positions()
 
+## TAKE A CARD OUT OF HAND TO PLAY IT, without charging for it (Vaan / Leon: "play ... from your hand").
+## The card itself is reparented by Field.play_card(); this only stops the hand owning it, exactly like discard_card.
+func remove_for_play(card: Card) -> void:
+	cards.erase(card)
+	update_card_positions()
+
 func discard_card(card: Card) -> void:
 	# Special ability (S) cost: the chosen card goes from hand to the break zone.
 	cards.erase(card)

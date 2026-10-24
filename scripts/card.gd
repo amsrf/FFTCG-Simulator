@@ -95,7 +95,10 @@ func create_instruction_from_json(array: Array) -> Array[Instruction]:
 		var executor: String = json_instruction.get("author", "")
 		var value = json_instruction.get("argument", null)
 		var condition: String = json_instruction.get("condition", "")
-		ans.append(Instruction.new(action, executor, value, condition))
+		var may_use: bool = bool(json_instruction.get("may", false))
+		var may_by: String = str(json_instruction.get("may_by", ""))
+		var may_prompt: String = str(json_instruction.get("may_prompt", ""))
+		ans.append(Instruction.new(action, executor, value, condition, may_use, may_by, may_prompt))
 	
 	# Create and return the Instruction
 	return ans
