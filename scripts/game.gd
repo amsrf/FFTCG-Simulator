@@ -969,6 +969,9 @@ func _execute_instructions_and_wait(instructions: Array[Instruction]) -> void:
 ## Turns are KEPT, not cleared: the array for an old turn costs nothing and "this turn" is a filter, not a deletion.
 var turn_number: int = 1
 var turn_history: Dictionary = {}
+## once_per_turn event triggers, keyed by card instance + trigger index + turn_number. The turn number is part of the
+## key, so a new turn starts with a clean slate without any reset pass.
+var _event_triggers_fired: Dictionary = {}
 
 func record_action(activity: String, targets: Array = [], actor: int = 0) -> void:
 	# actor 0 = "whoever's turn it is", which is right for anything the turn player initiates. Effects that fire on
@@ -1224,6 +1227,8 @@ func _on_player_side_damaged(side: PlayerSide) -> void:
 	# count-based power rule has to be re-evaluated — on BOTH sides' cards, since one player's damage feeds their own
 	# cards only, but the recompute is cheap and idempotent.
 	field.recompute_power_per()
+	if not match_over:
+		field.trigger_event("damage_received", {"player_id": 1 if side == player else 2})
 	if match_over or not side.is_defeated():
 		return
 	# Compare against the node, like side_for(), so there is only one definition
@@ -1842,6 +1847,9 @@ func enforce_game_state_rules() -> void:
 ## intercept the transition itself — the card never reaches the Break Zone, so nothing that watches for a card
 ## arriving there can see it. Implementing it as a trigger that reacts afterwards would be a different (wrong) rule.
 func _send_card_to_graveyard(card: Card) -> bool:
+	# CAPTURED BEFORE THE MOVE. Graveyard.add_card() sets current_zone to GRAVEYARD, and this flag decides whether the
+	# board-wide card_left_field event fires; a card that never was on the field must not trigger it.
+	var from_field: bool = card.current_zone == Card.Zone.FIELD
 	if card.status_effects.has("fragile"):
 		print("[Fragile] %s is removed from the game instead" % card.card_name)
 		card.status_effects.erase("fragile")
@@ -1860,6 +1868,8 @@ func _send_card_to_graveyard(card: Card) -> bool:
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
+	if from_field:
+		field.trigger_event("card_left_field", {"card": card})
 	return false
 
 func _yuna_exiles_break_zone() -> bool:

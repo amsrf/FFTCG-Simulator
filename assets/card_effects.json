@@ -2977,6 +2977,26 @@
 					}
 				]
 			}
+		],
+		"triggers": [
+			{
+				"on": "forward_attacks",
+				"filter": {
+					"is_type": "Forward",
+					"controller": "your"
+				},
+				"target": "event",
+				"instructions": [
+					{
+						"name": "power_change_targets",
+						"author": "game",
+						"argument": [
+							1000,
+							1
+						]
+					}
+				]
+			}
 		]
 	},
 	"210": {
@@ -3011,7 +3031,127 @@
 				"controller": "your"
 			},
 			"delta": -1
-		}
+		},
+		"triggers": [
+			{
+				"on": "card_left_field",
+				"filter": {
+					"is_type": "Forward",
+					"is_named": "Yuna",
+					"controller": "your"
+				},
+				"instructions": [
+					{
+						"name": "draw_cards",
+						"author": "game",
+						"argument": [
+							2
+						]
+					}
+				]
+			}
+		]
+	},
+	"108": {
+		"triggers": [
+			{
+				"on": "damage_received",
+				"filter": {
+					"controller": "your"
+				},
+				"may": true,
+				"may_prompt": "Deal 5000 damage",
+				"choose_target": {
+					"is_type": "Forward",
+					"controller": "opponent"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							5000
+						]
+					}
+				]
+			}
+		]
+	},
+	"206": {
+		"triggers": [
+			{
+				"on": "card_left_field",
+				"filter": {
+					"is_type": "Backup",
+					"controller": "your"
+				},
+				"instructions": [
+					{
+						"name": "apply_effect",
+						"author": "game",
+						"argument": [
+							{
+								"is_type": "Forward",
+								"controller": "opponent"
+							},
+							false
+						]
+					},
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							1000
+						]
+					}
+				]
+			}
+		]
+	},
+	"214": {
+		"triggers": [
+			{
+				"on": "summon_cast",
+				"filter": {
+					"controller": "your"
+				},
+				"once_per_turn": true,
+				"requires_active": true,
+				"may": true,
+				"may_prompt": "Dull Yuna to draw 1",
+				"instructions": [
+					{
+						"name": "dull_targets",
+						"author": "game",
+						"argument": []
+					},
+					{
+						"name": "draw_cards",
+						"author": "game",
+						"argument": [
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"215": {
+		"triggers": [
+			{
+				"on": "summon_cast",
+				"filter": {
+					"controller": "opponent"
+				},
+				"instructions": [
+					{
+						"name": "untap_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
 	},
 	"_definitions": {
 		"about": "Machine-readable reference for this file. Keys beginning with _ are documentation, not card ids.",
@@ -3203,6 +3343,18 @@
 			"cost_aura": "Aura cost modifier; fields for, name, element, from, delta, min.",
 			"per": "Criteria counted once per matching card the source controls.",
 			"min": "Minimum final cost; only reduces the size of the reduction, never raises a cost already below it."
+		},
+		"event_triggers": {
+			"card_key": "triggers",
+			"events": {
+				"damage_received": "A player took damage; context.player_id.",
+				"card_left_field": "A card was put into the Break Zone; context.card.",
+				"summon_cast": "A Summon was cast; context.card.",
+				"forward_attacks": "A Forward attacked; context.card is the attacker."
+			},
+			"filter": "Card criteria evaluated on context.card from the trigger owner's perspective; damage_received uses controller only.",
+			"target": "source (default), event (context.card), or none.",
+			"fields": "may, may_prompt, once_per_turn, requires_active, choose_target, instructions."
 		}
 	}
 }

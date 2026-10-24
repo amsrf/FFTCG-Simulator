@@ -4,6 +4,37 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### B4b: Board-Wide Event Triggers (108, 187, 206, 214, 215; 213 partial)
+
+New generic card-data key: `triggers`, an array of board-wide event triggers.
+
+```json
+"triggers": [{
+  "on": "damage_received",
+  "filter": {"controller": "your"},
+  "may": true,
+  "may_prompt": "Deal 5000 damage",
+  "choose_target": {"is_type": "Forward", "controller": "opponent"},
+  "instructions": [{"name": "damage_targets", "author": "game", "argument": [5000]}]
+}]
+```
+
+Supported events: `damage_received`, `card_left_field`, `summon_cast`, `forward_attacks`.
+Supported trigger fields: `filter`, `target` (`source`/`event`/`none`), `may`, `may_prompt`,
+`once_per_turn`, `requires_active`, `choose_target`, `instructions`.
+
+Cards:
+* **108 Cecil** — when you receive damage, may deal 5000 to an opponent Forward.
+* **187 Cloud** — each Forward you control that attacks gains +1000. Cloud is now complete (cost, buff, Climhazzard).
+* **206 Biggs** — when one of your Backups is put into the Break Zone, all opponent Forwards take 1000.
+* **214 Yuna** — when you cast a Summon, may dull her to draw 1; once per turn, only if active.
+* **215 Lenne** — when the opponent casts a Summon, untap her.
+* **213 Tidus** — its Yuna-leaves trigger draws 2; only the “Brave while you control Yuna” condition still needs code.
+
+`tests/event_triggers_probe.gd` (12 checks). Boot 0 errors; full suite green.
+Coverage: 99 implemented / 4 vanilla / 14 needs code.
+
+
 ### B4a: Counted Cost Reductions and Filtered Cost Aura (177, 187, 210, 213)
 
 The cost engine now handles two reusable shapes:

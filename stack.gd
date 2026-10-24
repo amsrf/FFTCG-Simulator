@@ -248,6 +248,8 @@ func cast_card():
 		# played, and a Summon that is invalidated before it resolves was still cast.
 		get_parent().record_action("Casted %s" % casting_card.card_name, [],
 			1 if casting_card.controller == "player" else 2)
+		# Board-wide "when a Summon is cast" triggers (Yuna 214, Lenne 215) fire at the cast, not at resolution.
+		field.trigger_event("summon_cast", {"card": casting_card})
 	else:
 		# Character cards go straight to the field: they are never stack objects,
 		# so nothing is popped and no stack slot is consumed. play_card() needs

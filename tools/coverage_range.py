@@ -24,11 +24,8 @@ NEEDS_CODE = {
     # B2 - replacement / shields
     # B3 - targeting / selection (implemented)
     # B4a - cost reductions (177 and 210 implemented)
-    187: 'cost reduction per Category count + global attack buff',
-    213: 'cost reduction per Category count + Yuna-leaves trigger',
-    214: 'when-you-cast-a-Summon trigger (once per turn)',
-    215: 'when-opponent-casts-a-Summon trigger',
-    206: 'when a Backup you control leaves the field',
+    # B4b - event triggers (108, 187, 206, 214, 215 implemented)
+    213: 'Brave while you control Yuna',
     211: 'targeted on-break rider',
     173: 'Attack Phase start trigger + element override',
     181: 'return-self-to-hand cost',
@@ -40,7 +37,6 @@ NEEDS_CODE = {
     103: 'dynamic element identity',
     107: 'dynamic element identity',
     104: 'delayed break at end of turn',
-    108: 'when you receive damage trigger',
     111: 'variable X cost',
     135: 'multi-card search/play with distinct elements',
     183: 'any-element mana production',

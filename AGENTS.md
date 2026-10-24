@@ -132,6 +132,25 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### Board-wide events use the `triggers` array
+
+`Card.card_effects["triggers"]` is an array of event watchers, separate from the printed `when_*` keywords:
+
+* Events: `damage_received`, `card_left_field`, `summon_cast`, `forward_attacks`.
+* `filter` is criteria on the event card from the trigger owner's perspective; `damage_received` has no card and only
+  compares `controller`.
+* `target` controls the default instruction target: `source` (default), `event` (the card in the event context), or
+  `none`. `choose_target` replaces it with a targeting session.
+* `once_per_turn` is keyed by card instance + trigger index + `Game.turn_number`, so no reset pass is needed.
+* Dispatch points: `Game._on_player_side_damaged`, `Game._send_card_to_graveyard` (only when `current_zone` was FIELD
+  before the move), `Stack.cast_card` for Summons, and `Field.execute_card_attack`.
+* **A non-local agent finishes targeting inside `request_target()`.** `AIAgent.choose_target()` calls
+  `set_target_card()` + `on_target_complete()` synchronously, so the signal is already spent when `request_target()`
+  returns. Check `targeting_picked` first and only await `target_complete` when it is still empty; otherwise the
+  trigger hangs forever.
+* Event triggers currently resolve immediately at the event rather than through the stack. Document that if a future
+  card needs to respond to the trigger itself.
+
 ### Costs are read through Rules.effective_cost only
 
 Cost modifiers are board queries, not payment-time special cases:
