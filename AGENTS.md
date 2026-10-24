@@ -34,6 +34,15 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - **The scripts are split across two folders:** `battle_field.gd`, `stack.gd`, `assistant.gd`, `power_display.gd` are at the **repo root**, while `game.gd`, `card.gd`, `hand.gd`, `player_side.gd` are in `scripts/`. `grep -r` for the filename rather than guessing a path — a wrong guess costs a round trip.
 - **Warnings arrive in batches.** The user runs Godot and pastes the warning list (`UNUSED_*`, `SHADOWED_VARIABLE`, `Case mismatch …`). Fix every line, then sweep for the same *class* (`grep` for other unused private vars, other case-mismatched `res://` paths) instead of waiting for the next run.
 
+## Mill
+
+`mill_player(player_id, count)` / `opponent_mills(count)` own the RULE; `Graveyard.draw(card)` owns the ANIMATION, and
+the loops `await` it, so a mill N is N sequential flights (measured 1516 ms for 3 x 0.5 s). Deck cards are children of
+the Deck node, so the flight starts from the card's real global position; the card is reparented into the pile BEFORE
+it moves, which is what makes it face-up at Break Zone size during the flight rather than popping at the end.
+
+Knobs (per node, Inspector): `mill_seconds` 0.5, `mill_arc_height` 0.45 m, `mill_ease`.
+
 ## Card Effect Data Traps
 
 **`apply_effect` placement.** On a TRIGGER (`when_enter_field`, `when_cast`, `when_attack`, ...) it must be TOP-LEVEL,

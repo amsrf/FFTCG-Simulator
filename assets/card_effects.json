@@ -513,4 +513,33 @@
 			"instructions":[{"name":"damage_targets","author":"game","argument":[6000]}]
 		}]
 	}
+,
+	"69":{
+		"when_enter_field":{
+			"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
+		}
+	},
+	"70":{
+		"when_enter_field":{
+			"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
+		}
+	},
+	"89":{
+		"skill":[
+			{
+				"cost":{"風":1},
+				"tap":true,
+				"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
+			},
+			{
+				"s_cost":true,
+				"cost":{"風":1},
+				"tap":true,
+				"instructions":[
+					{"name":"opponent_mills","author":"game","argument":[2]},
+					{"name":"draw_cards","author":"game","argument":[1]}
+				]
+			}
+		]
+	}
 }

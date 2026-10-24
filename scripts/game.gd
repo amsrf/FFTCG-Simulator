@@ -77,6 +77,27 @@ func controller_discards(count: int = 1) -> void:
 	var caster: int = 1 if _current_controller == "player" else 2
 	await discard_from(caster, count)
 
+## MILL — "your opponent puts the top card(s) of their deck into the Break Zone".
+##
+## ONE CARD AT A TIME, each animation awaited, because that is how it should read: a mill 3 is three separate mills,
+## not a blur of three cards. The pile owns the flight (Graveyard.draw) so the timing and the arc live in one place.
+func mill_player(player_id: int, count: int = 1) -> void:
+	var d = deck if player_id == 1 else opponent_deck
+	var side: PlayerSide = side_for(player_id)
+	if d == null or side == null or side.graveyard == null:
+		return
+	for _i in range(maxi(0, count)):
+		if d.deck_cards.is_empty():
+			return
+		var card = d.deck_cards.pop_front()
+		print("[Mill] P%d mills %s" % [player_id, card.card_name])
+		await side.graveyard.call("draw", card)
+
+## The caster's opponent mills. Same seat logic as opponent_discards(): the victim is the other player.
+func opponent_mills(count: int = 1) -> void:
+	var caster: int = 1 if _current_controller == "player" else 2
+	await mill_player(3 - caster, count)
+
 func discard_from(player_id: int, count: int = 1) -> void:
 	var owner_hand: Hand = hand_for(player_id)
 	if owner_hand == null:

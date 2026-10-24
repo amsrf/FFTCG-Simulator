@@ -13,6 +13,44 @@ var randomness_range = Vector3(0.015, 0.005, 0.015)
 ## but not the same place, and the difference matters: a card removed from the game must not be findable by anything
 ## that looks in the Break Zone. Defaults to GRAVEYARD so the existing nodes keep working untouched.
 @export var zone: Card.Zone = Card.Zone.GRAVEYARD
+
+## MILL ANIMATION — lift the top card off the deck and arc it onto the pile.
+##
+## One card per call and each call is awaitable, so "mill 3" runs three of these one after another instead of three
+## cards moving at once. That is deliberate: the milled cards should read as a sequence.
+@export var mill_seconds: float = 0.5
+## How far the arc rises above the MIDPOINT of the two centres, in metres. A first guess, meant to be tuned by eye:
+## the camera is nearly top-down, so most of this reads as a lift toward the viewer with a little screen travel.
+@export var mill_arc_height: float = 0.45
+@export var mill_ease: Tween.EaseType = Tween.EASE_IN_OUT
+
+## Animate `card` (still parented to the Deck) into the pile, then add it.
+##
+## The card is moved into THIS node's frame FIRST, keeping its world position, so the face-up / standard-size look of
+## the Break Zone applies for the whole flight rather than popping in on landing.
+func draw(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	var start: Vector3 = card.global_position
+	if card.get_parent() != self:
+		card.reparent(self, false)
+		card.global_position = start
+	card.enter_zone(zone)
+
+	# Where the card will land: the same slot update_card_positions() will give it, in this node's own space.
+	var index: int = graveyard_cards.size()
+	var destination: Vector3 = global_transform * (card_offset * index)
+	# Quadratic Bezier through a control point above the midpoint — the parabola the eye reads as "lifted and carried".
+	var peak: Vector3 = (start + destination) * 0.5 + Vector3.UP * mill_arc_height
+
+	var t: Tween = create_tween()
+	t.set_trans(Tween.TRANS_SINE).set_ease(mill_ease)
+	t.tween_method(func(k: float) -> void:
+		# De Casteljau: two lerps along the two control legs, then one between them.
+		card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
+	, 0.0, 1.0, mill_seconds)
+	await t.finished
+	add_card(card)
 		
 func add_card(card):
 	# READ THE ORIGIN BEFORE MOVING IT. These two triggers are specifically "put FROM THE FIELD into the Break Zone",
