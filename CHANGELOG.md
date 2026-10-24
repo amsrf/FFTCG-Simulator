@@ -4,6 +4,37 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### First 100 Cards, batch 1 (11 cards)
+
+Back on the 1-100 goal. Coverage now **51 implemented / 7 plain / 42 to do** (tools/coverage_1_100.py prints this).
+
+Implemented with existing instructions:
+  19 Chocobo Chick   skill 火+dull -> activate a Fire Backup
+  23 Brynhildr       EX BURST / when cast -> 7000 to a Forward
+  24 Magus           ETB -> 3000 to ALL opponent Forwards
+  34 Orran           skill 氷x3+dull -> dull all opponent Forwards
+  35 Bard            skill 氷x2+dull -> dull a Forward
+  39 Shiva           EX BURST / when cast -> 5000 to a DULL Forward
+  44 Sephiroth       First Strike; ETB -> each player discards 2
+  55 Dark Knight     put from the field into the Break Zone -> its controller takes 1
+  74 Sylph           EX BURST: activate a Forward, all your Forwards +1000
+  90 Rikku           ETB -> choose up to 5 Backups you control, return to hand
+  94 Vincent         when it attacks gains First Strike; S skill 6000 to a Forward
+
+New instruction `power_change_matching(criteria, amount, duration)` — "all the Forwards you control gain +1000"
+without a targeting session.
+
+THREE TRAPS, now in AGENTS.md:
+  * `apply_effect` on a TRIGGER must be TOP-LEVEL next to the keyword. Nested inside `when_enter_field` it is
+    silently ignored (inside a `skill` def it is correct — skills read it from the def);
+  * `play_card(animate = false)` is the SETUP path and never fires ETB, so a probe that "plays" a card must trigger
+    the ETB itself;
+  * a multi-target TRIGGERED ability now copies `targeting_picked` onto the stack object when the player confirms.
+    Single targets were already attached per pick; lists were not, so "choose up to 5" resolved against the last pick.
+
+NEW PROBE tests/cards_100_batch1_probe.tscn, 17 checks, 0 failures.
+
+
 ### Party Cards, group C (trigger-only cards)
 
 Seven cards whose party trigger needed no new instruction, plus the two small pieces they leaned on.

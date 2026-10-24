@@ -182,6 +182,17 @@ func power_change_targets(amount: int = 0, duration: int = 1) -> void:
 		return
 	_each_target("power_change", [amount, duration])
 
+## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
+## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
+## say "player"/"your" and still mean the caster's side.
+func power_change_matching(criteria: Dictionary, amount: int = 0, duration: int = 1) -> void:
+	if amount == 0:
+		return
+	for card in _cards_matching(criteria):
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.power_change(amount, duration)
+	enforce_game_state_rules()
+
 ## Draw `count` cards for the effect's controller. The generic "draw" instruction — every draw in the card pool goes
 ## through here so the empty-deck rule lives in one place.
 func draw_cards(count: int = 1) -> void:

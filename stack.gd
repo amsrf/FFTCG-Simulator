@@ -653,7 +653,15 @@ func _on_assistant_target_complete() -> void:
 	# this guard the handler hid the buttons and emitted request_priority, which reads exactly like "the effect
 	# went to the stack" - and it never set the Game's _targets, so the ex burst's damage then resolved against
 	# nothing at all. That was both halves of the report.
+	#
+	# BUT A TRIGGERED ABILITY CAN HAVE SEVERAL TARGETS ("choose up to 5 Backups you control", Rikku). A single target
+	# is already attached by request_target_confirmation as each pick is made; a LIST has to be copied onto the stack
+	# object here, or the effect resolves against only the last one.
 	if summon_casting_card == null and skill_activation_proxy == null:
+		var chosen: Array = get_parent().field.targeting_picked
+		var top: Card = cards.back() if not cards.is_empty() else null
+		if top != null and chosen.size() > 1:
+			top.set_effect_targets(chosen)
 		return
 	if summon_casting_card != null:
 		_commit_summon_to_stack()

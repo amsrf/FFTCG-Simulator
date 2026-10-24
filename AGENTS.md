@@ -34,6 +34,24 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - **The scripts are split across two folders:** `battle_field.gd`, `stack.gd`, `assistant.gd`, `power_display.gd` are at the **repo root**, while `game.gd`, `card.gd`, `hand.gd`, `player_side.gd` are in `scripts/`. `grep -r` for the filename rather than guessing a path — a wrong guess costs a round trip.
 - **Warnings arrive in batches.** The user runs Godot and pastes the warning list (`UNUSED_*`, `SHADOWED_VARIABLE`, `Case mismatch …`). Fix every line, then sweep for the same *class* (`grep` for other unused private vars, other case-mismatched `res://` paths) instead of waiting for the next run.
 
+## Card Effect Data Traps
+
+**`apply_effect` placement.** On a TRIGGER (`when_enter_field`, `when_cast`, `when_attack`, ...) it must be TOP-LEVEL,
+next to the keyword:
+```json
+"24": { "apply_effect": {"is_type":"Forward","controller":"opponent"},
+        "when_enter_field": { "instructions": [...] } }
+```
+Nested inside `when_enter_field` it is silently ignored — there is no error, the effect simply targets nothing. Inside a
+`skill` definition it belongs in the skill object (skills read it from their own def).
+
+**`play_card(animate = false)` does not fire ETB.** That is the SETUP path for pre-placed boards: those cards were not
+"played". A probe that wants an ETB must call `execute_card_effect(card, "when_enter_field")` itself; a real play from
+hand uses `animate = true` and fires it on the tween's `finished`.
+
+**Multi-target triggered abilities.** A single target is attached by `request_target_confirmation` on each pick; a LIST
+is copied onto the stack object in `Stack._on_assistant_target_complete` when the player confirms early ("up to 5").
+
 ## Party Triggers
 
 **Criteria predicates take exactly ONE argument.** `matches_criteria` calls every key with `callv(name, [value])`, so a

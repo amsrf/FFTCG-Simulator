@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/cards_100_batch1_probe.gd" id="1_cb"]
+
+[node name="Cards100Batch1Probe" type="Node"]
+script = ExtResource("1_cb")
