@@ -210,6 +210,31 @@ func _ready() -> void:
 	_expect(mill_deck.deck_cards.size() == deck_before - 1, "milling from the ground takes a card off the deck")
 	_expect(mill_pile.graveyard_cards.size() == pile_before + 1, "and the pile grows by one")
 
+	# --- the Terra ground: it must actually demonstrate the surcharge -----------------------------------
+	MatchSetup.config = MatchSetup.build_config("terra")
+	var terra_game = GAME_SCENE.instantiate()
+	add_child(terra_game)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tfield = terra_game.get("field")
+	var ground_ifrit: Card = null
+	for c in terra_game.get("hand").cards:
+		if c.id == GROUNDS.IFRIT:
+			ground_ifrit = c
+	_expect(ground_ifrit != null, "the Terra ground puts Ifrit in your hand")
+	var ground_terra: Card = null
+	for c in tfield.get_back_cards_for("opponent") + tfield.get_front_cards_for("opponent"):
+		if c.id == GROUNDS.TERRA:
+			ground_terra = c
+	_expect(ground_terra != null, "and Terra on the OPPONENT's board")
+	if ground_ifrit != null:
+		_expect(int(tfield.effective_cost(ground_ifrit).get("neutral", 0)) == int(ground_ifrit.get_cost().get("neutral", 0)) + 1,
+			"so your Ifrit costs 1 more there (%s vs %s)" % [str(tfield.effective_cost(ground_ifrit)), str(ground_ifrit.get_cost())])
+	_expect(tfield.get_back_cards_for("player").size() == 2,
+		"with two fire Backups — exactly enough to pay the surcharged cost")
+	terra_game.queue_free()
+	await get_tree().process_frame
+
 	print("[Grounds] %d checks | failures: %d" % [_checks, _fails])
 	print("[Grounds] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

@@ -46,6 +46,7 @@ const ICE_B := 43        # Snow,   ice Forward — HAS a when-attack dull effect
 const BARD := 35         # Bard,   ice Forward 4000, no effects — passive, safe to attack with
 const DARK_KNIGHT := 55  # Dark Knight, ice Forward 8000, no effects — the intended blocker
 const FIRE := 12         # Zack,   fire Forward
+const TERRA := 46        # Terra,  fire Backup — raises the OPPONENT's Summon costs by 1
 const CHOCOBO := 75      # Chocobo, wind Forward — "forms a party and attacks: party gains +3000"
 const HOPE := 82         # Hope,    wind Forward (the second half of the wind pair)
 const ZIDANE := 71       # cannot be chosen by the opponent's Summons/abilities
@@ -129,6 +130,22 @@ static func break_zone() -> Dictionary:
 	return cfg
 
 
+## TERRA (46) costs more for YOU: she sits on the opponent's side and her continuous aura adds 1 to the cost of every
+## Summon you cast. Ifrit is printed at cost 1 (1 fire), so with her out the payment row must show TWO crystals —
+## 1 fire + 1 wild — instead of the single fire crystal you would get on an empty board.
+##
+## Two fire Backups are on your board: exactly enough to pay the surcharged cost, so the cast itself is still possible
+## and you can see it through to the stack.
+static func terra_cost() -> Dictionary:
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_terra"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": FIRE_MANA}, {"id": FIRE_MANA}]
+	cfg["player_hand"] = [IFRIT]
+	cfg["opponent_field"] = [{"id": TERRA}]
+	return cfg
+
+
 static func mill() -> Dictionary:
 	## MILL. You have Rikku (89) and Thief (70) on the board, three wind Backups to pay for them, and a Thief (69)
 	## plus a spare Rikku in hand. Nothing else moves: the opponent is MOCK and its board is empty.
@@ -174,6 +191,10 @@ const GROUNDS := {
 		"title": "Ground: Mill (cards to the Break Zone)",
 		"blurb": "Rikku + Thief on the board and 3 wind Backups. Activate Rikku (風+dull, or her S ability) to mill; play Thief from hand to mill 1 on entry.",
 	},
+	"terra": {
+		"title": "Ground: Terra (Summon cost +1 for you)",
+		"blurb": "The opponent has Terra, so your Summons cost 1 more. Play Ifrit: the cost row shows 1 fire + 1 wild (2 mana), not the single fire it costs on an empty board.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -192,6 +213,8 @@ static func config(name: String) -> Dictionary:
 			return clean()
 		"mill":
 			return mill()
+		"terra":
+			return terra_cost()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()

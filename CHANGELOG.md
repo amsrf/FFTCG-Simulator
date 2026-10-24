@@ -4,6 +4,16 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Test ground: Terra (Summon cost +1)
+
+Test Mode → "Ground: Terra (Summon cost +1 for you)". The opponent has Terra and you hold Ifrit with two fire
+Backups. Play Ifrit and the cost row shows **2 crystals — 1 fire + 1 wild** instead of the single fire crystal it
+costs on an empty board; two sources is exactly enough to pay the surcharge, so the cast can be watched through.
+
+`test_grounds_probe` now boots this ground and asserts the surcharge is live in it
+(`{ "火": 1, "neutral": 1 }` vs printed `{ "火": 1, "neutral": 0 }`), 86 checks total.
+
+
 ### Cost modifiers: Terra 46
 
 "Your opponent's Summons cost 1 more" (and "Terra cannot be chosen by opponent's Summons") is implemented.
