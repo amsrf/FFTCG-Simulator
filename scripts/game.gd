@@ -996,19 +996,6 @@ func finish_target():
 	$Field.reset_targets()
 	_process_next_instruction()
 
-func pass_priority():
-	TEST_blocker()
-	await get_tree().create_timer(2.0).timeout
-	return []
-func TEST_blocker():
-	var front_cards = field.TEST_get_front_cards()
-	var blocker: Card = front_cards[0] if front_cards.size() > 0 else null
-	if(blocker != null):
-		blocker.declare_blocker()
-func _await_player_response():
-	await get_tree().create_timer(1.0).timeout
-	return null
-
 func cause_damage():
 	# The DEFENDING player (whoever isn't taking the turn) takes the damage, so
 	# an opponent attack actually hurts the human.
@@ -1658,9 +1645,6 @@ func _exit_phase(phase_name: String):
 		"End Phase":
 			pass
 
-func MOCK_opponent_pass_piority():
-	await get_tree().create_timer(0.5).timeout
-
 func enforce_game_state_rules() -> void:
 	# State-based actions, checked after any damage/power change.
 	# 1) Power reduced to 0 (or less): the card is put into the Graveyard.
@@ -1782,10 +1766,6 @@ func _trigger_status_break_zone_effects(card: Card) -> void:
 		_execute_instructions(instructions)
 		_current_controller = previous
 		return
-
-func pop_stack():
-	var card = stack.pop_stack()
-	player_graveyard.add_card(card)
 
 ## A TARGETING SESSION WAS CONFIRMED. This is the first moment the chosen set is real, so it is where "when chosen"
 ## triggers are announced (Kuja 37). Connected AFTER the Stack's target handler, so an ability triggered by the choice

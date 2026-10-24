@@ -129,7 +129,6 @@ var _ribbon_material: StandardMaterial3D = null
 var _points: Array[Vector3] = []
 var _ages: Array[float] = []
 var _surface := SurfaceTool.new()
-var _dbg: int = 0
 
 func _ready() -> void:
 	_build()
@@ -142,23 +141,25 @@ func _process(delta: float) -> void:
 	_face_camera()
 	_advance_history(delta)
 	_rebuild_ribbon()
-	# DIAGNOSTIC, temporary: the trail comes out far shorter than trail_lifetime should give, so this reports what
-	# the history actually holds. Remove once the length is right.
-	_dbg += 1
-	if _dbg == 60:
-		print("[LightOrb] history=%d points, oldest age=%.3fs, span=%.3fm, lifetime=%.2fs"
-			% [_points.size(), _ages[0] if not _ages.is_empty() else -1.0,
-			   _points[0].distance_to(_points[_points.size() - 1]) if _points.size() > 1 else 0.0,
-			   trail_lifetime])
 
-## Keeps the halo facing the camera. Same expression the crystal row uses to face its badges: take the camera's whole
-## basis, so the quad ends up parallel to the screen rather than merely pointing at a position.
+## Keeps the halo facing the camera: take the camera's whole basis, so the quad ends up parallel to the screen rather
+## than merely pointing at a position.
+##
+## THE PARENT CHECK IS NOT DEFENSIVE NOISE. The orb is queue_freed the moment it arrives, and a node on its way out
+## can be asked to render one more frame with a freed (zero) parent basis — setting `global_transform` then inverts
+## that basis and Godot prints "Condition det == 0 is true". There is nothing to face in that case, so leave it.
 func _face_camera() -> void:
-	if _halo == null:
+	if _halo == null or not is_instance_valid(_halo) or not _halo.is_inside_tree():
 		return
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam != null:
-		_halo.global_transform = Transform3D(cam.global_transform.basis, _halo.global_position)
+	if cam == null:
+		return
+	var parent_node: Node3D = _halo.get_parent() as Node3D
+	if parent_node == null or not parent_node.is_inside_tree():
+		return
+	if absf(parent_node.global_transform.basis.determinant()) < 0.000001:
+		return
+	_halo.global_transform = Transform3D(cam.global_transform.basis, _halo.global_position)
 
 ## Records where the orb is now and forgets anything older than the trail's lifetime.
 func _advance_history(delta: float) -> void:

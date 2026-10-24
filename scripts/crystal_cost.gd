@@ -21,6 +21,7 @@ class_name CrystalCost
 ## camera is only ~11 degrees off vertical, so a fixed row would be almost edge-on.
 
 const CRYSTAL := preload("res://mana_crystal.tscn")
+const ELEMENTS := preload("res://scripts/elements.gd")
 const LABEL_FONT := preload("res://Font/FOT-NewRodin Pro EB.otf")
 const LABEL_FONT_SIZE := 64
 const WILD := "neutral"
@@ -185,7 +186,7 @@ func _rebuild() -> void:
 	# rebuilds, then the wild ones, which have no element of their own and are drawn white.
 	var slots: Array = []
 	for key in cost.keys():
-		var element: String = ElementBadge.key_to_element(key)
+		var element: String = ELEMENTS.key_to_element(key)
 		if element == WILD or element.is_empty():
 			continue
 		for _i in range(int(cost[key])):

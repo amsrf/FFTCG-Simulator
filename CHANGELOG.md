@@ -4,6 +4,30 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Debt cleared (2026-10-24)
+
+* **The `det == 0` engine error is gone.** The stack trace put it in `LightOrb._face_camera()`: the orb is queue_freed
+  the moment it arrives, and one last frame tried to set `global_transform` through a freed (zero) parent basis.
+  `_face_camera()` now bails out when the halo or its parent is no longer in the tree, or the parent basis is not
+  invertible. The temporary `[LightOrb] history=...` diagnostic is also removed.
+* **The badge-era UI is deleted, not just its probe.** The mana UI became crystals long ago, but the old scene, shader,
+  generated icon/numeral PNGs, build tools and stale probe were still in the tree. The one part still in use — the
+  element spelling/colour tables — was extracted into `scripts/elements.gd` (static, preloaded by path) and the
+  callers updated. Removed: `scripts/element_badge.gd`, `element_badge.tscn`, `shaders/element_badge.gdshader`,
+  `assets/elements/`, the two build tools, and `tests/element_badge_probe.*`.
+* **Dead code removed**: `Card.show_actions`/`hide_actions` and `card_button.tscn`; `MOCK_opponent_pass_piority`;
+  `TEST_blocker`/`pass_priority`/`_await_player_response`; `Game.pop_stack`/`Stack.pop_stack`; `Field.untap_all_cards`
+  and `get_all_cards_from_player`; `Stack.process_next_effect`; the unused `absorb_ring_size` knob; `scripts/ManaCost.gd`;
+  the abandoned `card_tile` scene/script/preview; the unused `CrystalAura` shell and its shader/material; and a set of
+  scripts nothing referenced (`animation_player`, `arrow`, `button_text_viewport`, `focus_zone`, `graveyards`,
+  `life_display`, `player_1`, `text_display`, `CardActions`, `damagezones`).
+* **`card_effects.json` 122 entry fixed.** The newly added `"122": { "ex_burst_disabler": "" }` had a trailing comma
+  in two places, which makes the whole file fail to parse and silently disables EVERY card effect. The key is kept;
+  only the syntax was corrected.
+
+Verification: boot clean, `det == 0` occurrences 0, and all 60 probes green.
+
+
 ### "You may" is a real choice — Squall 41, Leon 60, Vaan 63
 
 The last three cards needed one shared idea: **may is decided at resolution, after targets are locked**, and it is a

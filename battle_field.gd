@@ -748,8 +748,6 @@ func TEST_get_front_cards():
 	return opponent_front_cards
 func get_all_cards() -> Array[Card]:
 	return front_cards + back_cards + opponent_front_cards + opponent_back_cards
-func get_all_cards_from_player():
-	return front_cards + back_cards
 
 func get_front_cards_for(controller_name: String) -> Array[Card]:
 	# Forwards of one side. Agents use this for attack / block decisions.
@@ -758,10 +756,6 @@ func get_front_cards_for(controller_name: String) -> Array[Card]:
 func get_back_cards_for(controller_name: String) -> Array[Card]:
 	# Backups of one side: the AI taps these to pay card costs.
 	return back_cards if controller_name == "player" else opponent_back_cards
-
-func untap_all_cards():
-	for card in get_all_cards_from_player():
-		card.untap()
 
 func untap_cards_for(controller_name: String) -> void:
 	# Active Phase untaps only the turn player's cards.

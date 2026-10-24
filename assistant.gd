@@ -15,6 +15,7 @@ class_name Assistant
 # The "Pay ..." crystal cost readout. Built in code rather than added to game.tscn so the whole payment
 # UI stays owned by one node.
 const COST_READOUT := preload("res://crystal_cost.tscn")
+const ELEMENTS := preload("res://scripts/elements.gd")
 ## Where the readout sits relative to the player's hand, in WORLD terms — so the hand's own 180-degree
 ## frame is irrelevant. +z is up the screen (the hand sits at the bottom, nearest the camera) and +y
 ## lifts it clear of the cards. Screen-up is 0.985 of +z and 0.174 of +y at this camera angle, so z does
@@ -407,7 +408,7 @@ func _on_field_request_target_confirmation(_target_card: Card, allow_cancel: boo
 func payment_breakdown() -> Array:
 	var slots: Array = []
 	for element in mana_cost:
-		var name: String = ElementBadge.key_to_element(element)
+		var name: String = ELEMENTS.key_to_element(element)
 		if name == "neutral" or name.is_empty():
 			continue
 		for _i in range(int(mana_cost[element])):
@@ -418,7 +419,7 @@ func payment_breakdown() -> Array:
 	# Pass 1: match each element to its own points.
 	var pool: Dictionary = {}
 	for element in mana_acc:
-		var name: String = ElementBadge.key_to_element(element)
+		var name: String = ELEMENTS.key_to_element(element)
 		pool[name] = int(pool.get(name, 0)) + int(mana_acc[element])
 	for slot in slots:
 		var name: String = str(slot["element"])

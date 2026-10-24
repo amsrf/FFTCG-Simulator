@@ -11,7 +11,6 @@
 [ext_resource type="Script" uid="uid://eur8blk8gur4" path="res://stack.gd" id="9_vef74"]
 [ext_resource type="Script" uid="uid://b8jjysxi0lj74" path="res://assistant.gd" id="10_hve3p"]
 [ext_resource type="PackedScene" path="res://GemButton.tscn" id="11_mfdv2"]
-[ext_resource type="PackedScene" uid="uid://dmhmh6wr3wejy" path="res://card_button.tscn" id="13_lc2xo"]
 [ext_resource type="PackedScene" uid="uid://bh8f5mddl0cbx" path="res://damage_zone.tscn" id="14_215e1"]
 [ext_resource type="PackedScene" uid="uid://ja4kal3yojgu" path="res://ballistic_arrow.tscn" id="16_80cx4"]
 [ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="17_e8heu"]
@@ -87,9 +86,9 @@ transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.33584, 0.1, -0.521555)
 transform = Transform3D(0.9989946, 0.043924663, -0.008969118, 0, 0.20006494, 0.97978264, 0.04483103, -0.97879755, 0.19986379, -0.35699987, 1.0298424, -0.39699882)
 
 [node name="Graveyard" parent="Player" unique_id=1914532016 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 4.45, 0.25, -2.0)
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 4.45, 0.25, -2)
 
-[node name="Removed" parent="Player" instance=ExtResource("7_mfdv2")]
+[node name="Removed" parent="Player" unique_id=981802536 instance=ExtResource("7_mfdv2")]
 transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, -3.5, 0.25, -1.4)
 zone = 7
 
@@ -108,9 +107,9 @@ mirror_presentation = true
 transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.597, 0.1, 0.579)
 
 [node name="Graveyard" parent="Opponent" unique_id=53191200 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -4.7, 0.25, 2.0)
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -4.7, 0.25, 2)
 
-[node name="Removed" parent="Opponent" instance=ExtResource("7_mfdv2")]
+[node name="Removed" parent="Opponent" unique_id=890441146 instance=ExtResource("7_mfdv2")]
 transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, 3.5, 0.25, 1.4)
 zone = 7
 
@@ -158,10 +157,6 @@ slide_in_delay = 0.1
 [node name="PassPhaseButton" parent="Assistant/ButtonRack" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
 visible = false
 
-[node name="CardButton" parent="." unique_id=867711801 instance=ExtResource("13_lc2xo")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.922038, 0)
-visible = false
-
 [node name="BallisticArrow" parent="." unique_id=868873254 instance=ExtResource("16_80cx4")]
 
 [node name="Player1" type="Node3D" parent="." unique_id=832380184]
@@ -206,5 +201,5 @@ font = ExtResource("17_e8heu")
 [connection signal="target_cancel" from="Assistant" to="Opponent/Hand" method="_on_assistant_target_cancel"]
 [connection signal="target_cancel" from="Assistant" to="Field" method="_on_assistant_target_cancel"]
 [connection signal="target_cancel" from="Assistant" to="Stack" method="_on_assistant_target_cancel"]
-[connection signal="target_complete" from="Assistant" to="Stack" method="_on_assistant_target_complete"]
 [connection signal="target_complete" from="Assistant" to="." method="_on_targets_confirmed"]
+[connection signal="target_complete" from="Assistant" to="Stack" method="_on_assistant_target_complete"]

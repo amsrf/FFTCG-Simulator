@@ -74,7 +74,6 @@ var current_conditional_bonus: int = 0
 
 var offset = Vector3.ZERO
 var camera: Camera3D
-var action_buttons = []
 var tween: Tween
 var original_basis: Basis
 # DEBUG VARIABLES
@@ -350,39 +349,9 @@ func can_be_played():
 		return true
 	return false
 	
-func show_actions():
-	hide_actions()
-	# Only activated abilities get buttons here. Attacking is handled by the
-	# ATTACK_DECLARATION_STEP flow (FieldCardState), not by card buttons.
-	if "skill" in card_effects:
-		var si := 0
-		for skill in card_effects["skill"]:
-			var idx := si
-			si += 1
-			var card_button_scene = preload("res://card_button.tscn")
-			var card_button = card_button_scene.instantiate()
-			action_buttons.append(card_button)
-			
-			card_button.position = Vector3(0.5 + 0.35 * idx, 0.1, -0.25)
-			card_button.rotation_degrees = Vector3(0, 180, 0)
-			card_button.set_text("Skill")
-			card_button.set_on_press_callback(func():
-				var f := get_parent() as Field
-				if f:
-					f.begin_skill_activation(self, idx)
-				hide_actions()
-			)
-			
-			add_child(card_button)
-
 func is_on_field():
 	return get_parent() is Field
 
-func hide_actions():
-	for button in action_buttons:
-		button.queue_free()
-	action_buttons = []
-	
 func showPower():
 	if(power_label == null):
 		return
@@ -1444,7 +1413,6 @@ const CARD_ABSORB := preload("res://scripts/card_absorb.gd")
 ## moving them into the strategy would have quietly taken that away.
 @export var absorb_seconds: float = 0.25
 @export var absorb_punch: float = 1.15
-@export var absorb_ring_size: float = 1.9
 
 ## Created on first use. It owns the two quads and their tweens; this card owns the knobs it is handed.
 var _absorb = null
@@ -1458,7 +1426,6 @@ func absorb_power(colour: Color, at: Vector3 = Vector3.ZERO) -> void:
 		_absorb = CARD_ABSORB.new(self)
 	_absorb.seconds = absorb_seconds
 	_absorb.punch = absorb_punch
-	_absorb.ring_size = absorb_ring_size
 	# The face size is measured HERE and handed over: reading the mesh is the card's business, not the reaction's.
 	_absorb.play(colour, at, _card_face_size())
 	# THE GLOW HOLDS, unlike the flash and the ring: it stays until the card is played, which is what makes it a STATE

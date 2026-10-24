@@ -117,6 +117,16 @@ session is CONFIRMED, not when rings are clicked. Three conditions:
 The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
 ability must land on top of the Summon/ability that caused it, so it resolves first.
 
+## Element spellings live in scripts/elements.gd
+
+ELEMENT NAMES / CJK / ACCENT and `key_to_element()` are static data in `scripts/elements.gd`, preloaded by path
+(`const ELEMENTS := preload("res://scripts/elements.gd")`). The old ElementBadge scene and all its generated assets are
+gone — do not reintroduce a class_name for this table, because a class_name added since Godot last scanned is not in the
+headless cache.
+
+When deleting a script, delete its `.uid` and check `.tscn` ext_resources and instanced nodes too: `godot --headless
+res://game.tscn` will surface a dangling path immediately.
+
 ## "May" is an instruction flag, decided at resolution
 
 `may: true` on an instruction makes the controller choose when the instruction is REACHED — after targets are locked,

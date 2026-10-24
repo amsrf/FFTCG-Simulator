@@ -925,5 +925,8 @@
 			"choose_target":{"is_type":"Backup","controller":"player","count":2},
 			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
 		}
+	},
+	"122":{
+		"ex_burst_disabler":""
 	}
 }

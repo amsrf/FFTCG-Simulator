@@ -272,9 +272,6 @@ func cast_card():
 		get_parent().note_action_taken()
 	
 	
-func pop_stack():
-	return cards.pop_back()
-
 func _on_assistant_charge_complete() -> void:
 	if summon_casting_card != null:
 		_continue_summon_after_mana(summon_casting_card)
@@ -605,13 +602,7 @@ func resolve_top_effect() -> void:
 		# here — rather than never — is what stops the red ring from outliving the effect.
 		field.clear_targeted_highlights()
 		GlobalVariables.refresh_mode()
-	
-func process_next_effect():
-	await get_tree().create_timer(1.0).timeout
-	var card: Card = cards.pop_back()
-	execute_card_effect.emit(card)
-	if len(cards) > 0:
-		process_next_effect()
+
 	
 
 

@@ -24,8 +24,6 @@ var card: Node3D = null
 var seconds: float = 0.25
 ## Peak swell, as a multiple of the resting scale. Mirrored from Card.absorb_punch.
 var punch: float = 1.15
-## Kept so the Inspector knob still exists on the card. The ring's travel is derived from the card's own width.
-var ring_size: float = 1.9
 var _tween: Tween = null
 ## The scale to come back to. Recorded only on the FIRST hit of a volley — see play().
 var _resting: Vector3 = Vector3.ONE

@@ -75,9 +75,10 @@ class_name ManaCrystal
 @export var glow_pulse_speed: float = 2.1
 
 const SHADER := preload("res://shaders/mana_crystal.gdshader")
+const ELEMENTS := preload("res://scripts/elements.gd")
 const WILD_COLOUR := Color(0.94, 0.95, 1.0)
 
-## The crystal BODY colours, in ElementBadge.ELEMENTS order. Seven of them are the badge accents, which are already
+## The crystal BODY colours, in ELEMENTS.NAMES order. Seven of them are the badge accents, which are already
 ## tuned per element, so the two displays cannot drift apart. FIRE is deliberately not: the badge accent for fire is
 ## (1.0, 0.38, 0.18), an orange at hue 12 degrees — right for a thin ring on a dark disc, and wrong for a crystal
 ## body, which wants the ruby that references/crystal.png shows.
@@ -134,10 +135,10 @@ func element_index(key: String) -> int:
 	var k: String = key.strip_edges()
 	if k.is_empty() or k.to_lower() == "any" or k.to_lower() == "neutral":
 		return -1
-	var i: int = ElementBadge.ELEMENTS.find(k.to_lower())
+	var i: int = ELEMENTS.NAMES.find(k.to_lower())
 	if i >= 0:
 		return i
-	return ElementBadge.CJK.find(k)
+	return ELEMENTS.CJK.find(k)
 
 ## Sizes the model so it really stands `height_m` tall IN THIS NODE'S SPACE, lifts its base to y = 0, and measures
 ## what it occupies.
@@ -233,7 +234,7 @@ func _mesh_instance() -> MeshInstance3D:
 	return null
 
 func _mesh_below(node: Node) -> MeshInstance3D:
-	if node is MeshInstance3D and node.name != "CrystalAura":
+	if node is MeshInstance3D:
 		return node
 	for child in node.get_children():
 		var found: MeshInstance3D = _mesh_below(child)
