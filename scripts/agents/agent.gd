@@ -140,6 +140,16 @@ func choose_break_zone_card(_owner_id: int, ids: Array, _filter: Dictionary) -> 
 	await _settle()
 	return int(ids[0]) if not ids.is_empty() else -1
 
+## Choose one of the owner's own Forwards (Cloud of Darkness 158). Pull shape: returns the Card or null.
+func choose_own_forward(_owner_id: int, candidates: Array) -> Card:
+	await _settle()
+	return candidates[0] if not candidates.is_empty() else null
+
+## Choose a card from the owner's deck (The Emperor 185). Returns a card id, or -1.
+func choose_deck_card(_owner_id: int, ids: Array, _filter: Dictionary) -> int:
+	await _settle()
+	return int(ids[0]) if not ids.is_empty() else -1
+
 func choose_discard(_owner_id: int, _cards: Array) -> Card:
 	await _settle()
 	return null

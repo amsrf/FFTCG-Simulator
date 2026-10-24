@@ -4,6 +4,38 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### B3: Targeting Priority, Two-Player Choices, and Search Destinations (109, 158, 162, 174, 185, 201, 207)
+
+**162 Cecil / 174 Yaag Rosch** — printed `must_be_chosen` (`Summon`/`Ability`, opponent). `Field.set_viable_targets`
+first builds the legal set, then collapses it to the mandatory cards if any legal candidate carries the rule. Your
+own effects are unaffected. Yaag is a Backup, so his rule applies when the effect's criteria can choose a Backup.
+
+**201 Rikku** — two `conditional_power` rules (+2000 for Yuna, +2000 for Paine) and two
+`conditional_cannot_be_chosen` shields (Yuna -> Summons, Paine -> abilities). This exposed a real ledger bug:
+`conditional_power` used one `current_conditional_bonus` per card, so the second rule overwrote the first. Each rule
+now keeps its own `granted` amount; `current_conditional_bonus` is the sum.
+
+**109 Serafie** — ETB/EX Burst: each player chooses 1 Forward in their own Break Zone and adds it to hand. Both
+choices go through the agent seam (`choose_break_zone_card`), so a human gets the search window and an AI answers
+immediately.
+
+**158 Cloud of Darkness** — each player chooses 1 Forward they control (`choose_own_forward`); every other Forward on
+the field is PUT into the Break Zone. This uses `put_card_into_graveyard`, not `break_card`, so `when_break` does not
+fire.
+
+**185 The Emperor** — `when_enter_break_from_field` searches for another The Emperor and plays it onto the field dull.
+`search_deck` gained `field` / `field_dull` destinations and a `tapped` argument, and now routes the choice through
+`Agent.choose_deck_card` for the search's owner (not always the local player). The instruction is `may`, so the player
+gets Confirm/Refuse.
+
+**207 Gilgamesh** — `cannot_be_returned_to_hand` (opponent's Summons/abilities) is checked in
+`Game.return_targets_to_hand`. His two skills are non-tap: 2 Lightning for +1000, and Divider (S + 2 Lightning, choose
+a Forward and break it) gated by `only_if_damage_received: 4`. Ability availability now asks `can_tap()` only when the
+ability actually has a `tap` cost, so a tapped Gilgamesh can still use them.
+
+`tests/b3_probe.gd` (29 checks). Full suite green; boot 0 errors. Coverage: 91 implemented / 4 vanilla / 22 needs code.
+
+
 ### Pending Damage Modifiers (status payloads)
 
 A one-shot damage rule is no longer a hardcoded status name. `add_status_effect` accepts an optional payload:

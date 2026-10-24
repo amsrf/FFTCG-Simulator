@@ -22,14 +22,7 @@ VANILLA = {105, 119, 138, 159}
 NEEDS_CODE = {
     # B1 - tiny vocabulary
     # B2 - replacement / shields
-    # B3 - targeting / selection
-    162: 'forced targeting',
-    174: 'forced targeting',
-    201: 'conditional cannot-be-chosen',
-    109: 'each player selects from their Break Zone',
-    158: 'each player selects; break the rest',
-    185: 'search and play onto the field dull',
-    207: 'cannot be returned + damage-count condition',
+    # B3 - targeting / selection (implemented)
     # B4 - costs / triggers
     177: 'cost_aura with an element filter',
     187: 'cost reduction per Category count + global attack buff',

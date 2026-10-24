@@ -132,6 +132,22 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### B3 rules: targeting priority, per-rule ledgers, owner-aware searches
+
+* `must_be_chosen` is enforced in `Field.set_viable_targets`, not in `Card.can_be_chosen_by`: it is a property of the
+  CHOICE SET (collapse legal candidates to the mandatory ones), not of a single candidate.
+* `conditional_cannot_be_chosen` is a live `if_controls` board query on the card, evaluated by `controls_matching()`.
+* `conditional_power` needs a `granted` ledger PER RULE. A single `current_conditional_bonus` makes the second rule
+  overwrite the first (Rikku 201: Yuna and Paine must both stack).
+* `search_deck(filter, destination, tapped)` is owner-aware and agent-driven. Destinations include `field` and
+  `field_dull`; the search filter is bridged between CardFilter keys (`name`, `type`, `category`, `job`, `element`)
+  and Card criteria (`is_named`, `is_type`, ...). Do not add another direct window call for a new search card.
+* Two-player choices (Serafie 109, Cloud 158) go through `Agent.choose_break_zone_card` / `choose_own_forward`; never
+  open a window directly from Game.
+* `only_if_damage_received` is a per-ability gate like `only_your_turn` / `only_if_blocking`. A `tap` cost alone asks
+  `can_tap()`; a non-tap ability remains available while tapped and while summoning-sick.
+* Return-to-hand checks `Card.can_be_returned_to_hand_by(source, kind)` at the single `return_targets_to_hand` verb.
+
 ### Damage modifiers: one pipeline, one context
 
 `Rules.modify_damage()` is the only place damage is modified. It scans `damage_modifiers` on every card on the field,

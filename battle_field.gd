@@ -558,13 +558,9 @@ func can_activate_now(card: Card) -> bool:
 	var mode = GlobalVariables.get_player_mode()
 	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
 		return false
-	if card.tapped:
-		return false
-	# SUMMONING SICKNESS CLOSES TAP-COSTED SKILLS TOO. can_tap() is the one place that knows the rule (sick and no
-	# Haste = no tap), and asking it here means the green availability ring and the activation agree: a card that
-	# just entered is simply not offered, rather than being offered and then refusing.
-	if not card.can_tap():
-		return false
+	# A TAPPED CARD CAN STILL USE A NON-TAP ABILITY. The tap rule belongs to the cost, not to the card: Gilgamesh's
+	# 《雷》《雷》 power pump has no dull cost, so it must stay available after he has attacked. The same reasoning
+	# applies to summoning sickness: can_tap() is asked per ability, below, only when the ability asks to tap.
 	if not "skill" in card.card_effects:
 		return false
 	var skills: Array = card.card_effects["skill"]
@@ -587,6 +583,13 @@ func can_activate_now(card: Card) -> bool:
 		# the same card may have another ability that is always available.
 		if bool(def.get("only_if_blocking", false)) and not card.status_effects.has("blocking"):
 			continue
+		# A tap cost needs a card that can actually tap; a non-tap ability does not.
+		if bool(def.get("tap", false)) and not card.can_tap():
+			continue
+		# "You can only use this ability if you have received 4 points of damage or more" (Gilgamesh 207).
+		if def.has("only_if_damage_received") \
+				and _damage_received_by(card) < int(def["only_if_damage_received"]):
+			continue
 		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
@@ -602,6 +605,15 @@ func can_activate_now(card: Card) -> bool:
 			continue
 		return true
 	return false
+
+## Damage in the controller's Damage Zone. Used by "you can only use this ability if you have received N damage"
+## (Gilgamesh 207); the zone holds one card per point, so its count is the number.
+func _damage_received_by(card: Card) -> int:
+	var game: Node = get_parent()
+	if game == null:
+		return 0
+	var side = game.side_for(1 if card.controller == "player" else 2)
+	return side.damage_count() if side != null else 0
 
 ## Cards that could be paid for a `"sacrifice": {...}` skill cost. Criteria are read from the SOURCE's perspective, so
 ## `controller: "player"` means the activating card's controller.
@@ -647,7 +659,10 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			for def in skills:
 				var turn_ok: bool = (not bool(def.get("only_your_turn", false)) \
 					or int(get_parent().turn_owner) == (1 if card.controller == "player" else 2)) \
-					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking"))
+					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking")) \
+					and (not bool(def.get("tap", false)) or card.can_tap()) \
+					and (not def.has("only_if_damage_received")
+						or _damage_received_by(card) >= int(def["only_if_damage_received"]))
 				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
 					or hand.has_card_matching_criteria({"is_named": card.card_name}))
 				if can_pay and def.has("sacrifice"):
@@ -1103,14 +1118,39 @@ func set_viable_targets(target_criteria, source: Card = null, source_kind: Strin
 	# by it — but the glow stays off, so the only thing we see is the card they pick, which
 	# set_target_card() marks red.
 	var glow: bool = source == null or source.controller == "player"
-	for card in _target_candidates():
-		var is_targetable = _card_matches_criteria(card, target_criteria, source, source_kind)
+	var candidates: Array = _target_candidates()
+	var legal: Array = []
+	for card in candidates:
+		if _card_matches_criteria(card, target_criteria, source, source_kind):
+			legal.append(card)
+	# "Summons or abilities of your opponent must choose Cecil if possible." If at least one legal candidate demands
+	# to be chosen, the legal set collapses to those candidates. If none do, every legal candidate stays available.
+	var allowed: Array = legal
+	if source != null:
+		var mandatory: Array = []
+		for card in legal:
+			if card.must_be_chosen_by(source, source_kind):
+				mandatory.append(card)
+		if not mandatory.is_empty():
+			allowed = mandatory
+	for card in candidates:
+		var is_targetable: bool = allowed.has(card)
 		# A fresh session starts with nothing picked: clear any leftover ring.
 		card.set_selected_highlight(false)
 		card.set_targeted_highlight(false)
 		# The prompt glow IS the indicator — no separate marker is spawned on top of
 		# each candidate.
 		card.set_valid_target(is_targetable, glow)
+
+## Live "do you control a card matching this?" query for conditional printed rules (Rikku 201). `source` resolves
+## controller-relative words in the criteria; `controller_name` is whose board is being searched.
+func controls_matching(controller_name: String, criteria: Dictionary, source: Card = null) -> bool:
+	for card in get_all_cards():
+		if card.controller != controller_name:
+			continue
+		if card.matches_criteria(criteria, source):
+			return true
+	return false
 
 ## WHERE THIS SESSION'S CANDIDATES COME FROM. The stack is a second target domain, for effects that choose a Summon
 ## before it resolves (Summoner 53). `stack.cards` is copied because cancelling a Summon mutates it mid-session.
@@ -1204,13 +1244,21 @@ func register_conditional_effects(card: Card) -> void:
 				"source": card,
 				"condition": effect.get("condition", {}),
 				"value": int(effect.get("value", 0)),
+				# EACH RULE KEEPS ITS OWN LEDGER. A card may have two conditional powers (Rikku 201: +2000 for
+				# Yuna, +2000 for Paine); one shared current_conditional_bonus made them overwrite each other, so
+				# the second always undid the first.
+				"granted": 0,
 			})
 
 func unregister_conditional_effects(card: Card) -> void:
+	var granted_total: int = 0
+	for effect in _conditional_effects:
+		if effect["source"] == card:
+			granted_total += int(effect.get("granted", 0))
 	_conditional_effects = _conditional_effects.filter(func(e): return e["source"] != card)
-	if card.current_conditional_bonus != 0:
-		card.power -= card.current_conditional_bonus
-		card.current_conditional_bonus = 0
+	if granted_total != 0:
+		card.power -= granted_total
+		card.current_conditional_bonus = maxi(0, card.current_conditional_bonus - granted_total)
 		if card.power_label:
 			card.power_label.changePower(card.power)
 
@@ -1305,9 +1353,14 @@ func recompute_conditional_power() -> void:
 		if source == null or not is_instance_valid(source) or not source.is_inside_tree():
 			continue
 		var desired: int = int(effect["value"]) if _condition_met(effect["condition"], source) else 0
-		if desired != source.current_conditional_bonus:
-			source.power += desired - source.current_conditional_bonus
-			source.current_conditional_bonus = desired
+		var granted: int = int(effect.get("granted", 0))
+		if desired != granted:
+			var delta: int = desired - granted
+			source.power += delta
+			effect["granted"] = desired
+			# current_conditional_bonus remains the SUM across this card's rules, for cleanup and diagnostics;
+			# the per-rule `granted` above is what prevents two rules from undoing each other.
+			source.current_conditional_bonus += delta
 			if source.power_label:
 				source.power_label.changePower(source.power)
 

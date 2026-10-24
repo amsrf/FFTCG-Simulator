@@ -1352,21 +1352,70 @@ func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 	# Unlike choose_target, these are evaluated against the SOURCE of the targeting effect, not against this card.
 	if source == null:
 		return true
-	if not card_effects.has("cannot_be_chosen"):
-		return true
-	var rule = card_effects["cannot_be_chosen"]
-	if not (rule is Dictionary):
-		return true
-	# "controller": "opponent" means the rule applies only to the other
-	# player's effects. Any other/absent value applies to every source.
+	if card_effects.has("cannot_be_chosen"):
+		var rule = card_effects["cannot_be_chosen"]
+		if rule is Dictionary and _protection_applies(rule, source, source_kind):
+			return false
+	# CONDITIONAL protection (Rikku 201: while you control Yuna she cannot be chosen by Summons, while you control Paine
+	# she cannot be chosen by abilities). A live board query, so it follows the named cards leaving or arriving.
+	var conditional = card_effects.get("conditional_cannot_be_chosen", [])
+	if conditional is Dictionary:
+		conditional = [conditional]
+	if conditional is Array:
+		for rule in conditional:
+			if not (rule is Dictionary):
+				continue
+			if not _controls_matching(rule.get("if_controls", {})):
+				continue
+			if _protection_applies(rule, source, source_kind):
+				return false
+	return true
+
+## Shared source filter for cannot_be_chosen / conditional_cannot_be_chosen:
+##   controller: "opponent" means the other player's effects; absent applies to every source.
+##   sources: ["Summon", "Ability"] limits the effect kind; absent applies to every kind.
+func _protection_applies(rule: Dictionary, source: Card, source_kind: String) -> bool:
 	var scope: String = str(rule.get("controller", ""))
 	if scope == "opponent" and source.controller == self.controller:
-		return true
+		return false
 	var kind: String = source_kind if source_kind != "" else source.get_effect_kind()
 	var sources: Array = rule.get("sources", [])
 	if not sources.is_empty() and not (kind in sources):
+		return false
+	return true
+
+## "If you control X" for a conditional printed rule. The criteria are evaluated with THIS card as source, so
+## controller-relative words and is_named behave the same way they do everywhere else.
+func _controls_matching(criteria: Dictionary) -> bool:
+	if criteria.is_empty():
+		return false
+	var host: Node = get_parent()
+	if host == null or not host.has_method("controls_matching"):
+		return false
+	return host.controls_matching(controller, criteria, self)
+
+## "Summons or abilities of your opponent must choose Cecil if possible." The FIELD uses this to shrink the viable
+## set to the mandatory cards when there is at least one legal one.
+func must_be_chosen_by(source: Card, source_kind: String = "") -> bool:
+	if source == null:
+		return false
+	if not card_effects.has("must_be_chosen"):
+		return false
+	var rule = card_effects["must_be_chosen"]
+	if not (rule is Dictionary):
+		return false
+	return _protection_applies(rule, source, source_kind)
+
+## Gilgamesh 207: "cannot be returned to its owner's hand by opponent's Summons or abilities."
+func can_be_returned_to_hand_by(source: Card, source_kind: String = "") -> bool:
+	if source == null:
 		return true
-	return false
+	if not card_effects.has("cannot_be_returned_to_hand"):
+		return true
+	var rule = card_effects["cannot_be_returned_to_hand"]
+	if not (rule is Dictionary):
+		return true
+	return not _protection_applies(rule, source, source_kind)
 
 ## Criteria predicates. A criteria key becomes a Card method called with the block's value, so
 ## {"is_tapped": false} and {"is_tapped": true} must both mean what they say — the old version ignored its argument

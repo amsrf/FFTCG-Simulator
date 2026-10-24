@@ -2738,6 +2738,153 @@
 		},
 		"break_zone_exile": true
 	},
+	"109": {
+		"ex_burst": "when_enter_field",
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "each_player_break_zone_to_hand",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward"
+						}
+					]
+				}
+			]
+		}
+	},
+	"158": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "each_player_keeps_one_forward",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"162": {
+		"must_be_chosen": {
+			"sources": [
+				"Summon",
+				"Ability"
+			],
+			"controller": "opponent"
+		}
+	},
+	"174": {
+		"must_be_chosen": {
+			"sources": [
+				"Summon",
+				"Ability"
+			],
+			"controller": "opponent"
+		}
+	},
+	"185": {
+		"when_enter_break_from_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"name": "The Emperor"
+						},
+						"field_dull",
+						true
+					],
+					"may": true,
+					"may_prompt": "Play The Emperor"
+				}
+			]
+		}
+	},
+	"201": {
+		"conditional_power": [
+			{
+				"condition": {
+					"is_named": "Yuna",
+					"controller": "your"
+				},
+				"value": 2000
+			},
+			{
+				"condition": {
+					"is_named": "Paine",
+					"controller": "your"
+				},
+				"value": 2000
+			}
+		],
+		"conditional_cannot_be_chosen": [
+			{
+				"if_controls": {
+					"is_named": "Yuna"
+				},
+				"sources": [
+					"Summon"
+				]
+			},
+			{
+				"if_controls": {
+					"is_named": "Paine"
+				},
+				"sources": [
+					"Ability"
+				]
+			}
+		]
+	},
+	"207": {
+		"cannot_be_returned_to_hand": {
+			"sources": [
+				"Summon",
+				"Ability"
+			],
+			"controller": "opponent"
+		},
+		"skill": [
+			{
+				"cost": {
+					"雷": 2
+				},
+				"tap": false,
+				"text": "《雷》《雷》: Gilgamesh gains +1000 power until the end of the turn.",
+				"instructions": [
+					{
+						"name": "power_change",
+						"author": "card",
+						"argument": [
+							1000,
+							1
+						]
+					}
+				]
+			},
+			{
+				"s_cost": true,
+				"cost": {
+					"雷": 2
+				},
+				"tap": false,
+				"only_if_damage_received": 4,
+				"text": "Divider 《S》《雷》《雷》: Choose 1 Forward. Break it. Use only if you have received 4+ damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "break_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
 	"_definitions": {
 		"about": "Machine-readable reference for this file. Keys beginning with _ are documentation, not card ids.",
 		"context": {
@@ -2846,7 +2993,10 @@
 			"all_jobs": "This card counts as every job.",
 			"activated_ability": "Non-tap activated ability data.",
 			"ex_burst_disabler": "Damage from this card suppresses EX Burst.",
-			"apply_effect": "Top-level target set for the trigger or skill; used by mass instructions."
+			"apply_effect": "Top-level target set for the trigger or skill; used by mass instructions.",
+			"must_be_chosen": "Opponent's Summons or abilities must choose this card if it is a legal target.",
+			"conditional_cannot_be_chosen": "Conditional protection: if_controls criteria gate the same sources/controller rule as cannot_be_chosen.",
+			"cannot_be_returned_to_hand": "Printed protection from being returned to hand by the listed source kinds and controller."
 		},
 		"skill_fields": {
 			"cost": "Mana cost by element plus neutral.",
@@ -2859,7 +3009,8 @@
 			"text": "Human-readable ability text for the choice window.",
 			"apply_effect": "Target set for the skill's instructions.",
 			"choose_target": "Targeting criteria; may be a staged array.",
-			"instructions": "Instruction list resolved on the stack."
+			"instructions": "Instruction list resolved on the stack.",
+			"only_if_damage_received": "Minimum number of cards in the controller's Damage Zone required to activate this ability."
 		},
 		"instructions": {
 			"add_status_effect": "Add a status to the source card. Optional third argument is a payload dictionary, e.g. {\"operation\": \"set\", \"value\": 0} for a next-damage shield.",
@@ -2891,14 +3042,16 @@
 			"put_hand_card_on_bottom": "Choose a hand card and put it on the bottom of the deck.",
 			"return_from_break_zone": "Return the source from the Break Zone to the field.",
 			"return_targets_to_hand": "Return every chosen target to its owner's hand.",
-			"search_deck": "Search the deck with a filter; destination is optional.",
+			"search_deck": "Search the deck with a filter. Destination: hand (default), top, removed, graveyard, field, field_dull.",
 			"set_extra_attacks": "Set the source's extra attacks.",
 			"suffer_damage": "Make the source card suffer damage.",
 			"take_damage": "A side takes N damage.",
 			"take_damage_to_controller": "Damage the source's controller.",
 			"tap": "Dull/tap the source card.",
 			"untap_all_matching": "Untap all cards matching criteria.",
-			"untap_targets": "Untap every chosen target."
+			"untap_targets": "Untap every chosen target.",
+			"each_player_break_zone_to_hand": "Each player chooses a matching Forward in their Break Zone and adds it to hand.",
+			"each_player_keeps_one_forward": "Each player chooses one Forward they control; all other Forwards are put into the Break Zone."
 		},
 		"statuses": {
 			"summoning_sickness": "Cannot tap until the next Active Phase.",

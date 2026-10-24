@@ -27,6 +27,9 @@ const DECK_SEARCH := preload("res://deck_search.tscn")
 ## The window's SCRIPT as well, because `DeckSearch.CHOOSE_NONE` needs the class and a class_name added since
 ## Godot last scanned the project is NOT in the global cache — naming the type is a parse error on every run.
 const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
+## Search filters use the CardFilter vocabulary (name/type/category/job/element/any). Preloaded by path for the same
+## reason as the two above.
+const CARD_FILTER := preload("res://scripts/card_filter.gd")
 
 
 ## Emitted when an instruction CHAIN has really finished — not merely when its queue is empty, because an instruction
@@ -252,6 +255,70 @@ func break_zone_to_hand(filter: Dictionary = {}) -> void:
 		owner_hand.add_card(found)
 	_last_action_succeeded = true
 
+## Serafie 109: EACH player chooses 1 Forward from their own Break Zone and adds it to hand. Both choices are
+## pull-shaped through the agent seam, so the human gets the window and the AI answers immediately.
+func each_player_break_zone_to_hand(filter: Dictionary = {}) -> void:
+	_last_action_succeeded = false
+	for pid in [1, 2]:
+		var side: PlayerSide = side_for(pid)
+		var pile = side.graveyard if side != null else null
+		if pile == null or pile.graveyard_cards.is_empty():
+			continue
+		var candidates: Array = []
+		for card in pile.graveyard_cards:
+			if _matches_search_filter(card, filter):
+				candidates.append(card)
+		if candidates.is_empty():
+			continue
+		var ids: Array = []
+		for card in candidates:
+			ids.append(card.id)
+		var agent: Agent = agent_for(pid)
+		if agent == null:
+			continue
+		var chosen: int = await agent.choose_break_zone_card(pid, ids, {})
+		var found: Card = null
+		for card in candidates:
+			if card.id == chosen:
+				found = card
+				break
+		if found == null:
+			continue
+		pile.graveyard_cards.erase(found)
+		pile.update_card_positions()
+		var owner_hand: Hand = hand_for(pid)
+		if owner_hand != null:
+			print("[Serafie] P%d returns %s from the Break Zone" % [pid, found.card_name])
+			owner_hand.add_card(found)
+			_last_action_succeeded = true
+
+## Cloud of Darkness 158: each player keeps 1 Forward they control; every other Forward on the field is PUT into
+## the Break Zone (not broken — no when_break trigger). Both choices are pull-shaped through the agent seam.
+func each_player_keeps_one_forward() -> void:
+	_last_action_succeeded = false
+	var kept: Array = []
+	for pid in [1, 2]:
+		var candidates: Array = field.get_front_cards_for(controller_for(pid)).duplicate()
+		if candidates.is_empty():
+			continue
+		var agent: Agent = agent_for(pid)
+		var chosen: Card = null
+		if agent != null:
+			chosen = await agent.choose_own_forward(pid, candidates)
+		if chosen == null or not candidates.has(chosen):
+			chosen = candidates[0]
+		kept.append(chosen)
+		print("[Cloud] P%d keeps %s" % [pid, chosen.card_name])
+	var unselected: Array = []
+	for card in field.get_all_cards():
+		if card.type == "Forward" and card.is_on_field() and not kept.has(card):
+			unselected.append(card)
+	for card in unselected:
+		print("[Cloud] %s is put into the Break Zone" % card.card_name)
+		put_card_into_graveyard(card)
+	enforce_game_state_rules()
+	_last_action_succeeded = true
+
 ## "Look at the top card of your deck. You may place it at the bottom." The card is named in the log; the choice goes
 ## through the agent seam so a remote player would get the same prompt.
 func look_top_may_bottom() -> void:
@@ -430,8 +497,15 @@ const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
 func return_targets_to_hand(index: int = -1) -> void:
 	var batch = ANIMATION_BATCH.new()
+	var source: Card = _current_source_card
+	var kind: String = _effect_kind()
 	for card in _selected_targets(index):
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		# Gilgamesh 207: opponent's Summons and abilities cannot return him. The rule is printed on the target, so
+		# it is asked here rather than at the call sites.
+		if not card.can_be_returned_to_hand_by(source, kind):
+			print("[ReturnToHand] %s is protected" % card.card_name)
 			continue
 		var owner_hand: Hand = hand_for(1 if card.controller == "player" else 2)
 		if owner_hand == null:
@@ -2036,39 +2110,48 @@ func _on_field_blocker_changed() -> void:
 ##
 ## Sets _last_action_succeeded so `condition: "if_last_succeeded"` can act on "and if you do so". A cancelled search
 ## counts as not succeeding, which is the whole point of that guard.
-func search_deck(filter: Dictionary, destination: String = "hand") -> void:
+func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false) -> void:
 	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
 	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.
 	_last_action_succeeded = false
-	var deck_node = $Player/Deck
-	var hand_node: Hand = $Player/Hand
+	# DEFAULT TO P1 when no controller has been set: direct/test callers have no effect source, and the old
+	# implementation was always the Player deck. An explicit "opponent" still selects P2.
+	var owner_id: int = 2 if _current_controller == "opponent" else 1
+	var deck_node = deck if owner_id == 1 else opponent_deck
+	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null:
-		push_warning("[Game] search_deck needs a Player/Deck and a Player/Hand")
+		push_warning("[Game] search_deck needs the owner's deck and hand")
 		return
 	if deck_node.deck_cards.is_empty():
 		return
 
-	var ids: Array = []
+	# FILTER FIRST, then hand only the matches to the agent. The window used to filter for display while the
+	# selection came back by id; a filter with is_named (older data) is a Card predicate, not a CardFilter key,
+	# so the two vocabularies are bridged in one helper.
+	var candidates: Array = []
 	for card in deck_node.deck_cards:
+		if _matches_search_filter(card, filter):
+			candidates.append(card)
+	if candidates.is_empty():
+		return
+	var ids: Array = []
+	for card in candidates:
 		ids.append(card.id)
 
-	# The window's type is not named either — see DECK_SEARCH_SCRIPT.
-	var window = DECK_SEARCH.instantiate()
-	add_child(window)
-	window.open(ids, filter)
-	var chosen: int = await window.finished
-	if chosen == DECK_SEARCH_SCRIPT.CHOOSE_NONE:
+	var agent: Agent = agent_for(owner_id)
+	if agent == null:
+		return
+	var chosen: int = await agent.choose_deck_card(owner_id, ids, {})
+	if chosen < 0:
 		return
 
 	var found: Card = null
-	for card in deck_node.deck_cards:
+	for card in candidates:
 		if card.id == chosen:
 			found = card
 			break
 	if found == null:
-		# The window can only offer cards it was given, so this would be a genuine inconsistency rather than
-		# a player error — say so instead of silently doing nothing.
-		push_warning("[Game] search_deck picked %d, which is not in the deck" % chosen)
+		push_warning("[Game] search_deck picked %d, which is not in the filtered deck" % chosen)
 		return
 
 	deck_node.deck_cards.erase(found)
@@ -2081,11 +2164,29 @@ func search_deck(filter: Dictionary, destination: String = "hand") -> void:
 		"top":
 			# The deck's array order IS the deck, so the front is the next card drawn.
 			deck_node.deck_cards.push_front(found)
+		"field", "field_dull":
+			# The Emperor 185: search it and play it onto the field DULL.
+			found.reset_for_field_arrival()
+			field.play_card(found, owner_id == 2, true)
+			if tapped or destination == "field_dull":
+				found.tap()
 		_:
 			# "hand" — the default, and what every existing search card uses.
 			hand_node.draw(found)
 	shuffle_deck(deck_node)
 	_last_action_succeeded = true
+
+## Two filter vocabularies meet here: CardFilter (name/type/category/job/element/any) and Card criteria
+## (is_named/is_type/...). Older search data uses both, so the shape of the filter picks the reader.
+func _matches_search_filter(card: Card, filter: Dictionary) -> bool:
+	if filter.is_empty():
+		return true
+	var filter_keys: Array = ["name", "type", "category", "job", "element",
+		"min_power", "max_power", "min_cost", "max_cost", "any"]
+	for key in filter.keys():
+		if key in filter_keys:
+			return CARD_FILTER.matches(CARD_FILTER.card_by_id(card.id), filter)
+	return card.matches_criteria(filter)
 
 ## RETURN THE SOURCE CARD FROM THE BREAK ZONE TO THE FIELD.
 ##
