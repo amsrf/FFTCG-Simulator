@@ -258,42 +258,55 @@ func break_zone_to_hand(filter: Dictionary = {}) -> void:
 		owner_hand.add_card(found)
 	_last_action_succeeded = true
 
-## Serafie 109: EACH player chooses 1 Forward from their own Break Zone and adds it to hand. Both choices are
-## pull-shaped through the agent seam, so the human gets the window and the AI answers immediately.
-func each_player_break_zone_to_hand(filter: Dictionary = {}) -> void:
-	_last_action_succeeded = false
-	for pid in [1, 2]:
-		var side: PlayerSide = side_for(pid)
+## Choose one card from a player's Break Zone. `chooser` is "self" or "opponent"; the pick is remembered in
+## `_chosen_cards`. The picker is the same search window used for deck searching, because the Break Zone is a pile.
+func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", prompt: String = "Choose a card in your Break Zone") -> void:
+	var caster_id: int = 1 if _current_controller == "player" else 2
+	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
+	var side: PlayerSide = side_for(chooser_id)
+	var pile = side.graveyard if side != null else null
+	if pile == null or pile.graveyard_cards.is_empty():
+		return
+	var candidates: Array = []
+	for card in pile.graveyard_cards:
+		if _matches_search_filter(card, criteria):
+			candidates.append(card)
+	if candidates.is_empty():
+		return
+	var ids: Array = []
+	for card in candidates:
+		ids.append(card.id)
+	var agent: Agent = agent_for(chooser_id)
+	if agent == null:
+		return
+	var chosen_id: int = await agent.choose_break_zone_card(chooser_id, ids, {})
+	var chosen: Card = null
+	for card in candidates:
+		if card.id == chosen_id:
+			chosen = card
+			break
+	if chosen == null:
+		return
+	_chosen_cards.append(chosen)
+	print("[Choose] P%d chose %s from the Break Zone" % [chooser_id, chosen.card_name])
+
+## Put every card chosen by earlier choose_break_zone_card instructions into its owner's hand.
+func put_card_into_hand(_argument = null) -> void:
+	for card in _chosen_cards.duplicate():
+		if card == null or not is_instance_valid(card):
+			continue
+		var owner_id: int = 1 if card.controller == "player" else 2
+		var side: PlayerSide = side_for(owner_id)
 		var pile = side.graveyard if side != null else null
-		if pile == null or pile.graveyard_cards.is_empty():
+		if pile == null or not pile.graveyard_cards.has(card):
 			continue
-		var candidates: Array = []
-		for card in pile.graveyard_cards:
-			if _matches_search_filter(card, filter):
-				candidates.append(card)
-		if candidates.is_empty():
-			continue
-		var ids: Array = []
-		for card in candidates:
-			ids.append(card.id)
-		var agent: Agent = agent_for(pid)
-		if agent == null:
-			continue
-		var chosen: int = await agent.choose_break_zone_card(pid, ids, {})
-		var found: Card = null
-		for card in candidates:
-			if card.id == chosen:
-				found = card
-				break
-		if found == null:
-			continue
-		pile.graveyard_cards.erase(found)
+		pile.graveyard_cards.erase(card)
 		pile.update_card_positions()
-		var owner_hand: Hand = hand_for(pid)
+		var owner_hand: Hand = hand_for(owner_id)
 		if owner_hand != null:
-			print("[Serafie] P%d returns %s from the Break Zone" % [pid, found.card_name])
-			owner_hand.add_card(found)
-			_last_action_succeeded = true
+			print("[Hand] P%d returns %s from the Break Zone" % [owner_id, card.card_name])
+			owner_hand.add_card(card)
+	_last_action_succeeded = true
 
 ## Generic "choose one card from the field" instruction. `chooser` is "self" (the effect's controller) or
 ## "opponent". Criteria are evaluated relative to the effect source, and the chosen card is remembered in

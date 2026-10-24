@@ -144,9 +144,9 @@ purpose, and no current effect changes a name in place. Add one in `enforce_game
   and Card criteria (`is_named`, `is_type`, ...). Do not add another direct window call for a new search card.
 * Two-player choices use generic instructions, not per-card Game functions. Cloud 158 is
   `choose_card(self)` -> `choose_card(opponent)` -> `apply_effect(..., exclude_chosen)` ->
-  `put_targets_into_break_zone`; `choose_card` routes the pick through `Agent.choose_field_card`. Prefer composing these
-  verbs over adding an `each_player_...` function. Serafie 109 still has its own Break-Zone helper and can follow the
-  same pattern later.
+  `put_targets_into_break_zone`; `choose_card` routes the pick through `Agent.choose_field_card`. Serafie 109 uses
+  `choose_break_zone_card(self)` -> `choose_break_zone_card(opponent)` -> `put_card_into_hand`. Prefer composing these
+  verbs over adding an `each_player_...` function.
 * `only_if_damage_received` is a per-ability gate like `only_your_turn` / `only_if_blocking`. A `tap` cost alone asks
   `can_tap()`; a non-tap ability remains available while tapped and while summoning-sick.
 * Return-to-hand checks `Card.can_be_returned_to_hand_by(source, kind)` at the single `return_targets_to_hand` verb.

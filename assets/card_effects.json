@@ -2743,13 +2743,31 @@
 		"when_enter_field": {
 			"instructions": [
 				{
-					"name": "each_player_break_zone_to_hand",
+					"name": "choose_break_zone_card",
 					"author": "game",
 					"argument": [
 						{
 							"is_type": "Forward"
-						}
+						},
+						"self",
+						"Choose a Forward in your Break Zone"
 					]
+				},
+				{
+					"name": "choose_break_zone_card",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward"
+						},
+						"opponent",
+						"Choose a Forward in your Break Zone"
+					]
+				},
+				{
+					"name": "put_card_into_hand",
+					"author": "game",
+					"argument": []
 				}
 			]
 		}
@@ -3084,10 +3102,11 @@
 			"tap": "Dull/tap the source card.",
 			"untap_all_matching": "Untap all cards matching criteria.",
 			"untap_targets": "Untap every chosen target.",
-			"each_player_break_zone_to_hand": "Each player chooses a matching Forward in their Break Zone and adds it to hand.",
 			"choose_card": "Choose one card from the field with criteria; chooser is self or opponent; the pick is stored for apply_effect(..., exclude_chosen).",
 			"apply_effect": "Set the current target list from a criteria block. Optional second argument excludes cards previously chosen by choose_card.",
-			"put_targets_into_break_zone": "Put every current target into the Break Zone. This is not a break: when_break does not trigger."
+			"put_targets_into_break_zone": "Put every current target into the Break Zone. This is not a break: when_break does not trigger.",
+			"choose_break_zone_card": "Choose one card from a player's Break Zone with criteria; chooser is self or opponent. Uses the deck-search style picker and stores the pick in _chosen_cards.",
+			"put_card_into_hand": "Put every card chosen by earlier choose_break_zone_card instructions into its owner's hand."
 		},
 		"statuses": {
 			"summoning_sickness": "Cannot tap until the next Active Phase.",

@@ -15,8 +15,9 @@ own effects are unaffected. Yaag is a Backup, so his rule applies when the effec
 `conditional_power` used one `current_conditional_bonus` per card, so the second rule overwrote the first. Each rule
 now keeps its own `granted` amount; `current_conditional_bonus` is the sum.
 
-**109 Serafie** — ETB/EX Burst: each player chooses 1 Forward in their own Break Zone and adds it to hand. Both
-choices go through the agent seam (`choose_break_zone_card`), so a human gets the search window and an AI answers
+**109 Serafie** — composed from generic instructions: `choose_break_zone_card(self)` ->
+`choose_break_zone_card(opponent)` -> `put_card_into_hand`. The Break Zone pick uses the same search window as deck
+searching, and the choice goes through `Agent.choose_break_zone_card`, so a human gets the modal and an AI answers
 immediately.
 
 **158 Cloud of Darkness** — composed from generic instructions instead of a bespoke function:

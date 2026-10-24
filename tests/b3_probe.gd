@@ -107,13 +107,21 @@ func _ready() -> void:
 	_game.player.graveyard.add_card(player_bz_forward)
 	_game.player.graveyard.add_card(player_bz_backup)
 	_game.opponent.graveyard.add_card(opponent_bz_forward)
-	await _game.each_player_break_zone_to_hand({"is_type": "Forward"})
+	var serafie: Card = _make(SERAFIE, "player")
+	_field.execute_card_effect(serafie, "when_enter_field")
+	await get_tree().process_frame
+	if _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
 	_expect(_game.player.hand.cards.has(player_bz_forward), "P1 gets its chosen Forward back")
 	_expect(not _game.player.graveyard.graveyard_cards.has(player_bz_forward), "and it leaves the Break Zone")
 	_expect(_game.player.graveyard.graveyard_cards.has(player_bz_backup), "a Backup is not a legal pick")
 	_expect(_game.opponent.hand.cards.has(opponent_bz_forward), "P2 gets its chosen Forward back")
-	_expect(effects.get(str(SERAFIE), {}).get("ex_burst") == "when_enter_field",
-		"Serafie's EX Burst uses the enter-the-field effect")
+	var serafie_steps: Array = effects.get(str(SERAFIE), {}).get("when_enter_field", {}).get("instructions", [])
+	_expect(effects.get(str(SERAFIE), {}).get("ex_burst") == "when_enter_field"
+		and serafie_steps.size() == 3
+		and str(serafie_steps[0].get("name", "")) == "choose_break_zone_card"
+		and str(serafie_steps[2].get("name", "")) == "put_card_into_hand",
+		"Serafie is composed from choose_break_zone_card + put_card_into_hand")
 	_game.queue_free()
 	await get_tree().process_frame
 
