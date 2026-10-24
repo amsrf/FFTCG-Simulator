@@ -621,6 +621,18 @@ func clear_damage():
 	if power_label:
 		power_label.changeAccumulatedDamage(0)
 
+## A CARD COMING BACK FROM A NON-FIELD ZONE IS A NEW OBJECT: no damage, no statuses, no leftover buffs, untapped,
+## not broken. `power` is a running value, so temporary buffs have to be SUBTRACTED before their list is dropped —
+## clearing power_array alone would leave the bonus baked into `power` forever.
+func reset_for_field_arrival() -> void:
+	for buff in power_array:
+		power -= int(buff[0])
+	power_array.clear()
+	status_effects.clear()
+	clear_damage()
+	broken = false
+	untap()
+
 func add_status_effect(status,duration):
 	status_effects[status] = duration
 	

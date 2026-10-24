@@ -204,7 +204,10 @@ func open_view(ids: Array, title: String) -> void:
 		_cancel.text = "Close"
 
 ## Opens the window on `deck_ids`, showing ONLY the cards that satisfy `filter`.
-func open(deck_ids: Array, filter: Dictionary) -> void:
+##
+## `subtitle_text` lets the SAME window serve another zone. The Break Zone search (Devout 48/77) is this window; the
+## only thing it needs to say differently is where the cards are coming from.
+func open(deck_ids: Array, filter: Dictionary, subtitle_text: String = "") -> void:
 	var matching: Array = []
 	for id in deck_ids:
 		if CARD_FILTER.matches(CARD_FILTER.card_by_id(int(id)), filter):
@@ -216,7 +219,7 @@ func open(deck_ids: Array, filter: Dictionary) -> void:
 	_page = 0
 
 	_title.text = "Choose a card"
-	_subtitle.text = _subtitle_for(filter)
+	_subtitle.text = subtitle_text if subtitle_text != "" else _subtitle_for(filter)
 
 	var takeable: int = matching.size()
 	_status.text = "%d card%s to choose from. Point at one to read it." % [

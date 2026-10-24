@@ -863,4 +863,26 @@
 			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
 		}
 	}
+,
+	"48":{
+		"skill":[
+			{
+				"tap":true,
+				"sacrifice":{"is_source":true},
+				"cost":{},
+				"only_your_turn":true,
+				"text":"Dull, put Devout into the Break Zone: Choose 1 Forward of cost 4 or less from your Break Zone. Play it onto the field. Use only during your turn.",
+				"instructions":[
+					{"name":"play_from_break_zone","author":"game","argument":[{"is_type":"Forward","is_cost_lower_than":5}]}
+				]
+			}
+		]
+	},
+	"77":{
+		"when_enter_field":{
+			"instructions":[
+				{"name":"play_from_break_zone","author":"game","argument":[{"is_type":"Forward","is_cost_lower_than":3}]}
+			]
+		}
+	}
 }

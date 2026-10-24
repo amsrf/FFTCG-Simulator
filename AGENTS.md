@@ -89,6 +89,21 @@ CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards`
 it), then move it to its owner's Break Zone — it was paid for. Do NOT set a flag and let it resolve with no effect;
 removal is what makes it never resolve.
 
+## A zone picker is the deck search, not a new window
+
+`DeckSearch.open(ids, filter, subtitle_text)` is reused for the Break Zone (Devout 48/77). Pass the zone label through
+the subtitle; do not build a second viewer.
+
+The choice goes through the agent seam (`Agent.choose_break_zone_card`), so a human gets the window and an AI/mock/remote
+answers without one — an instruction awaiting a pick must never hang.
+
+A card RETURNING from a non-field zone is a NEW permanent: call `Card.reset_for_field_arrival()`. It subtracts the
+remaining `power_array` buffs from the running `power` before clearing them (clearing the list alone bakes the bonus
+in), clears statuses and damage, untaps and unsets `broken`.
+
+Per-ability time gates (`only_your_turn`) must be checked in BOTH `can_activate_now` and the multi-skill picker's
+usable list, or the green ring and the picker disagree.
+
 ## "Chosen" is a targeting event, and it has rules
 
 `Field.notify_targets_chosen()` is called from `Game._on_targets_confirmed` (Assistant.target_complete) — the moment a

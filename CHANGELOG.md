@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### The Break Zone search: Devout 48 / 77
+
+The deck search window now serves a second zone — literally the same scene and the same fan, with an optional
+subtitle (`DeckSearch.open(ids, filter, subtitle_text)`). That reuse is the point: a card must read the same way
+wherever it is inspected, and a second viewer would drift.
+
+* `Agent.choose_break_zone_card(owner_id, ids, filter)` is the seam. `LocalAgent` opens the window; the default (AI,
+  mock, remote) takes the first, so an instruction awaiting a choice can never hang.
+* `Game.play_from_break_zone(criteria)` is the instruction: collect the pile's matching cards, ask, remove the chosen
+  one from the pile, and `Field.play_card()` it (history, sickness, ETB and the field row all follow automatically).
+* `Card.reset_for_field_arrival()` — a card returning from a non-field zone is a NEW permanent: damage, statuses and
+  temporary buffs are cleared, it is untapped and not broken. Clearing `power_array` alone would have left the bonus
+  baked into `power`, which is a running value.
+* `only_your_turn` on a skill closes Devout 48's ability outside its controller's turn, checked per ability in both
+  `can_activate_now` (the green ring / gate) and the multi-skill picker.
+
+New probe `devout_probe` (19 checks): only legal cards offered, the Break Zone subtitle, the card reaching the field and
+leaving the pile, damage/status reset, summoning sickness, no window when nothing is legal, and the turn gate.
+
+Coverage: **90 implemented / 7 plain / 3 to do** (41, 60, 63).
+
+
 ### "When chosen": Kuja 37
 
 A new trigger, `when_chosen`, fired from `Field.notify_targets_chosen()` when a targeting session is CONFIRMED — not

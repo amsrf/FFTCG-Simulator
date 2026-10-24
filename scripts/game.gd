@@ -100,6 +100,50 @@ func mill_player(player_id: int, count: int = 1) -> void:
 		await side.graveyard.call("draw", card)
 
 ## The caster's opponent mills. Same seat logic as opponent_discards(): the victim is the other player.
+## PLAY 1 CARD FROM A BREAK ZONE. "Choose 1 Forward of cost 4 or less from your Break Zone. Play it onto the field."
+## (Devout 48/77).
+##
+## The window IS the deck search — same fan, hover and look — with the zone's own candidates. The choice goes through
+## the agent seam so a human gets the window and the AI simply takes one; nothing can hang.
+##
+## The returning card is reset first (see Card.reset_for_field_arrival): it is a new permanent, not the broken
+## object that went to the pile, so damage, statuses and temporary buffs must not ride back with it.
+func play_from_break_zone(criteria: Dictionary = {}) -> void:
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var pile = player_graveyard if owner_id == 1 else opponent_graveyard
+	if pile == null:
+		return
+	var ids: Array = []
+	var candidates: Array = []
+	for card in pile.graveyard_cards:
+		if card == null or not is_instance_valid(card):
+			continue
+		if not card.matches_criteria(criteria, _current_source_card):
+			continue
+		candidates.append(card)
+		ids.append(card.id)
+	if ids.is_empty():
+		print("[BreakZone] nothing in the pile matches")
+		return
+	var agent: Agent = agent_for(owner_id)
+	if agent == null:
+		return
+	var chosen: int = await agent.choose_break_zone_card(owner_id, ids, criteria)
+	if chosen < 0:
+		print("[BreakZone] the choice was declined")
+		return
+	var picked: Card = null
+	for card in candidates:
+		if card.id == chosen:
+			picked = card
+			break
+	if picked == null:
+		return
+	print("[BreakZone] plays %s from the Break Zone" % picked.card_name)
+	pile.graveyard_cards.erase(picked)
+	picked.reset_for_field_arrival()
+	field.play_card(picked, owner_id == 2, true)
+
 func opponent_mills(count: int = 1) -> void:
 	var caster: int = 1 if _current_controller == "player" else 2
 	await mill_player(3 - caster, count)

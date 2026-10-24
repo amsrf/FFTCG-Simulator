@@ -66,6 +66,16 @@ func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Arr
 ## This lives here rather than in Game on purpose. The rules layer asks the seat that owns the hand and gets a card
 ## back; whether that seat is a person at this keyboard, an AI, or a remote opponent is the agent's business. Once
 ## a RemoteAgent exists it implements this same method and the rules layer does not change at all.
+## THE BREAK ZONE SEARCH IS THE DECK SEARCH. Same fan, same hover preview, same look — only the cards and the
+## subtitle differ, which is exactly what the window was built to allow.
+func choose_break_zone_card(_owner_id: int, ids: Array, filter: Dictionary) -> int:
+	if ids.is_empty():
+		return -1
+	var window = DECK_SEARCH.instantiate()
+	game.add_child(window)
+	window.open(ids, filter, "Choose a card in your Break Zone.")
+	return await window.finished
+
 func choose_discard(player_id: int, _cards: Array) -> Card:
 	var hand: Hand = game.hand_for(player_id)
 	if hand == null:

@@ -521,6 +521,11 @@ func can_activate_now(card: Card) -> bool:
 	# ONE USABLE ABILITY IS ENOUGH for the card to be offered. With several abilities the card is available if ANY of
 	# them can be paid; the unpayable ones are shown disabled in the picker rather than hiding the card entirely.
 	for def in skills:
+		# "You can only use this ability during your turn" (Devout 48). Checked PER ABILITY, because a card may have
+		# one time-restricted skill and one that is always available.
+		var owner_id_now: int = 1 if card.controller == "player" else 2
+		if bool(def.get("only_your_turn", false)) and int(get_parent().turn_owner) != owner_id_now:
+			continue
 		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
@@ -579,8 +584,10 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			# shows it disabled instead of letting the player pick an activation that can only abort.
 			var usable: Array = []
 			for def in skills:
-				var can_pay: bool = not bool(def.get("s_cost", false)) \
-					or hand.has_card_matching_criteria({"is_named": card.card_name})
+				var turn_ok: bool = not bool(def.get("only_your_turn", false)) \
+					or int(get_parent().turn_owner) == (1 if card.controller == "player" else 2)
+				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
+					or hand.has_card_matching_criteria({"is_named": card.card_name}))
 				if can_pay and def.has("sacrifice"):
 					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
 				if can_pay and int(def.get("discard", 0)) > 0:
