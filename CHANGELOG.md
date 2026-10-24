@@ -4,6 +4,39 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Cards 100-216: phase B1 (17 cards + the small vocabulary)
+
+Engine additions, each chosen because it unlocks a specific card shape:
+
+* `Card.is_damaged()` — 125 Onion Knight, 130 Black Mage.
+* `Game.discard_cards(n)` (an INSTRUCTION, not a skill cost) and `discard_from()` now returns how many were
+  discarded, so 190 Bahamut Fury can branch on "if you do" / "if not": 172 Moogle, 153 Alma, 190.
+* `Game.break_zone_to_hand(filter)` — 133 Sage.
+* `look_top_may_bottom()` and `put_hand_card_on_bottom()` — 169 Geomancer, 175 Yuj. The choice goes through the
+  agent seam (`confirm_optional`, `choose_hand_card_to_bottom`).
+* `cast_summon_for_free(criteria)` — 139 Summoner. The Summon goes through the normal charge path and is completed
+  without mana, so it stays counterable and keeps its targeting flow.
+* `power_change_targets_if_blocking()` — 106 Golem.
+* Per-ability `only_if_blocking` — 194 Snow (Vendetta).
+* Granted keyword auras (`method: "grant_status"`) with a counted `granted_statuses` ledger — 155 Warrior of Light
+  (First Strike), 188 Zangan (Haste). Counted so two sources can grant the same keyword and one leaving does not
+  revoke the other's.
+* `skip_next_active` status, consumed by the Active Phase it denies like Freeze — 127 Kain.
+* `Card.double_power()` — 116 Prishe, 128 Gilgamesh.
+* `extra_attacks` consumed by `Field.execute_card_attack()`; `extra_attacks_from_damage()` — 128 Gilgamesh (twice),
+  163 Tidus (once per point of damage).
+* `self_cost` with `if_controls` in `Rules.effective_cost()` — 153 Alma.
+
+B1 cards: 106, 116, 125, 127, 128, 130, 133, 139, 153, 155, 163, 169, 172, 175, 188, 190, 194.
+
+`tests/b1_probe.gd` (26 checks) exercises every primitive: damaged-only targeting, skip-active, blocking-conditional
+power, blocking-gated ability, granted-keyword auras and their teardown, self cost reduction, top/bottom deck,
+Break Zone to hand, draw-then-discard, the 7000/5000 branch, double power, extra attacks, and a free Summon cast.
+
+Coverage after B1: 78 implemented / 4 vanilla / 35 still needs code / 0 unclassified. Boot clean; full probe suite
+green.
+
+
 ### Cards 100-216: phases A1 and A2 (57 data-only cards)
 
 Classified all 117 cards in 100-216, then implemented the 57 that need no engine change.

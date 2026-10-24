@@ -119,6 +119,15 @@ ability must land on top of the Summon/ability that caused it, so it resolves fi
 
 ## Cards 100-216 coverage
 
+B1 introduced these primitives; use them rather than adding one-off code:
+
+* `is_damaged` criteria; `discard_cards`; `break_zone_to_hand`; `look_top_may_bottom`; `put_hand_card_on_bottom`;
+  `cast_summon_for_free`; `power_change_targets_if_blocking`; `only_if_blocking` (per ability); `self_cost` with
+  `if_controls`; `double_power`; `set_extra_attacks` / `extra_attacks_from_damage`.
+* Auras can `grant_status` (counted in `Card.granted_statuses`), and `unregister_card_auras` revokes exactly what it
+  granted. Haste/Brave/First Strike all read printed + timed status + granted.
+
+
 `python3 tools/coverage_range.py --check` must print `UNCLASSIFIED: 0`. The `NEEDS_CODE` dict in that tool is the
 roadmap: an id moves out when its primitive lands, and an entry in `card_effects.json` always wins.
 

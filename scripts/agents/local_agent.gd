@@ -126,6 +126,22 @@ func choose_discard(player_id: int, _cards: Array) -> Card:
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	return chosen if play else null
 
+## "Place 1 card from your hand at the bottom of your deck" (Yuj 175). Same picker as a discard, different verb.
+func choose_hand_card_to_bottom(player_id: int, _cards: Array) -> Card:
+	var hand: Hand = game.hand_for(player_id)
+	if hand == null:
+		return null
+	var assistant: Assistant = game.assistant
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	hand.begin_choose_card({})
+	assistant.show_choose_card_buttons("Put on bottom", "Cancel")
+	var play: bool = await assistant.choose_card_finished
+	var chosen: Card = hand.selected_card_for_effect
+	hand.end_choose_card()
+	assistant.hide_buttons()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
+	return chosen if play else null
+
 const SKILL_CHOICE := preload("res://skill_choice.tscn")
 
 ## Which ability? A modal listing each ability's text. The human selects a container, Confirm commits, Cancel (-1)

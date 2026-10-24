@@ -129,6 +129,11 @@ func choose_hand_card_to_play(_owner_id: int, ids: Array, _filter: Dictionary) -
 	await _settle()
 	return int(ids[0]) if not ids.is_empty() else -1
 
+## Choose a card from HAND to put on the bottom of the deck (Yuj 175). Returns the Card, or null.
+func choose_hand_card_to_bottom(_owner_id: int, cards: Array) -> Card:
+	await _settle()
+	return cards[0] if not cards.is_empty() else null
+
 ## CHOOSE A CARD FROM A ZONE (the Break Zone, for Devout 48/77). Returns a card id, or -1 for "none".
 ## The default takes the first: an AI or a mock can always answer, so an instruction awaiting this can never hang.
 func choose_break_zone_card(_owner_id: int, ids: Array, _filter: Dictionary) -> int:

@@ -188,27 +188,139 @@ func opponent_mills(count: int = 1) -> void:
 	var caster: int = 1 if _current_controller == "player" else 2
 	await mill_player(3 - caster, count)
 
-func discard_from(player_id: int, count: int = 1) -> void:
+func discard_from(player_id: int, count: int = 1) -> int:
 	var owner_hand: Hand = hand_for(player_id)
 	if owner_hand == null:
-		return
+		return 0
+	var discarded: int = 0
 	for _i in range(count):
 		if owner_hand.cards.is_empty():
 			print("[Discard] P%d has no cards to discard" % player_id)
-			return
+			return discarded
 		# ASK THE OWNER, whoever they are. Game does not know or care whether that player is the human at this
 		# keyboard, an AI, or a remote opponent — LocalAgent draws a UI, AIAgent picks heuristically, and a future
 		# RemoteAgent answers over the network. Special-casing LocalAgent here would have baked this machine's
 		# setup into the rules layer, which is the thing the seam exists to prevent.
 		var agent: Agent = agent_for(player_id)
 		if agent == null:
-			return
+			return discarded
 		var picked: Card = await agent.choose_discard(player_id, owner_hand.cards)
 		if picked == null:
 			# Cancelled locally, or an agent with no opinion. Nothing more to do.
-			return
+			return discarded
 		print("[Discard] P%d discards %s" % [player_id, picked.card_name])
 		owner_hand.discard_card(picked)
+		discarded += 1
+	return discarded
+
+## "Draw 1 card, then discard 1 card from your hand." The discard is an INSTRUCTION, not a skill cost, so it needs its
+## own entry point; and it must set the success latch because Bahamut Fury branches on whether the discard happened.
+func discard_cards(count: int = 1) -> void:
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var discarded: int = await discard_from(owner_id, count)
+	_last_action_succeeded = discarded > 0
+
+## "Choose 1 Character Card in your Break Zone. Add it to your hand." The Break Zone is a pile, so the same search
+## window the deck uses is the picker; the filter is a CardFilter block (type/category/job/name/...).
+func break_zone_to_hand(filter: Dictionary = {}) -> void:
+	_last_action_succeeded = false
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var side: PlayerSide = side_for(owner_id)
+	var pile = side.graveyard if side != null else null
+	if pile == null or pile.graveyard_cards.is_empty():
+		return
+	var ids: Array = []
+	for card in pile.graveyard_cards:
+		ids.append(card.id)
+	var window = DECK_SEARCH.instantiate()
+	add_child(window)
+	window.open(ids, filter, "Choose a card in your Break Zone.")
+	var chosen: int = await window.finished
+	if chosen == DECK_SEARCH_SCRIPT.CHOOSE_NONE:
+		return
+	var found: Card = null
+	for card in pile.graveyard_cards:
+		if card.id == chosen:
+			found = card
+			break
+	if found == null:
+		return
+	pile.graveyard_cards.erase(found)
+	pile.update_card_positions()
+	var owner_hand: Hand = hand_for(owner_id)
+	if owner_hand != null:
+		owner_hand.add_card(found)
+	_last_action_succeeded = true
+
+## "Look at the top card of your deck. You may place it at the bottom." The card is named in the log; the choice goes
+## through the agent seam so a remote player would get the same prompt.
+func look_top_may_bottom() -> void:
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var d = deck if owner_id == 1 else opponent_deck
+	if d == null or d.deck_cards.is_empty():
+		_last_action_succeeded = false
+		return
+	var top: Card = d.deck_cards[0]
+	print("[Deck] P%d looks at the top card: %s" % [owner_id, top.card_name])
+	var agent: Agent = agent_for(owner_id)
+	var put_bottom: bool = true
+	if agent != null:
+		put_bottom = await agent.confirm_optional(owner_id, "Put on bottom")
+	if put_bottom:
+		d.deck_cards.pop_front()
+		d.deck_cards.append(top)
+	_last_action_succeeded = true
+
+## "Draw 1 card, then place 1 card from your hand at the bottom of your deck." Choosing the card is the agent's job;
+## moving it is the rules layer's.
+func put_hand_card_on_bottom() -> void:
+	_last_action_succeeded = false
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_hand: Hand = hand_for(owner_id)
+	var d = deck if owner_id == 1 else opponent_deck
+	if owner_hand == null or d == null or owner_hand.cards.is_empty():
+		return
+	var agent: Agent = agent_for(owner_id)
+	if agent == null:
+		return
+	var picked: Card = await agent.choose_hand_card_to_bottom(owner_id, owner_hand.cards)
+	if picked == null:
+		return
+	owner_hand.cards.erase(picked)
+	owner_hand.update_card_positions()
+	d.deck_cards.append(picked)
+	picked.reparent(d, false)
+	picked.enter_zone(Card.Zone.DECK)
+	_last_action_succeeded = true
+
+## "Cast 1 Summon of cost 6 or less from your hand without paying its cost." The card goes through the SAME charge
+## path as a paid cast; we simply complete the payment stage immediately, with nothing selected. That keeps the
+## Summon on the stack (so it can be countered) and its targeting flow intact.
+func cast_summon_for_free(criteria: Dictionary = {}) -> void:
+	_last_action_succeeded = false
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_hand: Hand = hand_for(owner_id)
+	if owner_hand == null or owner_hand.cards.is_empty():
+		return
+	var ids: Array = []
+	for card in owner_hand.cards:
+		ids.append(card.id)
+	var chosen: int = await agent_for(owner_id).choose_hand_card_to_play(owner_id, ids, criteria)
+	if chosen < 0:
+		return
+	var picked: Card = null
+	for card in owner_hand.cards:
+		if card.id == chosen:
+			picked = card
+			break
+	if picked == null:
+		return
+	if not owner_hand.charge(picked):
+		return
+	# The Assistant pushed PAYING_COST during charge(); completing it with no mana selected is the "free" part.
+	await get_tree().process_frame
+	assistant.on_charge_complete()
+	_last_action_succeeded = true
 
 ## Damage amounts chosen in the split window, waiting for the ability that asked for them to resolve. ONE SLOT is
 ## enough: the ability commits immediately after the split, so no other effect can claim it in between.
@@ -341,6 +453,25 @@ func power_change_targets(amount: int = 0, duration: int = 1, index: int = -1) -
 	if amount == 0:
 		return
 	_each_target("power_change", [amount, duration], index)
+
+## Golem 106: "It gains +2000 power. If it is blocking, it gains +4000 instead." The CHOICE is the same; only the
+## number depends on the target's own state at resolution.
+func power_change_targets_if_blocking(normal: int = 0, blocking: int = 0, duration: int = 1, index: int = -1) -> void:
+	for card in _selected_targets(index):
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		card.power_change(blocking if card.status_effects.has("blocking") else normal, duration)
+	enforce_game_state_rules()
+
+## Tidus 163: "Tidus can attack as many times as your points of damage this turn." The first attack is the normal one,
+## so the extra allowance is damage_count - 1.
+func extra_attacks_from_damage() -> void:
+	var owner_id: int = 1 if _current_controller == "player" else 2
+	var side: PlayerSide = side_for(owner_id)
+	if _current_source_card == null or side == null:
+		return
+	_current_source_card.set_extra_attacks(maxi(0, side.damage_count() - 1))
+	_last_action_succeeded = true
 
 ## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may

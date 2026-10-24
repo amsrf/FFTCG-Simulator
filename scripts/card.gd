@@ -36,6 +36,11 @@ var mat: ShaderMaterial
 @export var field_actions : Array = []
 @export var status_effects = {}
 @export var power_array = []
+## Keywords GRANTED by a continuous effect (an aura), as opposed to printed in card_effects. A COUNT, not a bool,
+## because two auras can grant the same keyword and losing one must not lose the other.
+var granted_statuses: Dictionary = {}
+## Extra attacks left this turn ("Gilgamesh can attack twice", Tidus' Blitz Ace). Consumed by Field.execute_card_attack.
+var extra_attacks: int = 0
 @export var card_effects : Dictionary
 @export var key_word_effect: String
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
@@ -600,13 +605,40 @@ func reset_for_field_arrival() -> void:
 		power -= int(buff[0])
 	power_array.clear()
 	status_effects.clear()
+	granted_statuses.clear()
+	extra_attacks = 0
 	clear_damage()
 	broken = false
 	untap()
 
 func add_status_effect(status,duration):
 	status_effects[status] = duration
-	
+
+## Continuous GRANTS (an aura), as opposed to timed statuses. Counted so two sources can grant the same keyword and
+## one leaving does not revoke the other's.
+func grant_status(status: String) -> void:
+	granted_statuses[status] = int(granted_statuses.get(status, 0)) + 1
+
+func revoke_status(status: String) -> void:
+	var n: int = int(granted_statuses.get(status, 0)) - 1
+	if n > 0:
+		granted_statuses[status] = n
+	else:
+		granted_statuses.erase(status)
+
+func has_granted(status: String) -> bool:
+	return int(granted_statuses.get(status, 0)) > 0
+
+## "Double the power of this Forward until the end of the turn." A one-time doubling at resolution: if power later
+## changes, the doubled value is the base it happened on, which is what the rules mean.
+func double_power(duration: int = 1) -> void:
+	power_change(power, duration)
+
+## "Can attack twice this turn": extra attacks are consumed by Field.execute_card_attack, which skips the tap while
+## one remains.
+func set_extra_attacks(count: int) -> void:
+	extra_attacks = maxi(0, count)
+
 func turn_end():
 	# End Phase cleanup for this card: expire "until end of turn" status
 	# effects and temporary power modifiers, then remove all damage.
@@ -614,7 +646,10 @@ func turn_end():
 		# FROZEN IS NOT A COUNTDOWN. It is spent by the Active Phase it denies (Field.untap_cards_for), and the
 		# Active Phase comes before its controller's End Phase — so decrementing it here could only ever remove it
 		# early, never late. Any number stored for it is a formality; skipping it keeps that from being load-bearing.
-		if s == "frozen":
+		#
+		# `skip_next_active` (Kain: "will not activate during your next Active Phase") works the same way and is
+		# consumed by the same untap, for the same reason.
+		if s == "frozen" or s == "skip_next_active":
 			continue
 		var dur = status_effects[s]
 		# JSON NUMBERS ARRIVE AS FLOAT. `dur is int` is false for a duration parsed out of card_effects.json, so a
@@ -653,6 +688,8 @@ func turn_end():
 	power_array = remaining_buffs
 	if power_label:
 		power_label.changePower(power)
+	# "can attack twice THIS turn" - the allowance expires with the turn, not with the card.
+	extra_attacks = 0
 	clear_damage()
 	
 			
@@ -702,14 +739,14 @@ func declare_blocker():
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
 ## what something gave it, and anything asking "can this tap" needs one answer.
 func has_haste() -> bool:
-	return card_effects.has("haste") or status_effects.has("haste")
+	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste")
 
 ## BRAVE: attacking does not dull this card, so it can attack and still block (or attack again). Same split as
 ## Brave — printed "brave": true in card_effects.json, granted as a status named "brave", or granted by a party effect
 ## on the field ("The Forwards forming a party you control gain Brave", Gippal). The Field is the only thing that knows
 ## who is currently in a party, so it is asked rather than duplicating the rule here.
 func is_brave() -> bool:
-	if card_effects.has("brave") or status_effects.has("brave"):
+	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave"):
 		return true
 	var host: Node = get_parent()
 	return host != null and host.has_method("party_grants_brave") and host.call("party_grants_brave", self)
@@ -718,7 +755,7 @@ func is_brave() -> bool:
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
 ## the question it asks.
 func is_first_strike() -> bool:
-	return card_effects.has("first_strike") or status_effects.has("first_strike")
+	return card_effects.has("first_strike") or status_effects.has("first_strike") or has_granted("first_strike")
 
 ## FROZEN: does not activate during its controller's next Active Phase. Granted only - no card prints Freeze, they
 ## all say "Freeze it" - so unlike Haste, Brave and First Strike there is no printed half. The status is CONSUMED
@@ -1322,6 +1359,10 @@ func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 ## and returned tapped-ness either way, which would silently pick the opposite set.
 func is_tapped(want: bool = true) -> bool:
 	return self.tapped == want
+
+## "a damaged Forward" — any damage at all, which is what the card text means (not "below its power").
+func is_damaged(want: bool = true) -> bool:
+	return (accumulated_damage > 0) == want
 
 ## "a blocking Forward" / "an attacking Forward". Both keys are already maintained by
 ## set_attacker_status() and set_blocker_status(), and both expire at turn_end like any other status.

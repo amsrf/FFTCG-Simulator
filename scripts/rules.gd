@@ -38,6 +38,19 @@ func _cards() -> Array:
 func effective_cost(card: Card) -> Dictionary:
 	var paid: Dictionary = card.get_cost()
 	var delta: int = 0
+	# A cost modifier printed ON the card itself ("If you control Ovelia, the cost to play Alma is reduced by 1").
+	# `if_controls` is a criteria block evaluated against the other cards on the field, from this card's perspective.
+	var self_rule = card.card_effects.get("self_cost", {})
+	if self_rule is Dictionary and not self_rule.is_empty():
+		var condition = self_rule.get("if_controls", {})
+		var condition_met: bool = condition is Dictionary and condition.is_empty()
+		if condition is Dictionary and not condition.is_empty():
+			for other in _cards():
+				if other != null and other != card and other.matches_criteria(condition, card):
+					condition_met = true
+					break
+		if condition_met:
+			delta += int(self_rule.get("delta", 0))
 	for source in _cards():
 		if source == null or not is_instance_valid(source):
 			continue

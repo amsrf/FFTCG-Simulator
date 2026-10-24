@@ -21,23 +21,6 @@ VANILLA = {105, 119, 138, 159}
 # Move an id out of here when it lands (the "implemented" bucket is read from the JSON, so an entry wins).
 NEEDS_CODE = {
     # B1 - tiny vocabulary
-    125: 'is_damaged predicate',
-    130: 'is_damaged predicate',
-    172: 'discard_cards(n) instruction',
-    190: 'discard_cards(n) instruction + may',
-    153: 'discard instruction + conditional cost',
-    133: 'Break Zone -> hand instruction',
-    169: 'look at top card / put on bottom',
-    175: 'draw + put a hand card on the bottom',
-    127: 'skip next Active Phase status',
-    106: 'conditional power while blocking',
-    194: 'only-if-blocking skill condition',
-    155: 'aura granting First Strike',
-    188: 'grant Haste to matching cards',
-    139: 'cast a Summon for free',
-    116: 'double power',
-    128: 'double power + attack twice',
-    163: 'attack multiple times',
     # B2 - replacement / shields
     152: 'Forwards enter the field dull',
     160: 'next damage becomes 0',

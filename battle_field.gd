@@ -231,6 +231,8 @@ class AuraValue:
 	var method: String
 	var targets: Dictionary  # Changed from Array[String] to Dictionary
 	var value: int
+	## For method == "grant_status": the keyword/status this aura grants ("first_strike", "haste", ...).
+	var status: String
 	## THE CARD THAT GRANTED IT, held so auras can be found by their source instead of by a dictionary key equal to the
 	## source's instance id — which is what limited a card to one aura: a second entry under the same key overwrote the
 	## first before anything had applied it, and the teardown only ever undid the survivor.
@@ -240,10 +242,11 @@ class AuraValue:
 	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
 	var granted: Dictionary = {}
 
-	func _init(p_method: String, p_targets: Dictionary, p_value: int = 0):
+	func _init(p_method: String, p_targets: Dictionary, p_value: int = 0, p_status: String = ""):
 		method = p_method
 		targets = p_targets
 		value = p_value
+		status = p_status
 
 
 ## Every aura, each under its OWN id. This was a Dictionary keyed by the source card's instance id, so a card that granted
@@ -253,7 +256,8 @@ var _auras: Dictionary[int, AuraValue] = {}
 var _next_aura_id: int = 1
 
 func add_aura(aura: Dictionary, source: Card) -> AuraValue:
-	var aura_value := AuraValue.new(str(aura.get('method', '')), aura.get('targets', {}), int(aura.get('value', 0)))
+	var aura_value := AuraValue.new(str(aura.get('method', '')), aura.get('targets', {}),
+		int(aura.get('value', 0)), str(aura.get('status', '')))
 	aura_value.source = source
 	_auras[_next_aura_id] = aura_value
 	_next_aura_id += 1
@@ -283,6 +287,10 @@ func add_aura_to_card(aura: AuraValue, card: Card):
 	if aura.method == 'power_change':
 		# -1 = permanent modifier (does not expire at end of turn).
 		card.power_change(aura.value, -1)
+	elif aura.method == 'grant_status' and not aura.status.is_empty():
+		# Keywords from a continuous effect ("the Standard Unit Forwards gain First Strike"). Counted, so two
+		# sources can grant the same keyword and one leaving does not revoke the other's.
+		card.grant_status(aura.status)
 				
 func add_all_auras_to_card(card:Card):
 	for aura in _auras.values():
@@ -403,7 +411,12 @@ func execute_card_attack():
 			continue
 		# BRAVE does not dull to attack, which is what lets a Brave Forward attack and still block — and attack again
 		# on a later combat step the same turn. This is PER MEMBER, not per party.
-		if not card.is_brave():
+		#
+		# EXTRA ATTACKS: "Gilgamesh can attack twice this turn." The allowance is consumed here, and while it lasts the
+		# card stays untapped, so the next attack step can declare it again. The LAST allowed attack taps normally.
+		if card.extra_attacks > 0:
+			card.extra_attacks -= 1
+		elif not card.is_brave():
 			card.tap()
 		attacking.append(card)
 		execute_card_effect(card, 'when_attack')
@@ -526,6 +539,10 @@ func can_activate_now(card: Card) -> bool:
 		var owner_id_now: int = 1 if card.controller == "player" else 2
 		if bool(def.get("only_your_turn", false)) and int(get_parent().turn_owner) != owner_id_now:
 			continue
+		# "You can only use this ability while <card> is blocking." A per-ability gate, like only_your_turn:
+		# the same card may have another ability that is always available.
+		if bool(def.get("only_if_blocking", false)) and not card.status_effects.has("blocking"):
+			continue
 		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
@@ -584,8 +601,9 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			# shows it disabled instead of letting the player pick an activation that can only abort.
 			var usable: Array = []
 			for def in skills:
-				var turn_ok: bool = not bool(def.get("only_your_turn", false)) \
-					or int(get_parent().turn_owner) == (1 if card.controller == "player" else 2)
+				var turn_ok: bool = (not bool(def.get("only_your_turn", false)) \
+					or int(get_parent().turn_owner) == (1 if card.controller == "player" else 2)) \
+					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking"))
 				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
 					or hand.has_card_matching_criteria({"is_named": card.card_name}))
 				if can_pay and def.has("sacrifice"):
@@ -769,6 +787,12 @@ func untap_cards_for(controller_name: String) -> void:
 		#
 		# It does NOT block untap_targets(): "Activate" effects still work on a Frozen card. Freeze denies the
 		# Active Phase, not activation.
+		# "WILL NOT ACTIVATE DURING YOUR NEXT ACTIVE PHASE" (Kain) is the same clock as Freeze: a status consumed by
+		# the untap it denies, never counted down at End Phase.
+		if card.status_effects.has("skip_next_active"):
+			card.status_effects.erase("skip_next_active")
+			print("[Skip] %s does not activate" % card.card_name)
+			continue
 		if card.status_effects.has("frozen"):
 			card.status_effects.erase("frozen")
 			print("[Freeze] %s does not activate" % card.card_name)
@@ -1308,13 +1332,15 @@ func unregister_card_auras(card: Card) -> void:
 	for id in keys:
 		var aura: AuraValue = _auras[id]
 		_auras.erase(id)
-		if aura.method != "power_change":
-			continue
 		# The exact inverse, off the record of what was actually granted — not off the target test, which would also take the
 		# bonus off cards that never received it.
 		for other in aura.granted.keys():
-			if is_instance_valid(other):
+			if not is_instance_valid(other):
+				continue
+			if aura.method == "power_change":
 				other.power_change(-aura.value, -1)
+			elif aura.method == "grant_status" and not aura.status.is_empty():
+				other.revoke_status(aura.status)
 		aura.granted.clear()
 	
 func get_breakable_cards():
