@@ -54,6 +54,10 @@ const BAHAMUT := 18      # Summon: fragile + big damage
 const FIRE_MANA := 3     # Red Mage, fire Backup
 const ICE_MANA := 31     # Chemist, ice Backup
 const ICE_MANA_2 := 32   # Chemist, ice Backup
+const WIND_MANA := 68    # Evoker, wind Backup — pays for Thief / Rikku
+const MILL_RIKKU := 89   # Rikku: skill 風+dull mills 1; S skill 風+dull mills 2 and draws 1
+const MILL_THIEF := 69   # Thief, Forward: enters the field -> opponent mills 1
+const MILL_THIEF_BACKUP := 70  # Thief, Backup: same ETB, already on the board here
 
 
 static func clean() -> Dictionary:
@@ -125,6 +129,26 @@ static func break_zone() -> Dictionary:
 	return cfg
 
 
+static func mill() -> Dictionary:
+	## MILL. You have Rikku (89) and Thief (70) on the board, three wind Backups to pay for them, and a Thief (69)
+	## plus a spare Rikku in hand. Nothing else moves: the opponent is MOCK and its board is empty.
+	##
+	## Rikku's ability (風 + dull) mills the opponent 1; her S ability discards the Rikku in hand to mill 2 and draw 1.
+	## Playing the Thief from hand mills 1 on entry. Both decks are 20 cards so repeated activations stay visible.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_mill"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [
+		{"id": MILL_RIKKU}, {"id": MILL_THIEF_BACKUP},
+		{"id": WIND_MANA}, {"id": WIND_MANA}, {"id": WIND_MANA},
+	]
+	cfg["player_hand"] = [MILL_THIEF, MILL_RIKKU]
+	cfg["player_deck"] = range(PLAYER_DECK_START, PLAYER_DECK_START + 20)
+	cfg["opponent_deck"] = range(OPPONENT_DECK_START, OPPONENT_DECK_START + 20)
+	cfg["opponent_field"] = []
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -146,6 +170,10 @@ const GROUNDS := {
 		"title": "Ground: Empty board",
 		"blurb": "No cards in play, no hands, seeded decks. A blank slate for setting things up by hand.",
 	},
+	"mill": {
+		"title": "Ground: Mill (cards to the Break Zone)",
+		"blurb": "Rikku + Thief on the board and 3 wind Backups. Activate Rikku (風+dull, or her S ability) to mill; play Thief from hand to mill 1 on entry.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -162,6 +190,8 @@ static func config(name: String) -> Dictionary:
 			return break_zone()
 		"clean":
 			return clean()
+		"mill":
+			return mill()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()

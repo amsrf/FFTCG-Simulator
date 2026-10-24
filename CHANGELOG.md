@@ -4,6 +4,18 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Test Mode: the Mill ground
+
+A curated board under **Test Mode**, so the mill animation and the three mill cards can be driven by hand:
+
+* Rikku (89) and Thief (70) on the board, three **wind** Backups (Evoker 68) to pay for them;
+* Thief (69) and a spare Rikku in hand — play the Thief to mill on entry, or discard the spare Rikku for her S ability;
+* both decks are 20 cards, and the opponent is **Mock** with an empty board, so nothing else moves.
+
+`test_grounds_probe` grew 9 checks (75 total): the ground is listed, its board is what it claims, Rikku starts ready to
+tap, the opponent cannot act, and one real `mill_player(2, 1)` takes a card off the deck into the pile.
+
+
 ### Mill: the Animation and Three Cards (batch 2)
 
 `mill_player(player_id, count)` + `opponent_mills(count)` — the instruction, and the animation, live in one place:

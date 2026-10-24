@@ -94,6 +94,10 @@ party members through `Card.is_brave()` → `Field.party_grants_brave()`.
 
 ## Test Grounds (one board per mechanic)
 
+Adding one is three edits in `scripts/test_grounds.gd`: a builder function, an entry in
+`GROUNDS` (title + blurb) and an arm in `config()`. `test_grounds_probe` then checks the ids, the board it boots and
+anything the ground specifically claims.
+
 `scripts/test_grounds.gd` is a registry of curated boards, reached from the main menu's **Test Mode** button
 (`test_grounds_menu.tscn`). The main menu itself is unchanged — the grounds are deliberately NOT presets there.
 Use these instead of the general `ai` preset whenever you are testing one mechanic: the `ai` board also casts Ifrit/Valefor, so the board

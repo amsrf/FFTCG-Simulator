@@ -117,6 +117,21 @@ func _ready() -> void:
 	var zone: Dictionary = GROUNDS.break_zone()
 	_expect(zone["player_hand"].has(GROUNDS.BAHAMUT), "the break-zone ground puts Bahamut in hand")
 
+	# --- the mill ground: the pieces that make milling reachable by hand ------------------------------------
+	var mill: Dictionary = GROUNDS.mill()
+	var mill_field_ids: Array = []
+	for e in mill["player_field"]:
+		mill_field_ids.append(int(e["id"]))
+	_expect(mill_field_ids.has(GROUNDS.MILL_RIKKU), "the mill ground puts Rikku on the board")
+	_expect(mill_field_ids.count(GROUNDS.WIND_MANA) == 3,
+		"with three wind Backups to pay for her ability (%d)" % mill_field_ids.count(GROUNDS.WIND_MANA))
+	_expect(mill["player_hand"].has(GROUNDS.MILL_THIEF),
+		"and Thief in hand, whose ETB mills on entry")
+	_expect(mill["player_hand"].has(GROUNDS.MILL_RIKKU),
+		"plus a spare Rikku to pay her S cost (discard a card named Rikku)")
+	_expect(mill["opponent_deck"].size() >= 10,
+		"the opponent's deck is long enough to watch several mills (%d)" % mill["opponent_deck"].size())
+
 	# --- boot one for real -------------------------------------------------------------------------------
 	# The party ground is the one that must not move on its own, so it is the most useful smoke test.
 	MatchSetup.config = MatchSetup.build_config("party")
@@ -168,6 +183,32 @@ func _ready() -> void:
 	print("[Grounds] after the AI's party attack, %d player Forward(s) can still block: %s" % [
 		blockable, str(bfield.get_front_cards_for("player").map(func(c): return "%s(tapped=%s)" % [c.card_name, c.tapped]))])
 	_expect(blockable > 0, "and you can still block it — the ground's whole purpose")
+
+	# --- the mill ground, booted -----------------------------------------------------------------------------
+	blocking_game.queue_free()
+	await get_tree().process_frame
+	MatchSetup.config = MatchSetup.build_config("mill")
+	var mill_game = GAME_SCENE.instantiate()
+	add_child(mill_game)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var mfield = mill_game.get("field")
+	var mill_rikku: Card = null
+	for c in mfield.get_back_cards_for("player"):
+		if c.id == GROUNDS.MILL_RIKKU:
+			mill_rikku = c
+	_expect(mill_rikku != null, "the mill ground really places Rikku")
+	_expect(mill_rikku != null and not mill_rikku.tapped and mill_rikku.can_tap(),
+		"and she starts ready to tap for the ability")
+	_expect(mill_game.get("opponent_agent") is MockAgent,
+		"the mill ground's opponent is MOCK, so nothing mills itself")
+	var mill_deck = mill_game.get("opponent_deck")
+	var mill_pile: Node = mill_game.get("opponent").graveyard
+	var deck_before: int = mill_deck.deck_cards.size()
+	var pile_before: int = mill_pile.graveyard_cards.size()
+	await mill_game.call("mill_player", 2, 1)
+	_expect(mill_deck.deck_cards.size() == deck_before - 1, "milling from the ground takes a card off the deck")
+	_expect(mill_pile.graveyard_cards.size() == pile_before + 1, "and the pile grows by one")
 
 	print("[Grounds] %d checks | failures: %d" % [_checks, _fails])
 	print("[Grounds] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
