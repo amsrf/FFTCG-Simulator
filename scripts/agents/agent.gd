@@ -67,6 +67,14 @@ func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Arr
 	await _settle()
 	return greedy_party_split(party, total)
 
+## Divide a fixed amount of damage among chosen targets ("divide 6000 among them as you like", Yuffie's Bloodfest).
+## Same shape as the blocker's party split, but this one is part of PLAYING the ability, so it happens before the
+## ability commits and its Cancel can step back to target selection. Empty array = cancelled; the rules layer decides
+## what that means for the ability.
+func choose_damage_split(_player_id: int, cards: Array, total: int) -> Array:
+	await _settle()
+	return greedy_party_split(cards, total)
+
 func greedy_party_split(party: Array, total: int) -> Array:
 	var out: Array = []
 	if party.is_empty():

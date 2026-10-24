@@ -43,6 +43,17 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Divide Damage
+
+"Divide N damage among them as you like" is a `divide_damage` instruction, but the PLAYER'S CHOICE happens **before
+the ability commits** — in `Stack._on_assistant_target_complete`, not at resolution. That is what makes Cancel on the
+distribution able to step back to target selection (re-push the TARGET modal, re-emit `request_target_confirmation`);
+a resolution-time modal could not, because the effect is already on the stack with locked targets.
+
+The window is `party_split.tscn` with `allow_cancel = true` (Back button + Escape, emits `finished([])`). The blocker's
+party split leaves it false. Amounts are stored on `Game._damage_division` — one slot, consumed by `divide_damage()`
+in `_targets` order.
+
 ## Blocking Legality
 
 Two predicates, one per side of the pair: `Card.allows_blocker(blocker)` (attacker-side `cannot_be_blocked_by`) and

@@ -458,6 +458,8 @@ func _clear_skill_proxy() -> void:
 	var p = skill_activation_proxy
 	skill_activation_proxy = null
 	skill_mana_deferred_until_target_confirm = false
+	# A damage split chosen for THIS ability must not outlive it: the next divide-damage ability would inherit it.
+	get_parent()._damage_division.clear()
 	if was_pending:
 		var src: Card = p.effect_source
 		if src != null and is_instance_valid(src) and src.tapped:
@@ -668,6 +670,25 @@ func _on_assistant_target_complete() -> void:
 		_shatter_paid_cost()      # the Summon is on the stack
 		request_priority.emit()
 		return
+	# DIVIDE DAMAGE IS CHOSEN BEFORE THE ABILITY COMMITS. "Divide 6000 damage among them as you like" (Yuffie's
+	# Bloodfest) is part of PLAYING the ability, not of resolving it — which is exactly what lets Cancel on the
+	# distribution screen step back to target selection instead of stranding a committed effect.
+	var pool: int = _divide_damage_total(skill_activation_proxy)
+	if pool >= 0:
+		var field_ref = get_parent().field
+		var picks: Array = field_ref.targeting_picked.duplicate()
+		var owner_id: int = 1 if skill_activation_proxy.controller == "player" else 2
+		var agent: Agent = get_parent().agent_for(owner_id)
+		var split: Array = await agent.choose_damage_split(owner_id, picks, pool)
+		if split.is_empty():
+			# BACK ONE STEP. The targeting session was never torn down — picks and arcs are intact — so the only thing
+			# missing is the TARGET modal and its Confirm button. Costs already paid stay paid: the ability is still
+			# being activated, the player is only redoing this choice.
+			GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
+			field_ref.request_target_confirmation.emit(
+				picks.back() if not picks.is_empty() else null, field_ref.targeting_allow_cancel)
+			return
+		get_parent()._damage_division = split
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: costs paid, target chosen
 	# Same as the no-target path below: clear the button that got us here, then put the player's pass button back. Hiding the
@@ -675,6 +696,23 @@ func _on_assistant_target_complete() -> void:
 	assistant.hide_buttons()
 	assistant.show_pass_priority_button()
 	request_priority.emit()
+
+## The damage pool for an ability that says "divide N damage among them", or -1 when it says no such thing.
+## Read from the SKILL DEF of the source, because the stack object is a proxy with no skill array of its own.
+func _divide_damage_total(proxy: Card) -> int:
+	if proxy == null or proxy.skill_activation_index < 0:
+		return -1
+	var src: Card = proxy.effect_source
+	if src == null or not ("skill" in src.card_effects):
+		return -1
+	var skills: Array = src.card_effects["skill"]
+	if proxy.skill_activation_index >= skills.size():
+		return -1
+	for instruction in skills[proxy.skill_activation_index].get("instructions", []):
+		if str(instruction.get("name", "")) == "divide_damage":
+			var args: Array = instruction.get("argument", [])
+			return int(args[0]) if not args.is_empty() else 0
+	return -1
 
 func confirm_skill_without_target_then_priority() -> void:
 	commit_skill_activation_costs_if_pending()

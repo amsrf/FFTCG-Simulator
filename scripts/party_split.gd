@@ -22,6 +22,11 @@ var _party: Array = []
 var _total: int = 0
 var _amounts: Array = []
 
+## Shown as an extra "Back" button, and Escape does the same. Cancelling emits `finished([])` — an empty split is
+## impossible for a real distribution (the total is always > 0), so it is an unambiguous "cancelled". The blocker's
+## party split never allows it; Yuffie's damage division does, because there Cancel returns to target selection.
+var allow_cancel: bool = false
+
 var _root: Control = null
 var _rows: Array = []          # per card: { "value": Label }
 var _total_label: Label = null
@@ -76,6 +81,21 @@ func confirm() -> void:
 	queue_free()
 
 
+## Abandon the distribution. The caller decides what that means: for a blocker it is not offered at all; for Yuffie's
+## Bloodfest it goes back to choosing targets.
+func cancel() -> void:
+	if not allow_cancel:
+		return
+	finished.emit([])
+	queue_free()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if allow_cancel and event.is_action_pressed("ui_cancel"):
+		cancel()
+		get_viewport().set_input_as_handled()
+
+
 # --- building -------------------------------------------------------------------------------------------------------
 func _build() -> void:
 	layer = 10
@@ -120,12 +140,19 @@ func _build() -> void:
 	_total_label.add_theme_font_size_override("font_size", 20)
 	column.add_child(_total_label)
 
+	var confirm_row := HBoxContainer.new()
+	confirm_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	confirm_row.add_theme_constant_override("separation", 14)
+	if allow_cancel:
+		var back := Button.new()
+		back.text = "Back"
+		back.custom_minimum_size = Vector2(140, 46)
+		back.pressed.connect(cancel)
+		confirm_row.add_child(back)
 	_confirm = Button.new()
 	_confirm.text = "Confirm"
 	_confirm.custom_minimum_size = Vector2(220, 46)
 	_confirm.pressed.connect(confirm)
-	var confirm_row := HBoxContainer.new()
-	confirm_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	confirm_row.add_child(_confirm)
 	column.add_child(confirm_row)
 

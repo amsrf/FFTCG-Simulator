@@ -550,7 +550,17 @@
 		"cannot_block":{"greater_power":true}
 	},
 	"85":{
-		"cannot_be_blocked_by":{"min_cost":4}
+		"cannot_be_blocked_by":{"min_cost":4},
+		"skill":[
+			{
+				"s_cost":true,
+				"cost":{},
+				"tap":true,
+				"text":"《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like. (Unit must be 1000.)",
+				"choose_target":{"is_type":"Forward","count":3},
+				"instructions":[{"name":"divide_damage","author":"game","argument":[6000]}]
+			}
+		]
 	},
 	"86":{
 		"cannot_be_blocked_by":{"min_cost":3}

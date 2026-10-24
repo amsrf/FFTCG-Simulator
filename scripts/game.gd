@@ -120,6 +120,26 @@ func discard_from(player_id: int, count: int = 1) -> void:
 		print("[Discard] P%d discards %s" % [player_id, picked.card_name])
 		owner_hand.discard_card(picked)
 
+## Damage amounts chosen in the split window, waiting for the ability that asked for them to resolve. ONE SLOT is
+## enough: the ability commits immediately after the split, so no other effect can claim it in between.
+var _damage_division: Array = []
+
+## "Divide 6000 damage among them as you like." The amounts were chosen BEFORE the ability committed (so Cancel
+## could step back to targeting); this applies them to `_targets` in the order they were picked.
+func divide_damage(_total: int = 0) -> void:
+	var amounts: Array = _damage_division.duplicate()
+	_damage_division.clear()
+	for i in range(_targets.size()):
+		var card = _targets[i]
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var amount: int = int(amounts[i]) if i < amounts.size() else 0
+		if amount <= 0:
+			continue
+		print("[Divide] %s takes %d" % [card.card_name, amount])
+		card.suffer_damage(amount)
+	enforce_game_state_rules()
+
 func _each_target(action: String, argument: Array = []) -> void:
 	for card in _targets:
 		if card != null and is_instance_valid(card) and card.is_on_field():

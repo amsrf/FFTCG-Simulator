@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Bloodfest: divide damage among chosen targets (Yuffie 85)
+
+The S ability is complete: **choose up to 3 Forwards → Confirm → distribute 6000 damage in 1000-point steps →
+Confirm**, with **Cancel on the distribution returning to target selection**.
+
+The ordering is the whole design. The split happens **before the ability commits**, inside
+`Stack._on_assistant_target_complete`, not as a resolution instruction — a resolution-time modal could not go back,
+because by then the effect is already on the stack and its targets are locked. Cancel re-opens the TARGET modal and
+re-emits `request_target_confirmation`, leaving picks, arcs and paid costs intact.
+
+The distribution window is the existing `party_split.tscn`, which gained an optional `allow_cancel`:
+a "Back" button (and Escape) that emits `finished([])`. The blocker's party split never enables it, so its behaviour
+is unchanged. `Agent.choose_damage_split(player_id, cards, total)` is the seam — LocalAgent opens the window, the base
+agent answers greedily, so the AI and a future RemoteAgent need no special case.
+
+`divide_damage(total)` applies the stored split to `_targets` in pick order at resolution, then clears it.
+
+Coverage: **58 implemented / 7 plain / 35 to do**. New probe `divide_damage_probe` (30 checks) covers the window,
+the sum rule, the disabled Cancel path, the full Cancel→retarget→reopen loop (mode 3 = TARGET, 3 picks, stack still
+holding the uncommitted ability, no damage dealt) and the final per-target amounts 2000 / 1000 / 3000.
+
+
 ### Blocking Restrictions (batch 3)
 
   27 Lann     cannot be blocked by a Forward with GREATER power; and cannot block one either

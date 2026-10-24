@@ -92,3 +92,15 @@ func choose_skill(_player_id: int, card: Card, skills: Array, usable: Array = []
 	window.call("open", card, skills, usable)
 	var index: int = await window.finished
 	return index
+
+## The human distributes the damage. `allow_cancel` adds the Back button (and Escape): for Bloodfest, cancelling must
+## return to choosing targets, which the rules layer does when it sees an empty array come back.
+func choose_damage_split(_player_id: int, cards: Array, total: int) -> Array:
+	if cards.is_empty():
+		return []
+	var window = PARTY_SPLIT.instantiate()
+	game.add_child(window)
+	window.allow_cancel = true
+	window.open(cards, total)
+	var split: Array = await window.finished
+	return split
