@@ -41,6 +41,9 @@ var targeting_picked: Array[Card] = []
 var targeting_arrows: Array = []
 var targeting_criteria_now: Variant = {}
 var targeting_source_kind: String = ""
+## Where this session's candidates come from: "field" (default) or "stack". Set from the effect's
+## `"choose_target": {"in": "stack"}` — Summoner 53 picks a Summon that has not resolved yet.
+var targeting_domain: String = "field"
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
@@ -514,6 +517,11 @@ func can_activate_now(card: Card) -> bool:
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
 		if def.has("sacrifice") and _sacrifice_candidates(def["sacrifice"], card).is_empty():
 			continue
+		# An ability that targets the STACK is only worth offering while there is something there to target.
+		var ct = def.get("choose_target", {})
+		if ct is Dictionary and str(ct.get("in", "")) == "stack" \
+				and not has_viable_target(ct, card, "Ability", "stack"):
+			continue
 		return true
 	return false
 
@@ -679,7 +687,10 @@ func execute_card_effect(card,keyword):
 		# NO LEGAL TARGET MEANS NO TARGETING SESSION. "You may deal it damage" style triggers fire when nothing is
 		# eligible (no dull Forward, say) — opening an empty session there would strand the effect with no way to
 		# finish it, so the trigger simply adds an effect that resolves with nothing to do.
-		if has_viable_target(choose_target_criteria, source_for_target, "Ability"):
+		var domain: String = "field"
+		if choose_target_criteria is Dictionary:
+			domain = str(choose_target_criteria.get("in", "field"))
+		if has_viable_target(choose_target_criteria, source_for_target, "Ability", domain):
 			request_target(choose_target_criteria, source_for_target, false, "Ability")
 
 ## The stack's copy of the effect triggered by `source`, if it exists yet.
@@ -751,11 +762,16 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	targeting_criteria_now = targeting_criteria
 	targeting_source_kind = source_kind
 	targeting_count = 1
+	targeting_domain = "field"
 	if targeting_criteria is Dictionary:
 		targeting_count = maxi(1, int(targeting_criteria.get("count", 1)))
-		if targeting_criteria.has("count"):
+		# `in` chooses WHICH BOARD the candidates come from: the field (default) or the stack. Session keys, stripped
+		# before matching so that matches_criteria never sees them.
+		targeting_domain = str(targeting_criteria.get("in", "field"))
+		if targeting_criteria.has("count") or targeting_criteria.has("in"):
 			targeting_criteria_now = targeting_criteria.duplicate()
 			targeting_criteria_now.erase("count")
+			targeting_criteria_now.erase("in")
 	targeting_picked.clear()
 	# EVERY arc from the last session goes, not just the aiming one: a multi-target session leaves several behind.
 	for old in targeting_arrows:
@@ -948,7 +964,7 @@ func set_viable_targets(target_criteria, source: Card = null, source_kind: Strin
 	# by it — but the glow stays off, so the only thing we see is the card they pick, which
 	# set_target_card() marks red.
 	var glow: bool = source == null or source.controller == "player"
-	for card in get_all_cards():
+	for card in _target_candidates():
 		var is_targetable = _card_matches_criteria(card, target_criteria, source, source_kind)
 		# A fresh session starts with nothing picked: clear any leftover ring.
 		card.set_selected_highlight(false)
@@ -957,10 +973,17 @@ func set_viable_targets(target_criteria, source: Card = null, source_kind: Strin
 		# each candidate.
 		card.set_valid_target(is_targetable, glow)
 
-func has_viable_target(target_criteria, source: Card = null, source_kind: String = "") -> bool:
-	# Used before casting a Summon: a targeted Summon cannot be cast unless
-	# at least one legal target exists on the field.
-	for card in get_all_cards():
+## WHERE THIS SESSION'S CANDIDATES COME FROM. The stack is a second target domain, for effects that choose a Summon
+## before it resolves (Summoner 53). `stack.cards` is copied because cancelling a Summon mutates it mid-session.
+func _target_candidates() -> Array:
+	if targeting_domain == "stack" and stack != null:
+		return stack.cards.duplicate()
+	return get_all_cards()
+
+func has_viable_target(target_criteria, source: Card = null, source_kind: String = "", domain: String = "field") -> bool:
+	# Used before casting a Summon (no legal target = cannot cast) and before offering an ability that needs a target.
+	var candidates: Array = stack.cards.duplicate() if domain == "stack" and stack != null else get_all_cards()
+	for card in candidates:
 		if _card_matches_criteria(card, target_criteria, source, source_kind):
 			return true
 	return false

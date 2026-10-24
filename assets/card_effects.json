@@ -786,4 +786,16 @@
 			}
 		]
 	}
+,
+	"53":{
+		"skill":[
+			{
+				"cost":{"氷":1},
+				"sacrifice":{"is_source":true},
+				"text":"《Ice》, put Summoner into the Break Zone: Choose 1 Summon. Cancel its effect.",
+				"choose_target":{"in":"stack","is_type":"Summon"},
+				"instructions":[{"name":"cancel_targets","author":"game","argument":[]}]
+			}
+		]
+	}
 }

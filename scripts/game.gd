@@ -149,6 +149,13 @@ func _each_target(action: String, argument: Array = []) -> void:
 func untap_targets(_argument = null) -> void:
 	_each_target("untap")
 
+## CANCEL THE CHOSEN STACK OBJECTS (Summoner 53). The target is a Summon that has not resolved yet, so this is not
+## `_each_target` — it has no `is_on_field()` and the removal belongs to the Stack.
+func cancel_targets(_argument = null) -> void:
+	for card in _targets:
+		if card != null and is_instance_valid(card):
+			stack.call("cancel_stack_card", card)
+
 ## DULL. "Dull it", "Dull all Forwards", "Dull it and Freeze it".
 ##
 ## It deliberately does NOT go through Card.can_tap(): dulling is not a tap COST, it is the effect. A Frozen card,

@@ -21,8 +21,9 @@ extends RefCounted
 ## Deliberately no `class_name`: a new global class is not in Godot's cache until the editor rescans, and every headless
 ## run of this project has been bitten by that. Callers preload the path.
 
-## Keys that configure the SESSION and say nothing about a card.
-const SESSION_KEYS := ["count"]
+## Keys that configure the SESSION and say nothing about a card. `in` picks the target domain — "field" (default) or
+## "stack", so an effect can choose a Summon that has not resolved yet (Summoner 53).
+const SESSION_KEYS := ["count", "in"]
 ## The aura data's spellings of the two criteria that have a method of their own.
 const ALIASES := {"type": "is_type", "element": "is_element"}
 

@@ -558,6 +558,26 @@ func create_card(id, controller, keyword, source) -> Card:
 	
 	return card
 
+## CANCEL a stack object without resolving it (Summoner 53 countering a Summon). It was already paid for, so the card
+## goes to its owner's Break Zone. Removing it from `cards` is enough to stop it resolving — the priority loop takes
+## the top of that list — and the fan is re-laid out immediately.
+func cancel_stack_card(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	if not cards.has(card):
+		return
+	print("[Counter] %s is cancelled" % card.card_name)
+	cards.erase(card)
+	if summon_casting_card == card:
+		summon_casting_card = null
+	if casting_card == card:
+		casting_card = null
+	var game: Node = get_parent()
+	var pile = game.get("player_graveyard") if card.controller == "player" else game.get("opponent_graveyard")
+	if pile != null:
+		pile.add_card(card)
+	update_card_positions()
+
 func resolve_top_effect() -> void:
 	## Stack resolution: run effect instructions only; costs were applied at
 	## commit for skills. The effect handler may await a modal (e.g. Auron's

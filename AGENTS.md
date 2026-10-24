@@ -57,6 +57,20 @@ Sacrifice is chosen by the OWNER through `Agent.choose_sacrifice()` (LocalAgent 
 takes the cheapest) and is paid at activation. Aborting it clears the proxy. A skill whose sacrifice has no candidates
 is not offered by `can_activate_now`, so the green ring and the picker agree.
 
+## Targeting has a DOMAIN: field or stack
+
+`"choose_target": {"in": "stack", ...}` makes the session's candidates come from `Stack.cards` instead of the field.
+`in` and `count` are SESSION keys — add them to `card_target.gd`'s `SESSION_KEYS` if you add more, or
+`matches_criteria` will treat them as card predicates and refuse every candidate.
+
+`Field._target_candidates()` is the one place that picks the list; `set_viable_targets` and `has_viable_target` both
+go through it. A stack card's click reaches `StackCardState.handle_grabbed()`, which forwards to
+`Field.set_target_card()` while the mode is TARGET and the card is legal.
+
+CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards` (so the priority loop never picks
+it), then move it to its owner's Break Zone — it was paid for. Do NOT set a flag and let it resolve with no effect;
+removal is what makes it never resolve.
+
 ## Rules live in scripts/rules.gd, not in Field
 
 `Field.rules` owns the CONTINUOUS-EFFECT QUERIES (created in `Field._ready`, bound to the board, NO Game

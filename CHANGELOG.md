@@ -4,6 +4,29 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Countering a Summon — targeting the stack (53 Summoner)
+
+An effect can now choose a card that is **still on the stack**. The effect says which board to look at:
+
+```json
+"choose_target": {"in": "stack", "is_type": "Summon"}
+```
+
+`in` is a SESSION key (like `count`), stripped before matching, so `matches_criteria` never treats it as a predicate.
+`Field.targeting_domain` picks the candidate list (`_target_candidates()`), and `has_viable_target()` takes a domain so
+the "no legal target, don't open a session" guard works for both. The ability is only offered while a Summon is
+actually there to counter.
+
+Stack cards are clickable targets: `StackCardState` forwards a click to `Field.set_target_card()` when the mode is
+TARGET and the card is a legal candidate — otherwise clicking still just raises it in the fan.
+
+Resolution removes the chosen card from `Stack.cards` (`cancel_stack_card`), which is enough to stop it resolving:
+the priority loop resolves the top of that list. Because its cost was paid, the card goes to its owner's Break Zone.
+Nothing about the cancelled Summon executes — the probe uses Ifrit and asserts the chosen Forward took 0 damage.
+
+Coverage: **81 implemented / 7 plain / 12 to do**. New probe `counter_summon_probe` (13 checks).
+
+
 ### Self-sacrifice costs (10 Black Mage, 36 Bard, 88 Archer)
 
 "Put THIS card into the Break Zone" is the same `sacrifice` key with the source as the target — no picker, because
