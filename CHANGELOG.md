@@ -4,6 +4,24 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Chip cards: Ninja 78, Bartz 81, Amodar 91
+
+Three small pieces of vocabulary, one per card:
+
+* **`"discard": 1`** as a skill cost (78 Ninja). Chosen by the owner through `Agent.choose_discard()` — the human
+  gets the hand picker, the AI picks the cheapest. Refusing the pick aborts the activation and clears the proxy, so
+  cancelling costs nothing. `can_activate_now` and the ability picker both treat "too few cards in hand" as
+  unavailable.
+* **`{"any": [...]}`** in a search filter (91 Amodar: Lightning **or** Snow). Each entry is a complete filter and one
+  match is enough; the other keys still AND on top. Amodar is an EX burst that runs its ETB.
+* **`all_jobs`** + `Card.is_job()` (81 Bartz). Every job check succeeds for him; normal cards match by substring from
+  `job_en`, the same way the deck editor's job filter does. `"job"` is now an alias in the criteria table.
+
+Coverage: **84 implemented / 7 plain / 9 to do**. New probe `chip_cards_probe` (17 checks: discard-as-cost end to
+end, the gate closing with an empty hand, all-jobs true/false, and the OR filter accepting Lightning and Snow but not
+Auron).
+
+
 ### Countering a Summon — targeting the stack (53 Summoner)
 
 An effect can now choose a card that is **still on the stack**. The effect says which board to look at:

@@ -1236,6 +1236,14 @@ func is_cost_at_least(value: int) -> bool:
 func is_cost_at_most(value: int) -> bool:
 	return int(cost) <= int(value)
 
+## "Bartz has all the jobs" (81). Every job check succeeds for him, so a future "choose 1 [Job (X)]" finds him.
+## A normal card matches by SUBSTRING, the same way the deck editor's job filter reads it.
+func is_job(value: String) -> bool:
+	if card_effects.has("all_jobs"):
+		return true
+	var data: Dictionary = CardDatabase.card_database[id - 1]
+	return str(value).to_lower() in str(data.get("job_en", "")).to_lower()
+
 ## "[Category (VII)]" (Cloud 1-009C). Checks the card's categories from the database; a card can have several.
 func is_category(value: String) -> bool:
 	var data: Dictionary = CardDatabase.card_database[id - 1]

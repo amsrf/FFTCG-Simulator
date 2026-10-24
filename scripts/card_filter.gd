@@ -30,6 +30,18 @@ static func matches(card: Dictionary, filter: Dictionary) -> bool:
 	if card.is_empty():
 		return false
 
+	# --- any: OR. "search for Lightning OR Snow" — each entry is a complete filter and ONE match is enough. ----
+	# The rest of the keys still apply, so `{"any": [...], "type": "Forward"}` reads as "one of those, and a Forward".
+	var any_clauses: Array = filter.get("any", [])
+	if not any_clauses.is_empty():
+		var hit: bool = false
+		for clause in any_clauses:
+			if clause is Dictionary and matches(card, clause):
+				hit = true
+				break
+		if not hit:
+			return false
+
 	# --- name: the code OR the English name, because a player may search for either -------------------
 	var needle: String = str(filter.get("name", "")).strip_edges().to_lower()
 	if not needle.is_empty():

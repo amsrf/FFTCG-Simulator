@@ -517,6 +517,9 @@ func can_activate_now(card: Card) -> bool:
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
 		if def.has("sacrifice") and _sacrifice_candidates(def["sacrifice"], card).is_empty():
 			continue
+		# Same for a discard cost with too few cards in hand.
+		if int(def.get("discard", 0)) > 0 and (hand == null or hand.cards.size() < int(def.get("discard", 0))):
+			continue
 		# An ability that targets the STACK is only worth offering while there is something there to target.
 		var ct = def.get("choose_target", {})
 		if ct is Dictionary and str(ct.get("in", "")) == "stack" \
@@ -571,6 +574,8 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 					or hand.has_card_matching_criteria({"is_named": card.card_name})
 				if can_pay and def.has("sacrifice"):
 					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
+				if can_pay and int(def.get("discard", 0)) > 0:
+					can_pay = hand != null and hand.cards.size() >= int(def.get("discard", 0))
 				usable.append(can_pay)
 			var owner_id: int = 1 if card.controller == "player" else 2
 			var agent: Agent = get_parent().agent_for(owner_id)
@@ -604,9 +609,9 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	# PUT-INTO-THE-BREAK-ZONE COST (Mystic 96). Paid at activation like the S discard, and chosen by the owner through
 	# the agent seam, so the human gets a picker and the AI picks for itself. A cancelled pick aborts the whole
 	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
+	var owner_id: int = 1 if card.controller == "player" else 2
 	var sacrifice: Dictionary = def.get("sacrifice", {})
 	if not sacrifice.is_empty():
-		var owner_id: int = 1 if card.controller == "player" else 2
 		var picked: Card = null
 		if bool(sacrifice.get("is_source", false)):
 			# "Put THIS card into the Break Zone" — no choice to make, and no reason to ask an agent.
@@ -620,6 +625,23 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			return
 		print("[Sacrifice] %s -> Break Zone" % picked.card_name)
 		get_parent().put_card_into_graveyard(picked)
+	# DISCARD AS A COST (Ninja 78). The owner picks which cards leave their hand, through the same agent seam the
+	# discard effects use — so the human gets the hand picker and the AI chooses for itself. A refused pick aborts the
+	# activation and clears the proxy, which is what keeps "cancel" from costing a card.
+	var discard_count: int = int(def.get("discard", 0))
+	if discard_count > 0:
+		var owner_hand: Hand = get_parent().hand_for(owner_id)
+		for _i in range(discard_count):
+			if owner_hand == null or owner_hand.cards.is_empty():
+				stack.call("_clear_skill_proxy")
+				return
+			var discarded: Card = await get_parent().agent_for(owner_id).choose_discard(
+				owner_id, owner_hand.cards.duplicate())
+			if discarded == null:
+				stack.call("_clear_skill_proxy")
+				return
+			print("[Discard] %s (cost)" % discarded.card_name)
+			owner_hand.discard_card(discarded)
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
 		# source, then the regular mana payment step follows.

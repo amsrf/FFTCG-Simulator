@@ -25,7 +25,7 @@ extends RefCounted
 ## "stack", so an effect can choose a Summon that has not resolved yet (Summoner 53).
 const SESSION_KEYS := ["count", "in"]
 ## The aura data's spellings of the two criteria that have a method of their own.
-const ALIASES := {"type": "is_type", "element": "is_element"}
+const ALIASES := {"type": "is_type", "element": "is_element", "job": "is_job"}
 
 static func matches(card: Card, block: Dictionary, source: Card = null) -> bool:
 	if card == null:

@@ -798,4 +798,25 @@
 			}
 		]
 	}
+,
+	"78":{
+		"skill":[
+			{
+				"cost":{"風":1},
+				"discard":1,
+				"text":"《Wind》, discard 1 card from your hand: Choose 1 Forward. Deal it 2000 damage.",
+				"choose_target":{"is_type":"Forward"},
+				"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
+			}
+		]
+	},
+	"81":{"all_jobs":true},
+	"91":{
+		"ex_burst":"when_enter_field",
+		"when_enter_field":{
+			"instructions":[
+				{"name":"search_deck","author":"game","argument":[{"any":[{"name":"Lightning"},{"name":"Snow"}]}]}
+			]
+		}
+	}
 }
