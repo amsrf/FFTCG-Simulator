@@ -4,6 +4,29 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### B4a: Counted Cost Reductions and Filtered Cost Aura (177, 187, 210, 213)
+
+The cost engine now handles two reusable shapes:
+
+* `self_cost: {"per": {...criteria...}, "delta": -1}` — reduce the card's own cost once for each matching card its
+  controller has on the field. Only same-controller cards count, so an opponent's Category VII Forward cannot
+  discount Cloud.
+* `cost_aura: {"for": "Summon", "element": "水", "from": "own", "delta": -1, "min": 1}` — a filtered aura with an
+  optional element and a final-cost floor. `min` only shrinks the reduction; it never raises a cost that was already
+  below the floor.
+
+Cards:
+* **177 Yuna** — Water Summons cost 1 less, never below 1. Complete.
+* **210 Lightning** — cost 1 less per Category XIII Forward; Haste and the “deal damage to opponent, dull a Forward”
+  trigger. Complete.
+* **187 Cloud** — cost 1 less per Category VII Forward; Climhazzard S ability added. Still needs the global
+  “when a Forward you control attacks” buff.
+* **213 Tidus** — cost 1 less per Category X Forward. Still needs the Yuna Brave condition and Yuna-leaves draw.
+
+`tests/cost_reduction_probe.gd` (11 checks): counted reductions, opponent exclusion, Water-only aura, the 1-cost
+floor, and data shape. Boot 0 errors; full suite green. Coverage: 95 implemented / 4 vanilla / 18 needs code.
+
+
 ### B3: Targeting Priority, Two-Player Choices, and Search Destinations (109, 158, 162, 174, 185, 201, 207)
 
 **162 Cecil / 174 Yaag Rosch** — printed `must_be_chosen` (`Summon`/`Ability`, opponent). `Field.set_viable_targets`

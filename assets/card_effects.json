@@ -2937,6 +2937,82 @@
 			}
 		]
 	},
+	"177": {
+		"cost_aura": {
+			"for": "Summon",
+			"element": "水",
+			"from": "own",
+			"delta": -1,
+			"min": 1
+		}
+	},
+	"187": {
+		"self_cost": {
+			"per": {
+				"is_category": "VII",
+				"is_type": "Forward",
+				"controller": "your"
+			},
+			"delta": -1
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"火": 1,
+					"neutral": 1
+				},
+				"tap": true,
+				"text": "Climhazzard 《S》《Fire》《1》《Dull》: Choose 1 Forward. Deal it 8000 damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							8000
+						]
+					}
+				]
+			}
+		]
+	},
+	"210": {
+		"self_cost": {
+			"per": {
+				"is_category": "XIII",
+				"is_type": "Forward",
+				"controller": "your"
+			},
+			"delta": -1
+		},
+		"haste": true,
+		"when_cause_damage_to_player": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"213": {
+		"self_cost": {
+			"per": {
+				"is_category": "X",
+				"is_type": "Forward",
+				"controller": "your"
+			},
+			"delta": -1
+		}
+	},
 	"_definitions": {
 		"about": "Machine-readable reference for this file. Keys beginning with _ are documentation, not card ids.",
 		"context": {
@@ -3029,8 +3105,8 @@
 			"power_per": "Power per matching card or per point of damage received.",
 			"protects": "Prevents cards matching targets from being broken by the given causes.",
 			"shields": "Prevents cards matching targets from being chosen by the given causes.",
-			"cost_aura": "Modifies the cost of matching cards.",
-			"self_cost": "Modifies this card's own cost while a condition holds.",
+			"cost_aura": "Modifies another card's cost. for is a card type, name is one card, element filters by element; from is own/opponent; delta is added to neutral; min floors the final total.",
+			"self_cost": "Modifies this card's own cost. if_controls is a one-shot condition; per is counted once per matching card you control; delta is added to the neutral part; min floors the final total.",
 			"damage_modifiers": "Damage replacement effects; see damage_modifiers.",
 			"on_character_enter": "Static rule applied when a Character enters the field.",
 			"on_causing_damage_to_forward": "Rider attached to a Forward damaged by this card.",
@@ -3121,6 +3197,12 @@
 			"fragile": "Exiled instead of entering the Break Zone.",
 			"raines_mark": "Cid Raines' on-break discard rider.",
 			"next_receiving_damage": "Payload status: operation/value modifies damage to this card, once by default; set once:false for a duration-long shield. The status name is only a label."
+		},
+		"cost_modifiers": {
+			"self_cost": "Per-card cost modifier; fields if_controls or per, delta, min.",
+			"cost_aura": "Aura cost modifier; fields for, name, element, from, delta, min.",
+			"per": "Criteria counted once per matching card the source controls.",
+			"min": "Minimum final cost; only reduces the size of the reduction, never raises a cost already below it."
 		}
 	}
 }

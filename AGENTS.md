@@ -132,6 +132,20 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### Costs are read through Rules.effective_cost only
+
+Cost modifiers are board queries, not payment-time special cases:
+
+* `self_cost.per` counts matching cards **controlled by the card's controller**; the card itself is excluded. Use it
+  for “cost 1 less for each Category VII Forward you control”.
+* `cost_aura` supports `for` (type), `name` (one card), `element` (e.g. Water Summons), and `from` (own/opponent).
+* `min` is a final-cost floor for the modifier. It only limits how much that modifier removes; a cost already below
+  the floor is not raised.
+* The payment modal and the AI both call `effective_cost()`. Never add a second cost calculator.
+
+187/213 currently carry only their cost piece in `card_effects.json` and remain in `NEEDS_CODE` until their other
+abilities land.
+
 ### B3 rules: targeting priority, per-rule ledgers, owner-aware searches
 
 * `must_be_chosen` is enforced in `Field.set_viable_targets`, not in `Card.can_be_chosen_by`: it is a property of the

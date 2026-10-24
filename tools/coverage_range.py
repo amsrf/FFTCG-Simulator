@@ -23,10 +23,8 @@ NEEDS_CODE = {
     # B1 - tiny vocabulary
     # B2 - replacement / shields
     # B3 - targeting / selection (implemented)
-    # B4 - costs / triggers
-    177: 'cost_aura with an element filter',
+    # B4a - cost reductions (177 and 210 implemented)
     187: 'cost reduction per Category count + global attack buff',
-    210: 'cost reduction per Category count',
     213: 'cost reduction per Category count + Yuna-leaves trigger',
     214: 'when-you-cast-a-Summon trigger (once per turn)',
     215: 'when-opponent-casts-a-Summon trigger',
