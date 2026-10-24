@@ -1,4 +1,4 @@
-"""Audit every function in scripts/game.gd for call sites.
+"""Audit every function in a GDScript file for call sites (default: scripts/game.gd).
 
 For each function it looks for:
   * direct calls            name( ... )            — in .gd / .tscn / .tres
@@ -11,15 +11,16 @@ Categories printed: UNREFERENCED, TEST-ONLY, QUOTED-ONLY, DATA-ONLY.
 Instruction handlers (damage_targets, draw_cards, ...) are DATA entries: they are called by name from
 assets/card_effects.json through the instruction chain, which is why a plain grep of .gd files finds no caller.
 
-Run: python3 tools/game_dead_audit.py
+Run: python3 tools/dead_audit.py [path/to/file.gd]
 """
 import os
 import re
+import sys
 from collections import Counter
 
 ROOT = '.'
 SKIP = ('.git', '.godot', 'addons')
-TARGET = 'scripts/game.gd'
+TARGET = sys.argv[1] if len(sys.argv) > 1 else 'scripts/game.gd'
 
 files = []
 for base, dirs, names in os.walk(ROOT):
@@ -104,7 +105,7 @@ for name, line in funcs:
         status = 'called'
     rows.append((status, name, line, prod, tst, data))
 
-print('game.gd functions:', len(funcs))
+print(TARGET, 'functions:', len(funcs))
 for status in ('UNREFERENCED', 'TEST-ONLY', 'QUOTED-ONLY', 'DATA-ONLY'):
     print('\n=== %s ===' % status)
     for st, name, line, prod, tst, data in rows:

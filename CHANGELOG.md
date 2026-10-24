@@ -4,6 +4,23 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Field audit (`battle_field.gd`)
+
+`tools/dead_audit.py` now takes a file path (default `scripts/game.gd`), and `tools/member_audit.py` reports unused
+member vars/consts in the same way. Running both over the Field:
+
+* **100 functions, 0 unreferenced.** The only dead one was `TEST_get_front_cards()`, which returned
+  `opponent_front_cards` (not the player's, despite the name) and had no caller since `Game.TEST_blocker` was removed.
+  Deleted.
+* **No unused members** among its 172 vars/consts.
+* Kept and classified: `preview_card` / `preview_visible` are TEST-ONLY accessors for the hover-preview probe;
+  `_on_tween_finished` is a tween callback and `party_grants_brave` is called by `Card` through
+  `host.call("party_grants_brave", ...)`, so both read as QUOTED-ONLY rather than dead.
+* Four `_on_*` handlers are scene-connected (verified against `game.tscn`, not assumed).
+
+Boot clean; the combat/party/Field probes are green.
+
+
 ### game.gd audit: dead code out, call sites findable
 
 New `tools/game_dead_audit.py` classifies every function in `scripts/game.gd` by how it is reached: direct calls, bare

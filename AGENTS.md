@@ -119,7 +119,7 @@ ability must land on top of the Summon/ability that caused it, so it resolves fi
 
 ## Auditing call sites in game.gd
 
-Run `python3 tools/game_dead_audit.py`. It reports each function as called / DATA-ONLY / TEST-ONLY / QUOTED-ONLY /
+Run `python3 tools/dead_audit.py [file.gd]` (default scripts/game.gd), and `python3 tools/member_audit.py [file.gd]` for unused vars/consts. It reports each function as called / DATA-ONLY / TEST-ONLY / QUOTED-ONLY /
 scene-connected / UNREFERENCED.
 
 Two traps it exists to avoid:

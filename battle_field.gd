@@ -744,8 +744,6 @@ func _stack_effect_card_for(source: Card) -> Card:
 		if c.effect_source == source:
 			found = c
 	return found
-func TEST_get_front_cards():
-	return opponent_front_cards
 func get_all_cards() -> Array[Card]:
 	return front_cards + back_cards + opponent_front_cards + opponent_back_cards
 
