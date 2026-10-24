@@ -4,6 +4,34 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Cards 100-216: phases A1 and A2 (57 data-only cards)
+
+Classified all 117 cards in 100-216, then implemented the 57 that need no engine change.
+
+* **A1 (28):** 112, 114, 117, 118, 123, 124, 126, 132, 136, 137, 140, 142, 143, 149, 157, 161, 170, 178, 182, 186,
+  189, 191, 192, 193, 198, 205, 209, 212 - ETB and skill damage, break, dull, freeze, return, activate, mass damage,
+  and Cid Raines' damage -> on-break rider.
+* **A2 (29):** 101, 110, 113, 115, 120, 121, 134, 144, 145, 146, 147, 148, 150, 151, 156, 164, 167, 168, 179, 180,
+  195, 196, 197, 199, 200, 202, 203, 204, 208 - auras, power_per, keyword-only cards, search, draw/discard,
+  self-sacrifice skills, unbreakable, conditional power.
+
+Also fixed **151** (Agrias), which was missing its printed First Strike.
+
+Tooling:
+
+* `tools/coverage_range.py [--check]` - every id in 100-216 must be implemented, vanilla, or listed in `NEEDS_CODE`
+  with the primitive it waits on. 61 implemented / 4 vanilla / 52 needs-code / 0 unclassified.
+* `tests/effects_data_probe.gd` now reports 1-100 and 101-216 separately, and prints the remaining list.
+* `tools/cards_range.py` dumps id, code, name, type, element, cost, power and text for a range.
+* `tools/card_data_batches.py` applies a phase without reformatting the rest of `card_effects.json`.
+
+`tests/cards_100_216_probe.gd` (26 checks) exercises one representative card per mechanism: ETB break, cost-limited
+break, single-target damage, mass buff, dull, mass Water buff, conditional power, power_per, aura, unbreakable,
+multi-target freeze, mass damage + conditional untap, and the on-break rider.
+
+Boot clean; the full probe suite is green (`projection_probe` reports "measured" by design).
+
+
 ### Field audit (`battle_field.gd`)
 
 `tools/dead_audit.py` now takes a file path (default `scripts/game.gd`), and `tools/member_audit.py` reports unused

@@ -48,19 +48,23 @@ func _ready() -> void:
 	var db = CardDatabase.card_database
 
 	# --- coverage ----------------------------------------------------------------------------------------
-	var covered: Array = []
-	var vanilla: Array = []
-	var missing: Array = []
-	for i in range(1, 101):
-		if effects.has(str(i)):
-			covered.append(i)
-		elif str(db[i - 1].get("text_en", "")).strip_edges().is_empty():
-			vanilla.append(i)
-		else:
-			missing.append(i)
-	print("[Effects] 1-100 coverage: %d have an entry, %d are vanilla (no text), %d still to write" % [
-		covered.size(), vanilla.size(), missing.size()])
-	print("[Effects] still to write: %s" % str(missing))
+	# Two ranges, because they are tracked separately: 1-100 is finished; 100-216 is in progress and its
+	# "still to write" list is the roadmap of cards that need new engine vocabulary.
+	for span in [Vector2i(1, 100), Vector2i(101, 216)]:
+		var covered: Array = []
+		var vanilla: Array = []
+		var missing: Array = []
+		for i in range(span.x, span.y + 1):
+			if effects.has(str(i)):
+				covered.append(i)
+			elif str(db[i - 1].get("text_en", "")).strip_edges().is_empty():
+				vanilla.append(i)
+			else:
+				missing.append(i)
+		print("[Effects] %d-%d coverage: %d have an entry, %d are vanilla (no text), %d still to write" % [
+			span.x, span.y, covered.size(), vanilla.size(), missing.size()])
+		if span.x == 101:
+			print("[Effects] 101-216 still to write: %s" % str(missing))
 
 	# --- validate every instruction in the file ----------------------------------------------------------
 	var bad: Array = []

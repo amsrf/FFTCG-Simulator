@@ -110,6 +110,7 @@
 	},
 	
 	"151":{
+		"first_strike": true,
 		"when_enter_field":
 			{
 				"instructions":[{"name":"search_deck", "author":"game", "argument":[{"name":"Ovelia"}]}]
@@ -928,5 +929,1157 @@
 	},
 	"122":{
 		"ex_burst_disabler":""
+	},
+	"112": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_character": true,
+				"controller": "player"
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"土": 1
+				},
+				"text": "Northswain's Strike 《S》《Earth》: Choose 1 Forward blocking Delita. Break it.",
+				"choose_target": {
+					"is_type": "Forward",
+					"is_blocking": true
+				},
+				"instructions": [
+					{
+						"name": "break_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
+	"114": {
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"土": 2
+				},
+				"text": "Hammer Blow 《S》《Earth》《Earth》: Choose 1 Forward. Deal it 4000 damage. Barret gains +4000 power until the end of the turn.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							4000
+						]
+					},
+					{
+						"name": "power_change",
+						"author": "card",
+						"argument": [
+							4000,
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"117": {
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Backup",
+				"is_cost_at_least": 3
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"118": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_tapped": true
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"123": {
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_cost_at_most": 4
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"124": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"126": {
+		"apply_effect": {
+			"is_type": "Forward",
+			"controller": "opponent"
+		},
+		"when_attack": {
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						3000
+					]
+				}
+			]
+		},
+		"skill": [
+			{
+				"cost": {
+					"雷": 2
+				},
+				"text": "《Lightning》《Lightning》: Orlandeau gains Haste until the end of the turn.",
+				"instructions": [
+					{
+						"name": "add_status_effect",
+						"author": "card",
+						"argument": [
+							"haste",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"132": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"136": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_cost_at_most": 2
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"137": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_cost_at_most": 3
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"140": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						5000
+					]
+				}
+			]
+		}
+	},
+	"142": {
+		"haste": true,
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"143": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_tapped": false
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						5000
+					]
+				}
+			]
+		}
+	},
+	"149": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {},
+				"sacrifice": {
+					"is_type": "Backup",
+					"controller": "player"
+				},
+				"text": "《Dull》, put 1 Backup into the Break Zone: Choose 1 Forward. Deal it 5000 damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							5000
+						]
+					}
+				]
+			},
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"雷": 1
+				},
+				"text": "Thundaga 《S》《Lightning》《Dull》: Choose 1 Forward. Deal it 10000 damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							10000
+						]
+					}
+				]
+			}
+		]
+	},
+	"157": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {},
+				"sacrifice": {
+					"is_source": true
+				},
+				"text": "《Dull》, put Scholar into the Break Zone: Choose 1 Forward you control. Return it to its owner's hand.",
+				"choose_target": {
+					"is_type": "Forward",
+					"controller": "player"
+				},
+				"instructions": [
+					{
+						"name": "return_targets_to_hand",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
+	"161": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"170": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		}
+	},
+	"178": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "return_targets_to_hand",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"182": {
+		"brave": true,
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"neutral": 1
+				},
+				"text": "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all the Forwards opponent controls.",
+				"apply_effect": {
+					"is_type": "Forward",
+					"controller": "opponent"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							4000
+						]
+					}
+				]
+			},
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"neutral": 3
+				},
+				"text": "Omnislash 《S》《3》《Dull》: Choose 1 Forward. Break it.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "break_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
+	"186": {
+		"first_strike": true,
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Backup"
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"189": {
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"火": 1
+				},
+				"text": "Waterkick 《S》《Fire》: Choose 1 Forward. Dull it and deal it 6000 damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "dull_targets",
+						"author": "game",
+						"argument": []
+					},
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							6000
+						]
+					}
+				]
+			}
+		]
+	},
+	"191": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "power_change",
+					"author": "target",
+					"argument": [
+						3000,
+						1
+					]
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"火": 4
+				},
+				"text": "Cosmo Memory 《S》《Fire》《Fire》《Fire》《Fire》《Dull》: Deal 6000 damage to all the Forwards opponent controls.",
+				"apply_effect": {
+					"is_type": "Forward",
+					"controller": "opponent"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							6000
+						]
+					}
+				]
+			}
+		]
+	},
+	"192": {
+		"on_causing_damage_to_forward": {
+			"status": "raines_mark",
+			"duration": 1,
+			"on_enter_break_zone": [
+				{
+					"name": "opponent_discards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		},
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent",
+				"is_tapped": false
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						4000
+					]
+				}
+			]
+		}
+	},
+	"193": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"count": 2
+			},
+			"instructions": [
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"frozen",
+						1
+					]
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"氷": 1
+				},
+				"text": "Sadistic Surge 《S》《Ice》《Dull》: Choose 1 Forward. Dull it and Freeze it.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "dull_targets",
+						"author": "game",
+						"argument": []
+					},
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"frozen",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"198": {
+		"ex_burst": "when_cast",
+		"apply_effect": {
+			"is_type": "Forward",
+			"controller": "opponent"
+		},
+		"when_cast": {
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						3000
+					]
+				},
+				{
+					"name": "untap_all_matching",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Backup",
+							"controller": "player"
+						}
+					],
+					"condition": "controls:Yuna"
+				}
+			]
+		}
+	},
+	"205": {
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {},
+				"text": "Grenade Bomb 《S》: Deal 2000 damage to all the Forwards opponent controls.",
+				"apply_effect": {
+					"is_type": "Forward",
+					"controller": "opponent"
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							2000
+						]
+					}
+				]
+			}
+		]
+	},
+	"209": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {
+					"雷": 1
+				},
+				"text": "《Lightning》《Dull》: Choose 1 attacking Lightning Forward. It gains First Strike until the end of the turn.",
+				"choose_target": {
+					"is_type": "Forward",
+					"is_attacking": true,
+					"is_element": "雷"
+				},
+				"instructions": [
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"first_strike",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"212": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent",
+				"is_cost_at_most": 3
+			},
+			"instructions": [
+				{
+					"name": "return_targets_to_hand",
+					"author": "game",
+					"argument": []
+				}
+			]
+		}
+	},
+	"101": {
+		"apply_effect": {
+			"is_type": "Forward",
+			"controller": "player"
+		},
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "power_change_targets",
+					"author": "game",
+					"argument": [
+						4000,
+						1
+					]
+				}
+			]
+		}
+	},
+	"110": {
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "player"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"unbreakable",
+						1
+					]
+				}
+			]
+		}
+	},
+	"113": {
+		"when_blocks": {
+			"instructions": [
+				{
+					"name": "power_change",
+					"author": "card",
+					"argument": [
+						2000,
+						1
+					]
+				}
+			]
+		}
+	},
+	"115": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"brave",
+						1
+					]
+				}
+			]
+		}
+	},
+	"120": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {
+					"土": 1
+				},
+				"sacrifice": {
+					"is_source": true
+				},
+				"text": "《Earth》《Dull》, put Monk into the Break Zone: Choose 1 Forward. It gains +2000 power until the end of the turn.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "power_change",
+						"author": "target",
+						"argument": [
+							2000,
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"121": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {
+					"雷": 1
+				},
+				"text": "《Lightning》《Dull》: Choose 1 Forward. It gains Haste until the end of the turn.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"haste",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"134": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"job": "Knight"
+						}
+					]
+				}
+			]
+		}
+	},
+	"144": {
+		"power_per": {
+			"count": {
+				"is_type": "Backup",
+				"controller": "player"
+			},
+			"value": 1000
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"雷": 1
+				},
+				"text": "Shout 《S》《Lightning》: Until the end of the turn, Ramza gains +2000 power, Haste and First Strike.",
+				"instructions": [
+					{
+						"name": "power_change",
+						"author": "card",
+						"argument": [
+							2000,
+							1
+						]
+					},
+					{
+						"name": "add_status_effect",
+						"author": "card",
+						"argument": [
+							"haste",
+							1
+						]
+					},
+					{
+						"name": "add_status_effect",
+						"author": "card",
+						"argument": [
+							"first_strike",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"145": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {},
+				"text": "《Dull》: Choose 1 Backup. Activate it.",
+				"choose_target": {
+					"is_type": "Backup"
+				},
+				"instructions": [
+					{
+						"name": "untap_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
+	"146": {
+		"skill": [
+			{
+				"cost": {
+					"雷": 1
+				},
+				"sacrifice": {
+					"is_source": true
+				},
+				"text": "《Lightning》, put Ricard into the Break Zone: Choose 1 Forward. It cannot be broken this turn.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"unbreakable",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+	"147": {
+		"first_strike": true
+	},
+	"148": {
+		"haste": true
+	},
+	"150": {
+		"aura": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"controller": "player",
+					"is_element": "雷"
+				},
+				"method": "power_change",
+				"value": 1000
+			}
+		]
+	},
+	"156": {
+		"aura": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"controller": "player",
+					"is_job": "Knight"
+				},
+				"method": "power_change",
+				"value": 1000
+			}
+		]
+	},
+	"164": {
+		"when_attack": {
+			"instructions": [
+				{
+					"name": "power_change_matching",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward",
+							"controller": "player",
+							"is_element": "水"
+						},
+						1000,
+						1
+					]
+				}
+			]
+		}
+	},
+	"167": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		}
+	},
+	"168": {
+		"when_enter_break_from_field": {
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		}
+	},
+	"179": {
+		"when_cause_damage_to_player": {
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		}
+	},
+	"180": {
+		"aura": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"controller": "player",
+					"is_element": "水"
+				},
+				"method": "power_change",
+				"value": 1000
+			}
+		]
+	},
+	"195": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "opponent_discards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
+			]
+		}
+	},
+	"196": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"category": "XIII",
+							"type": "Forward"
+						}
+					]
+				}
+			]
+		}
+	},
+	"197": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"category": "X",
+							"type": "Forward"
+						}
+					]
+				}
+			]
+		}
+	},
+	"199": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Backup",
+				"controller": "player",
+				"count": 3
+			},
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					],
+					"condition": "controls:Yuna"
+				},
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": [],
+					"condition": "controls:Rikku"
+				}
+			]
+		}
+	},
+	"200": {
+		"skill": [
+			{
+				"tap": true,
+				"cost": {},
+				"sacrifice": {
+					"is_source": true
+				},
+				"text": "《Dull》, put Baralai into the Break Zone: Choose up to 2 Forwards. Activate them.",
+				"choose_target": {
+					"is_type": "Forward",
+					"count": 2
+				},
+				"instructions": [
+					{
+						"name": "untap_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
+			}
+		]
+	},
+	"202": {
+		"when_attack": {
+			"instructions": [
+				{
+					"name": "add_status_effect",
+					"author": "card",
+					"argument": [
+						"first_strike",
+						1
+					]
+				}
+			]
+		}
+	},
+	"203": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"name": "Biggs"
+						}
+					]
+				}
+			]
+		}
+	},
+	"204": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "search_deck",
+					"author": "game",
+					"argument": [
+						{
+							"category": "VII",
+							"type": "Forward"
+						}
+					]
+				}
+			]
+		}
+	},
+	"208": {
+		"haste": true,
+		"conditional_power": [
+			{
+				"condition": {
+					"check_controller": "player",
+					"is_named": "Serah"
+				},
+				"value": 2000
+			}
+		]
 	}
 }

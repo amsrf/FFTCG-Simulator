@@ -117,6 +117,21 @@ session is CONFIRMED, not when rings are clicked. Three conditions:
 The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
 ability must land on top of the Summon/ability that caused it, so it resolves first.
 
+## Cards 100-216 coverage
+
+`python3 tools/coverage_range.py --check` must print `UNCLASSIFIED: 0`. The `NEEDS_CODE` dict in that tool is the
+roadmap: an id moves out when its primitive lands, and an entry in `card_effects.json` always wins.
+
+Data batches live in `tools/card_data_batches.py`; they append to the JSON without reformatting it. `tools/cards_range.py
+<first> <last>` prints the raw card texts the batches are derived from.
+
+When writing data, remember the two placement rules:
+
+* `apply_effect` belongs at the **top level** of a trigger, or **inside the specific skill def** it applies to.
+  Putting it top-level on a card that also has a choose_target trigger re-targets that trigger's instructions.
+* Character `EX BURST` is still pending (the card must be played, not just have its ETB executed). Summons use
+  `"ex_burst": "when_cast"`; do not add that to Character cards yet.
+
 ## Auditing call sites in game.gd
 
 Run `python3 tools/dead_audit.py [file.gd]` (default scripts/game.gd), and `python3 tools/member_audit.py [file.gd]` for unused vars/consts. It reports each function as called / DATA-ONLY / TEST-ONLY / QUOTED-ONLY /
