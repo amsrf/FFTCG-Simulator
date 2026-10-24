@@ -43,7 +43,19 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Damage, its dealer, and its modifiers
+
+`Card.suffer_damage(damage, kind, controller, source_card)` records BOTH the cause (Summon/Ability/combat) and the
+DEALING card. `Field.modify_damage(source, target, amount)` runs before the damage is applied (Warrior of Light
+doubles to a cost-4+ Forward), so a doubled hit counts once for the break check. Combat passes the opposing card;
+effect instructions pass `_current_source_card`.
+
+A trigger whose `choose_target` has no legal candidate must NOT open a targeting session — `execute_card_effect`
+checks `has_viable_target` first. Otherwise "you may deal 7000 to a dull Forward" with no dull Forward strands the
+effect.
+
 ## power_per: continuous, count-based power
+
 
 `power_per` (Jecht, Dark Knight, Gabranth) is the counted sibling of `conditional_power`. Each rule stores what it
 currently GRANTS and applies only the difference — never recompute `power` from its base, or temporary buffs and auras

@@ -163,10 +163,12 @@ func damage_targets(amount: int = 0) -> void:
 	if amount <= 0:
 		return
 	# THE CAUSE GOES WITH THE DAMAGE. Protection like Auron's is judged when the break happens — possibly later, in
-	# the state-based sweep — so each card records who dealt this and with what.
+	# the state-based sweep — so each card records who dealt this and with what. The SOURCE CARD is passed as well,
+	# which is what lets "Warrior of Light doubles its damage" apply to effect damage too.
 	for card in _targets:
 		if card != null and is_instance_valid(card) and card.is_on_field():
-			card.suffer_damage(amount, _effect_kind(), _current_controller)
+			var dealt: int = field.modify_damage(_current_source_card, card, amount)
+			card.suffer_damage(dealt, _effect_kind(), _current_controller, _current_source_card)
 	enforce_game_state_rules()
 
 ## BREAK every target. "Choose 1 Forward. Break it." — 17 cards in the first hundred say this and none could be
@@ -1112,7 +1114,8 @@ func damage_player(amount: int = 1) -> void:
 
 func damage_forward(damage):
 	var card: Card = _targets[0]
-	card.suffer_damage(damage, _effect_kind(), _current_controller)
+	card.suffer_damage(field.modify_damage(_current_source_card, card, int(damage)),
+		_effect_kind(), _current_controller, _current_source_card)
 	enforce_game_state_rules()
 	
 func set_attacker(card):
@@ -1135,8 +1138,9 @@ func set_blocker(card):
 ## because a card that died here must not deal damage in a later step.
 func clash_cards(card1:Card,card2:Card):
 	if card1 != null and card2 != null and card1.is_on_field() and card2.is_on_field():
-		card1.suffer_damage(card2.power)
-		card2.suffer_damage(card1.power)
+		# Each card is the SOURCE of the damage the other takes, so per-dealer modifiers (Warrior of Light) apply.
+		card1.suffer_damage(field.modify_damage(card2, card1, card2.power), "", "", card2)
+		card2.suffer_damage(field.modify_damage(card1, card2, card1.power), "", "", card1)
 		enforce_game_state_rules()
 
 ## ONE HALF of a First Strike combat: only `striker` deals damage. The other card deals in its own step.
@@ -1145,7 +1149,7 @@ func clash_step(striker: Card, other: Card) -> void:
 		return
 	if not (striker.is_on_field() and other.is_on_field()):
 		return
-	other.suffer_damage(striker.power)
+	other.suffer_damage(field.modify_damage(striker, other, striker.power), "", "", striker)
 	enforce_game_state_rules()
 
 ## FIRST STRIKE.

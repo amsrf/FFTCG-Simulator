@@ -633,7 +633,12 @@ func execute_card_effect(card,keyword):
 	# from the card sitting on the field.
 	var stack_card: Card = _stack_effect_card_for(card)
 	if choose_target_criteria:
-		request_target(choose_target_criteria, stack_card if stack_card != null else card, false, "Ability")
+		var source_for_target: Card = stack_card if stack_card != null else card
+		# NO LEGAL TARGET MEANS NO TARGETING SESSION. "You may deal it damage" style triggers fire when nothing is
+		# eligible (no dull Forward, say) — opening an empty session there would strand the effect with no way to
+		# finish it, so the trigger simply adds an effect that resolves with nothing to do.
+		if has_viable_target(choose_target_criteria, source_for_target, "Ability"):
+			request_target(choose_target_criteria, source_for_target, false, "Ability")
 
 ## The stack's copy of the effect triggered by `source`, if it exists yet.
 func _stack_effect_card_for(source: Card) -> Card:
@@ -1415,6 +1420,10 @@ func effective_cost(card: Card) -> Dictionary:
 			var for_type: String = str(rule.get("for", ""))
 			if for_type != "" and card.type != for_type:
 				continue
+			# "…to cast [Card Name (Bahamut)]" — the modifier can name ONE card instead of a whole type.
+			var for_name: String = str(rule.get("name", ""))
+			if for_name != "" and card.card_name != for_name:
+				continue
 			var scope: String = str(rule.get("from", ""))
 			if scope == "opponent" and card.controller == source.controller:
 				continue
@@ -1486,6 +1495,28 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 				continue
 			return true
 	return false
+
+## Damage modifiers applied BEFORE the damage lands, so a doubled hit counts as one hit for the break check.
+##
+##   "damage_double": {"is_type": "Forward", "min_cost": 4}      (Warrior of Light 5)
+##
+## `min_cost` is a rule field here rather than a Card predicate, so it is stripped before the criteria are evaluated —
+## leaving it in would make matches_criteria() call a method named min_cost and refuse every target.
+func modify_damage(source: Card, target: Card, amount: int) -> int:
+	if source == null or target == null or amount <= 0:
+		return amount
+	var rule = source.card_effects.get("damage_double", null)
+	if not (rule is Dictionary):
+		return amount
+	var minimum: int = int(rule.get("min_cost", -1))
+	if minimum >= 0 and int(target.cost) < minimum:
+		return amount
+	var criteria: Dictionary = rule.duplicate()
+	criteria.erase("min_cost")
+	if not criteria.is_empty() and not target.matches_criteria(criteria, source):
+		return amount
+	print("[Damage] %s doubles its %d damage to %s" % [source.card_name, amount, target.card_name])
+	return amount * 2
 
 func can_block(card: Card) -> bool:
 	if card == null:

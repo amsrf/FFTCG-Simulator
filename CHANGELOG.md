@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Warrior of Light + the data-only cards (batch 6)
+
+**5 Warrior of Light** doubles its damage to a Forward of cost 4 or more. Damage now records the DEALING card
+(`Card.last_damage_source`), and `Field.modify_damage(source, target, amount)` applies modifiers BEFORE the damage
+lands — so a doubled hit is one hit for the break check. Combat (`clash_cards` / `clash_step`) passes the opposing
+card; `damage_targets` / `damage_forward` pass the effect's source.
+
+Then eight cards that only needed small vocabulary:
+`is_category` (9 Cloud's Category VII), `is_cost_at_least` (61 Alexander, cost 5+), `cost_aura.name` (20 Fang's
+"Bahamut costs 2 less"), and a guard so a trigger whose `choose_target` has NO legal candidate skips targeting instead
+of opening an empty session (58 Laguna's "may deal 7000 to a dull Forward").
+
+Data added: **9 Cloud** (conditional +2000, ETB 2000), **20 Fang** (Bahamut −2, First Strike on attack), **28 Reynn**
+(EX burst, search Lann, skill), **58 Laguna** (damage-to-opponent trigger, S: 9000), **59 Laguna** (EX burst, dull +
+freeze with Squall, conditional +2000), **61 Alexander** (EX burst, break a cost-5+ Forward), **79 Nora** (EX burst,
+search Hope), **80 Bartz** (EX burst, activate Wind characters).
+
+Coverage: **74 implemented / 7 plain / 19 to do**. New probes: `wol_probe` (9 checks) and `data_batch_probe`
+(17 checks: Cloud on/off, Bahamut 9→7, Fang First Strike, Alexander's cost filter, Bartz untaps only Wind, and the
+empty-target trigger resolving harmlessly).
+
+
 ### Count-Based Power (batch 5)
 
 **15 Jecht** (+1000 per Forward the opponent controls; S: 1 fire + 2 neutral + dull → break a Forward),

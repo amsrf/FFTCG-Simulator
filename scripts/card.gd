@@ -581,21 +581,26 @@ func untap():
 ## WHO/WHAT dealt the most recent damage. The state-based break happens later, in a sweep that cannot see the source,
 ## so the damage records it here and the sweep asks the same protection question an explicit break does.
 ## An empty kind means COMBAT damage — nobody's Summon or ability — which is also what clears a stale record.
+##
+## `source_card` is the DEALING card (Warrior of Light doubles damage he deals). It is separate from the kind: combat
+## passes the opposing card, a character ability passes the character, a Summon passes the Summon.
 var last_damage_kind: String = ""
 var last_damage_controller: String = ""
+var last_damage_source: Card = null
 
-func suffer_damage(damage: int, source_kind: String = "", source_controller: String = ""):
+func suffer_damage(damage: int, source_kind: String = "", source_controller: String = "", source_card: Card = null):
 	# Damage accumulates; the card breaks once the total reaches its current
 	# power (enforced by Game.enforce_game_state_rules()).
 	last_damage_kind = source_kind
 	last_damage_controller = source_controller
+	last_damage_source = source_card
 	accumulated_damage += damage
 	if power_label:
 		power_label.changeAccumulatedDamage(accumulated_damage)
 
-func take_damage(damage: int, source_kind: String = "", source_controller: String = ""):
+func take_damage(damage: int, source_kind: String = "", source_controller: String = "", source_card: Card = null):
 	# Alias kept for effect data that uses the "take_damage" instruction.
-	suffer_damage(damage, source_kind, source_controller)
+	suffer_damage(damage, source_kind, source_controller, source_card)
 
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.
@@ -1222,6 +1227,18 @@ func is_type_any(types) -> bool:
 
 func is_cost_lower_than(value: int) -> bool:
 	return cost < value
+
+## "a Forward of cost 5 or more" (Ifrit 1-061R).
+func is_cost_at_least(value: int) -> bool:
+	return int(cost) >= int(value)
+
+## "[Category (VII)]" (Cloud 1-009C). Checks the card's categories from the database; a card can have several.
+func is_category(value: String) -> bool:
+	var data: Dictionary = CardDatabase.card_database[id - 1]
+	for key in ["category_1", "category_2", "category_3"]:
+		if str(data.get(key, "")) == value:
+			return true
+	return false
 
 func is_named(value: String) -> bool:
 	# Card-name condition (e.g. "if you control a card named Aerith").
