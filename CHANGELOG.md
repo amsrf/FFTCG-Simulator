@@ -4,6 +4,37 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Exdeath 122: a source-aware EX BURST gate
+
+"Any card put in the Damage Zone due to Exdeath cannot use its EX Burst." The gate is checked against the **source of
+the damage**, not globally, so another attacker's damage still bursts normally.
+
+* `PlayerSide.take_damage(amount, source)` now carries the dealer through to `_run_ex_burst(card, source)`, which skips
+  the burst when `source` has `ex_burst_disabler` (printed OR granted via `status_effects`). The damage card still
+  enters the Damage Zone either way — only the burst is suppressed.
+* `Game.cause_damage()` passes `field.attacker_card`, or the party member carrying the disabler, because a party's
+  damage is dealt by the whole party. `damage_player()` and `take_damage_to_controller()` pass their effect's source.
+* The attack phase now calls `cause_attacking_damage()` instead of `cause_damage()`. That function was never called,
+  so the "when a party you control deals damage" trigger (Andoria/Boko) was dead in real play while the probe passed
+  by calling it directly.
+
+### Signals vs commands
+
+`game.call("run_ex_burst", ...)` was replaced with a direct call on an untyped `@onready var game = get_parent()`.
+`call("...")` is invisible to autocomplete, rename and Find Usages, which is exactly why "who calls this?" was hard to
+answer. The convention is now: **notifications go through signals; commands go to a known owner through a direct,
+named call**. `.call()` stays only where the type genuinely is not known — dynamically instantiated windows.
+
+### Damage Zone zone bug
+
+`DamageZone.draw()` (the animated path used by every real damage) never called `enter_zone(DAMAGE)`; only the instant
+`add_card()` did. Every damage card therefore kept its DECK `current_zone`, rotation and scale. It now normalises on
+arrival, which the Exdeath probe caught.
+
+New probe `exdeath_probe` (12 checks): Exdeath suppresses, another source still bursts, the card lands in both cases,
+and the attack-phase path is covered end to end.
+
+
 ### Debt cleared (2026-10-24)
 
 * **The `det == 0` engine error is gone.** The stack trace put it in `LightOrb._face_camera()`: the orb is queue_freed

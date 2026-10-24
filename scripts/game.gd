@@ -997,9 +997,17 @@ func finish_target():
 	_process_next_instruction()
 
 func cause_damage():
+	# WHO CAUSED IT travels with the damage. Exdeath 122 ("any card put in the Damage Zone due to Exdeath cannot use
+	# its EX Burst") is judged against the dealer, and a party's damage is dealt by the whole party — so if any
+	# member suppresses EX Burst, the damage it puts in the zone is covered.
+	var source: Card = field.attacker_card
+	for member in field.party_members():
+		if member != null and is_instance_valid(member) 				and (member.card_effects.has("ex_burst_disabler") or member.status_effects.has("ex_burst_disabler")):
+			source = member
+			break
 	# The DEFENDING player (whoever isn't taking the turn) takes the damage, so
 	# an opponent attack actually hurts the human.
-	side_for(3 - turn_owner).take_damage(1)
+	side_for(3 - turn_owner).take_damage(1, source)
 	# Triggered auto-ability: "when this card deals damage to the opponent".
 	if field.attacker_card != null:
 		stack.begin_triggered_ability(field.attacker_card, "when_cause_damage_to_player")
@@ -1222,18 +1230,18 @@ func take_damage_to_controller(amount: int = 1) -> void:
 	if _current_source_card == null:
 		return
 	if _current_source_card.controller == "player":
-		player.take_damage(amount)
+		player.take_damage(amount, _current_source_card)
 	else:
-		opponent.take_damage(amount)
+		opponent.take_damage(amount, _current_source_card)
 
 func damage_player(amount: int = 1) -> void:
 	# Damages the opponent of the effect's source controller.
 	if _current_source_card == null:
 		return
 	if _current_source_card.controller == "player":
-		opponent.take_damage(amount)
+		opponent.take_damage(amount, _current_source_card)
 	else:
-		player.take_damage(amount)
+		player.take_damage(amount, _current_source_card)
 
 func damage_forward(damage):
 	var card: Card = _targets[0]
@@ -1551,7 +1559,9 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 				# runs detached and two priority loops fight over _priority_lock.
 				await clash_attacker_blocker()
 			else:
-				cause_damage()
+				# cause_attacking_damage(), not cause_damage(): it also fires "when a party you control deals
+				# damage" (Andoria/Boko). Calling the inner function directly left that trigger dead in real play.
+				cause_attacking_damage()
 			await priority()
 			field.reset_blocker()
 			field.reset_attacker()

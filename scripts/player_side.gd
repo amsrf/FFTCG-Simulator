@@ -15,8 +15,14 @@ signal damaged(side: PlayerSide)
 @onready var hand: Hand = $Hand
 @onready var damage_zone: DamageZone = $DamageZone
 @onready var graveyard: Node = $Graveyard
+## The Game this side belongs to. Untyped on purpose: game.gd has no class_name (adding one would break headless
+## runs until the editor rescans), and a direct, named call is discoverable — `grep run_ex_burst` finds it — whereas
+## `call("run_ex_burst", ...)` hides the dependency from every tool.
+@onready var game = get_parent()
 
-func take_damage(amount: int = 1) -> void:
+## `source` is the card that CAUSED this damage (the attacker). It is optional because debug keys and some effects
+## damage a player directly; Exdeath 122 needs it, so the player-damage paths pass it through.
+func take_damage(amount: int = 1, source: Card = null) -> void:
 	for _i in range(amount):
 		if deck.deck_cards.is_empty():
 			# Nothing left in the deck to absorb the damage: report it anyway so
@@ -25,7 +31,7 @@ func take_damage(amount: int = 1) -> void:
 			return
 		var card = deck.deck_cards.pop_front()
 		damage_zone.draw(card)
-		_run_ex_burst(card)
+		_run_ex_burst(card, source)
 	damaged.emit(self)
 
 
@@ -46,15 +52,20 @@ func ex_burst_key(card: Card) -> String:
 func has_ex_burst(card: Card) -> bool:
 	return not ex_burst_key(card).is_empty()
 
-func _run_ex_burst(card: Card) -> void:
+func _run_ex_burst(card: Card, source: Card = null) -> void:
 	var keyword: String = ex_burst_key(card)
 	if keyword.is_empty() or not is_inside_tree():
 		return
-	var game: Node = get_parent()
+	# EXDEATH 122: "Any card put in the Damage Zone due to Exdeath cannot use its EX Burst."
+	# Checked against the SOURCE of the damage, not globally: another attacker's damage still bursts normally.
+	if source != null and is_instance_valid(source) \
+			and (source.card_effects.has("ex_burst_disabler") or source.status_effects.has("ex_burst_disabler")):
+		print("[ExBurst] suppressed for %s (damage dealt by %s)" % [card.card_name, source.card_name])
+		return
 	if game == null or not game.has_method("run_ex_burst"):
 		return
 	await get_tree().create_timer(EX_BURST_DELAY).timeout
-	game.call("run_ex_burst", self, card, keyword)
+	game.run_ex_burst(self, card, keyword)
 
 func damage_count() -> int:
 	return damage_zone.cards.size()

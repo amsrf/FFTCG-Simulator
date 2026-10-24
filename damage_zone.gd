@@ -21,6 +21,10 @@ func set_deck(deck_node: Node) -> void:
 	deck = deck_node
 
 func draw(card):
+	# THE CARD IS DAMAGE FROM THE MOMENT IT STARTS FLYING. enter_zone() is what normalises its presentation and sets
+	# `current_zone`; only the instant path (add_card) did it, so every card that arrived through the animated draw —
+	# which is every damage card in a real game — kept the DECK zone and its deck rotation/scale for good.
+	card.enter_zone(Card.Zone.DAMAGE)
 	add_card_to_tree(card)
 	update_card_positions(cards.size() - 1)
 

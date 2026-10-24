@@ -117,6 +117,26 @@ session is CONFIRMED, not when rings are clicked. Three conditions:
 The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
 ability must land on top of the Summon/ability that caused it, so it resolves first.
 
+## Signals are for events; commands are direct calls
+
+Use a signal when something HAPPENED and zero-or-many listeners may react (`damaged`, `target_complete`,
+`add_card_effect_to_stack`). Use a direct, named call when exactly one owner must do work and the caller needs it
+ordered/awaited (`game.run_ex_burst(...)`).
+
+Do NOT use `call("method", ...)` for a production command between nodes whose type is known: it is invisible to
+autocomplete, rename and Find Usages. Keep `.call()` only for dynamically instantiated scenes whose type is unknown
+(`window.call("open", ...)`). If the receiver has no `class_name` (Game does not), declare an untyped
+`@onready var game = get_parent()` and call the method by name — that is enough for grep and Find Usages.
+
+## EX BURST suppression is decided by the DAMAGE SOURCE
+
+`PlayerSide.take_damage(amount, source)` threads the dealer into `_run_ex_burst(card, source)`; a source with
+`ex_burst_disabler` (printed or status) skips the burst while the card still enters the Damage Zone. Rules paths that
+damage a player must pass a source; only debug keys may omit it.
+
+`DamageZone.draw()` must call `card.enter_zone(Card.Zone.DAMAGE)` — it is the animated path used for every real damage
+card, and without it the card keeps its DECK zone/rotation.
+
 ## Element spellings live in scripts/elements.gd
 
 ELEMENT NAMES / CJK / ACCENT and `key_to_element()` are static data in `scripts/elements.gd`, preloaded by path
