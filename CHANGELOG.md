@@ -4,6 +4,33 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### game.gd audit: dead code out, call sites findable
+
+New `tools/game_dead_audit.py` classifies every function in `scripts/game.gd` by how it is reached: direct calls, bare
+Callable references (`tween_callback(_end_damage_zoom)`), quoted calls (`call("...")`), scene connections, and the
+effect JSON (which invokes instruction handlers by name). Result after cleanup: **0 UNREFERENCED**.
+
+Removed from `game.gd` (11 functions, ~81 lines):
+
+* the whole old targeting chain - `_on_target_selected`, `check_target_requirements`, `request_target`, `finish_target` -
+  together with the `Card.on_target` signal and its `create_card()` connection. The Field's targeting session replaced
+  it, and `Card.signal_target()` had been commented out at its only call site.
+* `cause_damage_to_player` (an empty stub), `damage_player`, `damage_forward`, `clash_step`, `set_attacker` (the Field
+  has the live one), `_exit_phase`, `_on_assistant_process_next_instruction`.
+* their write-only members `_current_attacker_card`, `_current_blocker_card` and `select_arrow`, plus the now-unused
+  root `BallisticArrow` node in `game.tscn` (the Field keeps its own child).
+
+Also converted `game.call("side_for", ...)` in `battle_field.gd` to a named call, so searching `side_for` finds the
+caller.
+
+Kept deliberately, reported by the tool as reachable-but-unusual: 16 DATA-ONLY instruction handlers (`damage_targets`,
+`draw_cards`, ...) called by `card_effects.json`; 3 QUOTED-ONLY (`divide_damage` via `stack.gd`, `_end_damage_zoom` as
+a tween callback, `trigger_break_zone_keywords` via `graveyard.gd`); 3 TEST-ONLY helpers (`played_this_turn`,
+`clash_cards`, `remove_targets_from_game`) that are API/vocabulary not yet used by production data.
+
+Boot clean, all probes green.
+
+
 ### Exdeath 122: a source-aware EX BURST gate
 
 "Any card put in the Damage Zone due to Exdeath cannot use its EX Burst." The gate is checked against the **source of

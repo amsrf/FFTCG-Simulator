@@ -33,7 +33,6 @@ func handle_grabbed():
 			
 		GlobalVariables.Player_Mode.TARGET:
 			#print('on target signal emmited')
-			#card.signal_target()
 			field.set_target_card(card)
 		GlobalVariables.Player_Mode.BLOCKING:
 			# Blocking is the local player's call: any of your own untapped

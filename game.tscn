@@ -157,8 +157,6 @@ slide_in_delay = 0.1
 [node name="PassPhaseButton" parent="Assistant/ButtonRack" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
 visible = false
 
-[node name="BallisticArrow" parent="." unique_id=868873254 instance=ExtResource("16_80cx4")]
-
 [node name="Player1" type="Node3D" parent="." unique_id=832380184]
 script = SubResource("GDScript_e8heu")
 

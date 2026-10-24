@@ -117,6 +117,21 @@ session is CONFIRMED, not when rings are clicked. Three conditions:
 The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
 ability must land on top of the Summon/ability that caused it, so it resolves first.
 
+## Auditing call sites in game.gd
+
+Run `python3 tools/game_dead_audit.py`. It reports each function as called / DATA-ONLY / TEST-ONLY / QUOTED-ONLY /
+scene-connected / UNREFERENCED.
+
+Two traps it exists to avoid:
+
+* **Instruction handlers are DATA.** `damage_targets`, `draw_cards`, `break_targets`, ... have no `.gd` caller; they
+  are dispatched by name from `assets/card_effects.json`. Search the JSON before declaring one dead.
+* **A bare name is a call.** `tween_callback(_end_damage_zoom)` and `assistant.set_confirm_button(finish_target)` pass a
+  Callable, which a "name(" search does not see.
+
+The tool also checks `method="..."` scene connections, so `_on_*` handlers are only reported as connected when they
+actually are.
+
 ## Signals are for events; commands are direct calls
 
 Use a signal when something HAPPENED and zero-or-many listeners may react (`damaged`, `target_complete`,

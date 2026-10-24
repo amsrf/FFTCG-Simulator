@@ -19,9 +19,9 @@ var opponent_back_cards: Array[Card] = []
 var target_card: Card = null
 var source_card: Card = null
 var attacker_card: Card = null
-## The blocker declared for the current combat. Persisted on the Field because
-## Game's transient `_current_blocker_card` is cleared as soon as the blocker's
-## instructions finish, which is before DAMAGE_RESOLUTION reads it.
+## The blocker declared for the current combat. Persisted on the Field because the
+## instruction chain ends before DAMAGE_RESOLUTION reads it, so a transient copy
+## on Game would already be gone by then.
 var blocker_card: Card = null
 var arrow: BallisticArrow
 ## SEPARATE arrows for the combat's block links. The targeting arrow above belongs to a targeting session and follows
@@ -1218,10 +1218,12 @@ func recompute_power_per() -> void:
 ## else is a criteria block counted against the board.
 func _power_per_count(counter, source: Card) -> int:
 	if counter is String and counter == "damage_received":
-		var game: Node = get_parent()
+		# Untyped on purpose, so the call can be NAMED: a Node-typed variable cannot call side_for(), and
+		# call("side_for", ...) would hide the dependency from both grep and Find Usages.
+		var game = get_parent()
 		if game == null or not game.has_method("side_for"):
 			return 0
-		var side = game.call("side_for", 1 if source.controller == "player" else 2)
+		var side = game.side_for(1 if source.controller == "player" else 2)
 		return side.damage_count() if side != null else 0
 	if counter is Dictionary:
 		var total: int = 0

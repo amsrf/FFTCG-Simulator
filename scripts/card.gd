@@ -84,7 +84,6 @@ var debug_log: Array = []
 signal card_dragged(card)
 signal focus_card(card)
 signal execute_instructions(instructions)
-signal on_target(card)
 
 func create_instruction_from_json(array: Array) -> Array[Instruction]:
 	# Extract fields from JSON
@@ -1387,9 +1386,6 @@ func is_effect_card() -> bool:
 	# copies (triggered abilities, skill proxies) are effect cards.
 	return key_word_effect != ""
 	
-func signal_target():
-	emit_signal('on_target',self)
-
 ## The card reacts to being hit by a payment orb: a short flash of the orb's colour across its face, and a punch.
 ##
 ## BOTH TOGETHER is what reads as absorption rather than decoration. Either one alone reads as an effect happening near

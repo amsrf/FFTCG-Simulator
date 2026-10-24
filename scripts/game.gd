@@ -16,7 +16,6 @@ extends Node3D
 @onready var opponent_removed = $Opponent/Removed
 @onready var opponent_front_row_card = $Field/OpponentFrontrowCard
 @onready var opponent_damage_zone = $Opponent/DamageZone
-@onready var select_arrow: BallisticArrow  = $BallisticArrow
 @onready var assistant: Assistant = $Assistant
 @onready var card_scene = preload("res://card.tscn")
 @onready var turn_owner = 1
@@ -39,8 +38,6 @@ var _current_instructions: Array[Instruction]
 var _instructions_running: bool = false
 var _current_source_card: Card
 var _current_controller: String
-var _current_attacker_card: Card
-var _current_blocker_card: Card
 var _targets = []
 ## AERITH 1-064. "When Aerith enters the field, choose up to 3 Backups you control other than Aerith. Activate them." —
 ## which here is simply: untap each one that was picked.
@@ -701,8 +698,6 @@ func create_card(id, controller):
 	card.initialize(id,controller) 
 	if card.has_signal("execute_instructions"):
 		card.execute_instructions.connect(_execute_instructions)
-	if card.has_signal("on_target"):
-		card.on_target.connect(_on_target_selected)
 	return card
 
 func _execute_instructions(instructions: Array[Instruction]) -> void:
@@ -776,8 +771,6 @@ func played_this_turn(type_name: String, owner_id: int = 0) -> bool:
 
 func _clean_instruction_stack():
 	_current_source_card = null
-	_current_attacker_card = null
-	_current_blocker_card = null
 	_targets = []
 
 ## Whether the instruction that just ran accomplished something. Read by `condition: "if_last_succeeded"` — the
@@ -960,42 +953,6 @@ func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
 				push_error("Unknown executor: %s" % executor_key)
 			return node
 
-func _on_target_selected(card: Card):
-	if(card.is_valid_target):
-		_targets.append(card)
-		select_arrow.lock_arc(card.get_global_face_centre())
-		var cancelTarget = func():
-			_targets = []
-			select_arrow.unlock_arc()
-			assistant.hide_buttons()
-		if(check_target_requirements()):
-			assistant.set_confirm_button(finish_target)
-			assistant.set_cancel_button(cancelTarget)
-			assistant.set_confirm_text('Confirm')
-			assistant.set_cancel_text('Cancel')
-			assistant.show_buttons()
-		else:
-			assistant.hide_buttons()
-	else:
-		assistant.hide_buttons()
-		_targets = []
-		select_arrow.unlock_arc()
-
-func check_target_requirements():
-	if len(_targets) >= 1:
-		return true
-
-func request_target(targeting_criteria):
-	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
-	$Field.set_viable_targets(targeting_criteria, _current_source_card)
-	select_arrow.set_is_aiming_from_card(true, _current_source_card)
-
-func finish_target():
-	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
-	select_arrow.set_is_aiming(false)
-	$Field.reset_targets()
-	_process_next_instruction()
-
 func cause_damage():
 	# WHO CAUSED IT travels with the damage. Exdeath 122 ("any card put in the Damage Zone due to Exdeath cannot use
 	# its EX Burst") is judged against the dealer, and a party's damage is dealt by the whole party — so if any
@@ -1011,12 +968,6 @@ func cause_damage():
 	# Triggered auto-ability: "when this card deals damage to the opponent".
 	if field.attacker_card != null:
 		stack.begin_triggered_ability(field.attacker_card, "when_cause_damage_to_player")
-	
-func cause_damage_to_player(player_argument):
-	if player_argument == 'controller':
-		pass
-	
-	
 	
 func cause_attacking_damage():
 	if field.blocker_card == null:
@@ -1234,27 +1185,9 @@ func take_damage_to_controller(amount: int = 1) -> void:
 	else:
 		opponent.take_damage(amount, _current_source_card)
 
-func damage_player(amount: int = 1) -> void:
-	# Damages the opponent of the effect's source controller.
-	if _current_source_card == null:
-		return
-	if _current_source_card.controller == "player":
-		opponent.take_damage(amount, _current_source_card)
-	else:
-		player.take_damage(amount, _current_source_card)
-
-func damage_forward(damage):
-	var card: Card = _targets[0]
-	field.cause_damage(card, int(damage), _current_source_card, _effect_kind(), _current_controller)
-	enforce_game_state_rules()
-	
-func set_attacker(card):
-	_current_attacker_card = card
 func set_blocker(card):
-	_current_blocker_card = card
-	# Persist it on the Field: _clean_instruction_stack() nulls the transient
-	# _current_blocker_card as soon as these instructions finish, which happens
-	# BEFORE DAMAGE_RESOLUTION reads it.
+	# Persist it on the Field: the instruction chain ends before DAMAGE_RESOLUTION reads the blocker, so a transient
+	# on Game would already be gone by then.
 	field.blocker_card = card
 	# AND MARK THE CARD ITSELF. is_blocking — the criteria behind "choose a blocking Forward" — reads the card's own
 	# status, and only Field.set_blocker_card() (the human's CLICK selection) used to set it. So a blocker declared
@@ -1279,15 +1212,6 @@ func clash_cards(card1:Card,card2:Card):
 		field.cause_damage(card1, card2.power, card2, "", card2.controller)
 		field.cause_damage(card2, card1.power, card1, "", card1.controller)
 		enforce_game_state_rules()
-
-## ONE HALF of a First Strike combat: only `striker` deals damage. The other card deals in its own step.
-func clash_step(striker: Card, other: Card) -> void:
-	if striker == null or other == null:
-		return
-	if not (striker.is_on_field() and other.is_on_field()):
-		return
-	field.cause_damage(other, striker.power, striker, "", striker.controller)
-	enforce_game_state_rules()
 
 ## FIRST STRIKE.
 ##
@@ -1650,11 +1574,6 @@ func priority() -> void:
 	_priority_lock = false
 	next_phase()
 
-func _exit_phase(phase_name: String):
-	match phase_name:
-		"End Phase":
-			pass
-
 func enforce_game_state_rules() -> void:
 	# State-based actions, checked after any damage/power change.
 	# 1) Power reduced to 0 (or less): the card is put into the Graveyard.
@@ -1783,9 +1702,6 @@ func _trigger_status_break_zone_effects(card: Card) -> void:
 func _on_targets_confirmed() -> void:
 	if field != null:
 		field.notify_targets_chosen()
-
-func _on_assistant_process_next_instruction() -> void:
-	_process_next_instruction()
 
 static func phase_to_string(phase):
 	match phase:
