@@ -833,4 +833,28 @@
 			]
 		}
 	}
+,
+	"72":{
+		"on_causing_damage_to_forward":{
+			"status":"cid_verdict",
+			"duration":1,
+			"on_break":[{"name":"opponent_mills","author":"game","argument":[2]}]
+		},
+		"skill":[
+			{
+				"s_cost":true,
+				"tap":true,
+				"cost":{},
+				"text":"Highwind 《S》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone.",
+				"instructions":[{"name":"opponent_mills","author":"game","argument":[2]}]
+			}
+		]
+	},
+	"73":{
+		"on_causing_damage_to_forward":{
+			"status":"cid_verdict",
+			"duration":1,
+			"on_break":[{"name":"opponent_mills","author":"game","argument":[2]}]
+		}
+	}
 }

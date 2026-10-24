@@ -189,8 +189,7 @@ func damage_targets(amount: int = 0, index: int = -1) -> void:
 	# which is what lets "Warrior of Light doubles its damage" apply to effect damage too.
 	for card in _selected_targets(index):
 		if card != null and is_instance_valid(card) and card.is_on_field():
-			var dealt: int = field.modify_damage(_current_source_card, card, amount)
-			card.suffer_damage(dealt, _effect_kind(), _current_controller, _current_source_card)
+			field.cause_damage(card, amount, _current_source_card, _effect_kind(), _current_controller)
 	enforce_game_state_rules()
 
 ## BREAK every target. "Choose 1 Forward. Break it." — 17 cards in the first hundred say this and none could be
@@ -1147,8 +1146,7 @@ func damage_player(amount: int = 1) -> void:
 
 func damage_forward(damage):
 	var card: Card = _targets[0]
-	card.suffer_damage(field.modify_damage(_current_source_card, card, int(damage)),
-		_effect_kind(), _current_controller, _current_source_card)
+	field.cause_damage(card, int(damage), _current_source_card, _effect_kind(), _current_controller)
 	enforce_game_state_rules()
 	
 func set_attacker(card):
@@ -1172,8 +1170,8 @@ func set_blocker(card):
 func clash_cards(card1:Card,card2:Card):
 	if card1 != null and card2 != null and card1.is_on_field() and card2.is_on_field():
 		# Each card is the SOURCE of the damage the other takes, so per-dealer modifiers (Warrior of Light) apply.
-		card1.suffer_damage(field.modify_damage(card2, card1, card2.power), "", "", card2)
-		card2.suffer_damage(field.modify_damage(card1, card2, card1.power), "", "", card1)
+		field.cause_damage(card1, card2.power, card2, "", card2.controller)
+		field.cause_damage(card2, card1.power, card1, "", card1.controller)
 		enforce_game_state_rules()
 
 ## ONE HALF of a First Strike combat: only `striker` deals damage. The other card deals in its own step.
@@ -1182,7 +1180,7 @@ func clash_step(striker: Card, other: Card) -> void:
 		return
 	if not (striker.is_on_field() and other.is_on_field()):
 		return
-	other.suffer_damage(field.modify_damage(striker, other, striker.power), "", "", striker)
+	field.cause_damage(other, striker.power, striker, "", striker.controller)
 	enforce_game_state_rules()
 
 ## FIRST STRIKE.
@@ -1244,7 +1242,8 @@ func _apply_party_damage(blocker: Card) -> void:
 	if total <= 0:
 		return
 	print("[Combat] party deals %d to %s" % [total, blocker.card_name])
-	blocker.suffer_damage(total)
+	var leader: Card = field.attacker_card
+	field.cause_damage(blocker, total, leader, "", leader.controller if leader != null else "")
 	enforce_game_state_rules()
 
 ## How the blocker's power is divided across the party, WITHOUT applying it. Split out so the simultaneous step can
@@ -1274,7 +1273,8 @@ func _apply_blocker_split(split: Array) -> void:
 		var amount: int = int(split[i])
 		if amount <= 0:
 			continue
-		card.suffer_damage(amount)
+		var blocker_source: Card = field.blocker_card
+		field.cause_damage(card, amount, blocker_source, "", blocker_source.controller if blocker_source != null else "")
 
 
 ## A priority pass chain that does NOT advance the phase.
@@ -1643,6 +1643,34 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 	if was_broken and card.card_effects.has("when_break"):
 		print("[BreakZone] ", card.card_name, " -> when_break")
 		field.add_card_effect_to_stack.emit(card.id, "when_break", card)
+	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
+	# damaged card, so it fires here — the same choke point as the printed keywords, and only for cards arriving FROM
+	# THE FIELD (Graveyard.add_card gates that call).
+	_trigger_status_break_effects(card)
+
+## Runs the one-shot trigger a status carries when its card reaches the Break Zone (see
+## Field._apply_damage_caused_riders). The status is erased first, so the trigger cannot run twice, and the controller
+## recorded with it is restored around the chain so "your opponent mills" still means the right player.
+func _trigger_status_break_effects(card: Card) -> void:
+	for status in card.status_effects.keys():
+		var payload = card.status_effects[status]
+		if not (payload is Dictionary) or not payload.has("on_break"):
+			continue
+		var entries: Array = payload["on_break"]
+		card.status_effects.erase(status)
+		var instructions: Array[Instruction] = []
+		for entry in entries:
+			if entry is Dictionary:
+				instructions.append(Instruction.new(
+					str(entry.get("name", "")), str(entry.get("author", "game")), entry.get("argument", [])))
+		if instructions.is_empty():
+			return
+		var previous: String = _current_controller
+		_current_controller = str(payload.get("controller", previous))
+		print("[BreakZone] ", card.card_name, " -> status trigger ", status)
+		_execute_instructions(instructions)
+		_current_controller = previous
+		return
 
 func pop_stack():
 	var card = stack.pop_stack()

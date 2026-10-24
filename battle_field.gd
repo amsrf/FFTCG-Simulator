@@ -1547,6 +1547,44 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 func modify_damage(source: Card, target: Card, amount: int) -> int:
 	return rules.modify_damage(source, target, amount)
 
+## THE ONE PLACE DAMAGE LANDS. Effect damage, combat, party damage and first-strike steps all come through here, so
+## "when this card deals damage to a Forward, ..." riders are applied at the same moment on every path rather than
+## being re-implemented per call site.
+func cause_damage(target: Card, amount: int, source: Card = null, source_kind: String = "", source_controller: String = "") -> int:
+	if target == null or not is_instance_valid(target) or amount <= 0:
+		return 0
+	if source != null and not is_instance_valid(source):
+		source = null
+	var dealt: int = modify_damage(source, target, amount)
+	target.suffer_damage(dealt, source_kind, source_controller, source)
+	if source != null and dealt > 0 and target.is_on_field() and target.type == "Forward":
+		_apply_damage_caused_riders(source, target)
+	return dealt
+
+## "When the Forward that took damage from Cid Highwind is put from the field into the Break Zone on the same turn, ..."
+## (Cid 72/73).
+##
+## The rider is stored ON THE DAMAGED CARD, not on Cid: a one-turn status carrying the trigger that must run if THAT
+## Forward leaves the field. That is what makes it survive Cid leaving play, and carrying the CONTROLLER with it is
+## what sends the mill to the right player. `Card.turn_end()` expires it like any other status.
+func _apply_damage_caused_riders(source: Card, target: Card) -> void:
+	var rules = source.card_effects.get("on_causing_damage_to_forward", [])
+	if rules is Dictionary:
+		rules = [rules]
+	if not (rules is Array):
+		return
+	for rule in rules:
+		if not (rule is Dictionary):
+			continue
+		var status: String = str(rule.get("status", ""))
+		if status.is_empty():
+			continue
+		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller}
+		if rule.has("on_break"):
+			payload["on_break"] = rule["on_break"]
+		print("[Damage] %s marks %s (%s)" % [source.card_name, target.card_name, status])
+		target.add_status_effect(status, payload)
+
 func can_block(card: Card) -> bool:
 	if card == null:
 		return false

@@ -89,6 +89,18 @@ CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards`
 it), then move it to its owner's Break Zone — it was paid for. Do NOT set a flag and let it resolve with no effect;
 removal is what makes it never resolve.
 
+## Damage goes through Field.cause_damage
+
+Do NOT call `card.suffer_damage()` for game damage. `Field.cause_damage(target, amount, source, kind, controller)`
+applies `modify_damage`, lands the damage, and runs the dealer's `on_causing_damage_to_forward` riders. Every path
+(effect damage, combat, first strike, party damage, blocker split) already uses it; a new damage path must too or
+riders silently stop applying.
+
+A status can be a DICTIONARY payload: `{duration, controller, on_break}`. `Card.turn_end()` expires it like a number,
+and `Game.trigger_break_zone_keywords()` runs `on_break` once when the card reaches the Break Zone from the field. Use
+this shape when a trigger has to remember something about the card it is attached to (Cid 72/73's "the Forward that
+took damage from Cid").
+
 ## Rules live in scripts/rules.gd, not in Field
 
 `Field.rules` owns the CONTINUOUS-EFFECT QUERIES (created in `Field._ready`, bound to the board, NO Game

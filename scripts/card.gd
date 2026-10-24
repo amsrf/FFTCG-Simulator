@@ -643,6 +643,14 @@ func turn_end():
 				status_effects.erase(s)
 			else:
 				status_effects[s] = left
+		elif dur is Dictionary:
+			# A STATUS WITH A PAYLOAD. "This Forward that took damage from Cid" carries the trigger that must run if it
+			# leaves the field, and it still has to expire at end of turn like any other status.
+			var left: int = int(dur.get("duration", 0)) - 1
+			if left <= 0:
+				status_effects.erase(s)
+			else:
+				dur["duration"] = left
 
 	var remaining_buffs: Array = []
 	for p in power_array:
