@@ -92,12 +92,28 @@ func _ready() -> void:
 	_expect(_field.modify_damage(_owner, _target, 1000) == 2000, "source_is_self applies to the owner's damage")
 	_expect(_field.modify_damage(_other, _target, 1000) == 1000, "and not to another card's damage")
 
-	# --- status + consume_status ----------------------------------------------------------------------
-	_rule("set", 0, [{"status": "next_damage_zero"}])
-	_owner.card_effects["damage_modifiers"][0]["consume_status"] = "next_damage_zero"
-	_target.add_status_effect("next_damage_zero", 1)
-	_expect(_field.modify_damage(null, _target, 1000) == 0, "status condition applies")
-	_expect(not _target.status_effects.has("next_damage_zero"), "consume_status erases the marker")
+	# --- pending status payloads: the generic one-shot shield ----------------------------------------
+	_owner.card_effects["damage_modifiers"] = []
+	_target.add_status_effect("next_receiving_damage", 1, {"operation": "subtract", "value": 2000})
+	_expect(_field.modify_damage(null, _target, 5000) == 3000, "a status payload can subtract 2000")
+	_expect(not _target.status_effects.has("next_receiving_damage"), "and is consumed")
+	_target.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
+	_expect(_field.modify_damage(null, _target, 5000) == 0, "a status payload can set the damage to 0")
+	_expect(not _target.status_effects.has("next_receiving_damage"), "and is consumed")
+	_target.add_status_effect("next_receiving_damage", 1,
+		{"operation": "subtract", "value": 1000, "once": false})
+	_expect(_field.modify_damage(null, _target, 5000) == 4000, "once:false applies")
+	_expect(_field.modify_damage(null, _target, 5000) == 4000, "and keeps applying")
+	_expect(_target.status_effects.has("next_receiving_damage"), "while the status remains")
+	_target.turn_end()
+	_expect(not _target.status_effects.has("next_receiving_damage"), "and turn_end expires it")
+
+	# --- static status condition + consume_status -----------------------------------------------------
+	_rule("set", 0, [{"status": "test_marker"}])
+	_owner.card_effects["damage_modifiers"][0]["consume_status"] = "test_marker"
+	_target.add_status_effect("test_marker", 1)
+	_expect(_field.modify_damage(null, _target, 1000) == 0, "a static status condition still applies")
+	_expect(not _target.status_effects.has("test_marker"), "and consume_status erases the marker")
 
 	print("[DamageMods] %d checks | failures: %d" % [_checks, _fails])
 	print("[DamageMods] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

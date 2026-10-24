@@ -188,6 +188,14 @@ func modify_damage(source: Card, target: Card, amount: int, source_kind: String 
 		"source_kind": source_kind,
 		"source_controller": source_controller,
 	}
+	# PENDING STATUS MODIFIERS FIRST. A status payload with operation/value is a one-shot rule on the receiving card
+	# ("the next damage becomes 0", "the next damage is reduced by 2000"). The status NAME is irrelevant; applying it
+	# consumes it unless the payload says once: false, and turn_end() expires it if it was never used.
+	context["self"] = target
+	current = _apply_status_damage_modifiers(target, current, context)
+	context["amount"] = current
+	if current <= 0:
+		return 0
 	for owner in _cards():
 		if owner == null or not is_instance_valid(owner):
 			continue
@@ -350,3 +358,29 @@ func _apply_damage_operation(current: int, operation: String, value: Variant) ->
 		_:
 			push_warning("[DamageMod] unknown operation '%s'" % operation)
 			return current
+
+## Status payloads that modify incoming damage. The status NAME is deliberately irrelevant: anything carrying
+## operation/value is a rule. `once` defaults to true (the usual "next damage" wording); set once:false for a shield
+## that lasts for the status's duration. `conditions` may use the same context as static modifiers.
+func _apply_status_damage_modifiers(target: Card, amount: int, context: Dictionary) -> int:
+	var current: int = amount
+	for status in target.status_effects.keys():
+		var payload = target.status_effects[status]
+		if not (payload is Dictionary):
+			continue
+		if not payload.has("operation") or not payload.has("value"):
+			continue
+		if not _conditions_hold(payload.get("conditions", []), context):
+			continue
+		var operation: String = str(payload["operation"])
+		var value: Variant = _resolve_value(payload["value"], context)
+		var next: int = _apply_damage_operation(current, operation, value)
+		if next != current:
+			print("[DamageMod] status %s %s -> %d (%s)" % [status, operation, next, target.card_name])
+		current = next
+		context["amount"] = current
+		if bool(payload.get("once", true)):
+			target.status_effects.erase(status)
+		if current <= 0:
+			break
+	return current

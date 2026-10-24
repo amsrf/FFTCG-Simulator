@@ -151,6 +151,12 @@ means “same controller as this card”. Conditions are a list of blocks; all m
 `compare_values` with value refs (`{"context": "amount"}`, `{"context": "target", "property": "power"}`). Named
 conditions are only for non-numeric relations: `source_is_self`, `in_party_with_self`, `status`, `source_kind`.
 
+PENDING ONE-SHOT DAMAGE RULES are status payloads, not named flags. `add_status_effect(status, duration, payload)`
+stores the payload; any status whose payload has `operation` and `value` is applied to damage dealt to that card. The
+status name is only a label. `once` defaults to true; `once: false` keeps applying until `turn_end()` expires it. Do
+not reintroduce a `next_damage_zero`-style boolean — use a payload such as
+`{"operation": "set", "value": 0}` or `{"operation": "subtract", "value": 2000}`.
+
 Do NOT add a direct `card.suffer_damage()` call anywhere: it bypasses modifiers. `divide_damage` and the party-to-blocker
 hit were routed through `Field.cause_damage` for this reason.
 

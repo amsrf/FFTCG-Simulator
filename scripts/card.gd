@@ -611,8 +611,22 @@ func reset_for_field_arrival() -> void:
 	broken = false
 	untap()
 
-func add_status_effect(status,duration):
-	status_effects[status] = duration
+## A status is a duration (int) or a payload Dictionary with a "duration" inside. The optional `payload` form is how
+## a one-shot damage rule is carried: {"operation": "set", "value": 0} or {"operation": "subtract", "value": 2000}.
+## The pipeline does not know the status NAME; it reads any payload that has operation/value and consumes it
+## (unless once is false), and turn_end() expires it like any other status.
+func add_status_effect(status, duration, payload: Dictionary = {}):
+	if duration is Dictionary:
+		var entry: Dictionary = duration.duplicate()
+		entry.merge(payload, true)
+		status_effects[status] = entry
+		return
+	if payload.is_empty():
+		status_effects[status] = duration
+		return
+	var entry: Dictionary = payload.duplicate()
+	entry["duration"] = duration
+	status_effects[status] = entry
 
 ## Continuous GRANTS (an aura), as opposed to timed statuses. Counted so two sources can grant the same keyword and
 ## one leaving does not revoke the other's.

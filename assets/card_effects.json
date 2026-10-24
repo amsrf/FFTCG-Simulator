@@ -2646,26 +2646,15 @@
 						"name": "add_status_effect",
 						"author": "card",
 						"argument": [
-							"next_damage_zero",
-							1
+							"next_receiving_damage",
+							1,
+							{
+								"operation": "set",
+								"value": 0
+							}
 						]
 					}
 				]
-			}
-		],
-		"damage_modifiers": [
-			{
-				"targets": {
-					"is_source": true
-				},
-				"conditions": [
-					{
-						"status": "next_damage_zero"
-					}
-				],
-				"operation": "set",
-				"value": 0,
-				"consume_status": "next_damage_zero"
 			}
 		]
 	},
@@ -2790,7 +2779,8 @@
 				"multiply": "current * value, rounded to int.",
 				"add": "current + value.",
 				"subtract": "max(0, current - value)."
-			}
+			},
+			"pending_status_payloads": "A status whose payload has operation and value modifies incoming damage to that card. It is consumed after applying unless the payload says once: false; its duration expires in turn_end() if unused."
 		},
 		"conditions": {
 			"compare_values": "Object {left, op, right}; op is eq, neq, lt, lte, gt or gte.",
@@ -2872,7 +2862,7 @@
 			"instructions": "Instruction list resolved on the stack."
 		},
 		"instructions": {
-			"add_status_effect": "Add a status to the source card.",
+			"add_status_effect": "Add a status to the source card. Optional third argument is a payload dictionary, e.g. {\"operation\": \"set\", \"value\": 0} for a next-damage shield.",
 			"add_status_to_targets": "Add a status to every chosen target.",
 			"break_targets": "Break every chosen target.",
 			"break_zone_to_hand": "Choose a card in the Break Zone and add it to hand.",
@@ -2914,7 +2904,6 @@
 			"summoning_sickness": "Cannot tap until the next Active Phase.",
 			"frozen": "Does not activate in the next Active Phase.",
 			"skip_next_active": "Skips the next Active Phase and is consumed.",
-			"next_damage_zero": "The next damage dealt to this card becomes 0.",
 			"cannot_attack": "Cannot attack until it expires.",
 			"block_disabled": "Cannot block.",
 			"cannot_be_chosen": "Granted protection from being chosen.",
@@ -2922,7 +2911,8 @@
 			"brave": "Granted Brave.",
 			"haste": "Granted Haste.",
 			"fragile": "Exiled instead of entering the Break Zone.",
-			"raines_mark": "Cid Raines' on-break discard rider."
+			"raines_mark": "Cid Raines' on-break discard rider.",
+			"next_receiving_damage": "Payload status: operation/value modifies damage to this card, once by default; set once:false for a duration-long shield. The status name is only a label."
 		}
 	}
 }

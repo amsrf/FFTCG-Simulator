@@ -4,6 +4,27 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Pending Damage Modifiers (status payloads)
+
+A one-shot damage rule is no longer a hardcoded status name. `add_status_effect` accepts an optional payload:
+
+```json
+{"name": "add_status_effect", "author": "card",
+ "argument": ["next_receiving_damage", 1, {"operation": "set", "value": 0}]}
+```
+
+Any status whose payload has `operation` and `value` is applied by the damage pipeline to damage dealt to that card.
+The status name is only a label. `once` defaults to `true` (the usual “next damage” wording); `once: false` keeps it
+active for the status's duration, and `turn_end()` expires it if unused.
+
+This replaces `next_damage_zero`. Gordon 160 now carries no static `damage_modifiers`; its skill adds
+`next_receiving_damage` with `{"operation":"set","value":0}`. The same shape supports “the next damage is reduced by
+2000” as `{"operation":"subtract","value":2000}`.
+
+`tests/damage_modifiers_probe.gd` now has 20 checks, including subtract/set status payloads, `once: false`,
+`turn_end()` expiry, and the static `status` + `consume_status` feature.
+
+
 ### Generic Damage Modifiers: context, compare_values and definitions
 
 `Rules.modify_damage()` is now the one damage-modifier pipeline. It reads `damage_modifiers` from every card on the
@@ -45,7 +66,7 @@ in behavior.
 
 The B2 prevention cards now use the generic damage-modifier pipeline described above:
 
-* **160 Gordon** — a `next_damage_zero` status, consumed by the damage it prevents or expiring in `turn_end()`.
+* **160 Gordon** — a `next_receiving_damage` status payload (`operation: set, value: 0`), consumed by the damage it prevents or expiring in `turn_end()`.
 * **165/166 Knight** — if the target Forward is in a party with a Knight, the OTHER members take 0. Live
   `party_members()` query; Knight itself is not protected; the protection disappears when the party does.
 * **171 Minwu** — a Forward controlled by Minwu's controller takes 0 when the incoming damage is less than its

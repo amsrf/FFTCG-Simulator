@@ -39,10 +39,12 @@ func _make(id: int, side: String) -> Card:
 
 func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("160", {}).get("skill", [{}])[0].get("instructions", [{}])[0].get("argument", [""])[0]
-		== "next_damage_zero", "Gordon 160 grants a one-shot damage shield")
-	_expect(effects.get("160", {}).get("damage_modifiers", [{}])[0].get("consume_status") == "next_damage_zero",
-		"and its damage modifier consumes that status")
+	var gordon_arg: Array = effects.get("160", {}).get("skill", [{}])[0].get("instructions", [{}])[0].get("argument", [])
+	_expect(gordon_arg[0] == "next_receiving_damage"
+		and gordon_arg[2].get("operation") == "set" and int(gordon_arg[2].get("value", -1)) == 0,
+		"Gordon 160 grants a next-receiving-damage payload that sets it to 0")
+	_expect(not effects.get("160", {}).has("damage_modifiers"),
+		"the shield is carried by the status payload, not a static modifier")
 	_expect(effects.get("165", {}).get("damage_modifiers", [{}])[0].get("operation") == "set"
 		and effects.get("166", {}).get("damage_modifiers", [{}])[0].get("operation") == "set",
 		"both Knights carry a generic damage modifier")
@@ -64,12 +66,12 @@ func _ready() -> void:
 
 	# --- 160 Gordon: the next damage is 0, then the shield is spent --------------------------------
 	var gordon: Card = _make(GORDON, "player")
-	gordon.add_status_effect("next_damage_zero", 1)
+	gordon.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
 	var first: int = _field.cause_damage(gordon, 3000)
 	var second: int = _field.cause_damage(gordon, 3000)
 	print("[B2] Gordon: first %d, second %d, accumulated %d" % [first, second, gordon.accumulated_damage])
 	_expect(first == 0 and gordon.accumulated_damage == 3000, "Gordon 160's shield eats the first damage only")
-	_expect(not gordon.status_effects.has("next_damage_zero"), "and the shield is consumed")
+	_expect(not gordon.status_effects.has("next_receiving_damage"), "and the shield is consumed")
 	_game.call("put_card_into_graveyard", gordon)
 
 	# --- 171 Minwu: damage below the Forward's power is 0 ----------------------------------------
