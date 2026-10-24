@@ -239,6 +239,19 @@ func _ready() -> void:
 			"and a legal Forward for Ifrit to aim at, so the cast is not refused before payment")
 	_expect(tfield.get_front_cards_for("opponent").size() >= 1,
 		"the opponent has a Forward on the board for that")
+	# TERRA IS HERSELF A FORWARD — she just cannot be chosen by the opponent's Summons, which is exactly why the
+	# board needs a second one. Both halves are asserted so this ground cannot drift again.
+	_expect(ground_terra != null and ground_terra.type == "Forward", "Terra herself is a Forward")
+	if ground_ifrit != null and ground_terra != null:
+		tfield.set_viable_targets({"is_type": "Forward"}, ground_ifrit, "Summon")
+		_expect(not ground_terra.is_valid_target,
+			"but she is NOT a legal target for your Summon (her own protection)")
+		var squall_ok: bool = false
+		for c in tfield.get_front_cards_for("opponent"):
+			if c != ground_terra and c.is_valid_target:
+				squall_ok = true
+		_expect(squall_ok, "while another opponent Forward is")
+		tfield.reset_targets()
 	terra_game.queue_free()
 	await get_tree().process_frame
 

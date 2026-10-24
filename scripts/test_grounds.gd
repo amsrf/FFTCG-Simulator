@@ -46,7 +46,7 @@ const ICE_B := 43        # Snow,   ice Forward — HAS a when-attack dull effect
 const BARD := 35         # Bard,   ice Forward 4000, no effects — passive, safe to attack with
 const DARK_KNIGHT := 55  # Dark Knight, ice Forward 8000, no effects — the intended blocker
 const FIRE := 12         # Zack,   fire Forward
-const TERRA := 46        # Terra,  fire Backup — raises the OPPONENT's Summon costs by 1
+const TERRA := 46        # Terra,  ice Forward — raises the OPPONENT's Summon costs by 1, and their Summons cannot choose her
 const CHOCOBO := 75      # Chocobo, wind Forward — "forms a party and attacks: party gains +3000"
 const HOPE := 82         # Hope,    wind Forward (the second half of the wind pair)
 const ZIDANE := 71       # cannot be chosen by the opponent's Summons/abilities
@@ -137,8 +137,10 @@ static func break_zone() -> Dictionary:
 ## Two fire Backups are on your board: exactly enough to pay the surcharged cost, so the cast itself is still possible
 ## and you can see it through to the stack.
 ##
-## AND A FORWARD TO AIM AT. Terra is a BACKUP, so without ICE_A the opponent's board has no legal Ifrit target and
-## Hand.charge() refuses the cast before payment — the card just returns to hand, which looks like the surcharge broke.
+## AND A SECOND FORWARD TO AIM AT. Terra IS a Forward — but she cannot be chosen by the opponent's Summons, so on her
+## own the board has no legal Ifrit target: Hand.charge() refuses the cast before payment and the card returns to hand,
+## which reads as the surcharge being broken. ICE_A (Squall) is both a legal target and a demonstration that Terra
+## herself is not one.
 static func terra_cost() -> Dictionary:
 	var cfg: Dictionary = _base()
 	cfg["preset"] = "ground_terra"

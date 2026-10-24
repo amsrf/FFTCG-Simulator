@@ -69,8 +69,6 @@ func _ready() -> void:
 	var own_terra: Card = _make(TERRA, "player")
 	_expect(_field.effective_cost(ifrit) == base,
 		"your OWN Terra does not raise your Summons")
-	# Terra is herself a fire BACKUP, so take her off the board before counting the caster's mana sources.
-	_field.remove_card(own_terra)
 
 	# --- Terra on the OPPONENT's side does ----------------------------------------------------------------
 	var enemy_terra: Card = _make(TERRA, "opponent")
