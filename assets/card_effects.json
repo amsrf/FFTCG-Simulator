@@ -573,4 +573,19 @@
 			"by":["Summon","Ability"]
 		}
 	}
+,
+	"17":{
+		"shields":{
+			"targets":{"is_named":"Sazh"},
+			"from":"opponent",
+			"by":["Summon","Ability"]
+		}
+	},
+	"45":{
+		"shields":{
+			"targets":{"is_named":"Snow"},
+			"from":"opponent",
+			"by":["Ability"]
+		}
+	}
 }

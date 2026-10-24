@@ -4,6 +4,27 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Choice shields: Dajh 17 and Serah 45
+
+"The Card Name Sazh you control cannot be chosen by your opponent's Summons or abilities" and Serah's Snow version are
+GRANTS from one card to another, so they are a field query — `Field.is_protected_from_being_chosen(card, source,
+source_kind)` — asked from the targeting gate (`_card_matches_criteria`), next to the printed `cannot_be_chosen` rule.
+
+```json
+"17": { "shields": { "targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon","Ability"] } }
+"45": { "shields": { "targets": {"is_named": "Snow"}, "from": "opponent", "by": ["Ability"] } }
+```
+
+**SET EFFECTS ARE DELIBERATELY NOT FILTERED.** "Cannot be chosen" only stops CHOOSING; an effect that says "all the
+Backups" still hits a shielded card, because nobody chose it. `_cards_matching` (apply_effect) is untouched, and the
+probe asserts it: an opponent's all-Backups effect still matches Sazh.
+
+Because the shield is continuous, the target set needs no stamping: Sazh is shielded the moment Dajh is on the field.
+
+Coverage: **60 implemented / 7 plain / 33 to do**. New probe `shield_probe` (14 checks), including the targeting gate
+itself (Sazh not a legal target vs the opponent's ability, but legal vs your own) and Serah's Summon exception.
+
+
 ### Auron's protection: a query, not a status (card 2)
 
 "The Backups you control cannot be broken by your opponent's Summons or abilities" is now a CONTINUOUS field query,

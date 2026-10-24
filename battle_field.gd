@@ -924,7 +924,16 @@ func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Car
 	# ("one of yours") need to know whose effect is asking.
 	if not card.matches_criteria(target_criteria, source):
 		return false
-	return card.can_be_chosen_by(source, source_kind)
+	if not card.can_be_chosen_by(source, source_kind):
+		return false
+	# A SHIELD GRANTED BY ANOTHER CARD (Dajh -> Sazh, Serah -> Snow). The printed rule above is self-contained; this one
+	# is a continuous field effect, so the board has to be asked.
+	#
+	# ONLY THE CHOOSING GATE. "All your Backups" effects still hit a card that cannot be chosen — it was never chosen —
+	# which is why `_cards_matching` (apply_effect) deliberately does NOT ask this.
+	if source != null and is_protected_from_being_chosen(card, source, source_kind):
+		return false
+	return true
 		
 func reset_targets():
 	# Every meaning a targeting session can leave behind: the blue prompt, the ORANGE pick, and
@@ -1284,6 +1293,41 @@ func set_blockable(controller: String, enabled: bool) -> void:
 ##   "protects": {"targets": {"is_type": "Backup", "controller": "player"},
 ##                "from": "opponent", "by": ["Summon", "Ability"]}
 ## `targets` is read from the PROTECTOR's perspective, and `by` may be omitted to mean any effect.
+##
+## GRANTED CHOICE PROTECTION — "The Card Name Sazh you control cannot be chosen by your opponent's Summons or
+## abilities" (Dajh). Same continuous shape as the break rule, but asked from the TARGETING gate only: a set effect
+## ("all the Backups") still hits the card, because it was never chosen.
+##
+##   "shields": {"targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon", "Ability"]}
+func is_protected_from_being_chosen(card: Card, source: Card, source_kind: String) -> bool:
+	if card == null or source == null:
+		return false
+	for protector in get_all_cards():
+		if protector == null or not is_instance_valid(protector):
+			continue
+		var rules = protector.card_effects.get("shields", [])
+		if rules is Dictionary:
+			rules = [rules]
+		if not (rules is Array):
+			continue
+		for rule in rules:
+			if not (rule is Dictionary):
+				continue
+			var targets: Dictionary = rule.get("targets", {})
+			if not card.matches_criteria(targets, protector):
+				continue
+			var scope: String = str(rule.get("from", ""))
+			if scope == "opponent" and source.controller == protector.controller:
+				continue
+			if (scope == "own" or scope == "controller") and source.controller != protector.controller:
+				continue
+			var kinds: Array = rule.get("by", [])
+			# An empty kind is combat; a Summon/Ability list never contains it, so it is refused below.
+			if not kinds.is_empty() and not (source_kind in kinds):
+				continue
+			return true
+	return false
+
 func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
 	if card == null or source_kind.is_empty():
 		# An empty kind is combat damage — no Summon or ability to be protected from.

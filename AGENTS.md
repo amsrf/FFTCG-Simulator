@@ -43,6 +43,17 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Choice Shields (Dajh, Serah)
+
+A "cannot be chosen" rule can be SELF-PRINTED (`Card.can_be_chosen_by`, Zidane) or GRANTED to another card
+(`Field.is_protected_from_being_chosen`, Dajh -> Sazh, Serah -> Snow). The granted form is a continuous field query
+asked from `_card_matches_criteria`, so the blue ring, click validation and the AI's targeting all inherit it.
+
+**It is asked ONLY at the choosing gate.** "All the Backups" effects still hit a shielded card: it was not chosen. Do
+not add the check to `_cards_matching` / `apply_effect`.
+
+Data: `"shields": {"targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon","Ability"]}`.
+
 ## Break Protection (Auron)
 
 Protection is a CONTINUOUS QUERY, not a status stamped on each protected card:
