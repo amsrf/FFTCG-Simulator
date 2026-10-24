@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Blocking Restrictions (batch 3)
+
+  27 Lann     cannot be blocked by a Forward with GREATER power; and cannot block one either
+  85 Yuffie   cannot be blocked by a Forward of cost 4 or more
+  86 Yuffie   cannot be blocked by a Forward of cost 3 or more
+
+Two predicates carry the rule, one per side:
+`Card.allows_blocker(blocker)` (attacker-side `cannot_be_blocked_by`) and `Card.can_block_attacker(attacker)`
+(blocker-side `cannot_block`, Lann's second clause). `Field.can_block()` is still the single gate — the blue ring, the
+click handler and the AI's blocker choice all read it.
+
+**PARTY RULE (Advanced Rules 15.1.1.9.6).** A Forward blocks a party if it can legally block AT LEAST ONE member, and
+that blocks the whole party. The tempting inverse ("illegal if any member refuses this blocker") is wrong: a party of
+Yuffie 86 (no cost 3+) and Yuffie 85 (no cost 4+) IS blockable by a cost-3 Forward, because it can block the 85. The
+probe asserts exactly that pair from the rulebook, and that a cost-4 Forward blocks neither.
+
+Deferred: Yuffie 85's S ability (Bloodfest — divide 6000 damage among up to 3 Forwards) needs the damage-division UI,
+the same shape as the party split. Its printed restriction is done.
+
+Coverage: **57 implemented / 7 plain / 36 to do**. New probe `block_restriction_probe` (12 checks).
+
+
 ### Choosing Between Abilities (skill picker modal)
 
 A card with more than one `skill` entry (Rikku 89: her normal mill and her S ability) now opens a modal instead of

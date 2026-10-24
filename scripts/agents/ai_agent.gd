@@ -206,10 +206,16 @@ func decide_blocker(player_id: int, attacker: Card) -> Card:
 	# Blocking with a strictly bigger Forward is free: the blocker takes the
 	# attacker's power as damage (less than its own) and breaks the attacker.
 	# Prefer the smallest such Forward so the larger ones stay available.
+	#
+	# LEGALITY COMES FROM THE FIELD, not from a local copy of the rules: "cannot be blocked by a Forward of cost N or
+	# more", a party being blockable if any member can be blocked, and so on all live in Field.can_block().
 	if attacker == null:
 		return null
+	var field = game.get("field")
 	var best: Card = null
 	for card in _untapped_forwards(player_id):
+		if field != null and not field.can_block(card):
+			continue
 		if card.power <= attacker.power:
 			continue
 		if best == null or card.power < best.power:

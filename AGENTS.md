@@ -43,6 +43,15 @@ it moves, which is what makes it face-up at Break Zone size during the flight ra
 
 Knobs (per node, Inspector): `mill_seconds` 1.0, `mill_arc_height` 0.9 m, `mill_ease`.
 
+## Blocking Legality
+
+Two predicates, one per side of the pair: `Card.allows_blocker(blocker)` (attacker-side `cannot_be_blocked_by`) and
+`Card.can_block_attacker(attacker)` (blocker-side `cannot_block`). `Field.can_block()` is the ONLY gate — the blue
+ring, the click handler and `AIAgent.decide_blocker` all read it, so they cannot disagree.
+
+**A party is blocked if the blocker can legally block AT LEAST ONE member** (Advanced Rules 15.1.1.9.6), not if it can
+block every member. A party of Yuffie 86 (no cost 3+) + Yuffie 85 (no cost 4+) is blockable by a cost-3 Forward.
+
 ## Multiple Abilities on One Card
 
 `card_effects["skill"]` is a list. `Field.begin_skill_activation(card)` with a NEGATIVE index means "ask the owner":

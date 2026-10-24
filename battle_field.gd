@@ -1279,7 +1279,28 @@ func can_block(card: Card) -> bool:
 		return false
 	if card.status_effects.has("block_disabled"):
 		return false
-	return card.can_attack()
+	if not card.can_attack():
+		return false
+	if attacker_card == null:
+		return true
+	# AT LEAST ONE MEMBER, NOT ALL OF THEM. Advanced Rules 15.1.1.9.6: a Forward can block a party if it can legally
+	# block at least ONE Forward that makes it up, and that blocks the whole party. For a single attacker this is just
+	# "that attacker", so the same loop covers both.
+	#
+	# (The tempting inverse — "illegal if any member refuses this blocker" — is wrong: a party of two Yuffies with
+	# "cannot be blocked by cost 3+ / 4+" is blockable by a cost-3 Forward, because it can block the cost-4 one.)
+	var members: Array = party_members()
+	if members.is_empty():
+		members = [attacker_card]
+	for member in members:
+		if member == null or not is_instance_valid(member):
+			continue
+		if not member.allows_blocker(card):
+			continue
+		if not card.can_block_attacker(member):
+			continue
+		return true
+	return false
 
 ## The review link: the arc that shows what a card IN THE STACK was pointed at, re-drawn on
 ## demand as the player moves over the stack (see Stack.refresh_target_display).

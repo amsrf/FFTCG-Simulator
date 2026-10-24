@@ -544,4 +544,15 @@
 			}
 		]
 	}
+,
+	"27":{
+		"cannot_be_blocked_by":{"greater_power":true},
+		"cannot_block":{"greater_power":true}
+	},
+	"85":{
+		"cannot_be_blocked_by":{"min_cost":4}
+	},
+	"86":{
+		"cannot_be_blocked_by":{"min_cost":3}
+	}
 }

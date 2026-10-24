@@ -743,6 +743,36 @@ func can_attack():
 	if(type != 'Forward'):
 		return false
 	return true
+
+## Can THIS card, as the ATTACKER, be blocked by `blocker`? One side of the blocking legality — attacker-side
+## restrictions like Yuffie's "cannot be blocked by a Forward of cost 4 or more".
+##
+## Data: "cannot_be_blocked_by": {"min_cost": 4} or {"greater_power": true}.
+func allows_blocker(blocker: Card) -> bool:
+	if blocker == null:
+		return false
+	var rule = card_effects.get("cannot_be_blocked_by", {})
+	if not (rule is Dictionary):
+		return true
+	if rule.has("min_cost") and int(blocker.cost) >= int(rule["min_cost"]):
+		return false
+	if bool(rule.get("greater_power", false)) and blocker.power > power:
+		return false
+	return true
+
+## The other side: can THIS card, as the BLOCKER, legally block `attacker`? Lann also cannot block a Forward with
+## greater power than his own. Data: "cannot_block": {"min_cost": n} or {"greater_power": true}.
+func can_block_attacker(attacker: Card) -> bool:
+	if attacker == null:
+		return true
+	var rule = card_effects.get("cannot_block", {})
+	if not (rule is Dictionary):
+		return true
+	if rule.has("min_cost") and int(attacker.cost) >= int(rule["min_cost"]):
+		return false
+	if bool(rule.get("greater_power", false)) and attacker.power > power:
+		return false
+	return true
 		
 func attack():
 	tap()
