@@ -121,17 +121,16 @@ ability must land on top of the Summon/ability that caused it, so it resolves fi
 
 ### Static entry rules are board queries
 
- is read from  at the moment a Character enters ().
+`on_character_enter` is read from `get_all_cards()` at the moment a Character enters (`Field._apply_entry_rules`).
 Do NOT register a listener for it: a source that leaves the field stops being found automatically, which is exactly
 the teardown-free behaviour we want. It is O(field) per entry; index it only if such rules become numerous.
 
 ### Unique names are checked before entry
 
- calls  BEFORE reparenting. The card on the field is kept;
-the new copy goes through  (, no enter-the-field trigger).
-Setup () is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
-purpose, and no current effect changes a name in place. Add one in  if that changes.
-
+`Field.play_card()` calls `Game.would_be_unique_name_conflict()` BEFORE reparenting. The card on the field is kept;
+the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false`, no enter-the-field trigger).
+Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
+purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
 B1 introduced these primitives; use them rather than adding one-off code:
 
