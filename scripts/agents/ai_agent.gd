@@ -35,7 +35,7 @@ func _is_safe_to_play(card: Card) -> bool:
 	# delegates to it for a non-local owner). Only cast one when a legal target
 	# actually exists, otherwise the targeting session opens with nothing valid.
 	if card.type == "Summon":
-		var criteria: Dictionary = card.get_cast_target_criteria()
+		var criteria = card.get_cast_target_criteria()
 		if criteria.is_empty():
 			return true
 		return game.field.has_viable_target(criteria, card, "Summon")

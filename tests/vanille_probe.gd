@@ -91,7 +91,9 @@ func _ready() -> void:
 	_expect(graveyard.graveyard_cards.has(card) and not card.is_on_field(),
 		"the guarded return is SKIPPED when the search did not happen")
 
-	# Succeeded: now it comes back, dull.
+	# Succeeded: now it comes back, dull. The source has to be set again because finishing the previous chain cleaned
+	# the instruction stack, which is what a real chain does at its end.
+	_game.set("_current_source_card", card)
 	_game.set("_last_action_succeeded", true)
 	var unguarded: Array[Instruction] = [
 		Instruction.new("return_from_break_zone", "game", [true], "if_last_succeeded"),

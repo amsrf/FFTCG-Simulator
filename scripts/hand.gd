@@ -693,7 +693,7 @@ func charge(card) -> bool:
 		# requires one). The card leaves the hand and is parked on the stack
 		# visually, but it only legally enters the stack after the cost is
 		# paid and the target is confirmed.
-		var criteria: Dictionary = card.get_cast_target_criteria()
+		var criteria = card.get_cast_target_criteria()
 		if not criteria.is_empty() and not field.has_viable_target(criteria, card, "Summon"):
 			push_error("No viable target for %s" % card.card_name)
 			return false

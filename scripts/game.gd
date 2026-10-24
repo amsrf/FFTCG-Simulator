@@ -30,7 +30,13 @@ const DECK_SEARCH := preload("res://deck_search.tscn")
 const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 
 
+## Emitted when an instruction CHAIN has really finished — not merely when its queue is empty, because an instruction
+## that suspends on an animation or a modal leaves the queue empty while it is still running.
+signal instructions_finished
+
 var _current_instructions: Array[Instruction]
+## True from the moment a fresh chain starts until its last instruction has actually completed.
+var _instructions_running: bool = false
 var _current_source_card: Card
 var _current_controller: String
 var _current_attacker_card: Card
@@ -140,14 +146,23 @@ func divide_damage(_total: int = 0) -> void:
 		card.suffer_damage(amount)
 	enforce_game_state_rules()
 
-func _each_target(action: String, argument: Array = []) -> void:
-	for card in _targets:
+## The targets an instruction applies to: all of them, or the ONE at `index`. Staged effects (Hades: dull the
+## Forward, return the Backup) need to say which pick they mean.
+func _selected_targets(index: int = -1) -> Array:
+	if index < 0:
+		return _targets
+	if index < _targets.size():
+		return [_targets[index]]
+	return []
+
+func _each_target(action: String, argument: Array = [], index: int = -1) -> void:
+	for card in _selected_targets(index):
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			card.callv(action, argument)
 	enforce_game_state_rules()
 
-func untap_targets(_argument = null) -> void:
-	_each_target("untap")
+func untap_targets(index: int = -1) -> void:
+	_each_target("untap", [], index)
 
 ## CANCEL THE CHOSEN STACK OBJECTS (Summoner 53). The target is a Summon that has not resolved yet, so this is not
 ## `_each_target` — it has no `is_on_field()` and the removal belongs to the Stack.
@@ -160,19 +175,19 @@ func cancel_targets(_argument = null) -> void:
 ##
 ## It deliberately does NOT go through Card.can_tap(): dulling is not a tap COST, it is the effect. A Frozen card,
 ## a summoning-sick card and a card that was just activated can all still be dulled by an opponent's effect.
-func dull_targets(_argument = null) -> void:
-	_each_target("tap")
+func dull_targets(index: int = -1) -> void:
+	_each_target("tap", [], index)
 
 ## DAMAGE TO EVERY TARGET. This is what "deal 3000 damage to all the Forwards opponent controls" needed: the target
 ## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
 ## it could only ever hit one card.
-func damage_targets(amount: int = 0) -> void:
+func damage_targets(amount: int = 0, index: int = -1) -> void:
 	if amount <= 0:
 		return
 	# THE CAUSE GOES WITH THE DAMAGE. Protection like Auron's is judged when the break happens — possibly later, in
 	# the state-based sweep — so each card records who dealt this and with what. The SOURCE CARD is passed as well,
 	# which is what lets "Warrior of Light doubles its damage" apply to effect damage too.
-	for card in _targets:
+	for card in _selected_targets(index):
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			var dealt: int = field.modify_damage(_current_source_card, card, amount)
 			card.suffer_damage(dealt, _effect_kind(), _current_controller, _current_source_card)
@@ -187,8 +202,8 @@ func damage_targets(amount: int = 0) -> void:
 ## method through the shared loop. So this is its own walk, and it is short because break_card() does the work.
 ##
 ## is_on_field() is checked per card, so a card already broken earlier in the loop cannot be broken twice.
-func break_targets(_argument = null) -> void:
-	for card in _targets:
+func break_targets(index: int = -1) -> void:
+	for card in _selected_targets(index):
 		if card != null and is_instance_valid(card) and card.is_on_field():
 			print("[Break] ", card.card_name)
 			break_card(card, _current_controller, _effect_kind())
@@ -216,9 +231,9 @@ const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
 ## presentation lags, and the effect does not resolve until every animation has finished.
 ##
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
-func return_targets_to_hand(_argument = null) -> void:
+func return_targets_to_hand(index: int = -1) -> void:
 	var batch = ANIMATION_BATCH.new()
-	for card in _targets:
+	for card in _selected_targets(index):
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
 		var owner_hand: Hand = hand_for(1 if card.controller == "player" else 2)
@@ -239,10 +254,10 @@ func return_targets_to_hand(_argument = null) -> void:
 ## The loop settles state-based actions afterwards like every other verb — which is exactly right here, because a
 ## power REDUCTION can put a card at 0 and move it to the Graveyard, and that check must happen before the next
 ## instruction sees the board.
-func power_change_targets(amount: int = 0, duration: int = 1) -> void:
+func power_change_targets(amount: int = 0, duration: int = 1, index: int = -1) -> void:
 	if amount == 0:
 		return
-	_each_target("power_change", [amount, duration])
+	_each_target("power_change", [amount, duration], index)
 
 ## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
@@ -616,9 +631,15 @@ func _execute_instructions(instructions: Array[Instruction]) -> void:
 	_current_instructions = instructions + _current_instructions
 	if fresh_chain:
 		_last_action_succeeded = false
+		_instructions_running = true
 	_process_next_instruction()
-	if(_current_instructions.is_empty()):
-		_clean_instruction_stack()
+
+## The awaitable form of the instruction chain, for callers that must know it has really finished. Safe when the chain
+## runs synchronously: `_instructions_running` is already false, so there is nothing to wait for.
+func _execute_instructions_and_wait(instructions: Array[Instruction]) -> void:
+	_execute_instructions(instructions)
+	while _instructions_running:
+		await instructions_finished
 
 ## TURN HISTORY. Deliberately a plain ledger, not a rules engine: `turn_history[turn_number]` is the list of things
 ## that happened during that turn, in order, so a condition can ask "have I cast Alexander this turn?".
@@ -754,6 +775,11 @@ func _process_next_instruction() -> void:
 		# All instructions resolved: apply state-based actions so a card
 		# whose accumulated damage has reached its power is broken now.
 		enforce_game_state_rules()
+		# THE CHAIN IS FINISHED, and this is the only place that knows it. An instruction that suspends on an
+		# animation or a modal leaves the queue empty WHILE IT IS STILL RUNNING, so emptiness alone cannot mean done.
+		_clean_instruction_stack()
+		_instructions_running = false
+		instructions_finished.emit()
 		return
 
 	# CONDITIONAL GUARD. Checked BEFORE the instruction is resolved, and it consumes no state of its own: the flag is
@@ -1684,7 +1710,10 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 				instruction.value = chosen
 			break
 
-	_execute_instructions(instructions)
+	# AWAITED. Resolution is not complete until every instruction has finished, including the ones that suspend on an
+	# animation (return to hand) or on a modal — otherwise the next effect can resolve while this one is still moving
+	# cards, and resolve_top_effect() returns before the board has changed.
+	await _execute_instructions_and_wait(instructions)
 
 	if card.effect_source == null:
 		# A real card cast from hand (Summon) resolves to its controller's

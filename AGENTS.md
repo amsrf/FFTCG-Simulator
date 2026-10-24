@@ -57,6 +57,24 @@ Sacrifice is chosen by the OWNER through `Agent.choose_sacrifice()` (LocalAgent 
 takes the cheapest) and is paid at activation. Aborting it clears the proxy. A skill whose sacrifice has no candidates
 is not offered by `can_activate_now`, so the green ring and the picker agree.
 
+## Targeting can have STAGES
+
+`"choose_target"` may be a Dictionary (one stage) or an **Array of stages**, asked in order — Hades 52 is Forward
+then Backup. `Field.targeting_blocks` holds them; `_begin_target_block(index)` starts one; a pick advances to the
+next stage automatically, and Confirm appears only after the last.
+
+`has_viable_target()` requires EVERY stage to have a legal candidate: mandatory targets are judged at cast time, so a
+missing stage makes the card illegal to play.
+
+Instructions address a stage with an index: `dull_targets(0)`, `return_targets_to_hand(1)`. `_selected_targets(index)`
+is the single place that decides "all picks" (index < 0) or one pick. Add an index parameter to any new
+target-instruction wrapper the same way.
+
+The instruction chain is now awaitable: `_execute_instructions_and_wait()` waits for `instructions_finished`, which is
+emitted only from the empty-queue branch. Do NOT treat an empty `_current_instructions` as finished — an instruction
+that suspends on an animation or a modal empties the queue while it is still running. `_clean_instruction_stack()`
+runs at that same chain end.
+
 ## Targeting has a DOMAIN: field or stack
 
 `"choose_target": {"in": "stack", ...}` makes the session's candidates come from `Stack.cards` instead of the field.

@@ -293,7 +293,7 @@ func _continue_summon_after_mana(card: Card) -> void:
 	# Payment is only committed when the summon actually enters the stack
 	# (after target confirmation). If the summon needs a target, target
 	# selection happens now and may still be cancelled.
-	var criteria: Dictionary = card.get_cast_target_criteria()
+	var criteria = card.get_cast_target_criteria()
 	if criteria.is_empty():
 		_commit_summon_to_stack()
 		request_priority.emit()
@@ -617,7 +617,13 @@ func process_next_effect():
 
 func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: bool = false) -> void:
 	if summon_casting_card != null:
-		summon_casting_card.effect_target = target_card
+		# A STAGED SUMMON records every pick, not just the last (Hades: Forward + Backup). The single-target
+		# assignment stays for the ordinary case.
+		var summon_picks: Array = get_parent().field.targeting_picked
+		if summon_picks.size() > 1:
+			summon_casting_card.set_effect_targets(summon_picks)
+		else:
+			summon_casting_card.effect_target = target_card
 		return
 	# AN EMPTY STACK IS NOT AN ERROR HERE. A multi-target session emits this once per pick, and by a later pick the effect
 	# may already have resolved and been popped — there is simply no stack object left to record a target on, and

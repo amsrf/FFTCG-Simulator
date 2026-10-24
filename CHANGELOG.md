@@ -4,6 +4,38 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Staged targeting: Hades 52
+
+`choose_target` may now be an **Array of stages**, asked in order:
+
+```json
+"choose_target": [ {"is_type": "Forward", "controller": "opponent"},
+                   {"is_type": "Backup",  "controller": "opponent"} ]
+```
+
+The session advances as soon as a stage is full (the Forward keeps its ring and the blue prompt moves to the Backups),
+and Confirm appears once, after the last stage. Right-click steps back across a stage boundary and asks for the
+previous stage again.
+
+**Mandatory stages.** `has_viable_target()` returns false unless EVERY stage has a legal candidate, so with no Backup
+on the opponent's board Hades cannot be cast at all — the rule the user quoted.
+
+**Instructions can name a stage**: `dull_targets(0)` and `return_targets_to_hand(1)`, via `_selected_targets(index)`.
+Every existing `[...]`/no-argument instruction keeps its old "all targets" meaning.
+
+**Resolution now really waits for its instructions.** `_execute_instructions` used to fire the chain and return, so
+`resolve_top_effect()` marked itself complete while an instruction was still animating or waiting on a modal. A chain
+is now reported finished only from the empty-queue branch (`_instructions_running` + `instructions_finished`), and the
+stack handler awaits it. This is what made Hades' "return the Backup to hand, then discard" testable in one pass —
+and it was latent for every return-to-hand, discard and modal instruction before.
+
+New probe `hades_probe` (21 checks). Coverage: **85 implemented / 7 plain / 8 to do**.
+
+Known cosmetic issue: one Godot engine `ERROR: Condition "det == 0" is true` appears during the return animation in
+this flow. Behaviour is correct; it is an arrow/transform edge case on a card leaving the field mid-animation and is
+queued as a follow-up.
+
+
 ### Chip cards: Ninja 78, Bartz 81, Amodar 91
 
 Three small pieces of vocabulary, one per card:

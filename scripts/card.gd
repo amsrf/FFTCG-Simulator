@@ -793,13 +793,14 @@ func attack():
 func get_cost() -> Dictionary:
 	return {element:1, "neutral":cost-1}
 
-func get_cast_target_criteria() -> Dictionary:
+func get_cast_target_criteria() -> Variant:
 	# Targeting requirement for casting (Summons use "when_cast").
+	# A Dictionary is one stage; an Array is several, asked in order (Hades: Forward, then Backup).
 	if "when_cast" in card_effects:
 		var entry = card_effects["when_cast"]
 		if entry is Dictionary and entry.has("choose_target"):
 			var criteria = entry["choose_target"]
-			if criteria is Dictionary:
+			if criteria is Dictionary or criteria is Array:
 				return criteria
 	return {}
 

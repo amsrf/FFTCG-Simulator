@@ -44,6 +44,12 @@ var targeting_source_kind: String = ""
 ## Where this session's candidates come from: "field" (default) or "stack". Set from the effect's
 ## `"choose_target": {"in": "stack"}` — Summoner 53 picks a Summon that has not resolved yet.
 var targeting_domain: String = "field"
+## SEQUENTIAL STAGES. "Choose 1 Forward and 1 Backup" is one criteria block per pick stage:
+## `"choose_target": [ {...Forward...}, {...Backup...} ]`. A single block (the normal case) is a one-element list,
+## and `count` keeps its old meaning WITHIN a stage (Aerith's "up to 3 Backups").
+var targeting_blocks: Array = []
+var targeting_block_index: int = 0
+var targeting_block_start: int = 0
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
@@ -781,19 +787,10 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	# Card.matches_criteria() treats every key as a METHOD NAME ON CARD and errors out on anything else — so leaving
 	# "count" in the criteria made has_method("count") false, which made every candidate illegal and meant no pick could
 	# ever be recorded. That is a silent failure: the ring simply never lit.
-	targeting_criteria_now = targeting_criteria
 	targeting_source_kind = source_kind
-	targeting_count = 1
-	targeting_domain = "field"
-	if targeting_criteria is Dictionary:
-		targeting_count = maxi(1, int(targeting_criteria.get("count", 1)))
-		# `in` chooses WHICH BOARD the candidates come from: the field (default) or the stack. Session keys, stripped
-		# before matching so that matches_criteria never sees them.
-		targeting_domain = str(targeting_criteria.get("in", "field"))
-		if targeting_criteria.has("count") or targeting_criteria.has("in"):
-			targeting_criteria_now = targeting_criteria.duplicate()
-			targeting_criteria_now.erase("count")
-			targeting_criteria_now.erase("in")
+	targeting_blocks = targeting_criteria if targeting_criteria is Array else [targeting_criteria]
+	targeting_block_index = 0
+	targeting_block_start = 0
 	targeting_picked.clear()
 	# EVERY arc from the last session goes, not just the aiming one: a multi-target session leaves several behind.
 	for old in targeting_arrows:
@@ -809,18 +806,55 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	var stack_node = get_parent().get("stack")
 	if stack_node != null:
 		stack_node.release_target_display()
-	print("[Targeting] request_target source=%s criteria=%s count=%d" % [card.card_name, targeting_criteria, targeting_count])
+	print("[Targeting] request_target source=%s stages=%d" % [card.card_name, targeting_blocks.size()])
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
-	set_viable_targets(targeting_criteria_now, card, source_kind)
-	_spawn_aiming_arrow(card)
+	_begin_target_block(0)
 	if allow_cancel:
 		assistant.prepare_targeting_phase_cancel()
-	# A non-local owner resolves targeting through its agent instead of waiting
-	# for clicks nobody will make (which would hang the turn).
-	var owner_id: int = 1 if card.controller == "player" else 2
+
+## WHICH BOARD a criteria block looks at.
+func _block_domain(block) -> String:
+	return str(block.get("in", "field")) if block is Dictionary else "field"
+
+## Start pick stage `index`. One stage is one criteria block; a normal single-target effect has exactly one, and
+## `count` still means "this many picks inside THIS stage" (Aerith's "up to 3 Backups").
+##
+## The stage's first pick index is the sum of the earlier stages' counts, not `targeting_picked.size()`: that is what
+## makes stepping back into a previous stage ask for exactly the right number of picks again.
+func _begin_target_block(index: int) -> void:
+	targeting_block_index = index
+	var start: int = 0
+	for i in range(index):
+		var previous = targeting_blocks[i]
+		start += maxi(1, int(previous.get("count", 1))) if previous is Dictionary else 1
+	targeting_block_start = start
+	var block = targeting_blocks[index] if index >= 0 and index < targeting_blocks.size() else {}
+	targeting_criteria_now = block
+	targeting_count = 1
+	targeting_domain = _block_domain(block)
+	if block is Dictionary:
+		targeting_count = maxi(1, int(block.get("count", 1)))
+		if block.has("count") or block.has("in"):
+			targeting_criteria_now = block.duplicate()
+			targeting_criteria_now.erase("count")
+			targeting_criteria_now.erase("in")
+	target_card = null
+	_spawn_aiming_arrow(source_card)
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	# set_viable_targets() clears every ring; give the picks already recorded theirs back. The colour follows the
+	# CHOOSER, not the card's owner: when you are the one picking, your picks are orange even on the opponent's board.
+	var local_chooser: bool = source_card == null or source_card.controller == "player"
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
+		if local_chooser:
+			taken.set_selected_highlight(true)
+		else:
+			taken.set_targeted_highlight(true)
+	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
+	var owner_id: int = 1 if source_card != null and source_card.controller == "player" else 2
 	var agent: Agent = get_parent().agent_for(owner_id)
 	if agent != null and not (agent is LocalAgent):
-		agent.choose_target(owner_id, card, targeting_criteria)
+		agent.choose_target(owner_id, source_card, targeting_criteria_now)
 
 ## A fresh arc, aimed at the pointer from `from`.
 ##
@@ -870,6 +904,11 @@ func _drop_pick(at: int) -> void:
 		picked.set_targeted_highlight(false)
 	if picked == target_card:
 		target_card = null
+	# STEPPING BACK ACROSS A STAGE BOUNDARY. The pick just removed was the FIRST of the current stage, so the
+	# previous stage becomes current and asks for its own criteria again.
+	if targeting_block_index > 0 and at == targeting_block_start:
+		_begin_target_block(targeting_block_index - 1)
+		return
 	# It becomes legal again: the card is no longer spoken for, and the ring it lost has to come back.
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
 	for taken in targeting_picked:
@@ -911,6 +950,13 @@ func set_target_card(card: Card):
 	print("[Targeting] target selected: ", card.card_name)
 	arrow.lock_arc(card.get_global_face_centre())
 	targeting_picked.append(card)
+	# THIS STAGE IS FULL: either the next stage takes over (Hades: Forward, then Backup) or the session is complete.
+	var stage_full: bool = targeting_picked.size() >= targeting_block_start + targeting_count
+	if stage_full and targeting_block_index + 1 < targeting_blocks.size():
+		print("[Targeting] stage %d done — asking for stage %d" % [
+			targeting_block_index + 1, targeting_block_index + 2])
+		_begin_target_block(targeting_block_index + 1)
+		return
 	if targeting_picked.size() >= targeting_count:
 		request_target_confirmation.emit(target_card, targeting_allow_cancel)
 		return
@@ -1004,6 +1050,13 @@ func _target_candidates() -> Array:
 
 func has_viable_target(target_criteria, source: Card = null, source_kind: String = "", domain: String = "field") -> bool:
 	# Used before casting a Summon (no legal target = cannot cast) and before offering an ability that needs a target.
+	# EVERY STAGE MUST BE SATISFIABLE. "Choose 1 Forward and 1 Backup" is mandatory on both, so a board missing one
+	# of them makes the card illegal to play at all (Advanced Rules: mandatory targets at casting time).
+	if target_criteria is Array:
+		for block in target_criteria:
+			if not has_viable_target(block, source, source_kind, _block_domain(block)):
+				return false
+		return true
 	var candidates: Array = stack.cards.duplicate() if domain == "stack" and stack != null else get_all_cards()
 	for card in candidates:
 		if _card_matches_criteria(card, target_criteria, source, source_kind):
