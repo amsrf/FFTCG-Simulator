@@ -111,9 +111,9 @@ func choose_break_zone_card(_owner_id: int, ids: Array, filter: Dictionary) -> i
 	window.open(ids, filter, "Choose a card in your Break Zone.")
 	return await window.finished
 
-## Cloud of Darkness 158: the human picks which of their Forwards survives. The window is the same card browser;
-## the ids are the actual candidates, so the chosen id maps back to a card.
-func choose_own_forward(_owner_id: int, candidates: Array) -> Card:
+## A generic "select one of these field cards" picker. The window is the same card browser; the ids are the actual
+## candidates, so the chosen id maps back to a card.
+func choose_field_card(_owner_id: int, candidates: Array, prompt: String = "Choose a card") -> Card:
 	if candidates.is_empty():
 		return null
 	var ids: Array = []
@@ -121,7 +121,7 @@ func choose_own_forward(_owner_id: int, candidates: Array) -> Card:
 		ids.append(card.id)
 	var window = DECK_SEARCH.instantiate()
 	game.add_child(window)
-	window.open(ids, {}, "Choose a Forward to keep.")
+	window.open(ids, {}, prompt)
 	var chosen: int = await window.finished
 	if chosen < 0:
 		return null

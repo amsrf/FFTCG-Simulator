@@ -19,9 +19,10 @@ now keeps its own `granted` amount; `current_conditional_bonus` is the sum.
 choices go through the agent seam (`choose_break_zone_card`), so a human gets the search window and an AI answers
 immediately.
 
-**158 Cloud of Darkness** — each player chooses 1 Forward they control (`choose_own_forward`); every other Forward on
-the field is PUT into the Break Zone. This uses `put_card_into_graveyard`, not `break_card`, so `when_break` does not
-fire.
+**158 Cloud of Darkness** — composed from generic instructions instead of a bespoke function:
+`choose_card(self)` -> `choose_card(opponent)` -> `apply_effect({"is_type":"Forward"}, exclude_chosen)` ->
+`put_targets_into_break_zone`. The put verb uses `put_card_into_graveyard`, not `break_card`, so `when_break` does not
+fire. `choose_card` is the reusable "one player picks one card" instruction.
 
 **185 The Emperor** — `when_enter_break_from_field` searches for another The Emperor and plays it onto the field dull.
 `search_deck` gained `field` / `field_dull` destinations and a `tapped` argument, and now routes the choice through

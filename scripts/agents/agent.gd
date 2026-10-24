@@ -140,8 +140,9 @@ func choose_break_zone_card(_owner_id: int, ids: Array, _filter: Dictionary) -> 
 	await _settle()
 	return int(ids[0]) if not ids.is_empty() else -1
 
-## Choose one of the owner's own Forwards (Cloud of Darkness 158). Pull shape: returns the Card or null.
-func choose_own_forward(_owner_id: int, candidates: Array) -> Card:
+## Choose one card from a list of cards the owner controls (Cloud of Darkness 158 and any future "select one"
+## instruction). Pull shape: returns the Card or null. `prompt` is the picker's title.
+func choose_field_card(_owner_id: int, candidates: Array, _prompt: String = "Choose a card") -> Card:
 	await _settle()
 	return candidates[0] if not candidates.is_empty() else null
 

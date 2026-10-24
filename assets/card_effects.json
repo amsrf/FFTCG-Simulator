@@ -2758,7 +2758,41 @@
 		"when_enter_field": {
 			"instructions": [
 				{
-					"name": "each_player_keeps_one_forward",
+					"name": "choose_card",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward",
+							"controller": "your"
+						},
+						"self",
+						"Choose a Forward to keep"
+					]
+				},
+				{
+					"name": "choose_card",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward",
+							"controller": "theirs"
+						},
+						"opponent",
+						"Choose a Forward to keep"
+					]
+				},
+				{
+					"name": "apply_effect",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward"
+						},
+						true
+					]
+				},
+				{
+					"name": "put_targets_into_break_zone",
 					"author": "game",
 					"argument": []
 				}
@@ -3051,7 +3085,9 @@
 			"untap_all_matching": "Untap all cards matching criteria.",
 			"untap_targets": "Untap every chosen target.",
 			"each_player_break_zone_to_hand": "Each player chooses a matching Forward in their Break Zone and adds it to hand.",
-			"each_player_keeps_one_forward": "Each player chooses one Forward they control; all other Forwards are put into the Break Zone."
+			"choose_card": "Choose one card from the field with criteria; chooser is self or opponent; the pick is stored for apply_effect(..., exclude_chosen).",
+			"apply_effect": "Set the current target list from a criteria block. Optional second argument excludes cards previously chosen by choose_card.",
+			"put_targets_into_break_zone": "Put every current target into the Break Zone. This is not a break: when_break does not trigger."
 		},
 		"statuses": {
 			"summoning_sickness": "Cannot tap until the next Active Phase.",

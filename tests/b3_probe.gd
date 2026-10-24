@@ -119,17 +119,26 @@ func _ready() -> void:
 
 	# --- 158: each player keeps one Forward, every other Forward is put into the Break Zone ------------
 	await _boot()
+	var cloud: Card = _make(CLOUD, "player")
 	var p_keep: Card = _make(41, "player")
 	var p_other: Card = _make(29, "player")
 	var o_keep: Card = _make(43, "opponent")
 	var o_other: Card = _make(47, "opponent")
-	await _game.each_player_keeps_one_forward()
+	_field.execute_card_effect(cloud, "when_enter_field")
+	await get_tree().process_frame
+	if _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
 	_expect(_field.get_front_cards_for("player").size() == 1, "P1 keeps exactly one Forward")
 	_expect(_field.get_front_cards_for("opponent").size() == 1, "P2 keeps exactly one Forward")
 	_expect(not p_other.is_on_field() and not o_other.is_on_field(),
 		"the unselected Forwards leave the field")
-	_expect(bool(effects.get(str(CLOUD), {}).get("when_enter_field", {}).has("instructions")),
-		"Cloud of Darkness has the two-player keep instruction")
+	var cloud_steps: Array = effects.get(str(CLOUD), {}).get("when_enter_field", {}).get("instructions", [])
+	_expect(cloud_steps.size() == 4
+		and str(cloud_steps[0].get("name", "")) == "choose_card"
+		and str(cloud_steps[1].get("name", "")) == "choose_card"
+		and str(cloud_steps[2].get("name", "")) == "apply_effect"
+		and str(cloud_steps[3].get("name", "")) == "put_targets_into_break_zone",
+		"Cloud of Darkness is composed from choose/apply/put instructions")
 	_game.queue_free()
 	await get_tree().process_frame
 

@@ -42,6 +42,9 @@ var _instructions_running: bool = false
 var _current_source_card: Card
 var _current_controller: String
 var _targets = []
+## Cards selected by `choose_card` instructions in the current chain, so `apply_effect(..., exclude_chosen)` can
+## remove them from a later mass target set. Cleared with the rest of the instruction state.
+var _chosen_cards: Array = []
 ## AERITH 1-064. "When Aerith enters the field, choose up to 3 Backups you control other than Aerith. Activate them." —
 ## which here is simply: untap each one that was picked.
 ##
@@ -292,29 +295,42 @@ func each_player_break_zone_to_hand(filter: Dictionary = {}) -> void:
 			owner_hand.add_card(found)
 			_last_action_succeeded = true
 
-## Cloud of Darkness 158: each player keeps 1 Forward they control; every other Forward on the field is PUT into
-## the Break Zone (not broken — no when_break trigger). Both choices are pull-shaped through the agent seam.
-func each_player_keeps_one_forward() -> void:
-	_last_action_succeeded = false
-	var kept: Array = []
-	for pid in [1, 2]:
-		var candidates: Array = field.get_front_cards_for(controller_for(pid)).duplicate()
-		if candidates.is_empty():
-			continue
-		var agent: Agent = agent_for(pid)
-		var chosen: Card = null
-		if agent != null:
-			chosen = await agent.choose_own_forward(pid, candidates)
-		if chosen == null or not candidates.has(chosen):
-			chosen = candidates[0]
-		kept.append(chosen)
-		print("[Cloud] P%d keeps %s" % [pid, chosen.card_name])
-	var unselected: Array = []
+## Generic "choose one card from the field" instruction. `chooser` is "self" (the effect's controller) or
+## "opponent". Criteria are evaluated relative to the effect source, and the chosen card is remembered in
+## `_chosen_cards` so a later apply_effect can exclude it.
+func choose_card(criteria: Dictionary, chooser: String = "self", prompt: String = "Choose a card") -> void:
+	var caster_id: int = 1 if _current_controller == "player" else 2
+	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
+	var source: Card = _current_source_card
+	var candidates: Array = []
 	for card in field.get_all_cards():
-		if card.type == "Forward" and card.is_on_field() and not kept.has(card):
-			unselected.append(card)
-	for card in unselected:
-		print("[Cloud] %s is put into the Break Zone" % card.card_name)
+		if card.matches_criteria(criteria, source):
+			candidates.append(card)
+	if candidates.is_empty():
+		return
+	var agent: Agent = agent_for(chooser_id)
+	var chosen: Card = null
+	if agent != null:
+		chosen = await agent.choose_field_card(chooser_id, candidates, prompt)
+	if chosen == null or not candidates.has(chosen):
+		chosen = candidates[0]
+	_chosen_cards.append(chosen)
+	print("[Choose] P%d chose %s" % [chooser_id, chosen.card_name])
+
+## Generic "set _targets from a criteria block" instruction. `exclude_chosen` removes cards selected by earlier
+## choose_card instructions (Cloud of Darkness 158).
+func apply_effect(criteria: Dictionary, exclude_chosen: bool = false) -> void:
+	_targets = _cards_matching(criteria)
+	if exclude_chosen:
+		_targets = _targets.filter(func(c): return not _chosen_cards.has(c))
+	_last_action_succeeded = not _targets.is_empty()
+
+## PUT, not BREAK: triggers when_enter_break_from_field, never when_break.
+func put_targets_into_break_zone(_argument = null) -> void:
+	for card in _selected_targets(-1):
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		print("[BreakZone] %s is put into the Break Zone" % card.card_name)
 		put_card_into_graveyard(card)
 	enforce_game_state_rules()
 	_last_action_succeeded = true
@@ -979,6 +995,7 @@ func played_this_turn(type_name: String, owner_id: int = 0) -> bool:
 func _clean_instruction_stack():
 	_current_source_card = null
 	_targets = []
+	_chosen_cards = []
 
 ## Whether the instruction that just ran accomplished something. Read by `condition: "if_last_succeeded"` — the
 ## "search ... and if you do so, return Vanille" shape, where the second half must not happen after a cancel.
