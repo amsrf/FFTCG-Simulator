@@ -4,6 +4,24 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Character EX BURST
+
+Characters now use the same fake-stack path as Summons: `"ex_burst": "when_enter_field"` copies the ETB onto the
+stack and resolves it immediately. The body does NOT enter the field - a deliberate simplification of the official
+"play it for free" - and the card stays in the Damage Zone.
+
+Added to 101 Gippal, 118 Mustadio, 127 Kain, 132 Cait Sith, 151 Agrias, 188 Zangan, 193 Jihl Nabaat and 212 Shuyin;
+Golem 106 (a Summon) also gained its `when_cast` burst. Cards 28/59/79/80/91 already used this shape.
+
+Found and fixed while proving it: **a no-target EX BURST never resolved.** `run_ex_burst()` only called
+`resolve_top_effect()` when the effect had `choose_target`, so Moogle, Gippal and Valefor queued an effect that sat on
+the stack until some later priority round. It now resolves the queued effect in both branches.
+
+`tests/ex_burst_character_probe.gd` (8 checks): a no-target Character burst (Gippal), a no-target Summon burst
+(Valefor), and a targeted Character burst (Mustadio, including target selection, break, Damage Zone location and
+stack cleanup). Boot clean; full probe suite green.
+
+
 ### Cards 100-216: phase B1 (17 cards + the small vocabulary)
 
 Engine additions, each chosen because it unlocks a specific card shape:

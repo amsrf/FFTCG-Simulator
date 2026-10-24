@@ -110,6 +110,7 @@
 	},
 	
 	"151":{
+		"ex_burst": "when_enter_field",
 		"first_strike": true,
 		"when_enter_field":
 			{
@@ -1012,6 +1013,7 @@
 		}
 	},
 	"118": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -1092,6 +1094,7 @@
 		]
 	},
 	"132": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -1464,6 +1467,7 @@
 		}
 	},
 	"193": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -1587,6 +1591,7 @@
 		]
 	},
 	"212": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -1603,6 +1608,7 @@
 		}
 	},
 	"101": {
+		"ex_burst": "when_enter_field",
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
@@ -2083,6 +2089,7 @@
 		]
 	},
 	"106": {
+		"ex_burst": "when_cast",
 		"when_cast": {
 			"choose_target": {
 				"is_type": "Forward"
@@ -2166,6 +2173,7 @@
 		}
 	},
 	"127": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward"
@@ -2469,6 +2477,7 @@
 		}
 	},
 	"188": {
+		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"instructions": [
 				{

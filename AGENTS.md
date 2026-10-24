@@ -138,8 +138,10 @@ When writing data, remember the two placement rules:
 
 * `apply_effect` belongs at the **top level** of a trigger, or **inside the specific skill def** it applies to.
   Putting it top-level on a card that also has a choose_target trigger re-targets that trigger's instructions.
-* Character `EX BURST` is still pending (the card must be played, not just have its ETB executed). Summons use
-  `"ex_burst": "when_cast"`; do not add that to Character cards yet.
+* Character `EX BURST` uses the SAME fake-stack copy as a Summon: `"ex_burst": "when_enter_field"` queues the ETB
+  effect and resolves it immediately, leaving the body in the Damage Zone (a deliberate simplification of the official
+  "play it for free"). `Game.run_ex_burst()` must resolve the queued effect in BOTH branches - a no-target burst that
+  only queues would otherwise sit on the stack forever.
 
 ## Auditing call sites in game.gd
 

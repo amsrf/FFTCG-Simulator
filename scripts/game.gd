@@ -1278,10 +1278,14 @@ func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 	# anything is resolving.
 	field.execute_card_effect(card, keyword)
 
+	# TARGETED BURSTS WAIT FOR THE PICK; NO-TARGET BURSTS HAVE NOTHING TO WAIT FOR. Either way the effect copy is now
+	# on the stack and must be resolved HERE, because a burst bypasses the priority loop entirely — leaving a no-target
+	# burst on the stack would make Moogle or Gippal do nothing until some later priority round.
 	if effect.has("choose_target"):
 		await assistant.target_complete
-		# IMMEDIATELY: no priority round, nobody responds. The stack's own resolution does the work - the same
-		# code every other effect goes through, so instructions, targets and cleanup all behave identically.
+	# IMMEDIATELY: no priority round, nobody responds. The stack's own resolution does the work - the same code every
+	# other effect goes through, so instructions, targets and cleanup all behave identically.
+	if stack.stack_length() > 0:
 		await stack.resolve_top_effect()
 
 	# The burst is spent; leave nothing behind for the next effect to inherit.
