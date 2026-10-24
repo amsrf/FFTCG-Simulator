@@ -4,6 +4,31 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### B2: Damage Prevention and Yuna's Exile (160, 165, 166, 171, 176)
+
+Damage prevention is now a layer in `Field.cause_damage`, applied after `Rules.modify_damage` (doubling) and before
+`suffer_damage`:
+
+* **160 Gordon** — a `next_damage_zero` status, consumed by the damage it prevents or expiring in `turn_end()`.
+* **165/166 Knight** — if the target Forward is in a party with a Knight, the OTHER members take 0. Live
+  `party_members()` query; Knight itself is not protected; the protection disappears when the party does.
+* **171 Minwu** — a Forward controlled by Minwu's controller takes 0 when the incoming damage is less than its
+  current power. Live board query; damage equal to power still happens.
+
+Every damage path now goes through `Field.cause_damage`; `divide_damage` and the party-to-blocker hit were the last
+two direct `suffer_damage` calls.
+
+**176 Yuna** — ETB/EX Burst returns a Forward to hand; while she is on the field, a Character put from the field into
+the Break Zone may be exiled instead. SIMPLIFICATION: the "may" is auto-accepted for now, because the zone transition
+is synchronous at every break/removal call site. `current_zone == FIELD` keeps the rule off cards that never entered;
+Yuna herself is removed from the field before the check, so she is not exiled by her own rule.
+
+`tests/b2_probe.gd` (15 checks). `cards_100_216_probe` now removes Yuna before the Cid Raines rider case, because her
+replacement would otherwise stop the victim from reaching the Break Zone.
+
+Coverage: 84 implemented / 4 vanilla / 29 needs code / 0 unclassified.
+
+
 ### Static Entry Rules and Unique Names (Ultimecia 152)
 
 **Static entry rules.** A card can now carry:

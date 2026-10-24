@@ -339,7 +339,9 @@ func divide_damage(_total: int = 0) -> void:
 		if amount <= 0:
 			continue
 		print("[Divide] %s takes %d" % [card.card_name, amount])
-		card.suffer_damage(amount)
+		# Through the damage choke point, not suffer_damage directly: 160/171/165 are replacements and must see
+		# every damage event, including divided damage.
+		field.cause_damage(card, amount, _current_source_card, _effect_kind(), _current_controller)
 	enforce_game_state_rules()
 
 ## The targets an instruction applies to: all of them, or the ONE at `index`. Staged effects (Hades: dull the
@@ -1369,7 +1371,9 @@ func clash_attacker_blocker() -> void:
 		var at_once: Array = await _blocker_split(blocker)
 		if party_total > 0 and blocker.is_on_field():
 			print("[Combat] party deals %d to %s" % [party_total, blocker.card_name])
-			blocker.suffer_damage(party_total)
+			# No single source card: the party deals its SUMMED power, so damage doubling must not apply. The
+			# prevention replacements (160/171) still need to see this event, hence the choke point.
+			field.cause_damage(blocker, party_total)
 		_apply_blocker_split(at_once)
 		enforce_game_state_rules()
 		return
@@ -1739,10 +1743,25 @@ func _send_card_to_graveyard(card: Card) -> bool:
 		card.status_effects.erase("fragile")
 		_send_card_to_removed(card)
 		return true
+	# 176 Yuna: "If a Character is put from the field into the Break Zone, you may remove it from the game instead."
+	# SIMPLIFICATION: the "may" is auto-accepted. This transition has to stay synchronous for the break/removal call
+	# sites; a real optional prompt belongs at a higher-level pre-break step. `current_zone` still says FIELD here,
+	# because the caller removes the card from the field before sending it; that is what keeps the rule off cards
+	# that never entered (a unique-name duplicate from hand/stack).
+	if card.current_zone == Card.Zone.FIELD and card.is_character() and _yuna_exiles_break_zone():
+		print("[Yuna] %s is removed from the game instead of the Break Zone" % card.card_name)
+		_send_card_to_removed(card)
+		return true
 	if card.controller == "player":
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
+	return false
+
+func _yuna_exiles_break_zone() -> bool:
+	for other in field.get_all_cards():
+		if other != null and other.card_effects.has("break_zone_exile"):
+			return true
 	return false
 
 func _send_card_to_removed(card: Card) -> void:

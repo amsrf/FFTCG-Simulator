@@ -222,6 +222,10 @@ func _ready() -> void:
 		"and activates your Backups because you control Yuna")
 
 	# --- 192 Cid Raines: damage rider -> opponent discards on break -----------------------------------
+	# Yuna 176 is still on the field from the Valefor case, and her exile replacement would stop this card from
+	# reaching the Break Zone. Remove her so the rider can be observed.
+	_game.call("put_card_into_graveyard", yuna)
+	await get_tree().process_frame
 	var victim: Card = _make(SQUALL, "opponent")
 	var hand_before: int = _game.get("opponent").hand.cards.size()
 	var raines: Card = _make(192, "player")

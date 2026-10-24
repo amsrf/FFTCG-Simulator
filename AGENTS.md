@@ -132,6 +132,18 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### Damage prevention is a layer in Field.cause_damage
+
+Prevention runs after `Rules.modify_damage` (doubling) and before `suffer_damage`. Do NOT add a direct
+`card.suffer_damage()` call anywhere: it bypasses 160/165/166/171. `divide_damage` and the party-to-blocker hit were
+routed through `Field.cause_damage` for this reason.
+
+* `next_damage_zero` is consumed by the damage it prevents, or expires in `turn_end()`.
+* `party_damage_zero` protects the OTHER members of the current party; Knight is not protected by its own rule.
+* `damage_zero_if_below_power` is a live query over the target's controller's field, using current power.
+* Yuna 176's `break_zone_exile` is auto-accepted (known simplification: the "may" would need an async pre-break step);
+  it is gated on `current_zone == FIELD`, so unique-name duplicates from hand/stack are not exiled.
+
 B1 introduced these primitives; use them rather than adding one-off code:
 
 * `is_damaged` criteria; `discard_cards`; `break_zone_to_hand`; `look_top_may_bottom`; `put_hand_card_on_bottom`;

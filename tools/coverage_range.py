@@ -22,11 +22,6 @@ VANILLA = {105, 119, 138, 159}
 NEEDS_CODE = {
     # B1 - tiny vocabulary
     # B2 - replacement / shields
-    160: 'next damage becomes 0',
-    165: 'party member damage becomes 0',
-    166: 'party member damage becomes 0',
-    171: 'damage below power becomes 0',
-    176: 'exile instead of Break Zone',
     # B3 - targeting / selection
     162: 'forced targeting',
     174: 'forced targeting',
