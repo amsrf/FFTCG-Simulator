@@ -857,4 +857,10 @@
 			"on_enter_break_zone":[{"name":"opponent_mills","author":"game","argument":[2]}]
 		}
 	}
+,
+	"37":{
+		"when_chosen":{
+			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
+		}
+	}
 }

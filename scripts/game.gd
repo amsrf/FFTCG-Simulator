@@ -1676,6 +1676,13 @@ func pop_stack():
 	var card = stack.pop_stack()
 	player_graveyard.add_card(card)
 
+## A TARGETING SESSION WAS CONFIRMED. This is the first moment the chosen set is real, so it is where "when chosen"
+## triggers are announced (Kuja 37). Connected AFTER the Stack's target handler, so an ability triggered by the choice
+## lands ABOVE the summon/ability that caused it and resolves first.
+func _on_targets_confirmed() -> void:
+	if field != null:
+		field.notify_targets_chosen()
+
 func _on_assistant_process_next_instruction() -> void:
 	_process_next_instruction()
 

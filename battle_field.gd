@@ -50,6 +50,9 @@ var targeting_domain: String = "field"
 var targeting_blocks: Array = []
 var targeting_block_index: int = 0
 var targeting_block_start: int = 0
+## "When Kuja is chosen by an opponent's Summon or ability" fires ONCE per targeting session, on CONFIRM — not on
+## every ring-click, and not when a pick is replaced before confirming. Reset by request_target.
+var _chosen_notified: bool = false
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
@@ -792,6 +795,7 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	targeting_block_index = 0
 	targeting_block_start = 0
 	targeting_picked.clear()
+	_chosen_notified = false
 	# EVERY arc from the last session goes, not just the aiming one: a multi-target session leaves several behind.
 	for old in targeting_arrows:
 		if old != null and is_instance_valid(old):
@@ -1729,6 +1733,31 @@ func _on_assistant_target_cancel() -> void:
 	# NOTE: the TARGET modal is popped by Assistant.on_target_cancel() /
 	# on_target_complete(), which owns the modal it opened. Don't pop here too.
 
+
+## "WHEN CHOSEN" — called when a targeting session is CONFIRMED, not when rings are clicked.
+##
+## Only the OPPONENT'S choice counts: Kuja's text says "chosen by ... your opponent", so being picked by its own
+## controller must not trigger it. And only Summon/Ability targeting: a set effect reaches cards without choosing them.
+## Fired once per session (`_chosen_notified`), because a pick can be replaced before confirming.
+func notify_targets_chosen() -> void:
+	if _chosen_notified:
+		return
+	_chosen_notified = true
+	if source_card == null or targeting_picked.is_empty():
+		return
+	var chooser: String = source_card.controller
+	var kind: String = targeting_source_kind
+	if kind != "Summon" and kind != "Ability":
+		return
+	for card in targeting_picked:
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller == chooser:
+			continue
+		if not card.is_key_word_in_card_effect("when_chosen"):
+			continue
+		print("[Chosen] %s was chosen by the opponent's %s" % [card.card_name, kind])
+		execute_card_effect(card, "when_chosen")
 
 func _on_stack_execute_card_effect(card: Card) -> void:
 	# Targeting session is over: clear all targeting state so the next

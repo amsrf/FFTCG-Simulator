@@ -89,6 +89,19 @@ CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards`
 it), then move it to its owner's Break Zone — it was paid for. Do NOT set a flag and let it resolve with no effect;
 removal is what makes it never resolve.
 
+## "Chosen" is a targeting event, and it has rules
+
+`Field.notify_targets_chosen()` is called from `Game._on_targets_confirmed` (Assistant.target_complete) — the moment a
+session is CONFIRMED, not when rings are clicked. Three conditions:
+
+* once per session (`_chosen_notified`, reset in `request_target`), because picks can be replaced before confirming;
+* the chooser (`source_card.controller`) must differ from the card's controller — "chosen by your opponent";
+* `targeting_source_kind` must be `Summon` or `Ability`. Set effects never choose, so they must not fire this (same
+  line as `cannot_be_chosen`).
+
+The connection is placed AFTER the Stack's `_on_assistant_target_complete` in `game.tscn` on purpose: the triggered
+ability must land on top of the Summon/ability that caused it, so it resolves first.
+
 ## Damage goes through Field.cause_damage
 
 Do NOT call `card.suffer_damage()` for game damage. `Field.cause_damage(target, amount, source, kind, controller)`

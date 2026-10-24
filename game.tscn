@@ -207,3 +207,4 @@ font = ExtResource("17_e8heu")
 [connection signal="target_cancel" from="Assistant" to="Field" method="_on_assistant_target_cancel"]
 [connection signal="target_cancel" from="Assistant" to="Stack" method="_on_assistant_target_cancel"]
 [connection signal="target_complete" from="Assistant" to="Stack" method="_on_assistant_target_complete"]
+[connection signal="target_complete" from="Assistant" to="." method="_on_targets_confirmed"]
