@@ -310,7 +310,45 @@ func remove_card_from_mana_conversion(card:Card):
 	selected_cards_for_mana_has_changed.emit(-1,card.element)
 
 
+## Apply every static `on_character_enter` rule currently on the board to a card that just entered. This is a BOARD
+## QUERY, not a registered listener: the rule lives on its source card and is read while that source is on the field,
+## so a source that leaves stops contributing with no teardown at all.
+func _apply_entry_rules(entering: Card) -> void:
+	if entering == null or not is_instance_valid(entering):
+		return
+	for source in get_all_cards():
+		if source == null or not is_instance_valid(source) or not source.is_on_field():
+			continue
+		var rules = source.card_effects.get("on_character_enter", [])
+		if rules is Dictionary:
+			rules = [rules]
+		if not (rules is Array):
+			continue
+		for rule in rules:
+			if not (rule is Dictionary):
+				continue
+			if not CARD_TARGET.matches(entering, rule.get("targets", {}), source):
+				continue
+			var action: String = str(rule.get("action", ""))
+			match action:
+				"dull", "tap":
+					entering.tap()
+				_:
+					push_warning("[EntryRule] %s: unknown action '%s'" % [source.card_name, action])
+
+
 func play_card(card, is_opponent: bool = false, animate = true, record: bool = true) -> void:
+	# UNIQUE NAMES. A player may not control two Characters with the same name. Checked BEFORE the reparent, so the
+	# duplicate never touches the field: it did not enter, so no enter-the-field trigger and no entry animation run.
+	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
+	# Setup boards (animate == false) are exempt, like summoning sickness, so test grounds may place a board directly.
+	if animate and card != null and card.is_character():
+		var unique_game: Node = get_parent()
+		if unique_game != null and unique_game.has_method("would_be_unique_name_conflict") \
+				and unique_game.would_be_unique_name_conflict(card):
+			print("[Unique] %s is already on the field; the new copy goes to the Break Zone" % card.card_name)
+			unique_game.send_off_field_card_to_break_zone(card)
+			return
 	var trans = card.global_transform
 	card.reparent(self, false)
 	card.position = Vector3.ZERO
@@ -366,6 +404,12 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# hand's fan tilt, because the reparent above deliberately preserves the whole
 	# global transform so the travel animation starts where the card was.
 	card.enter_zone(Card.Zone.FIELD)
+
+	# ENTRY RULES (Ultimecia 152: "all Forwards other than Ultimecia enter the field dull"). Read from the board at
+	# the moment of entry — nothing is registered, so a source that leaves the field simply stops being found. O(field)
+	# per entry; a registry would be the optimisation if entry rules ever become numerous.
+	if animate:
+		_apply_entry_rules(card)
 
 	if animate:
 		var tween = create_tween().set_ease(Tween.EASE_OUT)

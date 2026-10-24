@@ -22,7 +22,6 @@ VANILLA = {105, 119, 138, 159}
 NEEDS_CODE = {
     # B1 - tiny vocabulary
     # B2 - replacement / shields
-    152: 'Forwards enter the field dull',
     160: 'next damage becomes 0',
     165: 'party member damage becomes 0',
     166: 'party member damage becomes 0',

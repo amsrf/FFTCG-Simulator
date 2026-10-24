@@ -4,6 +4,34 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Static Entry Rules and Unique Names (Ultimecia 152)
+
+**Static entry rules.** A card can now carry:
+
+
+
+ reads every matching rule off the CURRENT board when a Character enters. There is no
+registry, so a source that leaves the field simply stops being found — nothing to unregister. This is O(field) per
+entry; the optimisation, if entry rules ever become numerous, is an index maintained on play/remove.
+
+**Ultimecia 152** uses it for "all Forwards other than Ultimecia enter dull", plus Time Compression as pure data
+( + the existing  rule, freeze all other Forwards). Haste does not bypass it: Haste ignores
+summoning sickness, not this.
+
+**Unique names.** A player cannot control two Characters with the same name. Enforced in  BEFORE
+the card is reparented, so the duplicate never enters and no enter-the-field trigger runs. The card already on the
+field is kept; the new copy goes to the Break Zone with  (not a break). Setup boards
+() are exempt. There is deliberately no state-based sweep in  yet:
+it would rewrite test boards that place duplicate names on purpose, and no current effect changes a card's name in
+place. If one lands, add the sweep there.
+
+ (16 checks): pre-existing Forwards stay active, later ones enter dull, Backups are
+unaffected, an opponent's Ultimecia is excluded by name, Haste still enters dull, the rule disappears with each
+source, a duplicate never enters and lands in the Break Zone, and the same name across controllers is legal.
+
+Coverage after 152: 79 implemented / 4 vanilla / 34 needs code / 0 unclassified.
+
+
 ### Character EX BURST
 
 Characters now use the same fake-stack path as Summons: `"ex_burst": "when_enter_field"` copies the ETB onto the

@@ -119,6 +119,20 @@ ability must land on top of the Summon/ability that caused it, so it resolves fi
 
 ## Cards 100-216 coverage
 
+### Static entry rules are board queries
+
+ is read from  at the moment a Character enters ().
+Do NOT register a listener for it: a source that leaves the field stops being found automatically, which is exactly
+the teardown-free behaviour we want. It is O(field) per entry; index it only if such rules become numerous.
+
+### Unique names are checked before entry
+
+ calls  BEFORE reparenting. The card on the field is kept;
+the new copy goes through  (, no enter-the-field trigger).
+Setup () is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
+purpose, and no current effect changes a name in place. Add one in  if that changes.
+
+
 B1 introduced these primitives; use them rather than adding one-off code:
 
 * `is_damaged` criteria; `discard_cards`; `break_zone_to_hand`; `look_top_may_bottom`; `put_hand_card_on_bottom`;

@@ -2580,5 +2580,43 @@
 				]
 			}
 		]
+	},
+	"152": {
+		"on_character_enter": [
+			{
+				"targets": {
+					"is_type": "Forward",
+					"exclude": {
+						"is_named": "Ultimecia"
+					}
+				},
+				"action": "dull"
+			}
+		],
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"水": 3
+				},
+				"text": "Time Compression 《S》《Water》《Water》《Water》: Freeze all the Forwards other than Ultimecia.",
+				"apply_effect": {
+					"is_type": "Forward",
+					"exclude": {
+						"is_named": "Ultimecia"
+					}
+				},
+				"instructions": [
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"frozen",
+							1
+						]
+					}
+				]
+			}
+		]
 	}
 }

@@ -42,18 +42,18 @@ func _ready() -> void:
 
 	# --- a Character played onto the field ------------------------------------------------------------
 	var field = _game.get("field")
-	var forward: Card = _game.call("create_card", 41, "player")
+	var forward: Card = _game.call("create_card", 47, "player")
 	_game.add_child(forward)
 	field.play_card(forward, false)          # record defaults to true
 	await get_tree().process_frame
 	var acts: Array = _activities()
-	print("[History] after playing Squall: %s" % str(acts))
-	_expect(acts.has("Forward Squall was played"), "playing a Forward records it by name and type")
+	print("[History] after playing Terra: %s" % str(acts))
+	_expect(acts.has("Forward Terra was played"), "playing a Forward records it by name and type")
 
 	var entries: Array = _game.call("actions_this_turn")
 	var actor: int = 0
 	for e in entries:
-		if str(e.get("activity", "")) == "Forward Squall was played":
+		if str(e.get("activity", "")) == "Forward Terra was played":
 			actor = int(e.get("actor", 0))
 	_expect(actor == 1, "and the record says P1 did it (actor %d)" % actor)
 	_expect(_game.call("played_this_turn", "Forward", 1), "played_this_turn(Forward, P1) is true")

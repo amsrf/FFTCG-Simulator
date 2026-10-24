@@ -1711,6 +1711,9 @@ func priority() -> void:
 
 func enforce_game_state_rules() -> void:
 	# State-based actions, checked after any damage/power change.
+	# UNIQUE NAMES are enforced at the ENTRY CHOKE POINT (Field.play_card), not swept here: the only way a Character
+	# legally reaches the field is play_card, and setup boards/probes may deliberately contain duplicates that never
+	# entered. If a future effect changes a card's name in place, this sweep is where that conflict would go.
 	# 1) Power reduced to 0 (or less): the card is put into the Graveyard.
 	#    This is NOT a break, so "when put into the Break Zone" effects do
 	#    not trigger. (Break Zone and Graveyard share a container here, but
@@ -1758,6 +1761,25 @@ func remove_targets_from_game(_argument = null) -> void:
 		if card.is_on_field():
 			field.remove_card(card)
 		_send_card_to_removed(card)
+
+## True when `card`'s controller already controls a Character with the same name. Used BEFORE a card is parented onto
+## the field, so the duplicate never enters and no enter-the-field trigger runs for it.
+func would_be_unique_name_conflict(card: Card) -> bool:
+	if card == null or not is_instance_valid(card) or not card.is_character():
+		return false
+	var side_name: String = "player" if card.controller == "player" else "opponent"
+	for other in field.get_front_cards_for(side_name) + field.get_back_cards_for(side_name):
+		if other != null and other != card and other.is_character() and other.card_name == card.card_name:
+			return true
+	return false
+
+## A unique-name duplicate never reached the field, so this is NOT a break and the Break Zone arrival triggers must not
+## run (Graveyard.add_card gates them on `from_field`). `broken` stays false for the same reason.
+func send_off_field_card_to_break_zone(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	card.broken = false
+	_send_card_to_graveyard(card)
 
 func put_card_into_graveyard(card: Card) -> void:
 	# Removal that is NOT a break (e.g. power reduced to 0). The "unbreakable" status does not apply, because the

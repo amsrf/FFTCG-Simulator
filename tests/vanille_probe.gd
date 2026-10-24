@@ -71,7 +71,7 @@ func _ready() -> void:
 			hand_before, hand.cards.size()])
 
 	# --- return_from_break_zone + the "if you did so" guard -----------------------------------------------
-	var card: Card = _game.create_card(41, "player")
+	var card: Card = _game.create_card(47, "player")
 	_game.add_child(card)
 	field.play_card(card, false, false)
 	await get_tree().process_frame
