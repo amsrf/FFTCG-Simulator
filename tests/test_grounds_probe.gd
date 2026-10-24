@@ -232,6 +232,13 @@ func _ready() -> void:
 			"so your Ifrit costs 1 more there (%s vs %s)" % [str(tfield.effective_cost(ground_ifrit)), str(ground_ifrit.get_cost())])
 	_expect(tfield.get_back_cards_for("player").size() == 2,
 		"with two fire Backups — exactly enough to pay the surcharged cost")
+	# AND A LEGAL TARGET. Ifrit's when_cast chooses a Forward; with only Terra (a Backup) on the other side the card
+	# bounces back to hand and never reaches the payment window — which is exactly how this ground first shipped.
+	if ground_ifrit != null:
+		_expect(tfield.has_viable_target({"is_type": "Forward"}, ground_ifrit, "Summon"),
+			"and a legal Forward for Ifrit to aim at, so the cast is not refused before payment")
+	_expect(tfield.get_front_cards_for("opponent").size() >= 1,
+		"the opponent has a Forward on the board for that")
 	terra_game.queue_free()
 	await get_tree().process_frame
 

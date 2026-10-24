@@ -10,6 +10,10 @@ Test Mode → "Ground: Terra (Summon cost +1 for you)". The opponent has Terra a
 Backups. Play Ifrit and the cost row shows **2 crystals — 1 fire + 1 wild** instead of the single fire crystal it
 costs on an empty board; two sources is exactly enough to pay the surcharge, so the cast can be watched through.
 
+**The ground shipped without a legal Ifrit target** (Terra is a Backup, so the opponent's board had no Forward):
+`Hand.charge()` refused the Summon and the card returned to hand with `No viable target for Ifrit`, which looks like the
+surcharge itself failing. Squall (41) is now on that board, and the probe asserts `has_viable_target()`.
+
 `test_grounds_probe` now boots this ground and asserts the surcharge is live in it
 (`{ "火": 1, "neutral": 1 }` vs printed `{ "火": 1, "neutral": 0 }`), 86 checks total.
 
