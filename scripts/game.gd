@@ -2064,7 +2064,10 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	# A board-wide event trigger is a stack object with its own resolution path; its copied card data has no
 	# `__event_trigger` keyword to resolve.
 	if not card.event_trigger.is_empty():
+		# Clear anything a previous targeting session left behind, resolve, then clear the session this one opened.
+		field.call("finish_targeting_state")
 		await _resolve_event_trigger(card)
+		field.call("finish_targeting_state")
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return

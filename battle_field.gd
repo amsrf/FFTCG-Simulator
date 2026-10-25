@@ -1975,3 +1975,13 @@ func _clear_target_arrows() -> void:
 	if arrow != null and is_instance_valid(arrow):
 		arrow.queue_free()
 	arrow = null
+
+## End a targeting session from the EFFECT side. The normal stack path does this in
+## _on_stack_execute_card_effect; event triggers resolve through Game._resolve_event_trigger and need the same
+## cleanup afterwards, or the last locked arc and the orange pick ring outlive the effect.
+func finish_targeting_state() -> void:
+	_clear_target_arrows()
+	target_card = null
+	source_card = null
+	targeting_allow_cancel = false
+	reset_targets()

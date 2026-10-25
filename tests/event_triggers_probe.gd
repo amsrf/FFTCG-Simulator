@@ -79,6 +79,8 @@ func _ready() -> void:
 	_game.player.take_damage(1)
 	await _trigger_and_resolve("", {})
 	_expect(victim.accumulated_damage == 5000, "108 damage_received deals 5000 to the chosen Forward")
+	_expect(_field.targeting_arrows.is_empty() and _field.arrow == null, "108 removes every targeting arrow and arc")
+	_expect(not victim.ring_selected() and not victim.ring_targeted(), "and clears the orange/red ring on the target")
 
 	# 206 Biggs: when one of your Backups leaves the field, all opponent Forwards take 1000.
 	_make(206, "player")
