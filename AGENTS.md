@@ -154,6 +154,18 @@ search domain for `choose_revealed`; `put_revealed_on_bottom` preserves reveal o
 `check_revealed` writes the instruction latch. Put the two conditional branches IMMEDIATELY after it: the dispatcher
 sets `_last_action_succeeded = true` before every other instruction, so an intervening instruction destroys the check.
 
+### Ability nullification (Wakka 216)
+
+`Card.card_effects` is a read-time view, not the raw printed data. While `status_effects` contains `abilities_nullified`
+it returns an empty dictionary; `_printed_effects` holds the real data and comes back when the status expires. Do not
+clear the shared JSON or mutate the printed effects.
+
+Nullification must also be respected by things that registered earlier: `conditional_power`, `power_per`, auras,
+party Brave and entry rules all check `abilities_enabled()`, and the applying instruction recomputes those systems.
+Abilities already on the stack keep their proxy snapshots and still resolve.
+
+Power setting uses `Card.set_power_value()`, a temporary `power_change` delta, so normal buff expiry still works.
+
 ### Copied skills (Kimahri 102)
 
 A copied Special Ability lives in `Card.copied_skill` (one slot, empty = none). Do **not** append it to

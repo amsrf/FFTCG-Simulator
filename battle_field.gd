@@ -279,6 +279,8 @@ const CARD_TARGET := preload("res://scripts/card_target.gd")
 func add_aura_to_card(aura: AuraValue, card: Card):
 	# `aura.source` is the card GRANTING the aura, so "your Fire Forwards" is read from its controller — not from a
 	# fixed seat. An AI-owned aura would otherwise buff the human's board.
+	if aura.source != null and (not is_instance_valid(aura.source) or not aura.source.abilities_enabled()):
+		return
 	if not CARD_TARGET.matches(card, aura.targets, aura.source):
 		return
 	if aura.granted.has(card):
@@ -318,6 +320,8 @@ func _apply_entry_rules(entering: Card) -> void:
 		return
 	for source in get_all_cards():
 		if source == null or not is_instance_valid(source) or not source.is_on_field():
+			continue
+		if not source.abilities_enabled():
 			continue
 		var rules = source.card_effects.get("on_character_enter", [])
 		if rules is Dictionary:
@@ -589,7 +593,7 @@ func party_grants_brave(card: Card) -> bool:
 	if card == null or attacking_party.size() < 2 or not attacking_party.has(card):
 		return false
 	for c in get_all_cards():
-		if c != null and is_instance_valid(c) and c.controller == card.controller and c.card_effects.has("party_brave"):
+		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.card_effects.has("party_brave"):
 			return true
 	return false
 	
@@ -607,6 +611,11 @@ func end_phase_cleanup():
 			game.break_card(c)
 	for c in get_all_cards():
 		c.turn_end()
+	# Expiring abilities_nullified can make a source's auras/conditionals live again. Recompute after the statuses
+	# are actually gone; otherwise the board would keep the suppressed numbers until the next unrelated change.
+	recompute_conditional_power()
+	recompute_power_per()
+	refresh_auras()
 func try_activate_from_field(card: Card) -> void:
 	var skills: Array = card.activation_skills()
 	if skills.is_empty():
@@ -1393,7 +1402,7 @@ func recompute_power_per() -> void:
 		if source == null or not is_instance_valid(source) or not source.is_on_field():
 			continue
 		var n: int = _power_per_count(rule["count"], source)
-		var desired: int = n * int(rule["value"])
+		var desired: int = n * int(rule["value"]) if source.abilities_enabled() else 0
 		if desired != int(rule["granted"]):
 			source.power_change(desired - int(rule["granted"]), -1)
 			rule["granted"] = desired
@@ -1433,7 +1442,7 @@ func recompute_conditional_power() -> void:
 		var source: Card = effect["source"]
 		if source == null or not is_instance_valid(source) or not source.is_inside_tree():
 			continue
-		var desired: int = int(effect["value"]) if _condition_met(effect["condition"], source) else 0
+		var desired: int = int(effect["value"]) if source.abilities_enabled() and _condition_met(effect["condition"], source) else 0
 		var granted: int = int(effect.get("granted", 0))
 		if desired != granted:
 			var delta: int = desired - granted
@@ -1498,8 +1507,24 @@ func register_card_auras(card: Card) -> void:
 ## been applied to — without that guard this would stack a fresh +1000 on every field change.
 func refresh_auras() -> void:
 	for aura in _auras.values():
+		var source: Card = aura.source
+		if source == null or not is_instance_valid(source) or not source.abilities_enabled():
+			_revoke_aura(aura)
+			continue
 		for card in get_all_cards():
 			add_aura_to_card(aura, card)
+
+
+## Undo exactly what an aura granted. Used both when its source leaves and while its source is ability-nullified.
+func _revoke_aura(aura: AuraValue) -> void:
+	for other in aura.granted.keys():
+		if not is_instance_valid(other):
+			continue
+		if aura.method == "power_change":
+			other.power_change(-aura.value, -1)
+		elif aura.method == "grant_status" and not aura.status.is_empty():
+			other.revoke_status(aura.status)
+	aura.granted.clear()
 
 func unregister_card_auras(card: Card) -> void:
 	# EVERY aura this card granted — not the single entry a key-per-card dictionary could hold.
@@ -1510,16 +1535,7 @@ func unregister_card_auras(card: Card) -> void:
 	for id in keys:
 		var aura: AuraValue = _auras[id]
 		_auras.erase(id)
-		# The exact inverse, off the record of what was actually granted — not off the target test, which would also take the
-		# bonus off cards that never received it.
-		for other in aura.granted.keys():
-			if not is_instance_valid(other):
-				continue
-			if aura.method == "power_change":
-				other.power_change(-aura.value, -1)
-			elif aura.method == "grant_status" and not aura.status.is_empty():
-				other.revoke_status(aura.status)
-		aura.granted.clear()
+		_revoke_aura(aura)
 	
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their

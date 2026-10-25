@@ -500,6 +500,34 @@ func copy_skill(_argument = null) -> void:
 func untap_targets(index: int = -1) -> void:
 	_each_target("untap", [], index)
 
+## Wakka 216: the chosen Forward loses all its abilities until the end of the turn. The printed data is untouched;
+## Card.card_effects becomes an empty view while the status is present.
+func nullify_abilities(duration: int = 1) -> void:
+	for card in _selected_targets(-1):
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		card.add_status_effect("abilities_nullified", duration)
+		print("[Nullify] %s loses its abilities" % card.card_name)
+	# A nullified source stops granting auras/conditionals immediately, not at the next unrelated board change.
+	field.recompute_conditional_power()
+	field.recompute_power_per()
+	field.refresh_auras()
+	enforce_game_state_rules()
+
+
+## Wakka 216: "power becomes 1000". Kept as a temporary delta so normal buffs still expire independently.
+func set_targets_power(value: int = 1000, duration: int = 1) -> void:
+	_each_target("set_power_value", [value, duration])
+
+
+## "+1000 power for each Forward you control" (Wakka's attack trigger). The count is read at resolution.
+func power_change_targets_per_forward(amount: int = 1000, duration: int = 1) -> void:
+	var controller_name: String = _current_controller
+	var count: int = field.get_front_cards_for(controller_name).size()
+	if count <= 0 or amount == 0:
+		return
+	_each_target("power_change", [count * amount, duration])
+
 ## CANCEL THE CHOSEN STACK OBJECTS (Summoner 53). The target is a Summon that has not resolved yet, so this is not
 ## `_each_target` — it has no `is_on_field()` and the removal belongs to the Stack.
 func cancel_targets(_argument = null) -> void:

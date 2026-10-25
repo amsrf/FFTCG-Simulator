@@ -3620,5 +3620,53 @@
 				]
 			}
 		]
+	},
+
+	"216": {
+		"when_attack": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "your"
+			},
+			"instructions": [
+				{
+					"name": "power_change_targets_per_forward",
+					"author": "game",
+					"argument": [
+						1000,
+						1
+					]
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"水": 1
+				},
+				"text": "Status Reels 《S》《水》: Choose 1 Forward. Until the end of the turn, it loses all its abilities and its power becomes 1000.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "nullify_abilities",
+						"author": "game",
+						"argument": [
+							1
+						]
+					},
+					{
+						"name": "set_targets_power",
+						"author": "game",
+						"argument": [
+							1000,
+							1
+						]
+					}
+				]
+			}
+		]
 	}
 }

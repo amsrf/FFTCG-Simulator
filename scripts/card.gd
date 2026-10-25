@@ -41,7 +41,15 @@ var mat: ShaderMaterial
 var granted_statuses: Dictionary = {}
 ## Extra attacks left this turn ("Gilgamesh can attack twice", Tidus' Blitz Ace). Consumed by Field.execute_card_attack.
 var extra_attacks: int = 0
-@export var card_effects : Dictionary
+var _printed_effects: Dictionary = {}
+## The card's effects as they are ACTIVE right now. "Loses all abilities" is a temporary, per-card view, never a
+## change to the shared JSON data: while abilities_nullified is present every printed ability lookup sees an empty
+## dictionary, and the original data comes back when the status expires.
+@export var card_effects: Dictionary:
+	get:
+		return {} if status_effects.has("abilities_nullified") else _printed_effects
+	set(value):
+		_printed_effects = value
 @export var key_word_effect: String
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
 ## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
@@ -736,6 +744,12 @@ func turn_end():
 	clear_damage()
 	
 			
+## "Its power becomes 1000" (Wakka 216): a temporary SET, expressed as the delta from the current value. Keeping it
+## in power_array means existing temporary modifiers still expire correctly and a later +X applies on top.
+func set_power_value(value: int, duration: int = 1) -> void:
+	power_change(value - power, duration)
+
+
 func power_change(amount, duration):
 	# duration < 0 (or null) means permanent (used by auras).
 	if duration == null:
@@ -747,6 +761,8 @@ func power_change(amount, duration):
 	
 ## Skills the card can actually activate right now: printed skills plus Kimahri's copied ability.
 func activation_skills() -> Array:
+	if not abilities_enabled():
+		return []
 	var out: Array = []
 	var printed = card_effects.get("skill", [])
 	if printed is Array:
@@ -845,6 +861,11 @@ func declare_blocker():
 		Instruction.new('set_blocker','game', self),
 	]
 	emit_signal("execute_instructions", instructions)
+
+## "Loses all abilities" (Wakka 216). This is a read-time view, not a mutation of the printed data. A status is
+## cleared by turn_end like every other until-end-of-turn effect, and stack copies keep their own snapshots.
+func abilities_enabled() -> bool:
+	return not status_effects.has("abilities_nullified")
 
 ## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says

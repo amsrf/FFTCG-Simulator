@@ -150,6 +150,17 @@ func _ready() -> void:
 		"Cloud is opposite, with two S abilities for the copy picker")
 	_expect(kimahri["opponent_type"] == "mock", "the opponent is passive during the copy test")
 
+	# --- Wakka: attack trigger and Status Reels --------------------------------------------------------------
+	var wakka: Dictionary = GROUNDS.wakka_status()
+	var wakka_field: Array = []
+	for e in wakka["player_field"]:
+		wakka_field.append(int(e["id"]))
+	_expect(wakka_field.has(GROUNDS.WAKKA), "the Wakka ground puts Wakka on your board")
+	_expect(wakka["player_hand"].has(GROUNDS.WAKKA), "with a same-name copy for the S cost")
+	_expect(wakka["opponent_field"][0]["id"] == GROUNDS.WAKKA_TARGET,
+		"and Cloud opposite as the nullification target")
+	_expect(wakka["opponent_type"] == "mock", "the opponent is passive during the Wakka test")
+
 	# --- the counter ground: everything needed for the loop, on one side ------------------------------------
 	var counter: Dictionary = GROUNDS.counter_summon()
 	var counter_field: Array = []

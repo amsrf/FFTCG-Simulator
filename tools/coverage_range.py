@@ -33,7 +33,6 @@ NEEDS_CODE = {
     107: 'dynamic element identity',
     111: 'variable X cost',
     135: 'multi-card search/play with distinct elements',
-    216: 'dynamic power + strip abilities / set power 1000',
 }
 
 

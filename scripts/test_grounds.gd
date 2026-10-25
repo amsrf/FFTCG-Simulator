@@ -65,6 +65,9 @@ const KIMAHRI := 102     # Kimahri: Ronso Rage copies one Special Ability from a
 const CLOUD := 182       # Cloud: two S abilities, so the copy picker has something to choose.
 const EARTH_MANA := 105  # Evoker, earth Backup.
 const EARTH_MANA_2 := 120  # Monk, earth Backup.
+const WAKKA := 216       # Wakka: attack-trigger power boost; Status Reels nullifies and sets power to 1000.
+const WATER_MANA := 159  # Evoker, water Backup.
+const WAKKA_TARGET := 182  # Cloud, a Forward with abilities to nullify.
 const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or damage the chosen Forward.
 const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
 const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
@@ -236,6 +239,19 @@ static func kimahri_copy() -> Dictionary:
 	return cfg
 
 
+## WAKKA 216. Wakka, Zack and one water Backup; Cloud opposite. Wakka can attack to demonstrate the per-Forward
+## power trigger, or use Status Reels (S + water) to nullify Cloud and set its power to 1000.
+static func wakka_status() -> Dictionary:
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_wakka"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": WAKKA}, {"id": FIRE}, {"id": WATER_MANA}]
+	cfg["player_hand"] = [WAKKA]
+	cfg["opponent_field"] = [{"id": WAKKA_TARGET}]
+	cfg["opponent_hand"] = []
+	return cfg
+
+
 static func cecil_damage() -> Dictionary:
 	## 108 CECIL. Press Y to take 1 damage; Cecil's event trigger asks whether to deal 5000 to an opponent Forward.
 	## The three opponent Forwards are deliberately sturdy (6000/7000/8000) so 5000 shows as accumulated damage
@@ -299,6 +315,10 @@ const GROUNDS := {
 		"title": "Ground: Kimahri 102 (copy a Special Ability)",
 		"blurb": "Activate Ronso Rage (S + two earth), discard the Kimahri in hand, and choose Cloud. Cloud has two S abilities: pick one. Kimahri can then use the copy for free, even while tapped.",
 	},
+	"wakka": {
+		"title": "Ground: Wakka 216 (nullify abilities)",
+		"blurb": "Attack with Wakka to pump a Forward per controlled Forward, or use Status Reels (S + water) on Cloud: it loses all abilities and its power becomes 1000 until end of turn.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -329,6 +349,8 @@ static func config(name: String) -> Dictionary:
 			return gilgamesh_reveal_backup()
 		"kimahri":
 			return kimahri_copy()
+		"wakka":
+			return wakka_status()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()
@@ -349,6 +371,7 @@ const CATEGORY_OF := {
 	"gilgamesh_forward": "Card Effects",
 	"gilgamesh_backup": "Card Effects",
 	"kimahri": "Card Effects",
+	"wakka": "Card Effects",
 	"break_zone": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",

@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Wakka 216: Ability Nullification and Temporary Power
+
+Wakka's Status Reels applies status `abilities_nullified` to the chosen Forward. `Card.card_effects` is now an active
+view: while that status is present it returns an empty dictionary, so every printed trigger, skill, keyword, aura,
+protection and continuous rule disappears without touching the shared JSON data. The original data returns when the
+status expires.
+
+A nullified source is also skipped by the registered continuous-effect loops (`conditional_power`, `power_per`,
+auras, party Brave and the entry-rule query), and the effect recomputes those systems immediately. Abilities already on
+the stack keep their own snapshots and still resolve.
+
+Power is set with `Card.set_power_value()`, expressed as a temporary delta so it expires through `power_array` like any
+other until-end-of-turn modifier. Wakka's attack trigger uses `power_change_targets_per_forward()` and counts the
+controller's Forwards at resolution.
+
+Data: `"216"` has the `when_attack` trigger and the S + Water Status Reels skill.
+
+Probe: `tests/wakka_probe.tscn` — 15 checks covering the empty ability view, activation gate, keyword loss, power set,
+temporary expiry and the per-Forward attack bonus.
+
+Coverage is now **107 implemented / 4 vanilla / 6 missing + 1 partial (173)**.
+
 ### Kimahri 102: Copied Special Abilities
 
 Kimahri stores **one** copied Special Ability in `Card.copied_skill` (empty = no permission). Ronso Rage targets
