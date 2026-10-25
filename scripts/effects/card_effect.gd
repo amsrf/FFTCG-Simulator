@@ -1,4 +1,5 @@
 extends RefCounted
+const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
 ## A card effect is STATELESS: the per-event state lives in the EffectContext passed to the hook. One instance can be
@@ -17,6 +18,16 @@ extends RefCounted
 ## There is no separate event list and no name mapping, so there is nothing to drift.
 func handles_event(event: String) -> bool:
 	return has_method(event)
+
+
+## Activated abilities this card offers. Event methods are zero-or-one per event; a card may have several activated
+## abilities, and each one carries its own costs and target timing, so they get a descriptor.
+func activated_abilities() -> Array:
+	return []
+
+
+func _ability(data: Dictionary) -> RefCounted:
+	return ABILITY_SPEC.new(data)
 
 
 # ---------------------------------------------------------------------------------------------------------------

@@ -28,6 +28,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   have its own targeting logic.
 - **Activated abilities and Summons choose targets before they are committed**, so their ability descriptors own
   target criteria and the hook receives `ctx.targets`. Do not move those choices into the resolution hook.
+- Activated abilities use `AbilitySpec` (`scripts/effects/ability_spec.gd`) via `activated_abilities()` and
+  `_ability(...)`: one object carries text, costs, target timing and the handler. Event hooks do not get this
+  descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - `Card.current_elements()` is a live query: printed `element` stays immutable, while `effect.current_elements(ctx,
   card)` may add or replace Elements. `is_element()` and every criteria/cost check must go through it.
 - Keep class references by path (`preload("res://...")`) for new effect scripts; Godot's headless run does not have a

@@ -2373,6 +2373,20 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
+	# A code-defined ACTIVATED ability. Costs and targets were settled during activation; the proxy carries the
+	# AbilitySpec snapshot, so resolution is just the handler with those targets.
+	if card.ability_spec != null:
+		var ability_source: Card = card.effect_source
+		if ability_source != null:
+			var ability_picks: Array = card.effect_targets.duplicate()
+			if ability_picks.is_empty() and card.effect_target != null:
+				ability_picks = [card.effect_target]
+			var ability_ctx = ability_source.make_effect_context("activated_ability", {}, card, ability_picks)
+			await card.ability_spec.run.call(ability_ctx)
+		field.call("finish_targeting_state")
+		card.queue_free()
+		stack._mark_resolution_complete()
+		return
 	# A board-wide event trigger is a stack object with its own resolution path; its copied card data has no
 	# `__event_trigger` keyword to resolve.
 	if not card.event_trigger.is_empty():

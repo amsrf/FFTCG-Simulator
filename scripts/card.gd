@@ -85,6 +85,9 @@ func set_effect_targets(picks: Array) -> void:
 ## The skill definition carried by a stack copy. Copied abilities use this instead of an index because the source
 ## card may overwrite its copy while this object is still on the stack.
 var skill_def_override: Dictionary = {}
+## The AbilitySpec snapshot of a code-defined activated ability. The stack proxy carries it so resolution can call the
+## same handler even if the source card changes afterwards.
+var ability_spec = null
 ## True when this stack copy is Kimahri's copied ability, so committing it can consume the permission.
 var copied_skill_activation: bool = false
 var copied_skill_token: int = 0
@@ -774,6 +777,17 @@ func activation_skills() -> Array:
 	if not abilities_enabled():
 		return []
 	var out: Array = []
+	# CODE-DEFINED ABILITIES WIN over the JSON list for the same card, so a card can migrate its abilities without
+	# keeping a duplicate set in card_effects.json.
+	var effect_obj = effect()
+	if effect_obj != null and effect_obj.has_method("activated_abilities"):
+		for spec in effect_obj.activated_abilities():
+			if spec != null and spec.has_method("as_skill_dict"):
+				out.append(spec.as_skill_dict())
+	if not out.is_empty():
+		if not copied_skill.is_empty():
+			out.append(copied_skill)
+		return out
 	var printed = card_effects.get("skill", [])
 	if printed is Array:
 		out.append_array(printed)
@@ -788,6 +802,15 @@ func activation_skill(index: int) -> Dictionary:
 	if index < 0 or index >= skills.size() or not (skills[index] is Dictionary):
 		return {}
 	return skills[index]
+
+
+## The code-defined AbilitySpec behind one activation slot, if it has one. JSON abilities return null and keep using
+## their instruction list.
+func activation_ability_spec(index: int) -> RefCounted:
+	var definition: Dictionary = activation_skill(index)
+	if definition.has("_ability_spec"):
+		return definition["_ability_spec"]
+	return null
 
 
 ## Only Special Abilities (the ones with an S icon / s_cost) are valid Ronso Rage targets.

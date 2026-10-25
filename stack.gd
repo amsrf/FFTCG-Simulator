@@ -404,6 +404,7 @@ func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
 	# Snapshot the definition. The source's copied-skill slot may be overwritten or cleared while this object is
 	# still on the stack, and an ability already on the stack must resolve independently of its source.
 	proxy.skill_def_override = definition.duplicate(true)
+	proxy.ability_spec = source.activation_ability_spec(skill_index)
 	proxy.copied_skill_activation = bool(definition.get("copied", false))
 	proxy.copied_skill_token = source.copied_skill_token if proxy.copied_skill_activation else 0
 	proxy.key_word_effect = "skill"

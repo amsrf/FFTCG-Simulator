@@ -99,6 +99,38 @@ target session.
 
 `tests/effects_batch2_probe.tscn` covers 202, 523, 549, 583 and 719. Full suite and boot are green.
 
+### Activated Abilities: AbilitySpec
+
+Added `scripts/effects/ability_spec.gd` and the first code-defined activated abilities:
+
+`3` Red Mage, `47` Terra, `49` Time Mage, `145` Ramza.
+
+An activated ability is one descriptor because it carries several things at once:
+
+```gdscript
+_ability({
+	"text": "《Dull》: Choose 1 Backup. Activate it.",
+	"cost": {},
+	"tap": true,
+	"targets": {"is_type": "Backup"},
+	"run": Callable(self, "_activate_backup"),
+})
+```
+
+- **Events** remain method-name contracts: `func when_enter_field(ctx)`.
+- **Activated abilities** use `activated_abilities()` / `_ability(...)` because a card can have several and each needs
+  text, costs, target timing and a handler.
+- Targets are chosen at activation, as required for action abilities; the handler receives them as `ctx.targets`.
+- The activation pipeline still consumes a dictionary (`as_skill_dict()`), so the existing mana, S-cost, discard,
+  sacrifice and tap machinery is unchanged.
+- The stack proxy snapshots the `AbilitySpec` and calls the same handler at resolution.
+
+Code-defined abilities win over a card's JSON `skill` list, so the JSON entries can be removed card by card without
+creating duplicates.
+
+`tests/ability_probe.tscn` covers activation, the Dull cost, target selection, the stack proxy and the handler
+(6 checks). Full suite and boot are green.
+
 ### Silence Status Icon
 
 Nullified field cards now show a silence bubble beside them. The balloon and tail are a single continuous transparent
