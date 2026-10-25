@@ -144,6 +144,28 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### Light/Dark and any-element mana
+
+* Rule 7.7.5 normally allows one Light or Dark card per side. `Game.would_break_light_dark_limit()` is a board query
+  called from `Field.play_card()` before entry. `light_dark_exempt` on Cosmos/Chaos lets them enter beside their own
+  element and, while on the field, allows more of that element. Setup boards (`animate == false`) are exempt.
+* `Card.mana_element()` returns `"any"` for a card with `produces_any_element` while it is on the field. Field/Hand
+  mana emitters must use `mana_element()`, not `element`. `Assistant.payment_breakdown()` spends any-element mana on
+  unmatched elemental points first, then on wild points.
+
+### Delayed break and status payloads
+
+* `break_at_end_of_turn` is a status resolved by `Field.end_phase_cleanup()` before `turn_end()` clears statuses.
+* `add_status_to_targets(status, duration, payload)` stores the payload and automatically adds `source` and `controller`.
+  `_trigger_status_break_zone_effects()` restores both while executing the payload's `on_enter_break_zone` instructions.
+* The generic `Game.choose_target(criteria)` instruction opens a targeting session in an instruction chain and writes
+  the picks to `_targets`, so following instructions can act on them.
+
+### Conditional statuses
+
+`conditional_status` is evaluated live from `if_controls`; use it instead of writing a status when the grant should
+disappear as soon as the board changes (Tidus + Yuna).
+
 ### Board-wide events use the `triggers` array
 
 `Card.card_effects["triggers"]` is an array of event watchers, separate from the printed `when_*` keywords:

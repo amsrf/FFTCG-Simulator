@@ -417,11 +417,14 @@ func payment_breakdown() -> Array:
 	for _i in range(int(mana_cost.get("neutral", 0))):
 		slots.append({"element": "", "paid_by": ""})
 
-	# Pass 1: match each element to its own points.
+	# Pass 1: match each element to its own points. `any` is kept aside: it can fill an elemental slot that has
+	# no matching source, or a wild point, but only one point per selected source.
 	var pool: Dictionary = {}
 	for element in mana_acc:
 		var name: String = ELEMENTS.key_to_element(element)
 		pool[name] = int(pool.get(name, 0)) + int(mana_acc[element])
+	var any_pool: int = int(pool.get("any", 0))
+	pool.erase("any")
 	for slot in slots:
 		var name: String = str(slot["element"])
 		if name.is_empty():
@@ -430,9 +433,18 @@ func payment_breakdown() -> Array:
 			pool[name] = int(pool[name]) - 1
 			slot["paid_by"] = name
 
+	# Pass 1b: ANY-ELEMENT MANA fills what the coloured sources could not. It is spent here, before the wild
+	# points, because an elemental requirement cannot be paid by surplus later.
+	for slot in slots:
+		if str(slot["element"]).is_empty() or any_pool <= 0:
+			continue
+		if not str(slot["paid_by"]).is_empty():
+			continue
+		slot["paid_by"] = "any"
+		any_pool -= 1
+
 	# Pass 2: the surplus pays the wild points, sorted so the row does not reshuffle between frames. "neutral"
-	# is deliberately NOT part of the surplus — that is the rule remaining_cost() has always applied, and this
-	# function has to reproduce it exactly.
+	# is deliberately NOT part of the surplus, and any leftover `any` joins it.
 	var spare: Array = []
 	var names: Array = pool.keys()
 	names.sort()
@@ -441,18 +453,10 @@ func payment_breakdown() -> Array:
 			continue
 		for _i in range(int(pool[name])):
 			spare.append(str(name))
+	for _i in range(any_pool):
+		spare.append("any")
 	var next: int = 0
 	for slot in slots:
-		# AN ELEMENTAL POINT CANNOT BE PAID BY SPARE.
-		#
-		# Without this guard the loop also falls through to the still-owed ELEMENTAL points, and surplus of any
-		# colour fills them — which is how a cost of one fire and one wild was payable with a single blue card: its
-		# two blue mana covered the wild point and then slid into the fire point. Pass 1 above states that an
-		# elemental point needs its own element; this is the other half of that rule.
-		#
-		# It matters beyond this loop, because remaining_cost() — and therefore can_pay_cost(), and therefore the
-		# Confirm button — are all DERIVED from the list this builds. One missing guard here turned the button's
-		# check off as well.
 		if not str(slot["element"]).is_empty():
 			continue
 		if not str(slot["paid_by"]).is_empty():

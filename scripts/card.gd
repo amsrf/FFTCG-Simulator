@@ -766,8 +766,27 @@ func has_haste() -> bool:
 func is_brave() -> bool:
 	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave"):
 		return true
+	if has_conditional_status("brave"):
+		return true
 	var host: Node = get_parent()
 	return host != null and host.has_method("party_grants_brave") and host.call("party_grants_brave", self)
+
+## A keyword granted while a board condition holds ("If you control Yuna, Tidus gains Brave"). Evaluated live, like
+## conditional_power; no status is written, so the board changing is enough to turn it off.
+func has_conditional_status(status: String) -> bool:
+	var rules = card_effects.get("conditional_status", [])
+	if rules is Dictionary:
+		rules = [rules]
+	if not (rules is Array):
+		return false
+	for rule in rules:
+		if not (rule is Dictionary):
+			continue
+		if str(rule.get("status", "")) != status:
+			continue
+		if _controls_matching(rule.get("if_controls", {})):
+			return true
+	return false
 
 ## FIRST STRIKE: this card deals its damage before a card without it. Printed "first_strike": true, or granted as
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
@@ -1320,6 +1339,25 @@ func is_element(value: String) -> bool:
 	if element == value:
 		return true
 	return ELEMENT_NAMES.get(value, "") == element
+
+func is_light_or_dark() -> bool:
+	return is_element("Light") or is_element("Dark")
+
+## "light" / "dark" / "" — the two elements with the rule that you may normally control only one such card.
+func light_dark_kind() -> String:
+	if is_element("Light"):
+		return "light"
+	if is_element("Dark"):
+		return "dark"
+	return ""
+
+## A Backup can print "produces CP of any Element" (Cosmos/Chaos). The card only behaves that way while it is on
+## the field; `mana_element()` is what the payment UI asks instead of reading `element` directly.
+func produces_any_element() -> bool:
+	return is_on_field() and (card_effects.has("produces_any_element") or status_effects.has("produces_any_element"))
+
+func mana_element() -> String:
+	return "any" if produces_any_element() else element
 
 const CARD_TARGET := preload("res://scripts/card_target.gd")
 

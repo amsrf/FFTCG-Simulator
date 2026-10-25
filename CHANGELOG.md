@@ -4,7 +4,33 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
-### B4b: Board-Wide Event Triggers (108, 187, 206, 214, 215; 213 partial)
+### Reusable Mechanics: Any-Element Mana, Delayed Break, Riders, Conditional Status
+
+Five cards landed with primitives that are useful beyond them: **183 Cosmos**, **184 Chaos**, **104 Kefka**, **211 Rygdea**, **213 Tidus**.
+
+* **Any-element mana (183/184).** `Card.produces_any_element()` is true while a card with `produces_any_element` is
+  on the field; `mana_element()` returns `any` there and the Field/Hand mana emitters use it. `Assistant.payment_breakdown()`
+  keeps `any` in its own pool, spends it on elemental points that have no matching source first, then lets the remainder
+  pay wild points. Paid `any` slots render as wild crystals.
+* **Light/Dark field limit (183/184).** Rule 7.7.5 normally allows only one Light or Dark card per side.
+  `Game.would_break_light_dark_limit()` checks the board before entry; `light_dark_exempt` lets Cosmos/Chaos enter beside
+  their own element and lifts the limit for that element while they remain. A card that would exceed the limit is sent to
+  the Break Zone without entering (the existing-card simplification also used for duplicate names).
+* **Delayed break (104).** Status `break_at_end_of_turn`; `Field.end_phase_cleanup()` breaks marked cards before the
+  end-of-turn damage/status wipe.
+* **Targeted break-zone rider (211).** `add_status_to_targets` now accepts a payload. The payload records its source and
+  controller, and `_trigger_status_break_zone_effects()` restores both while running it. The generic `choose_target`
+  instruction opens a targeting session inside an instruction chain, so the rider can pick an opponent Forward and then
+  `dull_targets` it.
+* **Conditional keyword (213).** `conditional_status` evaluates a live board condition (`if_controls`) and is read by
+  `is_brave()`. Tidus gains Brave while Yuna is controlled; the status disappears with Yuna, with no stored state.
+
+Probe: `tests/reusable_probe.tscn` — 16 checks covering both mana modes, the Light/Dark exception, Kefka's end-phase
+break, Rygdea's rider across a real Break Zone transition, and Tidus's conditional Brave.
+
+Coverage after this slice: **103 implemented / 4 vanilla / 10 missing + 1 partial (173)**.
+
+### B4b: Board-Wide Event Triggers (108, 187, 206, 214, 215, 213)
 
 New generic card-data key: `triggers`, an array of board-wide event triggers.
 

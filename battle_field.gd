@@ -301,13 +301,13 @@ func add_card_to_mana_conversion(card:Card):
 		selected_cards_for_mana_conversion.push_back(card)
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
 	card.show_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(1,card.element)
+	selected_cards_for_mana_has_changed.emit(1,card.mana_element())
 	
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
 	card.clear_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(-1,card.element)
+	selected_cards_for_mana_has_changed.emit(-1,card.mana_element())
 
 
 ## Apply every static `on_character_enter` rule currently on the board to a card that just entered. This is a BOARD
@@ -347,6 +347,12 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 		if unique_game != null and unique_game.has_method("would_be_unique_name_conflict") \
 				and unique_game.would_be_unique_name_conflict(card):
 			print("[Unique] %s is already on the field; the new copy goes to the Break Zone" % card.card_name)
+			unique_game.send_off_field_card_to_break_zone(card)
+			return
+		# RULE 7.7.5: normally one Light or Dark card per side. Cosmos/Chaos carry the printed exception.
+		if unique_game != null and unique_game.has_method("would_break_light_dark_limit") \
+				and unique_game.would_break_light_dark_limit(card):
+			print("[Light/Dark] %s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
 			unique_game.send_off_field_card_to_break_zone(card)
 			return
 	var trans = card.global_transform
@@ -588,9 +594,17 @@ func party_grants_brave(card: Card) -> bool:
 	return false
 	
 func end_phase_cleanup():
-	# End Phase cleanup: remove all damage from every card on the field and
-	# expire "until end of turn" effects. (No end-of-turn priority window
-	# exists yet, so this runs immediately on entering the End Phase.)
+	# End Phase cleanup: resolve "break it at the end of the turn" first, then remove all damage from every card
+	# on the field and expire "until end of turn" effects. (No end-of-turn priority window exists yet, so this runs
+	# immediately on entering the End Phase.)
+	var game: Node = get_parent()
+	for c in get_all_cards().duplicate():
+		if c == null or not is_instance_valid(c) or not c.status_effects.has("break_at_end_of_turn"):
+			continue
+		c.status_effects.erase("break_at_end_of_turn")
+		print("[EndPhase] %s is broken by its delayed-break effect" % c.card_name)
+		if game != null and game.has_method("break_card"):
+			game.break_card(c)
 	for c in get_all_cards():
 		c.turn_end()
 func try_activate_from_field(card: Card) -> void:

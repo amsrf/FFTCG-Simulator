@@ -25,8 +25,6 @@ NEEDS_CODE = {
     # B3 - targeting / selection (implemented)
     # B4a - cost reductions (177 and 210 implemented)
     # B4b - event triggers (108, 187, 206, 214, 215 implemented)
-    213: 'Brave while you control Yuna',
-    211: 'targeted on-break rider',
     173: 'Attack Phase start trigger + element override',
     181: 'return-self-to-hand cost',
     129: 'exile top card and branch on its type',
@@ -36,11 +34,8 @@ NEEDS_CODE = {
     102: 'copy an opponent Forward ability',
     103: 'dynamic element identity',
     107: 'dynamic element identity',
-    104: 'delayed break at end of turn',
     111: 'variable X cost',
     135: 'multi-card search/play with distinct elements',
-    183: 'any-element mana production',
-    184: 'any-element mana production',
     216: 'dynamic power + strip abilities / set power 1000',
 }
 

@@ -850,13 +850,13 @@ func add_card_to_mana_conversion(card:Card):
 		selected_cards_for_mana_conversion.push_back(card)
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
 	card.show_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(2,card.element)
+	selected_cards_for_mana_has_changed.emit(2,card.mana_element())
 	
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
 	card.clear_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(-2,card.element)
+	selected_cards_for_mana_has_changed.emit(-2,card.mana_element())
 			
 func animate_card(card, target_position, target_tilt: float = 0.0):
 	# POSITION AND TILT. It used to tween the scale to 1.0 as well, which quietly made 1.0 the hand's REAL resting size:

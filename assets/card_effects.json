@@ -3023,6 +3023,7 @@
 			]
 		}
 	},
+	
 	"213": {
 		"self_cost": {
 			"per": {
@@ -3049,6 +3050,14 @@
 						]
 					}
 				]
+			}
+		],
+		"conditional_status": [
+			{
+				"status": "brave",
+				"if_controls": {
+					"is_named": "Yuna"
+				}
 			}
 		]
 	},
@@ -3357,5 +3366,93 @@
 			"fields": "may, may_prompt, once_per_turn, requires_active, choose_target, instructions.",
 			"resolution": "Matched triggers are placed on the stack as effect copies. The may choice, target selection and instructions run when the stack object resolves, after either player may respond."
 		}
+	},
+
+	"104": {
+		"skill": [
+			{
+				"cost": {},
+				"tap": true,
+				"text": "Dull: Choose 1 Forward you control. It gains +5000 power until the end of the turn. At the end of the turn, break it.",
+				"choose_target": {
+					"is_type": "Forward",
+					"controller": "your"
+				},
+				"instructions": [
+					{
+						"name": "power_change_targets",
+						"author": "game",
+						"argument": [
+							5000,
+							1
+						]
+					},
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"break_at_end_of_turn",
+							1
+						]
+					}
+				]
+			}
+		]
+	},
+
+	
+	"211": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_tapped": false
+			},
+			"instructions": [
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"rygdea_mark",
+						1,
+						{
+							"on_enter_break_zone": [
+								{
+									"name": "choose_target",
+									"author": "game",
+									"argument": [
+										{
+											"is_type": "Forward",
+											"controller": "opponent"
+										}
+									]
+								},
+								{
+									"name": "dull_targets",
+									"author": "game",
+									"argument": []
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						3000
+					]
+				}
+			]
+		}
+	},
+
+	"183": {
+		"produces_any_element": true,
+		"light_dark_exempt": "light"
+	},
+
+	"184": {
+		"produces_any_element": true,
+		"light_dark_exempt": "dark"
 	}
 }

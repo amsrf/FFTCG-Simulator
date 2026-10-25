@@ -646,15 +646,38 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 			found.append(c)
 	return found
 
+## A generic instruction: open a targeting session in the middle of an instruction chain. The cards chosen become
+## the current targets, so the next instruction (dull_targets, damage_targets, ...) acts on them. Used by delayed
+## riders such as Rygdea's "when it is put into the Break Zone, choose an opponent Forward".
+func choose_target(criteria: Dictionary) -> void:
+	var source: Card = _current_source_card
+	if source == null or not is_instance_valid(source):
+		return
+	if not field.has_viable_target(criteria, source, "Ability"):
+		_last_action_succeeded = false
+		return
+	field.request_target(criteria, source, false, "Ability")
+	# A non-local agent completes synchronously inside request_target(); only a local player leaves the list empty.
+	if field.targeting_picked.is_empty():
+		await assistant.target_complete
+	_targets = field.targeting_picked.duplicate()
+	_last_action_succeeded = not _targets.is_empty()
+
 ## Grant a status to EVERY target of the current effect. The multi-target twin of Card.add_status_effect, which an
 ## instruction can only reach one card with — see untap_targets above for the same shape and why it lives here.
 ##
 ## The duration is in TURNS: 1 means "until the end of this turn", expired by Card.turn_end() alongside attacking and
-## blocking.
-func add_status_to_targets(status: String, duration: int = 1, _extra = null) -> void:
+## blocking. A payload (Rygdea) rides with the status and is restored when the card reaches the Break Zone.
+func add_status_to_targets(status: String, duration: int = 1, extra = null) -> void:
+	var payload: Dictionary = extra.duplicate() if extra is Dictionary else {}
+	if not payload.is_empty():
+		# The rider remembers who created it, so a break-zone trigger can still ask "your opponent" correctly
+		# and can point the targeting arrow back at the source card.
+		payload["source"] = _current_source_card
+		payload["controller"] = _current_controller
 	for card in _targets:
 		if card != null and is_instance_valid(card):
-			card.add_status_effect(status, duration)
+			card.add_status_effect(status, duration, payload)
 			print("[Status] ", card.card_name, " gains ", status, " for ", duration, " turn(s)")
 ## Re-entrancy guard: true while a priority round is running. Prevents
 ## overlapping priority loops when Stack.request_priority fires mid-round.
@@ -1914,6 +1937,38 @@ func send_off_field_card_to_break_zone(card: Card) -> void:
 	card.broken = false
 	_send_card_to_graveyard(card)
 
+## Rule 7.7.5: normally only one Light or Dark card may be on a side. Cosmos (Light) and Chaos (Dark) print the
+## exception: they may enter next to one of their own element, and while one is on the field that element may have
+## two or more cards. This is a board query, so it stops applying the moment the exceptional card leaves.
+func would_break_light_dark_limit(card: Card) -> bool:
+	if card == null or not is_instance_valid(card) or not card.is_character():
+		return false
+	var kind: String = card.light_dark_kind()
+	if kind.is_empty():
+		return false
+	var side_name: String = "player" if card.controller == "player" else "opponent"
+	var same_kind: bool = false
+	var other_kind: bool = false
+	var enabled_by_field: bool = false
+	for other in field.get_front_cards_for(side_name) + field.get_back_cards_for(side_name):
+		if other == null or not is_instance_valid(other) or other == card:
+			continue
+		if not other.is_light_or_dark():
+			continue
+		if other.light_dark_kind() == kind:
+			same_kind = true
+		else:
+			other_kind = true
+		if str(other.card_effects.get("light_dark_exempt", "")) == kind:
+			enabled_by_field = true
+	# The exceptional card itself may enter beside cards of its OWN kind, never beside the opposite kind. While it
+	# is on the field it lifts the limit for that kind (the "you can play 2 or more Light Characters" clause).
+	if str(card.card_effects.get("light_dark_exempt", "")) == kind:
+		return other_kind
+	if enabled_by_field:
+		return false
+	return same_kind or other_kind
+
 func put_card_into_graveyard(card: Card) -> void:
 	# Removal that is NOT a break (e.g. power reduced to 0). The "unbreakable" status does not apply, because the
 	# card did not break — but it still ARRIVES in the Break Zone, so `when_enter_break_from_field` fires and
@@ -1980,10 +2035,15 @@ func _trigger_status_break_zone_effects(card: Card) -> void:
 		if instructions.is_empty():
 			return
 		var previous: String = _current_controller
+		var previous_source: Card = _current_source_card
+		var payload_source = payload.get("source", null)
+		if payload_source is Card and is_instance_valid(payload_source):
+			_current_source_card = payload_source
 		_current_controller = str(payload.get("controller", previous))
 		print("[BreakZone] ", card.card_name, " -> status trigger ", status)
 		_execute_instructions(instructions)
 		_current_controller = previous
+		_current_source_card = previous_source
 		return
 
 ## A TARGETING SESSION WAS CONFIRMED. This is the first moment the chosen set is real, so it is where "when chosen"
