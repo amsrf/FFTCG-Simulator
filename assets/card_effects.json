@@ -3592,5 +3592,33 @@
 				]
 			}
 		]
+	},
+
+	"102": {
+		"skill": [
+			{
+				"s_cost": true,
+				"cost": {
+					"土": 2
+				},
+				"text": "Ronso Rage 《S》《土》《土》: Choose 1 Forward opponent controls. Kimahri gains its Special Ability until the end of the turn. You can use this ability without paying any cost but only once.",
+				"choose_target": {
+					"is_type": "Forward",
+					"controller": "opponent",
+					"has_special_ability": true
+				},
+				"instructions": [
+					{
+						"name": "copy_skill",
+						"author": "game",
+						"argument": [
+							{
+								"type": "special_ability"
+							}
+						]
+					}
+				]
+			}
+		]
 	}
 }

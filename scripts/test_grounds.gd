@@ -61,6 +61,10 @@ const MILL_THIEF := 69   # Thief, Forward: enters the field -> opponent mills 1
 const MILL_THIEF_BACKUP := 70  # Thief, Backup: same ETB, already on the board here
 const SUMMONER := 53     # Summoner: 《Ice》, put itself into the Break Zone: cancel a Summon on the STACK
 const CECIL := 108       # Cecil: "When you receive damage, choose 1 Forward opponent controls. You may deal it 5000 damage."
+const KIMAHRI := 102     # Kimahri: Ronso Rage copies one Special Ability from an opponent Forward.
+const CLOUD := 182       # Cloud: two S abilities, so the copy picker has something to choose.
+const EARTH_MANA := 105  # Evoker, earth Backup.
+const EARTH_MANA_2 := 120  # Monk, earth Backup.
 const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or damage the chosen Forward.
 const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
 const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
@@ -218,6 +222,20 @@ static func gilgamesh_reveal_backup() -> Dictionary:
 	return gilgamesh_ground(GILGAMESH_BACKUP_TOP, "ground_gilgamesh_backup")
 
 
+## KIMAHRI 102. Kimahri and an earth pair on your side; Cloud 182 opposite. Use Ronso Rage (S + two earth),
+## discard the Kimahri copy in hand, then choose Cloud. Cloud has two S abilities, so the copy picker appears.
+## The copied ability can then be activated for free.
+static func kimahri_copy() -> Dictionary:
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_kimahri"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": KIMAHRI}, {"id": EARTH_MANA}, {"id": EARTH_MANA_2}]
+	cfg["player_hand"] = [KIMAHRI]
+	cfg["opponent_field"] = [{"id": CLOUD}]
+	cfg["opponent_hand"] = []
+	return cfg
+
+
 static func cecil_damage() -> Dictionary:
 	## 108 CECIL. Press Y to take 1 damage; Cecil's event trigger asks whether to deal 5000 to an opponent Forward.
 	## The three opponent Forwards are deliberately sturdy (6000/7000/8000) so 5000 shows as accumulated damage
@@ -277,6 +295,10 @@ const GROUNDS := {
 		"title": "Ground: Gilgamesh 129 (reveal a Backup)",
 		"blurb": "Use Gilgamesh's S + Dull ability; discard the copy in hand. The top card is Chemist (Backup), so the chosen Forward takes 3000 instead. Opponent is passive.",
 	},
+	"kimahri": {
+		"title": "Ground: Kimahri 102 (copy a Special Ability)",
+		"blurb": "Activate Ronso Rage (S + two earth), discard the Kimahri in hand, and choose Cloud. Cloud has two S abilities: pick one. Kimahri can then use the copy for free, even while tapped.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -305,6 +327,8 @@ static func config(name: String) -> Dictionary:
 			return gilgamesh_reveal_forward()
 		"gilgamesh_backup":
 			return gilgamesh_reveal_backup()
+		"kimahri":
+			return kimahri_copy()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()
@@ -312,6 +336,46 @@ static func config(name: String) -> Dictionary:
 
 static func names() -> Array:
 	return GROUNDS.keys()
+
+
+## Test Mode groups. Kept beside the registry so adding a ground has one obvious place to categorise it.
+const CATEGORY_OF := {
+	"party": "Combat",
+	"party_ai": "Combat",
+	"summons": "Abilities & Targeting",
+	"counter": "Abilities & Targeting",
+	"terra": "Abilities & Targeting",
+	"cecil": "Abilities & Targeting",
+	"gilgamesh_forward": "Card Effects",
+	"gilgamesh_backup": "Card Effects",
+	"kimahri": "Card Effects",
+	"break_zone": "Zones",
+	"mill": "Zones",
+	"clean": "Sandbox",
+}
+const CATEGORY_ORDER := ["Combat", "Abilities & Targeting", "Card Effects", "Zones", "Sandbox"]
+
+
+static func category(name: String) -> String:
+	return str(CATEGORY_OF.get(name, "Other"))
+
+
+static func categories() -> Array:
+	var out: Array = []
+	for category_name in CATEGORY_ORDER:
+		for ground_name in GROUNDS.keys():
+			if category(ground_name) == category_name:
+				if not out.has(category_name):
+					out.append(category_name)
+	return out
+
+
+static func names_in(category_name: String) -> Array:
+	var out: Array = []
+	for ground_name in GROUNDS.keys():
+		if category(ground_name) == category_name:
+			out.append(ground_name)
+	return out
 
 
 static func has(name: String) -> bool:

@@ -67,6 +67,12 @@ func set_effect_targets(picks: Array) -> void:
 @export var effect_source: Card
 ## Index into card_effects["skill"] for stack copies activating a skill (-1 = not used).
 @export var skill_activation_index: int = -1
+## The skill definition carried by a stack copy. Copied abilities use this instead of an index because the source
+## card may overwrite its copy while this object is still on the stack.
+var skill_def_override: Dictionary = {}
+## True when this stack copy is Kimahri's copied ability, so committing it can consume the permission.
+var copied_skill_activation: bool = false
+var copied_skill_token: int = 0
 ## "Summon" / "Ability" for stack copies; empty on real cards. Lets protection
 ## rules ("cannot be chosen by opponent's Summons or abilities") identify the
 ## source of a targeting effect.
@@ -77,6 +83,10 @@ var event_trigger: Dictionary = {}
 var event_context: Dictionary = {}
 ## Power currently granted by conditional continuous effects (e.g. Zack/Aerith).
 var current_conditional_bonus: int = 0
+## KIMAHRI 1-102H. One copied Special Ability, not a library. Empty means no permission. The stack copy takes a
+## snapshot, so this can be safely overwritten or cleared while an already-activated copy is still on the stack.
+var copied_skill: Dictionary = {}
+var copied_skill_from: String = ""
 
 @onready var hand_mesh: MeshInstance3D = $HandMesh
 @onready var field_mesh: MeshInstance3D = $FieldMesh
@@ -486,6 +496,9 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
 func enter_zone(zone: Zone) -> void:
+	# A copied ability is a continuous effect while its source is on the field. Leaving the field drops it.
+	if current_zone == Zone.FIELD and zone != Zone.FIELD:
+		clear_copied_skill()
 	current_zone = zone
 	set_hidden(false)
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
@@ -668,6 +681,8 @@ func set_extra_attacks(count: int) -> void:
 	extra_attacks = maxi(0, count)
 
 func turn_end():
+	# Kimahri's copied ability, like everything else temporary, expires at end of turn.
+	clear_copied_skill()
 	# End Phase cleanup for this card: expire "until end of turn" status
 	# effects and temporary power modifiers, then remove all damage.
 	for s in status_effects.keys():
@@ -730,16 +745,84 @@ func power_change(amount, duration):
 	if power_label:
 		power_label.changePower(power)
 	
+## Skills the card can actually activate right now: printed skills plus Kimahri's copied ability.
+func activation_skills() -> Array:
+	var out: Array = []
+	var printed = card_effects.get("skill", [])
+	if printed is Array:
+		out.append_array(printed)
+	if not copied_skill.is_empty():
+		out.append(copied_skill)
+	return out
+
+
+## One skill by index in activation_skills(). Used by the existing index-based activation pipeline.
+func activation_skill(index: int) -> Dictionary:
+	var skills: Array = activation_skills()
+	if index < 0 or index >= skills.size() or not (skills[index] is Dictionary):
+		return {}
+	return skills[index]
+
+
+## Only Special Abilities (the ones with an S icon / s_cost) are valid Ronso Rage targets.
+func special_ability_skills() -> Array:
+	var out: Array = []
+	for def in activation_skills():
+		if def is Dictionary and (bool(def.get("s_cost", false)) or bool(def.get("special_ability", false))):
+			out.append(def)
+	return out
+
+
+## Criteria predicate for "choose 1 Forward opponent controls that has a Special Ability".
+func has_special_ability(want: bool = true) -> bool:
+	return (not special_ability_skills().is_empty()) == want
+
+
+## Install a copied Special Ability. The source text is kept, but every activation cost is stripped. The "only if"
+## restrictions and the effect instructions stay: they are not costs.
+func set_copied_skill(definition: Dictionary, from_name: String = "") -> void:
+	if definition.is_empty():
+		return
+	var copy: Dictionary = definition.duplicate(true)
+	for key in ["cost", "tap", "s_cost", "discard", "sacrifice"]:
+		copy.erase(key)
+	copy["copied"] = true
+	copy["special_ability"] = true
+	copy["free_activation"] = true
+	copy["copied_from"] = from_name
+	copied_skill = copy
+	copied_skill_from = from_name
+	copied_skill_token += 1
+
+
+func clear_copied_skill() -> void:
+	if copied_skill.is_empty() and copied_skill_from == "":
+		return
+	copied_skill = {}
+	copied_skill_from = ""
+	copied_skill_token += 1
+
+
+## Consume exactly the permission this stack copy was made from. A newer Ronso Rage may have overwritten the slot
+## before this activation commits, and that newer permission must not be consumed by the older activation.
+func consume_copied_skill(token: int) -> void:
+	if token != 0 and token == copied_skill_token:
+		clear_copied_skill()
+
+
 func get_card_effect_instructions() -> Array[Instruction]:
-	if key_word_effect == "skill" and skill_activation_index >= 0:
-		if not "skill" in card_effects:
-			print("Error: no skill entry for card ", id)
-			return []
-		var skills = card_effects["skill"]
-		if skill_activation_index >= skills.size():
-			return []
-		var raw = skills[skill_activation_index].get("instructions", [])
-		return create_instruction_from_json(raw)
+	if key_word_effect == "skill":
+		if not skill_def_override.is_empty():
+			return create_instruction_from_json(skill_def_override.get("instructions", []))
+		if skill_activation_index >= 0:
+			if not "skill" in card_effects:
+				print("Error: no skill entry for card ", id)
+				return []
+			var skills = card_effects["skill"]
+			if skill_activation_index >= skills.size():
+				return []
+			var raw = skills[skill_activation_index].get("instructions", [])
+			return create_instruction_from_json(raw)
 	if key_word_effect != "" and key_word_effect in card_effects:
 		var entry = card_effects[key_word_effect]
 		if entry is Dictionary and entry.has("instructions"):

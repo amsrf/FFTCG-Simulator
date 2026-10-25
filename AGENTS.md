@@ -154,6 +154,17 @@ search domain for `choose_revealed`; `put_revealed_on_bottom` preserves reveal o
 `check_revealed` writes the instruction latch. Put the two conditional branches IMMEDIATELY after it: the dispatcher
 sets `_last_action_succeeded = true` before every other instruction, so an intervening instruction destroys the check.
 
+### Copied skills (Kimahri 102)
+
+A copied Special Ability lives in `Card.copied_skill` (one slot, empty = none). Do **not** append it to
+`card_effects["skill"]`; use `Card.activation_skills()`, which is the single activation list (printed + copied). The
+copy strips `cost`, `tap`, `s_cost`, `discard` and `sacrifice` but keeps `only_*` restrictions and all effect data.
+
+The stack proxy snapshots the chosen definition in `skill_def_override`. That is required because an ability on the
+stack is independent of its source: a later Ronso Rage may overwrite `copied_skill`, or Kimahri may leave the field,
+while the already-activated copy is still resolving. `consume_copied_skill(token)` only clears the exact permission the
+proxy was created from. `Copied_skill` clears on use, on leaving the field, and in `turn_end`.
+
 ### Discard flight
 
 `Graveyard.discard(card)` appends the card to the pile FIRST and then tweens its visual from the hand to the assigned
@@ -526,7 +537,8 @@ party members through `Card.is_brave()` → `Field.party_grants_brave()`.
 
 Adding one is three edits in `scripts/test_grounds.gd`: a builder function, an entry in
 `GROUNDS` (title + blurb) and an arm in `config()`. `test_grounds_probe` then checks the ids, the board it boots and
-anything the ground specifically claims.
+anything the ground specifically claims. Also add the ground to `CATEGORY_OF`; the Test Mode menu lays categories out
+in four columns from that mapping.
 
 `scripts/test_grounds.gd` is a registry of curated boards, reached from the main menu's **Test Mode** button
 (`test_grounds_menu.tscn`). The main menu itself is unchanged — the grounds are deliberately NOT presets there.

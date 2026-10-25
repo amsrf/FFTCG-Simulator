@@ -608,9 +608,7 @@ func end_phase_cleanup():
 	for c in get_all_cards():
 		c.turn_end()
 func try_activate_from_field(card: Card) -> void:
-	if not "skill" in card.card_effects:
-		return
-	var skills: Array = card.card_effects["skill"]
+	var skills: Array = card.activation_skills()
 	if skills.is_empty():
 		return
 	# ONE ENTRY POINT. A single ability activates immediately; two or more open the skill picker modal, which shows
@@ -647,9 +645,7 @@ func can_activate_now(card: Card) -> bool:
 	# A TAPPED CARD CAN STILL USE A NON-TAP ABILITY. The tap rule belongs to the cost, not to the card: Gilgamesh's
 	# 《雷》《雷》 power pump has no dull cost, so it must stay available after he has attacked. The same reasoning
 	# applies to summoning sickness: can_tap() is asked per ability, below, only when the ability asks to tap.
-	if not "skill" in card.card_effects:
-		return false
-	var skills: Array = card.card_effects["skill"]
+	var skills: Array = card.activation_skills()
 	if skills.is_empty():
 		return false
 	# AN S COST THAT CANNOT BE PAID IS NOT AN AVAILABLE ABILITY. Without this the activation TAPPED the source and then
@@ -733,7 +729,7 @@ func refresh_available_effects() -> void:
 func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	if not can_activate_now(card):
 		return
-	var skills: Array = card.card_effects["skill"]
+	var skills: Array = card.activation_skills()
 	if skills.is_empty():
 		return
 	if skill_index < 0:
@@ -847,12 +843,11 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 		return
 	var src: Card = _proxy.effect_source
 	var idx: int = _proxy.skill_activation_index
-	if idx < 0 or not "skill" in src.card_effects:
+	var def: Dictionary = _proxy.skill_def_override
+	if def.is_empty():
+		def = src.activation_skill(idx)
+	if def.is_empty():
 		return
-	var skills: Array = src.card_effects["skill"]
-	if idx >= skills.size():
-		return
-	var def: Dictionary = skills[idx]
 	var choose_target = def.get("choose_target", null)
 	if choose_target:
 		# The arc starts from the PROXY in the stack, not from the card on the field:

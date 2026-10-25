@@ -467,6 +467,36 @@ func _each_target(action: String, argument: Array = [], index: int = -1) -> void
 			card.callv(action, argument)
 	enforce_game_state_rules()
 
+## KIMAHRI 102. Ronso Rage copies ONE Special Ability from the chosen Forward. With several S abilities the
+## controller chooses through the same agent seam as normal skill selection; the copied text is stripped of every
+## activation cost when installed on Kimahri.
+func copy_skill(_argument = null) -> void:
+	_last_action_succeeded = false
+	var source: Card = _current_source_card
+	if source == null or not is_instance_valid(source) or not source.is_on_field():
+		return
+	var target: Card = _targets[0] if not _targets.is_empty() else null
+	if target == null or not is_instance_valid(target) or not target.is_on_field():
+		print("[CopySkill] no valid target")
+		return
+	var specials: Array = target.special_ability_skills()
+	if specials.is_empty():
+		print("[CopySkill] %s has no Special Ability" % target.card_name)
+		return
+	var chosen: int = 0
+	if specials.size() > 1:
+		var owner_id: int = 1 if source.controller == "player" else 2
+		var agent: Agent = agent_for(owner_id)
+		if agent != null:
+			chosen = await agent.choose_skill(owner_id, target, specials)
+		if chosen < 0 or chosen >= specials.size():
+			print("[CopySkill] choice cancelled")
+			return
+	source.set_copied_skill(specials[chosen], target.card_name)
+	_last_action_succeeded = true
+	print("[CopySkill] %s copies %s from %s" % [source.card_name, target.card_name, str(specials[chosen].get("text", ""))])
+
+
 func untap_targets(index: int = -1) -> void:
 	_each_target("untap", [], index)
 
@@ -634,6 +664,9 @@ func power_change_party(amount: int = 0, duration: int = 1) -> void:
 func _apply_effect_block(card: Card) -> Dictionary:
 	if card == null:
 		return {}
+	# A stack copy carries a snapshot, so a copied ability's apply_effect survives its source being overwritten.
+	if not card.skill_def_override.is_empty() and card.skill_def_override.get("apply_effect") is Dictionary:
+		return card.skill_def_override["apply_effect"]
 	var src: Card = card.effect_source
 	if src != null and card.skill_activation_index >= 0 and "skill" in src.card_effects:
 		var skills: Array = src.card_effects["skill"]

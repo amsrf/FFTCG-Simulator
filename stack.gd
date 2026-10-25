@@ -395,9 +395,17 @@ func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
 	## Physical stack object for UI (pay + target). Costs apply later at de facto stack commit.
 	if skill_activation_proxy != null:
 		return false
+	var definition: Dictionary = source.activation_skill(skill_index)
+	if definition.is_empty():
+		return false
 	var proxy: Card = card_scene.instantiate()
 	proxy.initialize(source.id, source.controller)
 	proxy.skill_activation_index = skill_index
+	# Snapshot the definition. The source's copied-skill slot may be overwritten or cleared while this object is
+	# still on the stack, and an ability already on the stack must resolve independently of its source.
+	proxy.skill_def_override = definition.duplicate(true)
+	proxy.copied_skill_activation = bool(definition.get("copied", false))
+	proxy.copied_skill_token = source.copied_skill_token if proxy.copied_skill_activation else 0
 	proxy.key_word_effect = "skill"
 	proxy.effect_source = source
 	proxy.effect_kind = "Ability"
@@ -414,15 +422,13 @@ func _apply_skill_source_tap_from_proxy() -> void:
 	if skill_activation_proxy == null:
 		return
 	var src: Card = skill_activation_proxy.effect_source
-	var idx: int = skill_activation_proxy.skill_activation_index
 	if src == null or not src.is_inside_tree():
 		return
-	if not "skill" in src.card_effects:
+	var def: Dictionary = skill_activation_proxy.skill_def_override
+	if def.is_empty():
+		def = src.activation_skill(skill_activation_proxy.skill_activation_index)
+	if def.is_empty():
 		return
-	var skills: Array = src.card_effects["skill"]
-	if idx < 0 or idx >= skills.size():
-		return
-	var def: Dictionary = skills[idx]
 	if def.get("tap", false):
 		src.tap()
 
@@ -438,6 +444,12 @@ func commit_skill_activation_costs_if_pending() -> void:
 	if s_cost_selected_card != null:
 		hand.discard_card(s_cost_selected_card)
 		s_cost_selected_card = null
+	# The copied-skill permission is one use. Consume only the exact permission this proxy was created from; a newer
+	# Ronso Rage may have replaced the slot while this activation was waiting.
+	if skill_activation_proxy != null and skill_activation_proxy.copied_skill_activation:
+		var copied_source: Card = skill_activation_proxy.effect_source
+		if copied_source != null:
+			copied_source.consume_copied_skill(skill_activation_proxy.copied_skill_token)
 	skill_mana_deferred_until_target_confirm = false
 
 func _clear_skill_proxy() -> void:
@@ -729,15 +741,19 @@ func _on_assistant_target_complete() -> void:
 ## The damage pool for an ability that says "divide N damage among them", or -1 when it says no such thing.
 ## Read from the SKILL DEF of the source, because the stack object is a proxy with no skill array of its own.
 func _divide_damage_total(proxy: Card) -> int:
-	if proxy == null or proxy.skill_activation_index < 0:
+	if proxy == null:
 		return -1
-	var src: Card = proxy.effect_source
-	if src == null or not ("skill" in src.card_effects):
+	var def: Dictionary = proxy.skill_def_override
+	if def.is_empty():
+		if proxy.skill_activation_index < 0:
+			return -1
+		var src: Card = proxy.effect_source
+		if src == null:
+			return -1
+		def = src.activation_skill(proxy.skill_activation_index)
+	if def.is_empty():
 		return -1
-	var skills: Array = src.card_effects["skill"]
-	if proxy.skill_activation_index >= skills.size():
-		return -1
-	for instruction in skills[proxy.skill_activation_index].get("instructions", []):
+	for instruction in def.get("instructions", []):
 		if str(instruction.get("name", "")) == "divide_damage":
 			var args: Array = instruction.get("argument", [])
 			return int(args[0]) if not args.is_empty() else 0

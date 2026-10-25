@@ -4,6 +4,31 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Kimahri 102: Copied Special Abilities
+
+Kimahri stores **one** copied Special Ability in `Card.copied_skill` (empty = no permission). Ronso Rage targets
+opponent Forwards with `has_special_ability`; if the target has several S abilities, the normal skill-choice modal asks
+which one to copy.
+
+The copied definition has `cost`, `tap`, `s_cost`, `discard` and `sacrifice` stripped, so it can be used for free even
+when Kimahri is tapped. Other activation restrictions and all effect instructions remain. The stack object carries a
+`skill_def_override` snapshot, so a copied ability already on the stack still resolves if Kimahri leaves or a second
+Ronso Rage replaces the slot. A per-copy token prevents an older pending activation from consuming the newer
+permission. The slot clears on use, on leaving the field, and at end of turn.
+
+Data: `"102"` with `{"name":"copy_skill","author":"game"}`.
+
+Probe: `tests/kimahri_probe.tscn` — 22 checks covering target legality, the two-S picker, cost stripping, one-use,
+overwrite, stack snapshots and end-of-turn expiry.
+
+Coverage is now **106 implemented / 4 vanilla / 7 missing + 1 partial (173)**.
+
+### Test Mode Categories
+
+The Test Mode screen now groups grounds into five categories and lays the category columns out four across:
+Combat, Abilities & Targeting, Card Effects, Zones and Sandbox. A deterministic **Kimahri** ground was added: Kimahri
+and two earth Backups face Cloud 182, whose two S abilities exercise the copy picker.
+
 ### Reveal Staging: 129 Gilgamesh and 131 Cait Sith
 
 New `reveal_top(count)` instruction. It takes cards off the top of the acting player's deck one at a time, lifts each

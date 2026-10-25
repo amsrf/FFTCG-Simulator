@@ -31,6 +31,11 @@ func _valid_ids(ids: Array, what: String) -> bool:
 func _ready() -> void:
 	var names: Array = GROUNDS.names()
 	_expect(names.size() >= 4, "at least four grounds are registered (%d)" % names.size())
+	var categories: Array = GROUNDS.categories()
+	_expect(categories.size() >= 3, "grounds are grouped into categories (%s)" % str(categories))
+	for name in names:
+		_expect(categories.has(GROUNDS.category(name)),
+			"'%s' belongs to a listed category (%s)" % [name, GROUNDS.category(name)])
 
 	# The MAIN MENU keeps its everyday presets; the grounds live on their own screen behind "Test Mode".
 	var presets: Array = MatchSetup.get_presets()
@@ -53,6 +58,8 @@ func _ready() -> void:
 			"it shows one button per ground (%d of %d)" % [menu.call("ground_button_count"), names.size()])
 		_expect(str(menu.call("ground_button_text", 0)).begins_with("Ground:"),
 			"and the first button is labelled as a ground ('%s')" % menu.call("ground_button_text", 0))
+		_expect(int(menu.call("column_count")) == 4,
+			"and the categories are laid out in four columns (%d)" % int(menu.call("column_count")))
 		menu.queue_free()
 		await get_tree().process_frame
 
@@ -131,6 +138,17 @@ func _ready() -> void:
 		"plus a spare Rikku to pay her S cost (discard a card named Rikku)")
 	_expect(mill["opponent_deck"].size() >= 10,
 		"the opponent's deck is long enough to watch several mills (%d)" % mill["opponent_deck"].size())
+
+	# --- Kimahri: the setup for the copy ability ------------------------------------------------------------
+	var kimahri: Dictionary = GROUNDS.kimahri_copy()
+	var kimahri_field: Array = []
+	for e in kimahri["player_field"]:
+		kimahri_field.append(int(e["id"]))
+	_expect(kimahri_field.has(GROUNDS.KIMAHRI), "the Kimahri ground puts Kimahri on your board")
+	_expect(kimahri["player_hand"].has(GROUNDS.KIMAHRI), "and a same-name copy in hand for the S cost")
+	_expect(kimahri["opponent_field"][0]["id"] == GROUNDS.CLOUD,
+		"Cloud is opposite, with two S abilities for the copy picker")
+	_expect(kimahri["opponent_type"] == "mock", "the opponent is passive during the copy test")
 
 	# --- the counter ground: everything needed for the loop, on one side ------------------------------------
 	var counter: Dictionary = GROUNDS.counter_summon()

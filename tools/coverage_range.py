@@ -29,7 +29,6 @@ NEEDS_CODE = {
     181: 'return-self-to-hand cost',
     141: 'force a blocker',
     # B5 - complex
-    102: 'copy an opponent Forward ability',
     103: 'dynamic element identity',
     107: 'dynamic element identity',
     111: 'variable X cost',
