@@ -43,6 +43,7 @@ func _ready() -> void:
 	await _check_copy_and_choice()
 	await _check_once_overwrite_and_snapshot()
 	await _check_no_special_ability()
+	await _check_copied_activation()
 	await _check_end_of_turn_and_free_activation()
 
 	print("[Kimahri] %d checks | failures: %d" % [_checks, _fails])
@@ -131,6 +132,26 @@ func _check_no_special_ability() -> void:
 	await _set_copy_target(kimahri, squall)
 	_expect(kimahri.copied_skill.is_empty(), "copying a card with no S ability does nothing")
 	_expect(not _game._last_action_succeeded, "and reports that the copy failed")
+
+
+func _check_copied_activation() -> void:
+	var agent: ChoiceAgent = _game.player_agent
+	agent.pick = 0
+	_kimahri.clear_copied_skill()
+	await _set_copy_target(_kimahri, _cloud)
+	_expect(not _kimahri.copied_skill.is_empty(), "setup: the free copy is installed")
+	_game.priority_holder = 1
+	GlobalVariables.set_base_mode(GlobalVariables.Player_Mode.FREE)
+	var copied_index: int = _kimahri.activation_skills().size() - 1
+	_field.begin_skill_activation(_kimahri, copied_index)
+	_expect(_game.stack.skill_activation_proxy != null,
+		"the copied ability puts an activation proxy on the stack")
+	_expect(_game.stack.cards.size() == 1, "and the proxy is visible on the stack")
+	_game.stack.confirm_skill_without_target_then_priority()
+	_expect(_kimahri.copied_skill.is_empty(), "committing the free copy consumes its permission")
+	await _game.stack.resolve_top_effect()
+	_expect(_cloud.accumulated_damage >= 4000,
+		"the copied Meteorain still applies its effect (Cloud took %d)" % _cloud.accumulated_damage)
 
 
 func _check_end_of_turn_and_free_activation() -> void:

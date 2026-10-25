@@ -18,8 +18,8 @@ permission. The slot clears on use, on leaving the field, and at end of turn.
 
 Data: `"102"` with `{"name":"copy_skill","author":"game"}`.
 
-Probe: `tests/kimahri_probe.tscn` — 22 checks covering target legality, the two-S picker, cost stripping, one-use,
-overwrite, stack snapshots and end-of-turn expiry.
+Probe: `tests/kimahri_probe.tscn` — 27 checks covering target legality, the two-S picker, cost stripping, free
+activation, one-use, overwrite, stack snapshots and end-of-turn expiry.
 
 Coverage is now **106 implemented / 4 vanilla / 7 missing + 1 partial (173)**.
 
