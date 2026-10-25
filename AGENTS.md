@@ -34,6 +34,18 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - **The scripts are split across two folders:** `battle_field.gd`, `stack.gd`, `assistant.gd`, `power_display.gd` are at the **repo root**, while `game.gd`, `card.gd`, `hand.gd`, `player_side.gd` are in `scripts/`. `grep -r` for the filename rather than guessing a path — a wrong guess costs a round trip.
 - **Warnings arrive in batches.** The user runs Godot and pastes the warning list (`UNUSED_*`, `SHADOWED_VARIABLE`, `Case mismatch …`). Fix every line, then sweep for the same *class* (`grep` for other unused private vars, other case-mismatched `res://` paths) instead of waiting for the next run.
 
+## Rules Reference (vector DB)
+
+The user maintains a vector database of the official FFTCG rules. Consult it before deciding a timing/priority/trigger question,
+rather than inventing a rule:
+
+```bash
+"C:\Users\KABUM\Desktop\VectorDb\rag-env\Scripts\python.exe" "C:\Users\KABUM\Desktop\VectorDb\search.py" "your rules question"
+```
+
+Quote the returned page/rule when it changes an implementation decision. It currently contains the game rules (for example,
+11.8.x auto-abilities: they go onto the stack at the next opportunity and can be responded to).
+
 ## Mill
 
 `mill_player(player_id, count)` / `opponent_mills(count)` own the RULE; `Graveyard.draw(card)` owns the ANIMATION, and
