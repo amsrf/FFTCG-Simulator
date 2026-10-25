@@ -128,8 +128,12 @@ _ability({
 Code-defined abilities win over a card's JSON `skill` list, so the JSON entries can be removed card by card without
 creating duplicates.
 
-`tests/ability_probe.tscn` covers activation, the Dull cost, target selection, the stack proxy and the handler
-(6 checks). Full suite and boot are green.
+`tests/ability_probe.tscn` covers activation, the Dull cost, target selection, the stack proxy and the handler.
+
+The JSON `skill` entries for `3`, `47`, `49`, `145` were removed once their specs landed; card 47 keeps its
+`when_enter_field` entry. Vincent `94` followed as the first **S-cost** code ability (`s_cost`, Dull, target, 6000
+damage), and the S-cost picker now reads `activation_skill()` instead of indexing `card_effects["skill"]`, so code
+abilities can use the same S payment flow. The ability probe is now 9 checks. Full suite and boot are green.
 
 ### Silence Status Icon
 

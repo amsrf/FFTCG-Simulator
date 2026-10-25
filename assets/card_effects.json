@@ -7,18 +7,6 @@
 			}
 		]
 	},
-	"3":{
-		"skill": [
-			{
-				"cost": {"火": 1, "neutral":1}, 
-				"tap":true, 
-				"instructions":[
-					{"name":"add_status_effect", "author":"target", "argument":["block_disabled", 1]}
-				],
-				"choose_target":{"is_type":"Forward"}
-			}
-		]
-	},
 	"4":{
 		"ex_burst":"when_cast",
 		"when_cast":
@@ -215,15 +203,6 @@
 
 	"95":{
 		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
-	},
-
-	"49":{
-		"skill":[{
-			"cost":{"氷":1, "neutral":1},
-			"tap":true,
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[{"name":"add_status_effect","author":"target","argument":["cannot_attack", 1]}]
-		}]
 	},
 
 	"93":{
@@ -518,19 +497,24 @@
 	"98":{
 		"power_per":{"count":"damage_received","value":1000,"brave_at":6}
 	},
-	"47":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Forward","controller":"opponent","is_tapped":true,"count":2},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[4000]}]
-		},
-		"skill":[
-			{
-				"cost":{"氷":1},
-				"text":"《Ice》: Choose 1 dull Forward. Deal it 1000 damage.",
-				"choose_target":{"is_type":"Forward","is_tapped":true},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
-			}
-		]
+"47": 	{
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent",
+				"is_tapped": true,
+				"count": 2
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						4000
+					]
+				}
+			]
+		}
 	},
 	"5": {
 		"damage_modifiers": [
@@ -1644,25 +1628,6 @@
 							"first_strike",
 							1
 						]
-					}
-				]
-			}
-		]
-	},
-	"145": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"text": "《Dull》: Choose 1 Backup. Activate it.",
-				"choose_target": {
-					"is_type": "Backup"
-				},
-				"instructions": [
-					{
-						"name": "untap_targets",
-						"author": "game",
-						"argument": []
 					}
 				]
 			}

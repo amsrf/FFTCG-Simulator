@@ -1,0 +1,20 @@
+extends "res://scripts/effects/card_effect.gd"
+## 1-094R Vincent
+## Berserk Dance 《S》《Dull》: Choose 1 Forward. Deal it 6000 damage.
+
+
+func activated_abilities() -> Array:
+	return [
+		_ability({
+			"text": "Berserk Dance 《S》《ダル》: Choose 1 Forward. Deal it 6000 damage.",
+			"s_cost": true,
+			"cost": {},
+			"tap": true,
+			"targets": {"is_type": "Forward"},
+			"run": Callable(self, "_berserk_dance"),
+		}),
+	]
+
+
+func _berserk_dance(ctx) -> void:
+	ctx.damage(ctx.targets, 6000)

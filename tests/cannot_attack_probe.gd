@@ -78,20 +78,16 @@ func _ready() -> void:
 	_expect(not card.status_effects.has("cannot_attack"), "the status is gone after the turn ends")
 	_expect(card.can_attack(), "so it can attack again")
 
-	# --- the data ---------------------------------------------------------------------------------------
-	var entry: Dictionary = CardDatabase.card_effects.get("49", {})
-	var skills: Array = entry.get("skill", [])
-	_expect(skills.size() == 1, "Time Mage has one skill")
-	if skills.size() == 1:
-		var skill: Dictionary = skills[0]
-		_expect(bool(skill.get("tap", false)), "activating it dulls the Backup")
-		_expect(skill.has("choose_target"), "and it chooses a Forward")
-		var instrs: Array = skill.get("instructions", [])
-		_expect(instrs.size() == 1 and str(instrs[0].get("name", "")) == "add_status_effect",
-			"whose effect is the status")
-		if instrs.size() == 1:
-			var args: Array = instrs[0].get("argument", [])
-			_expect(args.size() >= 1 and str(args[0]) == "cannot_attack", "namely cannot_attack")
+	# --- the code ability -------------------------------------------------------------------------------
+	var effect = load("res://assets/effects/card_49.gd").new()
+	var abilities: Array = effect.activated_abilities()
+	_expect(abilities.size() == 1, "Time Mage has one code-defined ability")
+	if abilities.size() == 1:
+		var spec = abilities[0]
+		_expect(spec.tap, "activating it dulls the Backup")
+		_expect(spec.targets is Dictionary, "and it chooses a Forward")
+		_expect(spec.run.is_valid(), "with a callable effect handler")
+		_expect(spec.cost.has("氷"), "and its mana cost is part of the descriptor")
 
 	print("[CannotAttack] %d checks | failures: %d" % [_checks, _fails])
 	print("[CannotAttack] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

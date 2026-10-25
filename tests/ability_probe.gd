@@ -73,6 +73,31 @@ func _ready() -> void:
 		await stack.resolve_top_effect()
 	_expect(not backup.tapped, "the ability's handler activates the chosen Backup")
 
+	# Vincent 94: S cost (discard a same-named card), Dull, choose a Forward, deal 6000. Cost is otherwise free, so
+	# after the S pick the activation goes straight to targeting.
+	var vincent: Card = _make(94, "player")
+	var victim: Card = _make(41, "opponent")
+	var duplicate: Card = _game.call("create_card", 94, "player")
+	_game.add_child(duplicate)
+	_game.get("hand").add_card(duplicate)
+	var hand = _game.get("hand")
+	agent.wanted = victim
+	_game.set("player_agent", agent)
+	_game.set("priority_holder", 1)
+	GlobalVariables.refresh_mode()
+	field.begin_skill_activation(vincent, 0)
+	hand.toggle_effect_card_selection(duplicate)
+	stack.call("_on_choose_card_finished", true)
+	guard = 0
+	while stack.stack_length() == 0 and guard < 60:
+		await get_tree().create_timer(0.05).timeout
+		guard += 1
+	_expect(stack.stack_length() == 1, "the S-cost ability reaches the stack")
+	if stack.stack_length() > 0:
+		await stack.resolve_top_effect()
+	_expect(victim.accumulated_damage == 6000, "Vincent's Berserk Dance deals 6000 to the chosen Forward")
+	_expect(not hand.cards.has(duplicate), "the S cost discarded the same-named card")
+
 	print("[Ability] %d checks | failures: %d" % [_checks, _fails])
 	print("[Ability] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

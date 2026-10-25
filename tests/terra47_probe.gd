@@ -85,16 +85,17 @@ func _ready() -> void:
 	_expect(snow.accumulated_damage == 0, "the active Forward takes nothing")
 	_expect(not snow.is_on_field() or snow.accumulated_damage == 0, "and is untouched")
 
-	# --- the skill's data ---------------------------------------------------------------------------------
-	var skills: Array = terra.card_effects.get("skill", [])
-	_expect(skills.size() == 1, "Terra has her one skill")
-	if skills.size() == 1:
-		var skill: Dictionary = skills[0]
-		# JSON numbers arrive as floats, so compare the VALUE, not the dictionary (1.0 != 1 for dict equality).
-		_expect(int(skill.get("cost", {}).get("氷", 0)) == 1, "it costs one ice")
-		_expect(not bool(skill.get("tap", false)), "and does not dull her")
-		_expect(bool(skill.get("choose_target", {}).get("is_tapped", false)), "it targets a dull Forward")
-		_expect(int(skill.get("instructions", [{}])[0].get("argument", [0])[0]) == 1000, "for 1000 damage")
+	# --- the code ability ---------------------------------------------------------------------------------
+	var skills: Array = terra.activation_skills()
+	_expect(skills.size() == 1, "Terra has her one code ability")
+	var spec = terra.activation_ability_spec(0)
+	_expect(spec != null, "the ability is an AbilitySpec")
+	if spec != null:
+		_expect(int(spec.cost.get("氷", 0)) == 1, "it costs one ice")
+		_expect(not spec.tap, "and does not dull her")
+		_expect(spec.targets is Dictionary and bool(spec.targets.get("is_tapped", false)),
+			"it targets a dull Forward")
+		_expect(spec.run.is_valid(), "with a callable damage handler")
 
 	print("[Terra47] %d checks | failures: %d" % [_checks, _fails])
 	print("[Terra47] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

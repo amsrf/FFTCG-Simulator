@@ -67,8 +67,14 @@ func as_skill_dict() -> Dictionary:
 		"copied_from": copied_from,
 	}
 	if targets != null:
-		out["choose_target"] = targets
-		out["count"] = target_count
+		# The activation engine reads `count` from inside the criteria block, not from the ability dictionary.
+		if targets is Dictionary:
+			var criteria: Dictionary = targets.duplicate(true)
+			if target_count > 1:
+				criteria["count"] = target_count
+			out["choose_target"] = criteria
+		else:
+			out["choose_target"] = targets
 		out["target_chooser"] = target_chooser
 	out["_ability_spec"] = self
 	return out
