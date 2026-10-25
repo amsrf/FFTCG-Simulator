@@ -4,6 +4,28 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Reveal Staging: 129 Gilgamesh and 131 Cait Sith
+
+New `reveal_top(count)` instruction. It takes cards off the top of the acting player's deck one at a time, lifts each
+card, turns it face-up, holds it, then hides and disables it. The Card object is kept in `Game.revealed_cards`, which
+is the search domain for reveal effects. The animation exports are `reveal_lift_m`, `reveal_lift_seconds`,
+`reveal_flip_seconds`, `reveal_hold_seconds` and `reveal_scale`.
+
+Follow-up vocabulary: `check_revealed`, `choose_revealed`, `put_chosen_into_hand`, `play_revealed`,
+`put_revealed_on_bottom`, and `remove_revealed_from_game`. Bottom placement preserves reveal order.
+
+`check_revealed` uses the normal criteria vocabulary and publishes through `_last_action_succeeded`. The two branches
+must come IMMEDIATELY after it: every other instruction sets the optimistic-success latch before dispatch, so an
+unguarded instruction in between would make `if_last_succeeded`/`if_last_did_not_succeed` read the wrong value.
+
+* **129 Gilgamesh** — Brave; S + Dull: choose a Forward, reveal/remove the top card, break the target if it is a
+  Forward, otherwise deal 3000.
+* **131 Cait Sith** — ETB breaks a cost-1-or-less Backup; S + Lightning + Dull: reveal/remove the top card, and if it
+  is a Forward deal 7000 to all active opponent Forwards.
+
+Probe: `tests/reveal_probe.tscn` — 22 checks covering order, hiding/inert state, search/move/bottom/removal and both
+Gilgamesh and Cait Sith branches.
+
 ### Reusable Mechanics: Any-Element Mana, Delayed Break, Riders, Conditional Status
 
 Five cards landed with primitives that are useful beyond them: **183 Cosmos**, **184 Chaos**, **104 Kefka**, **211 Rygdea**, **213 Tidus**.
@@ -28,7 +50,7 @@ Five cards landed with primitives that are useful beyond them: **183 Cosmos**, *
 Probe: `tests/reusable_probe.tscn` — 16 checks covering both mana modes, the Light/Dark exception, Kefka's end-phase
 break, Rygdea's rider across a real Break Zone transition, and Tidus's conditional Brave.
 
-Coverage after this slice: **103 implemented / 4 vanilla / 10 missing + 1 partial (173)**.
+Coverage after these slices: **105 implemented / 4 vanilla / 8 missing + 1 partial (173)**.
 
 ### B4b: Board-Wide Event Triggers (108, 187, 206, 214, 215, 213)
 

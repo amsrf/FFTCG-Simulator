@@ -27,8 +27,6 @@ NEEDS_CODE = {
     # B4b - event triggers (108, 187, 206, 214, 215 implemented)
     173: 'Attack Phase start trigger + element override',
     181: 'return-self-to-hand cost',
-    129: 'exile top card and branch on its type',
-    131: 'exile top card and branch on its type',
     141: 'force a blocker',
     # B5 - complex
     102: 'copy an opponent Forward ability',

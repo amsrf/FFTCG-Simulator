@@ -31,6 +31,16 @@ const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 ## reason as the two above.
 const CARD_FILTER := preload("res://scripts/card_filter.gd")
 
+## REVEAL staging. Cards are taken off the top of the deck, shown one at a time, then hidden/inert and kept here
+## until the effect moves them somewhere. This array is the search domain for reveal-style cards.
+@export var reveal_lift_m: float = 0.5
+@export var reveal_lift_seconds: float = 0.25
+@export var reveal_flip_seconds: float = 0.30
+@export var reveal_hold_seconds: float = 0.80
+@export var reveal_scale: float = 1.3
+var revealed_cards: Array[Card] = []
+var revealed_owner_id: int = 0
+
 
 ## Emitted when an instruction CHAIN has really finished — not merely when its queue is empty, because an instruction
 ## that suspends on an animation or a modal leaves the queue empty while it is still running.
@@ -645,6 +655,137 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 		if c != null and is_instance_valid(c) and c.matches_criteria(block, from):
 			found.append(c)
 	return found
+
+## Reveal the top `count` cards of the acting player's deck, one at a time. The card is lifted, turned face-up,
+## held, then hidden and made inert; its Card object stays in `revealed_cards` for the following instruction. The
+## animation is deliberately sequential: the next card only starts after the previous one has vanished.
+func reveal_top(count: int = 1) -> void:
+	var owner_id: int = 2 if _current_controller == "opponent" else 1
+	var d = opponent_deck if owner_id == 2 else deck
+	if d == null:
+		return
+	revealed_owner_id = owner_id
+	for _i in range(maxi(0, count)):
+		if d.deck_cards.is_empty():
+			break
+		var card: Card = d.deck_cards.pop_front()
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.get_parent() != self:
+			card.reparent(self, true)
+		card.set_hidden(false)
+		card.set_revealed(true)
+		var start: Transform3D = card.global_transform
+		var lifted_origin: Vector3 = start.origin + Vector3.UP * reveal_lift_m
+		var lifted := Transform3D(start.basis, lifted_origin)
+		if reveal_lift_seconds > 0.0:
+			var lift_tween: Tween = create_tween()
+			lift_tween.tween_property(card, "global_transform", lifted, reveal_lift_seconds)
+			await lift_tween.finished
+		else:
+			card.global_transform = lifted
+		var face := Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * reveal_scale), lifted_origin)
+		if reveal_flip_seconds > 0.0:
+			var flip_tween: Tween = create_tween()
+			flip_tween.tween_property(card, "global_transform", face, reveal_flip_seconds)
+			await flip_tween.finished
+		else:
+			card.global_transform = face
+		if reveal_hold_seconds > 0.0:
+			await get_tree().create_timer(reveal_hold_seconds).timeout
+		card.set_hidden(true)
+		revealed_cards.append(card)
+
+## Check one revealed card against criteria and publish the answer through the instruction latch. The next
+## instruction can use condition "if_last_succeeded" or "if_last_did_not_succeed".
+func check_revealed(index: int = 0, criteria: Dictionary = {}) -> void:
+	if index < 0 or index >= revealed_cards.size():
+		_last_action_succeeded = false
+		return
+	var card: Card = revealed_cards[index]
+	_last_action_succeeded = card != null and is_instance_valid(card) 		and (criteria.is_empty() or card.matches_criteria(criteria, _current_source_card))
+
+## Pick one card from the revealed staging area. The pick is recorded in `_chosen_cards`, exactly like choose_card,
+## so the existing hand/play/bottom instructions can act on it.
+func choose_revealed(criteria: Dictionary = {}, prompt: String = "Choose a revealed card") -> void:
+	var owner_id: int = revealed_owner_id if revealed_owner_id != 0 else (2 if _current_controller == "opponent" else 1)
+	var candidates: Array = []
+	for card in revealed_cards:
+		if card == null or not is_instance_valid(card):
+			continue
+		if _chosen_cards.has(card):
+			continue
+		if criteria.is_empty() or card.matches_criteria(criteria, _current_source_card):
+			candidates.append(card)
+	if candidates.is_empty():
+		_last_action_succeeded = false
+		return
+	var picked: Card = await agent_for(owner_id).choose_field_card(owner_id, candidates, prompt)
+	if picked == null or not candidates.has(picked):
+		picked = candidates[0]
+	_chosen_cards.append(picked)
+	_last_action_succeeded = true
+
+## Move the chosen revealed cards to their owner's hand. The card was hidden during the reveal, so restore it and
+## let Hand own the arrival animation/layout.
+func put_chosen_into_hand(_argument = null) -> void:
+	var owner_hand: Hand = opponent_hand if revealed_owner_id == 2 else hand
+	if owner_hand == null:
+		return
+	for card in _chosen_cards.duplicate():
+		if card == null or not is_instance_valid(card) or not revealed_cards.has(card):
+			continue
+		revealed_cards.erase(card)
+		card.set_hidden(false)
+		owner_hand.add_card(card)
+		_chosen_cards.erase(card)
+
+## Play the chosen revealed cards. Characters use the normal play path; this is also the hook for Selh'teus-style
+## reveal-to-play effects.
+func play_revealed(_argument = null) -> void:
+	for card in _chosen_cards.duplicate():
+		if card == null or not is_instance_valid(card) or not revealed_cards.has(card):
+			continue
+		revealed_cards.erase(card)
+		card.set_hidden(false)
+		card.reset_for_field_arrival()
+		field.play_card(card, revealed_owner_id == 2, true)
+		_chosen_cards.erase(card)
+
+## Put every revealed card that was NOT chosen on the bottom of its owner's deck, preserving reveal order.
+func put_revealed_on_bottom(_argument = null) -> void:
+	var d = opponent_deck if revealed_owner_id == 2 else deck
+	if d == null:
+		return
+	for card in revealed_cards.duplicate():
+		if card == null or not is_instance_valid(card):
+			continue
+		if _chosen_cards.has(card):
+			continue
+		revealed_cards.erase(card)
+		card.set_hidden(false)
+		card.enter_zone(Card.Zone.DECK)
+		card.reparent(d, false)
+		card.position = Vector3.ZERO
+		d.deck_cards.append(card)
+		d.update_card_positions()
+	if revealed_cards.is_empty():
+		revealed_owner_id = 0
+
+## Remove a revealed card from the game (Gilgamesh/Cait Sith). Used after the reveal animation.
+func remove_revealed_from_game(index: int = 0) -> void:
+	if revealed_cards.is_empty():
+		return
+	if index < 0:
+		index = 0
+	if index >= revealed_cards.size():
+		return
+	var card: Card = revealed_cards.pop_at(index)
+	if card != null and is_instance_valid(card):
+		card.set_hidden(false)
+		_send_card_to_removed(card)
+	if revealed_cards.is_empty():
+		revealed_owner_id = 0
 
 ## A generic instruction: open a targeting session in the middle of an instruction chain. The cards chosen become
 ## the current targets, so the next instruction (dull_targets, damage_targets, ...) acts on them. Used by delayed

@@ -162,6 +162,15 @@ func set_revealed(is_revealed: bool) -> void:
 	$HandMesh.set_surface_override_material(0, surface_material)
 	$FieldMesh.set_surface_override_material(0, surface_material)
 
+## Hidden/inert staging for a REVEALED card: the card is out of the deck and in Game.revealed_cards, but it must not
+## render or accept input until an effect moves it somewhere. The reverse is applied by enter_zone().
+func set_hidden(hidden: bool) -> void:
+	visible = not hidden
+	process_mode = Node.PROCESS_MODE_DISABLED if hidden else Node.PROCESS_MODE_INHERIT
+	var area: Node = get_node_or_null("CardArea3D")
+	if area is CollisionObject3D:
+		area.input_ray_pickable = not hidden
+
 func _get_card_back_material() -> StandardMaterial3D:
 	if _card_back_material == null:
 		_card_back_material = StandardMaterial3D.new()
@@ -478,6 +487,7 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## or hides the field readout. Positions stay the zone's own business.
 func enter_zone(zone: Zone) -> void:
 	current_zone = zone
+	set_hidden(false)
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
 	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
 	# unflipped container, so its cards must carry the half turn themselves.

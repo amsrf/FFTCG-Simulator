@@ -3332,6 +3332,14 @@
 			"put_targets_into_break_zone": "Put every current target into the Break Zone. This is not a break: when_break does not trigger.",
 			"choose_break_zone_card": "Choose one card from a player's Break Zone with criteria; chooser is self or opponent. Uses the deck-search style picker and stores the pick in _chosen_cards.",
 			"put_card_into_hand": "Put every card chosen by earlier choose_break_zone_card instructions into its owner's hand."
+		,
+			"reveal_top": "Reveal N cards from the top of the acting player deck, one at a time, and keep them in the revealed staging array. The next instruction searches or checks that array.",
+			"check_revealed": "Check revealed_cards[index] against criteria and set the if_last_succeeded / if_last_did_not_succeed latch. Keep the two conditional branches immediately after this instruction.",
+			"choose_revealed": "Choose one card from revealed_cards matching criteria; the pick becomes a chosen card for the following move instruction.",
+			"put_chosen_into_hand": "Move the chosen revealed cards to their owner hand.",
+			"play_revealed": "Play the chosen revealed cards onto the field.",
+			"put_revealed_on_bottom": "Put every revealed card that was not chosen on the bottom of its owner deck, in reveal order.",
+			"remove_revealed_from_game": "Move one revealed card to the removed-from-game zone."
 		},
 		"statuses": {
 			"summoning_sickness": "Cannot tap until the next Active Phase.",
@@ -3454,5 +3462,135 @@
 	"184": {
 		"produces_any_element": true,
 		"light_dark_exempt": "dark"
+	},
+
+	
+	"129": {
+		"brave": true,
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {},
+				"text": "Strongest Sword 《S》《Dull》: Choose 1 Forward. Remove the top card of your deck from the game. If the removed card is a Forward, break it. If not, deal it 3000 damage.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "reveal_top",
+						"author": "game",
+						"argument": [
+							1
+						]
+					},
+					{
+						"name": "check_revealed",
+						"author": "game",
+						"argument": [
+							0,
+							{
+								"is_type": "Forward"
+							}
+						]
+					},
+					{
+						"name": "break_targets",
+						"author": "game",
+						"argument": [],
+						"condition": "if_last_succeeded"
+					},
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							3000
+						],
+						"condition": "if_last_did_not_succeed"
+					},
+					{
+						"name": "remove_revealed_from_game",
+						"author": "game",
+						"argument": [
+							0
+						]
+					}
+				]
+			}
+		]
+	},
+
+	
+	
+	"131": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Backup",
+				"is_cost_at_most": 1
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {
+					"雷": 1
+				},
+				"text": "Slots 《S》《Lightning》《Dull》: Remove the top card of your deck from the game. If it is a Forward, deal 7000 damage to all the active Forwards opponent controls.",
+				"instructions": [
+					{
+						"name": "reveal_top",
+						"author": "game",
+						"argument": [
+							1
+						]
+					},
+					{
+						"name": "check_revealed",
+						"author": "game",
+						"argument": [
+							0,
+							{
+								"is_type": "Forward"
+							}
+						]
+					},
+					{
+						"name": "apply_effect",
+						"author": "game",
+						"argument": [
+							{
+								"is_type": "Forward",
+								"controller": "opponent",
+								"is_tapped": false
+							}
+						],
+						"condition": "if_last_succeeded"
+					},
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							7000
+						],
+						"condition": "if_last_succeeded"
+					},
+					{
+						"name": "remove_revealed_from_game",
+						"author": "game",
+						"argument": [
+							0
+						]
+					}
+				]
+			}
+		]
 	}
 }

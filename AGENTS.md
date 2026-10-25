@@ -144,6 +144,16 @@ the new copy goes through `send_off_field_card_to_break_zone()` (`broken = false
 Setup (`animate == false`) is exempt. There is intentionally no SBA sweep: test boards place duplicate names on
 purpose, and no current effect changes a name in place. Add one in `enforce_game_state_rules()` if that changes.
 
+### Reveal staging
+
+`Game.reveal_top(count)` pulls cards from the deck top, animates each one sequentially, then calls
+`Card.set_hidden(true)` and stores the Card in `Game.revealed_cards`. The array is the search domain for
+`choose_revealed`; `put_revealed_on_bottom` preserves reveal order. Use `Card.set_hidden(false)` (or any
+`Card.enter_zone`, which now restores it) before moving a revealed card.
+
+`check_revealed` writes the instruction latch. Put the two conditional branches IMMEDIATELY after it: the dispatcher
+sets `_last_action_succeeded = true` before every other instruction, so an intervening instruction destroys the check.
+
 ### Light/Dark and any-element mana
 
 * Rule 7.7.5 normally allows one Light or Dark card per side. `Game.would_break_light_dark_limit()` is a board query
