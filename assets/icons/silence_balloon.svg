@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Static silence balloon. Transparent background, white fill, black outline.
+       The tail is drawn first so the balloon covers the join and leaves one clean silhouette.
+       The three dots are separate Godot nodes so they can animate. -->
+  <path d="M 168 330 L 104 446 L 236 372"
+        fill="#ffffff" stroke="#000000" stroke-width="20"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="256" cy="218" rx="190" ry="132"
+           fill="#ffffff" stroke="#000000" stroke-width="20"/>
+</svg>

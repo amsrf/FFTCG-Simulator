@@ -154,6 +154,18 @@ search domain for `choose_revealed`; `put_revealed_on_bottom` preserves reveal o
 `check_revealed` writes the instruction latch. Put the two conditional branches IMMEDIATELY after it: the dispatcher
 sets `_last_action_succeeded = true` before every other instruction, so an intervening instruction destroys the check.
 
+### Silence status icon
+
+`assets/icons/silence_balloon.svg` is the static white balloon + black outline + tail. The three dots are separate
+`Sprite3D` nodes in `scripts/silence_icon.gd`, animated by that script; do not put animation into the SVG.
+
+The icon is a child of `Card`, shown only when `current_zone == FIELD` and `abilities_nullified` is present. It is
+billboarded and placed beside the card; when near the right edge it moves left and mirrors so the tail points back.
+Balloon sprites need `render_priority` below the dots, or transparent sorting can hide the dots behind the white fill.
+
+`tests/silence_icon_probe.tscn` verifies show/hide and the dot loop. For a visual check, run the shot harness with
+`--scene res://tests/silence_preview.tscn --as-scene 1`.
+
 ### Ability nullification (Wakka 216)
 
 `Card.card_effects` is a read-time view, not the raw printed data. While `status_effects` contains `abilities_nullified`

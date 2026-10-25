@@ -535,6 +535,7 @@ func enter_zone(zone: Zone) -> void:
 		showPower()
 	else:
 		hide_power_display()
+	_refresh_silence_icon()
 		
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -90.0
@@ -655,13 +656,14 @@ func add_status_effect(status, duration, payload: Dictionary = {}):
 		var entry: Dictionary = duration.duplicate()
 		entry.merge(payload, true)
 		status_effects[status] = entry
-		return
-	if payload.is_empty():
-		status_effects[status] = duration
-		return
-	var entry: Dictionary = payload.duplicate()
-	entry["duration"] = duration
-	status_effects[status] = entry
+	else:
+		if payload.is_empty():
+			status_effects[status] = duration
+		else:
+			var entry: Dictionary = payload.duplicate()
+			entry["duration"] = duration
+			status_effects[status] = entry
+	_refresh_silence_icon()
 
 ## Continuous GRANTS (an aura), as opposed to timed statuses. Counted so two sources can grant the same keyword and
 ## one leaving does not revoke the other's.
@@ -721,6 +723,7 @@ func turn_end():
 			else:
 				dur["duration"] = left
 
+	_refresh_silence_icon()
 	var remaining_buffs: Array = []
 	for p in power_array:
 		var dur = p[1]
@@ -867,6 +870,35 @@ func declare_blocker():
 func abilities_enabled() -> bool:
 	return not status_effects.has("abilities_nullified")
 
+## Show or hide the silence bubble. It belongs to the FIELD only; a card that loses its abilities and then
+## leaves the field must not carry the icon into the hand, Break Zone or deck.
+func _refresh_silence_icon() -> void:
+	var wanted: bool = current_zone == Zone.FIELD and status_effects.has("abilities_nullified")
+	if not wanted:
+		if silence_icon != null and is_instance_valid(silence_icon):
+			silence_icon.call("set_active", false)
+		return
+	if silence_icon == null or not is_instance_valid(silence_icon):
+		silence_icon = SILENCE_ICON_SCENE.instantiate()
+		add_child(silence_icon)
+	var face: Vector2 = _card_face_size()
+	var icon_width: float = face.x * 0.45
+	silence_icon.call("set_icon_width", icon_width)
+	var go_left: bool = _silence_icon_belongs_left()
+	var gap: float = face.x * 0.07
+	var side: float = -1.0 if go_left else 1.0
+	silence_icon.position = Vector3(side * (face.x * 0.5 + icon_width * 0.5 + gap), 0.02, 0.0)
+	silence_icon.call("set_mirrored", go_left)
+	silence_icon.call("set_active", true)
+
+
+func _silence_icon_belongs_left() -> bool:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return false
+	var screen_x: float = cam.unproject_position(global_position).x
+	return screen_x > get_viewport().get_visible_rect().size.x * 0.70
+
 ## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
 ## what something gave it, and anything asking "can this tap" needs one answer.
@@ -1010,6 +1042,10 @@ func _on_card_area_3d_card_released(_card: Variant) -> void:
 ## editor to tune colours, thickness and pulse from the Inspector. Card itself
 ## only supplies `card_size` (read from the mesh) and drives `intensity`.
 const TARGET_BORDER_MATERIAL := preload("res://shaders/target_border_material.tres")
+## The silence icon is a screen-facing status bubble, not part of the card face. Built lazily so a normal card
+## pays nothing for it.
+const SILENCE_ICON_SCENE := preload("res://silence_icon.tscn")
+var silence_icon: Node3D = null
 var target_border: MeshInstance3D = null
 var _border_material: ShaderMaterial = null
 var _border_tween: Tween = null

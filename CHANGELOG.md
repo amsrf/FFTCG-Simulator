@@ -4,6 +4,19 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Silence Status Icon
+
+Nullified field cards now show a silence bubble beside them. The balloon and tail are a transparent SVG
+(`assets/icons/silence_balloon.svg`, white fill, black outline, no plaque); the three black dots are runtime Godot
+sprites, so the SVG stays static and the loop is driven by `scripts/silence_icon.gd`.
+
+The icon is a child of `Card` and appears only while the card is on the field with `abilities_nullified`. It sits on
+the right by default, moves left when the card is near the right edge, and mirrors so the tail keeps pointing at the
+card. Dots reveal visually left-to-right as `* -> ** -> *** -> *`.
+
+`tests/silence_icon_probe.tscn` checks creation, activation, the three dot beats, placement, expiry and hiding when
+the card leaves the field. `tests/silence_preview.tscn` is available through the shot harness for visual inspection.
+
 ### Wakka 216: Ability Nullification and Temporary Power
 
 Wakka's Status Reels applies status `abilities_nullified` to the chosen Forward. `Card.card_effects` is now an active
