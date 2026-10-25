@@ -37,6 +37,7 @@ const CARD_FILTER := preload("res://scripts/card_filter.gd")
 @export var reveal_lift_seconds: float = 0.25
 @export var reveal_flip_seconds: float = 0.30
 @export var reveal_flip_back_seconds: float = 0.30
+@export var reveal_back_hold_seconds: float = 0.5
 @export var reveal_hold_seconds: float = 0.5
 @export var reveal_scale: float = 1.3
 var revealed_cards: Array[Card] = []
@@ -703,6 +704,8 @@ func reveal_top(count: int = 1) -> void:
 			await back_tween.finished
 		else:
 			card.global_transform = back
+		if reveal_back_hold_seconds > 0.0:
+			await get_tree().create_timer(reveal_back_hold_seconds).timeout
 		card.set_hidden(true)
 		revealed_cards.append(card)
 

@@ -30,6 +30,7 @@ func _ready() -> void:
 	_game.reveal_lift_seconds = 0.0
 	_game.reveal_flip_seconds = 0.0
 	_game.reveal_flip_back_seconds = 0.0
+	_game.reveal_back_hold_seconds = 0.0
 	_game.reveal_hold_seconds = 0.0
 	await get_tree().process_frame
 

@@ -7,7 +7,8 @@ All notable changes to the FF TCG Simulator project.
 ### Reveal Staging: 129 Gilgamesh and 131 Cait Sith
 
 New `reveal_top(count)` instruction. It takes cards off the top of the acting player's deck one at a time, lifts each
-card, turns it face-up, holds it for 0.5 seconds, turns it back face-down, then hides and disables it. The Card object is
+card, turns it face-up, holds it for 0.5 seconds, turns it back face-down, waits another 0.5 seconds, then hides and
+disables it. The Card object is
 kept in `Game.revealed_cards`, which is the search domain for reveal effects. The animation exports are
 `reveal_lift_m`, `reveal_lift_seconds`, `reveal_flip_seconds`, `reveal_flip_back_seconds`, `reveal_hold_seconds` and
 `reveal_scale`.

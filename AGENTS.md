@@ -147,7 +147,7 @@ purpose, and no current effect changes a name in place. Add one in `enforce_game
 ### Reveal staging
 
 `Game.reveal_top(count)` pulls cards from the deck top, animates each one sequentially (lift, face-up, 0.5 s hold,
-face-down again), then calls `Card.set_hidden(true)` and stores the Card in `Game.revealed_cards`. The array is the
+face-down again, 0.5 s hold), then calls `Card.set_hidden(true)` and stores the Card in `Game.revealed_cards`. The array is the
 search domain for `choose_revealed`; `put_revealed_on_bottom` preserves reveal order. Use `Card.set_hidden(false)`
 (or any `Card.enter_zone`, which now restores it) before moving a revealed card.
 
