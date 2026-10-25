@@ -823,16 +823,17 @@ func remove_for_play(card: Card) -> void:
 	update_card_positions()
 
 func discard_card(card: Card) -> void:
-	# Special ability (S) cost: the chosen card goes from hand to the break zone.
+	# Special ability (S) cost: the chosen card goes from hand to the break zone. The pile adds it immediately and
+	# animates the visual flight; this method must not block on the tween.
 	cards.erase(card)
-	graveyard.add_card(card)
+	graveyard.call("discard", card)
 	update_card_positions()
 	
 func send_selected_cards_to_graveyard():
 	cards = cards.filter(func(item): return not selected_cards_for_mana_conversion.has(item))
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
-		graveyard.add_card(c)
+		graveyard.call("discard", c)
 	selected_cards_for_mana_conversion = []
 	
 

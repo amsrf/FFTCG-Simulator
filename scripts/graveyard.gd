@@ -25,6 +25,12 @@ var randomness_range = Vector3(0.015, 0.005, 0.015)
 @export var mill_arc_height: float = 0.9
 @export var mill_ease: Tween.EaseType = Tween.EASE_IN_OUT
 
+## DISCARD ANIMATION — a card leaves a hand and travels to the top of this pile. Unlike draw(), the card enters the
+## pile's list IMMEDIATELY (so rules/tests see the discard at once); only the visual position is tweened.
+@export var discard_seconds: float = 0.35
+@export var discard_arc_height: float = 0.35
+@export var discard_ease: Tween.EaseType = Tween.EASE_OUT
+
 ## Animate `card` (still parented to the Deck) into the pile, then add it.
 ##
 ## The card is moved into THIS node's frame FIRST, keeping its world position, so the face-up / standard-size look of
@@ -53,6 +59,30 @@ func draw(card: Card) -> void:
 	await t.finished
 	add_card(card)
 		
+## Discard from a hand. The card joins the pile at once and the tween moves its visual from wherever it was to
+## the slot the pile already gave it. That ordering matters: discard effects, S costs and AI choices all proceed
+## immediately, while the player still sees the card travel instead of teleporting.
+func discard(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	var start: Vector3 = card.global_position
+	if card.get_parent() != self:
+		card.reparent(self, false)
+		card.global_position = start
+	graveyard_cards.append(card)
+	card.broken = false
+	card.enter_zone(zone)
+	update_card_positions()
+	var destination: Vector3 = card.global_position
+	card.global_position = start
+	var peak: Vector3 = (start + destination) * 0.5 + Vector3.UP * discard_arc_height
+	var t: Tween = create_tween()
+	t.set_trans(Tween.TRANS_SINE).set_ease(discard_ease)
+	t.tween_method(func(k: float) -> void:
+		card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
+	, 0.0, 1.0, discard_seconds)
+
+
 func add_card(card):
 	# READ THE ORIGIN BEFORE MOVING IT. These two triggers are specifically "put FROM THE FIELD into the Break Zone",
 	# so a card discarded from hand or milled from the deck must not fire them, and the pile is the only place that

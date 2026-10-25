@@ -146,13 +146,20 @@ purpose, and no current effect changes a name in place. Add one in `enforce_game
 
 ### Reveal staging
 
-`Game.reveal_top(count)` pulls cards from the deck top, animates each one sequentially (lift, face-up, 1 s hold,
+`Game.reveal_top(count)` pulls cards from the deck top, animates each one sequentially (lift, face-up, 0.5 s hold,
 face-down again), then calls `Card.set_hidden(true)` and stores the Card in `Game.revealed_cards`. The array is the
 search domain for `choose_revealed`; `put_revealed_on_bottom` preserves reveal order. Use `Card.set_hidden(false)`
 (or any `Card.enter_zone`, which now restores it) before moving a revealed card.
 
 `check_revealed` writes the instruction latch. Put the two conditional branches IMMEDIATELY after it: the dispatcher
 sets `_last_action_succeeded = true` before every other instruction, so an intervening instruction destroys the check.
+
+### Discard flight
+
+`Graveyard.discard(card)` appends the card to the pile FIRST and then tweens its visual from the hand to the assigned
+slot. This is the opposite order from `Graveyard.draw()` on purpose: discard effects, S costs and probes must see the
+card in the Break Zone immediately, while the player still sees it travel. Call it from `Hand.discard_card()` and
+`Hand.send_selected_cards_to_graveyard()`; do not wait on the tween.
 
 ### Light/Dark and any-element mana
 

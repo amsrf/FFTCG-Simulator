@@ -7,7 +7,7 @@ All notable changes to the FF TCG Simulator project.
 ### Reveal Staging: 129 Gilgamesh and 131 Cait Sith
 
 New `reveal_top(count)` instruction. It takes cards off the top of the acting player's deck one at a time, lifts each
-card, turns it face-up, holds it for 1 second, turns it back face-down, then hides and disables it. The Card object is
+card, turns it face-up, holds it for 0.5 seconds, turns it back face-down, then hides and disables it. The Card object is
 kept in `Game.revealed_cards`, which is the search domain for reveal effects. The animation exports are
 `reveal_lift_m`, `reveal_lift_seconds`, `reveal_flip_seconds`, `reveal_flip_back_seconds`, `reveal_hold_seconds` and
 `reveal_scale`.
@@ -30,6 +30,13 @@ Gilgamesh and Cait Sith branches.
 Test Mode gains two deterministic Gilgamesh grounds: `gilgamesh_forward` (top card Snow, breaks the target) and
 `gilgamesh_backup` (top card Chemist, deals 3000). Both put Gilgamesh on the field and a same-name copy in hand for
 the S cost.
+
+### Discard Flight
+
+`Graveyard.discard(card)` is the hand-to-Break-Zone counterpart of the mill animation. It appends the card to the
+pile immediately, so effects, S costs and tests see the discard at once, then tweens the visual along a short arc to
+the slot the pile assigned. Tuning: `discard_seconds` (0.35), `discard_arc_height` (0.35) and `discard_ease`. Hand
+discards and mana cards sent to the Break Zone both use it.
 
 ### Reusable Mechanics: Any-Element Mana, Delayed Break, Riders, Conditional Status
 
