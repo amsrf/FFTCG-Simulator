@@ -401,17 +401,19 @@
 			]
 		}
 	},
-	"94":{
-		"when_attack":{
-			"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]
-		},
-		"skill":[{
-			"s_cost":true,
-			"tap":true,
-			"cost":{},
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[6000]}]
-		}]
+"94": 	{
+		"when_attack": {
+			"instructions": [
+				{
+					"name": "add_status_effect",
+					"author": "card",
+					"argument": [
+						"first_strike",
+						1
+					]
+				}
+			]
+		}
 	},
 	"89":{
 		"skill":[
