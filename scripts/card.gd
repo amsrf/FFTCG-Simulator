@@ -1524,10 +1524,10 @@ func effect_handles_event(event: String) -> bool:
 
 ## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits
 ## under Stack. Either way the Game is the grandparent and EffectContext resolves Field from it.
-func make_effect_context(event: String = "static", data: Dictionary = {}):
+func make_effect_context(event: String = "static", data: Dictionary = {}, effect_card: Card = null):
 	var parent: Node = get_parent()
 	var game: Node = parent.get_parent() if parent != null else null
-	return EFFECT_CONTEXT.new(game, self, event, data)
+	return EFFECT_CONTEXT.new(game, self, event, data, effect_card)
 
 
 ## EVERY Element this card currently has, in the order it should be displayed. The printed `element` remains the
@@ -1536,6 +1536,12 @@ func make_effect_context(event: String = "static", data: Dictionary = {}):
 func current_elements() -> Array[String]:
 	if _elements_calculating:
 		return [element] if element != "" else []
+	# A temporary "becomes this Element" status replaces the whole set (Mime 173). It is checked before the printed
+	# element, so an override really does replace rather than add.
+	if status_effects.has("element_override"):
+		var override = status_effects["element_override"]
+		if override is Dictionary and str(override.get("element", "")) != "":
+			return [str(override["element"])]
 	_elements_calculating = true
 	var out: Array[String] = []
 	if element != "":
@@ -1557,6 +1563,12 @@ func is_element(value: String) -> bool:
 	# Accepts either the English element name ("Fire") or the game's single-character element code ("火").
 	var wanted: String = ELEMENT_NAMES.get(value, value)
 	return wanted in current_elements()
+
+
+## Elements this card can produce for CP. Kept separate from `current_elements` because payment may eventually ask
+## the player to choose one when a card has several; for now it is the same query.
+func mana_elements() -> Array[String]:
+	return current_elements()
 
 func is_light_or_dark() -> bool:
 	return is_element("Light") or is_element("Dark")

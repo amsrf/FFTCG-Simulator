@@ -7,8 +7,11 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 
 ### Code-defined effects
 - `scripts/effects/card_effect.gd` is the interface. A card subclass declares `triggered_events()` and overrides only
-  the hooks it uses; `EffectContext` carries the source, controller, event data and explicit `cards_in`/`choose`/
-  `damage`/`remove_from_game` helpers. Effects are stateless and cached by `effect_registry.gd`.
+  the hooks it uses; `EffectContext` carries the source, controller, event data and explicit helpers (`cards_in`,
+  `choose`, `choose_targets`, `may`, `search_deck`, `reveal_top`, `mill`, `discard`, `damage`, `remove_from_game`).
+  Effects are stateless and cached by `effect_registry.gd`.
+- The registry is convention-based: a card's code effect lives at `assets/effects/card_<id>.gd` and is loaded on
+  demand. Adding a card never means editing the registry.
 - A code hook wins over the JSON entry for the same event. Other events on the same card can remain JSON until they
   are migrated: this is a hybrid, not a flag day.
 - Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;

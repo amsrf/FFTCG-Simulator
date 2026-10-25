@@ -68,6 +68,15 @@ func _ready() -> void:
 	_expect(kimahri.is_element("Earth"), "the English element name resolves through the same query")
 	_expect(elements.size() == 4, "the element set has no duplicates")
 
+	# --- EffectContext: an element override replaces the whole set (Mime's primitive) --------------
+	var ctx = kimahri.make_effect_context("test")
+	ctx.set_element_until_end_of_turn(kimahri, "火")
+	_expect(kimahri.current_elements() == ["火"], "an element override replaces the current Elements")
+	_expect(kimahri.is_element("火") and not kimahri.is_element("土"),
+		"the override is visible through is_element()")
+	kimahri.status_effects.erase("element_override")
+	_expect(kimahri.is_element("土"), "removing the override restores the printed/effect Elements")
+
 	# --- 107: continuous six-element grant + ETB removal -----------------------------------------
 	await _boot()
 	var shantotto: Card = _make(SHANTOTTO, "player")

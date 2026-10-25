@@ -17,15 +17,17 @@ The first migration layer is now in place:
   as `current_elements()`.
 - `scripts/effects/effect_context.gd` — an explicit, short-lived context containing the source, controller, event and
   region/choice/action helpers. Card code no longer reads `_targets`, `_current_source_card` or UI globals directly.
-- `scripts/effects/effect_registry.gd` — card id → effect script. Effects are stateless and cached; a card with no
-  registry entry keeps the existing JSON path, so migration can be incremental.
+- `scripts/effects/effect_registry.gd` — convention-based: `assets/effects/card_<id>.gd` is loaded on demand and cached.
+  Adding a card is one file; a card without one keeps the existing JSON path, so migration can be incremental.
 - `Card` now owns `effect()`, `current_elements()` and dynamic `is_element()`. The printed `element` stays immutable;
   element grants are computed at query time.
 - Code-defined triggered abilities are stack objects. `Field.execute_card_effect()` enqueues them through
   `Stack.enqueue_code_trigger()`; `Game._on_stack_execute_card_effect()` resolves the event through
   `CardEffect.dispatch(ctx)`. Board events (`trigger_event`) also recognize code effects.
-- `EffectContext` wraps `cards_in`, `choose`, `choose_element`, `damage`, `remove_from_game`, `add_status` and `draw`,
-  so effects operate through explicit APIs rather than touching Game/Field internals.
+- `EffectContext` wraps `cards_in`, `choose`, `choose_targets`, `choose_element`, `may`, `search_deck`, `reveal_top`,
+  `mill`, `discard`, `damage`, `remove_from_game`, `add_status`, `draw` and `set_element_until_end_of_turn`, so effects
+  operate through explicit APIs rather than touching Game/Field internals. The stack copy is carried separately as
+  `effect_card`, which is where targeting arrows originate.
 
 Piloted cards:
 
@@ -33,8 +35,8 @@ Piloted cards:
 - **107 Shantotto** — six printed Elements plus a stack-based ETB that removes every Forward from the game.
 
 `tests/code_effect_probe.tscn` covers both, including duplicate-free element sets, English element aliases, the ETB
-stack object and both removed zones. Existing probes remain green; coverage for 100–216 is now 109 implemented,
-4 vanilla, 4 needing code (111, 135, 141, 181), with 173 still partial.
+stack object and both removed zones, plus the temporary element override that Mime will use. Existing probes remain
+green; coverage for 100–216 is now 109 implemented, 4 vanilla, 4 needing code (111, 135, 141, 181), with 173 partial.
 
 ### Silence Status Icon
 

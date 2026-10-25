@@ -10,15 +10,19 @@ extends RefCounted
 var game: Node = null
 var field = null
 var source: Card = null
+## The stack copy currently resolving, when there is one. Targeting arcs originate from this card, not from the
+## source that may already have left the field.
+var effect_card: Card = null
 var controller: String = ""
 var owner_id: int = 1
 var event_name: String = ""
 var event_data: Dictionary = {}
 
 
-func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dictionary = {}) -> void:
+func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dictionary = {}, p_effect_card: Card = null) -> void:
 	game = p_game
 	source = p_source
+	effect_card = p_effect_card
 	event_name = p_event
 	event_data = p_data.duplicate(true)
 	if p_source != null:
@@ -85,6 +89,63 @@ func choose(cards: Array, prompt: String = "Choose a card") -> Card:
 	if chosen != null and cards.has(chosen):
 		return chosen
 	return null
+
+
+## Open a targeting session and return every pick, in order. `count` maps to the existing `count` session key.
+## `effect_card` is the stack copy whose top edge the arrow originates from.
+func choose_targets(criteria: Dictionary, count: int = 1, allow_cancel: bool = false,
+		source_kind: String = "Ability") -> Array:
+	if field == null:
+		return []
+	var session: Dictionary = criteria.duplicate()
+	if count > 1:
+		session["count"] = count
+	var origin: Card = effect_card if effect_card != null and is_instance_valid(effect_card) else source
+	if not field.has_viable_target(session, origin, source_kind):
+		return []
+	field.request_target(session, origin, allow_cancel, source_kind)
+	var assistant = game.get("assistant") if game != null else null
+	# A non-local agent completes inside request_target(); only a local player leaves the list empty.
+	if field.targeting_picked.is_empty() and assistant != null:
+		await assistant.target_complete
+	var picks: Array = field.targeting_picked.duplicate()
+	field.finish_targeting_state()
+	return picks
+
+
+## Resolve an optional "you may" clause through the owning agent.
+func may(prompt: String) -> bool:
+	if game == null:
+		return true
+	var agent = game.agent_for(owner_id)
+	if agent == null:
+		return true
+	return bool(await agent.confirm_optional(owner_id, prompt))
+
+
+func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false) -> void:
+	if game != null:
+		game.search_deck(filter, destination, tapped, owner_id)
+
+
+func reveal_top(count: int = 1) -> void:
+	if game != null:
+		game.reveal_top(count, owner_id)
+
+
+func mill(player_id: int, count: int = 1) -> void:
+	if game != null:
+		await game.mill_player(player_id, count)
+
+
+func discard(player_id: int, count: int = 1) -> void:
+	if game != null:
+		await game.discard_from(player_id, count)
+
+
+func set_element_until_end_of_turn(card: Card, element: String) -> void:
+	if card != null and is_instance_valid(card):
+		card.add_status_effect("element_override", 1, {"element": element})
 
 
 func choose_element(options: Array, prompt: String = "Choose an Element") -> String:

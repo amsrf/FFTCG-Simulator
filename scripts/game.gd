@@ -722,8 +722,8 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 ## Reveal the top `count` cards of the acting player's deck, one at a time. The card is lifted, turned face-up,
 ## held, then hidden and made inert; its Card object stays in `revealed_cards` for the following instruction. The
 ## animation is deliberately sequential: the next card only starts after the previous one has vanished.
-func reveal_top(count: int = 1) -> void:
-	var owner_id: int = 2 if _current_controller == "opponent" else 1
+func reveal_top(count: int = 1, player_id: int = 0) -> void:
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
 	var d = opponent_deck if owner_id == 2 else deck
 	if d == null:
 		return
@@ -2316,7 +2316,7 @@ func _resolve_code_effect(card: Card) -> void:
 	var effect_obj = source.effect()
 	if effect_obj == null:
 		return
-	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data)
+	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card)
 	await effect_obj.dispatch(card.effect_event, ctx)
 
 
@@ -2509,13 +2509,13 @@ func _on_field_blocker_changed() -> void:
 ##
 ## Sets _last_action_succeeded so `condition: "if_last_succeeded"` can act on "and if you do so". A cancelled search
 ## counts as not succeeding, which is the whole point of that guard.
-func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false) -> void:
+func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false, player_id: int = 0) -> void:
 	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
 	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.
 	_last_action_succeeded = false
 	# DEFAULT TO P1 when no controller has been set: direct/test callers have no effect source, and the old
 	# implementation was always the Player deck. An explicit "opponent" still selects P2.
-	var owner_id: int = 2 if _current_controller == "opponent" else 1
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
 	var deck_node = deck if owner_id == 1 else opponent_deck
 	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null:
