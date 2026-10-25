@@ -14,6 +14,18 @@ const KNIGHT := 165
 const SQUALL := 41
 const SNOW := 43
 
+class RikkuAgent extends Agent:
+	## Rikku's ETB may choose up to five Backups and allows confirming early. This agent makes the two picks this
+	## probe cares about in the resolution-time targeting session, then confirms.
+	var wanted: Array = []
+
+	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+		for card in wanted:
+			if card != null and is_instance_valid(card) and card.is_valid_target:
+				game.field.set_target_card(card)
+		game.assistant.on_target_complete()
+
+
 var _checks: int = 0
 var _fails: int = 0
 var _game: Node = null
@@ -123,13 +135,14 @@ func _ready() -> void:
 	await _drain()
 	var hand_before: int = _game.get("hand").cards.size()
 	var rikku: Card = _make(RIKKU, "player")
-	# Same as Magus: the setup path does not fire ETB, so the probe triggers it explicitly.
+	# Same as Magus: the setup path does not fire ETB, so the probe triggers it explicitly. The ETB is an
+	# auto-ability, so it chooses its targets when it resolves.
+	var rikku_agent := RikkuAgent.new()
+	rikku_agent.bind(_game)
+	rikku_agent.wanted = [b1, b2]
+	_game.set("player_agent", rikku_agent)
 	_field.execute_card_effect(rikku, "when_enter_field")
-	# The ETB asks for a target; pick the two Backups, then confirm early ("up to 5").
-	_field.set_target_card(b1)
-	_field.set_target_card(b2)
-	_game.get("assistant").call("on_target_complete")
-	await _drain()
+	await _game.get("stack").resolve_top_effect()
 	# The return animation is a tween the instruction awaits; the landing callback fires near its end, so give it time
 	# (same reason as the Tonogiri check in party_cards_probe).
 	await get_tree().create_timer(1.0).timeout

@@ -13,6 +13,20 @@ const OVELIA := 156
 
 
 class PickAgent extends Agent:
+	var picked_target: Card = null
+
+	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+		picked_target = null
+		for card in game.field.get_all_cards():
+			if card.is_valid_target:
+				picked_target = card
+				break
+		if picked_target != null:
+			game.field.set_target_card(picked_target)
+			game.assistant.on_target_complete()
+		else:
+			game.assistant.on_target_cancel()
+
 	func choose_discard(_player_id: int, cards: Array) -> Card:
 		return cards[0] if not cards.is_empty() else null
 
@@ -111,12 +125,11 @@ func _ready() -> void:
 	var hurt: Card = _make(152, "opponent")
 	hurt.suffer_damage(1000)
 	var onion: Card = _make(125, "player")
+	# Auto-abilities choose targets when they resolve, not when they are put on the stack.
 	_field.execute_card_effect(onion, "when_enter_field")
-	print("[B1] 125 viable: healthy=%s damaged=%s" % [healthy.is_valid_target, hurt.is_valid_target])
-	_expect(not healthy.is_valid_target and hurt.is_valid_target,
+	await _stack.resolve_top_effect()
+	_expect(picker.picked_target == hurt,
 		"Onion Knight 125 can only choose a damaged Forward")
-	_pick(hurt)
-	await _drain()
 	_expect(hurt.accumulated_damage == 6000, "and deals it 5000")
 
 	# --- 127 Kain: skip the next Active Phase ---------------------------------------------------------

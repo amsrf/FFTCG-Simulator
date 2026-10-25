@@ -21,6 +21,15 @@ const TONOGIRI := 719       # water Forward: party attacks -> return a Forward t
 const RED_MAGE := 1879      # ice Forward: party attacks -> dull and freeze a Character
 const SNOW := 43            # ice Forward, used as a victim
 
+class TargetAgent extends Agent:
+	var wanted: Card = null
+
+	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+		if wanted != null and is_instance_valid(wanted) and wanted.is_valid_target:
+			game.field.set_target_card(wanted)
+		game.assistant.on_target_complete()
+
+
 var _checks: int = 0
 var _fails: int = 0
 var _game: Node = null
@@ -154,10 +163,16 @@ func _ready() -> void:
 	var victim_c: Card = _make(SQUALL, "opponent")
 	await _drain()
 	var opp_hand_before: int = opp_hand.cards.size()
+	# 719 is a code-defined auto-ability: it chooses its target when it resolves.
+	var previous_agent = _game.get("player_agent")
+	var target_agent := TargetAgent.new()
+	target_agent.bind(_game)
+	target_agent.wanted = victim_c
+	_game.set("player_agent", target_agent)
 	_party(tonogiri, knight_b)
 	_field.execute_card_attack()
-	_complete_target(victim_c)
 	await _drain()
+	_game.set("player_agent", previous_agent)
 	print("[PartyCards] Tonogiri: %s on field=%s parent=%s in_hand=%s, opponent hand %d -> %d" % [
 		victim_c.card_name, victim_c.is_on_field(),
 		victim_c.get_parent().name if victim_c.get_parent() != null else "<none>",

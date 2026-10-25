@@ -235,6 +235,21 @@ func draw(player_id: int, count: int = 1) -> void:
 		game.draw_cards(count, player_id)
 
 
+func return_to_hand(cards: Array) -> void:
+	if game == null:
+		return
+	for card in cards:
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var owner_hand = game.hand_for(1 if card.controller == "player" else 2)
+		if owner_hand == null:
+			continue
+		game.field.remove_card(card)
+		var tween = owner_hand.begin_return_card(card)
+		if tween != null:
+			await tween.finished
+
+
 func _sides(owner: String) -> Array:
 	if game == null:
 		return []

@@ -1,18 +1,15 @@
 extends "res://scripts/effects/card_effect.gd"
 ## 1-125R Onion Knight
 ##
-## Migrated from the JSON path.
+## Auto-ability: targets, if any, are chosen when the ability resolves.
 
 
-func target_criteria(_event: String):
-	return {"is_type": "Forward", "is_damaged": true}
+func event_specs() -> Array:
+	return [_event("when_enter_field", Callable(self, "_on_enter_field"))]
 
 
-func triggered_events() -> Array[String]:
-	return ["when_enter_field"]
-
-
-func on_enter_field(ctx) -> void:
-	var target: Card = ctx.targets[0] if not ctx.targets.is_empty() else null
-	if target != null:
-		ctx.damage([target], 5000)
+func _on_enter_field(ctx) -> void:
+	var targets: Array = await ctx.choose_targets({"is_type": "Forward", "is_damaged": true}, 1)
+	if targets.is_empty():
+		return
+	ctx.damage(targets, 5000)

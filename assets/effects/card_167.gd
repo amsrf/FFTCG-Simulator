@@ -1,12 +1,12 @@
 extends "res://scripts/effects/card_effect.gd"
 ## 1-167C Viking
 ##
-## Migrated from the JSON path.
+## Auto-ability: targets, if any, are chosen when the ability resolves.
 
 
-func triggered_events() -> Array[String]:
-	return ["when_enter_field"]
+func event_specs() -> Array:
+	return [_event("when_enter_field", Callable(self, "_on_enter_field"))]
 
 
-func on_enter_field(ctx) -> void:
+func _on_enter_field(ctx) -> void:
 	ctx.draw(ctx.owner_id, 1)

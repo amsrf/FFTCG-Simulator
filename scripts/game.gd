@@ -2319,8 +2319,11 @@ func _resolve_code_effect(card: Card) -> void:
 	var picks: Array = card.effect_targets.duplicate()
 	if picks.is_empty() and card.effect_target != null:
 		picks = [card.effect_target]
+	var spec: Dictionary = effect_obj.spec_for(card.effect_event)
+	if spec.is_empty():
+		return
 	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, picks)
-	await effect_obj.dispatch(card.effect_event, ctx)
+	await spec["run"].call(ctx)
 
 
 func _resolve_event_trigger(card: Card) -> void:

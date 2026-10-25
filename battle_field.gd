@@ -883,12 +883,8 @@ func execute_card_effect(card,keyword):
 		var stack_node = game_node.get("stack") if game_node != null else null
 		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
 			var effect_obj = card.effect()
-			var stack_copy: Card = stack_node.enqueue_code_trigger(card, keyword, {})
-			# Target timing is the same as the JSON path: choose when the ability goes on the stack, not when it
-			# resolves. The stack copy is the arrow's source and receives the picks.
-			var criteria = effect_obj.target_criteria(keyword) if effect_obj != null and effect_obj.has_method("target_criteria") else null
-			if criteria != null and stack_copy != null and has_viable_target(criteria, stack_copy, "Ability"):
-				request_target(criteria, stack_copy, false, "Ability")
+			if effect_obj != null and not effect_obj.spec_for(keyword).is_empty():
+				stack_node.enqueue_code_trigger(card, keyword, {})
 		return
 	if( not card.is_key_word_in_card_effect(keyword)):
 		return

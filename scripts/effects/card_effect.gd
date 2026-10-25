@@ -12,89 +12,30 @@ extends RefCounted
 ##
 ## This file deliberately contains no card logic. A card subclass overrides only the hooks it needs.
 
-## Event names this effect wants on the stack. Keep the names identical to the engine's event vocabulary.
-func triggered_events() -> Array[String]:
+## One spec per event this effect handles. A spec carries the event name and the Callable that implements it, so
+## there is no separate event list that can drift from the hooks. Each hook chooses its own targets (auto-abilities
+## choose at resolution) and is therefore self-contained.
+func event_specs() -> Array:
 	return []
 
-## Criteria for targets chosen when the trigger is put on the stack. Return null for an untargeted effect. The
-## engine requests these before resolution, so the normal targeting UI/agent path and the arrow source are preserved.
-func target_criteria(_event: String):
-	return null
+
+func spec_for(event: String) -> Dictionary:
+	for spec in event_specs():
+		if spec is Dictionary and str(spec.get("event", "")) == event:
+			return spec
+	return {}
 
 
-## True when this effect wants to be called for `event`. Used by Field.execute_card_effect before anything is queued.
+## True when this effect wants to be called for `event`.
 func handles_event(event: String) -> bool:
-	return event in triggered_events()
+	return not spec_for(event).is_empty()
 
-## Dispatch one event to its hook. Kept in one place so the engine never needs a growing match statement.
-func dispatch(event: String, ctx) -> void:
-	match event:
-		"when_enter_field":
-			await on_enter_field(ctx)
-		"when_attack":
-			await on_attack(ctx)
-		"when_cast":
-			await on_cast(ctx)
-		"when_blocks":
-			await on_blocks(ctx)
-		"when_blocked":
-			await on_blocked(ctx)
-		"when_damage_to_player":
-			await on_damage_to_player(ctx)
-		"attack_phase_start":
-			await on_attack_phase_start(ctx)
-		"when_party_attack":
-			await on_party_attack(ctx)
-		"when_party_attacks":
-			await on_party_attacks(ctx)
-		"when_party_deals_damage":
-			await on_party_deals_damage(ctx)
-		"when_enter_break_from_field":
-			await on_enter_break_from_field(ctx)
-		"when_break":
-			await on_break(ctx)
-		_:
-			push_warning("[CardEffect] no dispatch for event '%s'" % event)
 
-# ---------------------------------------------------------------------------------------------------------------
-# Triggered events
-# ---------------------------------------------------------------------------------------------------------------
+## Small constructor for event_specs(). The hook is a Callable because the engine invokes it later, when the stack
+## object resolves.
+func _event(event_name: String, hook: Callable) -> Dictionary:
+	return {"event": event_name, "run": hook}
 
-func on_enter_field(_ctx) -> void:
-	pass
-
-func on_attack(_ctx) -> void:
-	pass
-
-func on_cast(_ctx) -> void:
-	pass
-
-func on_blocks(_ctx) -> void:
-	pass
-
-func on_blocked(_ctx) -> void:
-	pass
-
-func on_damage_to_player(_ctx) -> void:
-	pass
-
-func on_attack_phase_start(_ctx) -> void:
-	pass
-
-func on_party_attack(_ctx) -> void:
-	pass
-
-func on_party_attacks(_ctx) -> void:
-	pass
-
-func on_party_deals_damage(_ctx) -> void:
-	pass
-
-func on_enter_break_from_field(_ctx) -> void:
-	pass
-
-func on_break(_ctx) -> void:
-	pass
 
 # ---------------------------------------------------------------------------------------------------------------
 # Continuous queries

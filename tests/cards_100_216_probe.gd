@@ -19,6 +19,15 @@ const YUNA_BACKUP := 176
 const SERAH := 195          # ice Forward
 const NOEL := 208           # lightning Forward: +2000 with Serah
 
+class TargetAgent extends Agent:
+	var wanted: Card = null
+
+	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+		if wanted != null and is_instance_valid(wanted) and wanted.is_valid_target:
+			game.field.set_target_card(wanted)
+		game.assistant.on_target_complete()
+
+
 var _checks: int = 0
 var _fails: int = 0
 var _game: Node = null
@@ -122,9 +131,15 @@ func _ready() -> void:
 	# --- 140 Magus: ETB 5000 damage -------------------------------------------------------------------
 	var target: Card = _make(SQUALL, "opponent")
 	var magus: Card = _make(140, "player")
+	# 140 is a code-defined auto-ability: it chooses its target when it resolves.
+	var previous_agent = _game.get("player_agent")
+	var target_agent := TargetAgent.new()
+	target_agent.bind(_game)
+	target_agent.wanted = target
+	_game.set("player_agent", target_agent)
 	_field.execute_card_effect(magus, "when_enter_field")
-	_pick(target)
 	await _drain()
+	_game.set("player_agent", previous_agent)
 	_expect(target.accumulated_damage == 5000, "Magus 140 deals 5000 to the chosen Forward")
 
 	# --- 101 Gippal: all YOUR Forwards +4000 ----------------------------------------------------------

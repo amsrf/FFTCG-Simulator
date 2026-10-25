@@ -59,6 +59,43 @@ code scripts as covered cards.
 `tests/simple_batch_probe.tscn` covers representative effects: damage, discard, mill, untap, Brave, draw, and the
 damaged-only target. Full suite and boot are green.
 
+### Effects: Event Specs and Resolution-Time Targets
+
+The code-effect interface no longer has three parallel declarations. A card publishes `event_specs()` returning a
+small descriptor per event:
+
+```gdscript
+func event_specs() -> Array:
+	return [_event("when_enter_field", Callable(self, "_on_enter_field"))]
+```
+
+There is no `triggered_events()` list to drift from the hooks, and no global `target_criteria()` that cannot tell two
+effects apart.
+
+Auto-abilities now choose targets **when they resolve**, which matches the rules and makes the hook self-contained:
+
+```gdscript
+func _on_enter_field(ctx) -> void:
+	var targets: Array = await ctx.choose_targets({"is_type": "Forward"}, 1)
+	if targets.is_empty():
+		return
+	ctx.damage(targets, 4000)
+```
+
+Activated abilities and Summons keep their earlier target timing; that will be modelled by their own ability
+descriptors rather than by the event path.
+
+### Second Migrated Batch
+
+Moved `90, 202, 523, 549, 583, 719` to code as well, bringing the code-owned set to 20 cards. `EffectContext` gained
+`return_to_hand()` for 90 and 719.
+
+Probes updated for the new timing: B1's Onion Knight 125, the 100–216 Magus 140 case, Rikku 90 in batch 1, and
+Tonogiri 719 in the party probe now let the auto-ability resolve and choose its target then, instead of pre-seeding a
+target session.
+
+`tests/effects_batch2_probe.tscn` covers 202, 523, 549, 583 and 719. Full suite and boot are green.
+
 ### Silence Status Icon
 
 Nullified field cards now show a silence bubble beside them. The balloon and tail are a single continuous transparent
