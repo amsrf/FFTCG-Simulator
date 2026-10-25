@@ -38,7 +38,11 @@ Cards:
 The optional prompt now pushes `OPTIONAL_CHOICE`, so the pass-phase button cannot sit on top of Confirm/Refuse; the
 button rack and its animation are unchanged.
 
-`tests/event_triggers_probe.gd` (12 checks). Test Mode now has a **Cecil 108** ground: press Y to take damage, watch
+Event-trigger resolution now also ends its targeting session: every locked/aiming arc is freed and the orange/red
+selection rings are cleared in `Field.finish_targeting_state()`. Cecil's chosen Forward no longer keeps its arrow or
+aura after the 5000 damage resolves.
+
+`tests/event_triggers_probe.gd` (14 checks). Test Mode now has a **Cecil 108** ground: press Y to take damage, watch
 the trigger go on the stack, then Confirm and pick one of three sturdy opponent Forwards.
 
 Boot 0 errors; full suite green. Coverage: 99 implemented / 4 vanilla / 14 needs code.

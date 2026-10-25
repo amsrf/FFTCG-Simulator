@@ -152,6 +152,9 @@ purpose, and no current effect changes a name in place. Add one in `enforce_game
   an effect copy; `Game._resolve_event_trigger()` does `may`, target selection and instructions at resolution. The
   priority loop therefore lets either player respond first. Do not resolve an event trigger inline.
 * The optional Confirm/Refuse prompt pushes `OPTIONAL_CHOICE`; otherwise the pass-phase button can appear over it.
+* Event-trigger resolution must end its targeting session. `Game._on_stack_execute_card_effect` calls
+  `Field.finish_targeting_state()` before AND after `_resolve_event_trigger()`; without the second call the last locked
+  arc and the orange pick ring outlive Cecil's effect.
 
 ### Costs are read through Rules.effective_cost only
 
