@@ -46,6 +46,13 @@ func _ready() -> void:
 
 	var effects: Dictionary = CardDatabase.card_effects
 	var db = CardDatabase.card_database
+	var code_ids: Dictionary = {}
+	for file_name in DirAccess.get_files_at("res://assets/effects"):
+		if not file_name.begins_with("card_") or not file_name.ends_with(".gd"):
+			continue
+		var stem: String = file_name.trim_prefix("card_").trim_suffix(".gd")
+		if stem.is_valid_int():
+			code_ids[int(stem)] = true
 
 	# --- coverage ----------------------------------------------------------------------------------------
 	# Two ranges, because they are tracked separately: 1-100 is finished; 100-216 is in progress and its
@@ -55,7 +62,7 @@ func _ready() -> void:
 		var vanilla: Array = []
 		var missing: Array = []
 		for i in range(span.x, span.y + 1):
-			if effects.has(str(i)):
+			if effects.has(str(i)) or code_ids.has(i):
 				covered.append(i)
 			elif str(db[i - 1].get("text_en", "")).strip_edges().is_empty():
 				vanilla.append(i)

@@ -81,7 +81,8 @@ func _ready() -> void:
 
 	# --- data shape for 70 and 89 ---------------------------------------------------------------------------
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("70", {}).has("when_enter_field"), "Thief (70) has an ETB entry")
+	_expect(effects.get("70", {}).has("when_enter_field")
+		or FileAccess.file_exists("res://assets/effects/card_70.gd"), "Thief (70) has an ETB entry")
 	var rikku_skills: Array = effects.get("89", {}).get("skill", [])
 	_expect(rikku_skills.size() == 2, "Rikku (89) has two abilities")
 	var s_skill: Dictionary = rikku_skills[1] if rikku_skills.size() > 1 else {}

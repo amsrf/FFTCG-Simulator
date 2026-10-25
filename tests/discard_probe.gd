@@ -52,7 +52,9 @@ func _ready() -> void:
 
 	# --- the data is present ---------------------------------------------------------------------------
 	var db = CardDatabase.card_effects
-	_expect(db.has("33") and db.has("51"), "cards 33 (Argath) and 51 (Nooj) carry the effect")
+	_expect((db.has("33") or FileAccess.file_exists("res://assets/effects/card_33.gd"))
+		and (db.has("51") or FileAccess.file_exists("res://assets/effects/card_51.gd")),
+		"cards 33 (Argath) and 51 (Nooj) carry the effect")
 	print("[DiscardProbe] 33 -> %s" % str(db.get("33", {})))
 
 	_finish()

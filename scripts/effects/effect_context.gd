@@ -13,16 +13,20 @@ var source: Card = null
 ## The stack copy currently resolving, when there is one. Targeting arcs originate from this card, not from the
 ## source that may already have left the field.
 var effect_card: Card = null
+## Targets chosen when the trigger was put on the stack, in pick order. Code effects that declare target_criteria
+## receive them here; effects that ask later can still use choose_target(s).
+var targets: Array = []
 var controller: String = ""
 var owner_id: int = 1
 var event_name: String = ""
 var event_data: Dictionary = {}
 
 
-func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dictionary = {}, p_effect_card: Card = null) -> void:
+func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dictionary = {}, p_effect_card: Card = null, p_targets: Array = []) -> void:
 	game = p_game
 	source = p_source
 	effect_card = p_effect_card
+	targets = p_targets.duplicate()
 	event_name = p_event
 	event_data = p_data.duplicate(true)
 	if p_source != null:
@@ -113,6 +117,12 @@ func choose_targets(criteria: Dictionary, count: int = 1, allow_cancel: bool = f
 	return picks
 
 
+## Single-target convenience over choose_targets().
+func choose_target(criteria: Dictionary, prompt: String = "Choose a card") -> Card:
+	var picks: Array = await choose_targets(criteria, 1)
+	return picks[0] if not picks.is_empty() else null
+
+
 ## Resolve an optional "you may" clause through the owning agent.
 func may(prompt: String) -> bool:
 	if game == null:
@@ -183,6 +193,41 @@ func add_status(cards: Array, status: String, duration: int = 1, payload: Dictio
 	for card in cards:
 		if card != null and is_instance_valid(card):
 			card.add_status_effect(status, duration, payload)
+
+
+func untap(cards: Array) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			card.untap()
+
+
+func dull(cards: Array) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			card.tap()
+
+
+func break_cards(cards: Array) -> void:
+	if game == null:
+		return
+	for card in cards:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			game.break_card(card)
+
+
+func power_change(cards: Array, amount: int, duration: int = 1) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			card.power_change(amount, duration)
+
+
+func opponent_discards(count: int = 1) -> void:
+	await discard(3 - owner_id, count)
+
+
+func each_player_discards(count: int = 1) -> void:
+	await discard(owner_id, count)
+	await discard(3 - owner_id, count)
 
 
 func draw(player_id: int, count: int = 1) -> void:

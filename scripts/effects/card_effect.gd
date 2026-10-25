@@ -16,6 +16,12 @@ extends RefCounted
 func triggered_events() -> Array[String]:
 	return []
 
+## Criteria for targets chosen when the trigger is put on the stack. Return null for an untargeted effect. The
+## engine requests these before resolution, so the normal targeting UI/agent path and the arrow source are preserved.
+func target_criteria(_event: String):
+	return null
+
+
 ## True when this effect wants to be called for `event`. Used by Field.execute_card_effect before anything is queued.
 func handles_event(event: String) -> bool:
 	return event in triggered_events()
@@ -37,6 +43,12 @@ func dispatch(event: String, ctx) -> void:
 			await on_damage_to_player(ctx)
 		"attack_phase_start":
 			await on_attack_phase_start(ctx)
+		"when_party_attack":
+			await on_party_attack(ctx)
+		"when_party_attacks":
+			await on_party_attacks(ctx)
+		"when_party_deals_damage":
+			await on_party_deals_damage(ctx)
 		"when_enter_break_from_field":
 			await on_enter_break_from_field(ctx)
 		"when_break":
@@ -67,6 +79,15 @@ func on_damage_to_player(_ctx) -> void:
 	pass
 
 func on_attack_phase_start(_ctx) -> void:
+	pass
+
+func on_party_attack(_ctx) -> void:
+	pass
+
+func on_party_attacks(_ctx) -> void:
+	pass
+
+func on_party_deals_damage(_ctx) -> void:
 	pass
 
 func on_enter_break_from_field(_ctx) -> void:

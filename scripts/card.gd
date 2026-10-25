@@ -1524,10 +1524,10 @@ func effect_handles_event(event: String) -> bool:
 
 ## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits
 ## under Stack. Either way the Game is the grandparent and EffectContext resolves Field from it.
-func make_effect_context(event: String = "static", data: Dictionary = {}, effect_card: Card = null):
+func make_effect_context(event: String = "static", data: Dictionary = {}, effect_card: Card = null, targets: Array = []):
 	var parent: Node = get_parent()
 	var game: Node = parent.get_parent() if parent != null else null
-	return EFFECT_CONTEXT.new(game, self, event, data, effect_card)
+	return EFFECT_CONTEXT.new(game, self, event, data, effect_card, targets)
 
 
 ## EVERY Element this card currently has, in the order it should be displayed. The printed `element` remains the

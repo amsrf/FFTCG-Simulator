@@ -41,6 +41,24 @@ ETB stack object and both removed zones, the element override and its expiry. `t
 the new picker UI. Existing probes remain green; coverage for 100–216 is 109 implemented, 4 vanilla, 4 needing code
 (111, 135, 141, 181).
 
+### Simple Effects: First Migrated Batch
+
+The first ordinary cards moved from `card_effects.json` to `assets/effects/card_<id>.gd`. These are single-trigger
+effects whose old instruction shapes map directly onto `EffectContext`:
+
+`21, 32, 33, 51, 65, 67, 69, 70, 115, 125, 140, 161, 167, 195`.
+
+Each script declares `triggered_events()` and, where the card targets, `target_criteria()`. The engine now requests
+those targets **when the trigger goes on the stack**, matching the old JSON timing; the picks are carried into
+resolution as `ctx.targets`. This is why `B1`'s 125 target-legality check still passes unchanged.
+
+The migrated JSON trigger blocks were removed. Static keys on cards that were not fully migrated (for example
+`haste` / `first_strike`) stay in the data file, so the hybrid behaves predictably. `effects_data_probe` now counts
+code scripts as covered cards.
+
+`tests/simple_batch_probe.tscn` covers representative effects: damage, discard, mill, untap, Brave, draw, and the
+damaged-only target. Full suite and boot are green.
+
 ### Silence Status Icon
 
 Nullified field cards now show a silence bubble beside them. The balloon and tail are a single continuous transparent

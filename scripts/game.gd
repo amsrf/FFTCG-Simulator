@@ -2316,7 +2316,10 @@ func _resolve_code_effect(card: Card) -> void:
 	var effect_obj = source.effect()
 	if effect_obj == null:
 		return
-	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card)
+	var picks: Array = card.effect_targets.duplicate()
+	if picks.is_empty() and card.effect_target != null:
+		picks = [card.effect_target]
+	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, picks)
 	await effect_obj.dispatch(card.effect_event, ctx)
 
 

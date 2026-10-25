@@ -93,14 +93,6 @@
 			}
 		
 	},
-	"32":{
-		"when_enter_field":
-			{
-				"instructions":[{"name":"add_status_effect", "author":"target", "argument":["unbreakable", 1]}], 
-				"choose_target":{"is_type":"Forward"}
-			}
-		
-	},
 	
 	"71":{
 		"cannot_be_chosen":{
@@ -118,29 +110,8 @@
 			}
 	},
 
-	"21":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[{"name":"suffer_damage","author":"target","argument":[4000]}]
-		}
-	},
-
 	"57":{
 		"aura":[{"targets":{"type":"Forward","controller":"player","element":"氷"},"method":"power_change","value":1000}]
-	},
-
-	"65":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Backup","controller":"player"},
-			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
-		}
-	},
-
-	"67":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Backup","controller":"player"},
-			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
-		}
 	},
 
 	"83":{
@@ -170,18 +141,6 @@
 		"skill":[{"tap":true, "cost":{"土":1},
 			"choose_target":{"is_type":"Forward","is_blocking":true},
 			"instructions":[{"name":"power_change","author":"target","argument":[1000, 1]}]}]
-	},
-
-	"33":{
-		"when_enter_field":{
-			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
-		}
-	},
-
-	"51":{
-		"when_enter_field":{
-			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
-		}
 	},
 
 	"62":{
@@ -516,16 +475,6 @@
 		}]
 	}
 ,
-	"69":{
-		"when_enter_field":{
-			"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
-		}
-	},
-	"70":{
-		"when_enter_field":{
-			"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
-		}
-	},
 	"89":{
 		"skill":[
 			{
@@ -1155,22 +1104,6 @@
 			]
 		}
 	},
-	"140": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					]
-				}
-			]
-		}
-	},
 	"142": {
 		"haste": true,
 		"when_enter_field": {
@@ -1272,20 +1205,6 @@
 				]
 			}
 		]
-	},
-	"161": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
 	},
 	"170": {
 		"ex_burst": "when_cast",
@@ -1679,23 +1598,6 @@
 			]
 		}
 	},
-	"115": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"brave",
-						1
-					]
-				}
-			]
-		}
-	},
 	"120": {
 		"skill": [
 			{
@@ -1902,19 +1804,6 @@
 			]
 		}
 	},
-	"167": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
-	},
 	"168": {
 		"when_enter_break_from_field": {
 			"instructions": [
@@ -1953,19 +1842,6 @@
 				"value": 1000
 			}
 		]
-	},
-	"195": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "opponent_discards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
 	},
 	"196": {
 		"when_enter_field": {
@@ -2170,23 +2046,6 @@
 				]
 			}
 		]
-	},
-	"125": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_damaged": true
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					]
-				}
-			]
-		}
 	},
 	"127": {
 		"ex_burst": "when_enter_field",

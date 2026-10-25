@@ -20,6 +20,10 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;
   `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch()` with a fresh context when that copy resolves.
   Do not call an effect hook immediately when the event happens.
+- Target timing is part of that contract: a code effect that needs targets declares `target_criteria(event)`. The
+  engine requests those targets when the stack object is enqueued and passes the picks as `ctx.targets`. Use
+  `ctx.targets` in the hook; `ctx.choose_target()`/`choose_targets()` is for effects that deliberately choose at
+  resolution, not a substitute for trigger-time targeting.
 - `Card.current_elements()` is a live query: printed `element` stays immutable, while `effect.current_elements(ctx,
   card)` may add or replace Elements. `is_element()` and every criteria/cost check must go through it.
 - Keep class references by path (`preload("res://...")`) for new effect scripts; Godot's headless run does not have a
