@@ -29,6 +29,7 @@ func _ready() -> void:
 	# Keep the probe fast; the animation itself is asserted structurally, not by waiting 0.8 s per card.
 	_game.reveal_lift_seconds = 0.0
 	_game.reveal_flip_seconds = 0.0
+	_game.reveal_flip_back_seconds = 0.0
 	_game.reveal_hold_seconds = 0.0
 	await get_tree().process_frame
 

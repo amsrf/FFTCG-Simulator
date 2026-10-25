@@ -36,7 +36,8 @@ const CARD_FILTER := preload("res://scripts/card_filter.gd")
 @export var reveal_lift_m: float = 0.5
 @export var reveal_lift_seconds: float = 0.25
 @export var reveal_flip_seconds: float = 0.30
-@export var reveal_hold_seconds: float = 0.80
+@export var reveal_flip_back_seconds: float = 0.30
+@export var reveal_hold_seconds: float = 1.0
 @export var reveal_scale: float = 1.3
 var revealed_cards: Array[Card] = []
 var revealed_owner_id: int = 0
@@ -693,6 +694,15 @@ func reveal_top(count: int = 1) -> void:
 			card.global_transform = face
 		if reveal_hold_seconds > 0.0:
 			await get_tree().create_timer(reveal_hold_seconds).timeout
+		# TURN IT BACK FACE-DOWN before it disappears: the player has read it, and the vanish should not look like
+		# a card being discarded face-up.
+		var back := Transform3D(start.basis, lifted_origin)
+		if reveal_flip_back_seconds > 0.0:
+			var back_tween: Tween = create_tween()
+			back_tween.tween_property(card, "global_transform", back, reveal_flip_back_seconds)
+			await back_tween.finished
+		else:
+			card.global_transform = back
 		card.set_hidden(true)
 		revealed_cards.append(card)
 
