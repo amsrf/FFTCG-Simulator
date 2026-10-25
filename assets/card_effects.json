@@ -3354,7 +3354,8 @@
 			},
 			"filter": "Card criteria evaluated on context.card from the trigger owner's perspective; damage_received uses controller only.",
 			"target": "source (default), event (context.card), or none.",
-			"fields": "may, may_prompt, once_per_turn, requires_active, choose_target, instructions."
+			"fields": "may, may_prompt, once_per_turn, requires_active, choose_target, instructions.",
+			"resolution": "Matched triggers are placed on the stack as effect copies. The may choice, target selection and instructions run when the stack object resolves, after either player may respond."
 		}
 	}
 }

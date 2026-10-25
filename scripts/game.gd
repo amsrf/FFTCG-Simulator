@@ -2019,7 +2019,55 @@ static func phase_to_string(phase):
 			return "UNKNOWN_PHASE"
 	
 
+## Resolve a board-wide event trigger that was enqueued by Field.trigger_event(). It is a normal stack object, so
+## priority has already passed around it; this is the RESOLUTION half: may -> choose target -> instructions.
+func _resolve_event_trigger(card: Card) -> void:
+	var trigger: Dictionary = card.event_trigger
+	var context: Dictionary = card.event_context
+	var source: Card = card.effect_source
+	if source == null or not is_instance_valid(source):
+		return
+	# "if it is active" is checked at resolution, not when the trigger was put on the stack.
+	if bool(trigger.get("requires_active", false)) and (not source.is_on_field() or source.tapped):
+		return
+	if bool(trigger.get("may", false)):
+		var owner_id: int = 1 if source.controller == "player" else 2
+		var agent: Agent = agent_for(owner_id)
+		var use_it: bool = true
+		if agent != null:
+			use_it = await agent.confirm_optional(owner_id, str(trigger.get("may_prompt", "")))
+		if not use_it:
+			return
+	var targets: Array = field.call("_event_targets", trigger, source, context)
+	_current_source_card = source
+	_current_controller = card.controller
+	_targets = targets
+	var criteria = trigger.get("choose_target", null)
+	if criteria:
+		# The stack copy is the source of the arrow: this is the effect the player is resolving.
+		if not field.has_viable_target(criteria, card, "Ability"):
+			return
+		field.request_target(criteria, card, false, "Ability")
+		# A non-local agent completes inside request_target(); only a local player leaves the list empty.
+		if field.targeting_picked.is_empty():
+			await assistant.target_complete
+		targets = field.targeting_picked.duplicate()
+		_targets = targets
+	var instructions_json = trigger.get("instructions", [])
+	if instructions_json is Array and not instructions_json.is_empty():
+		var instructions: Array[Instruction] = source.create_instruction_from_json(instructions_json)
+		await _execute_instructions_and_wait(instructions)
+	else:
+		_clean_instruction_stack()
+
 func _on_stack_execute_card_effect(card: Card) -> void:
+	# A board-wide event trigger is a stack object with its own resolution path; its copied card data has no
+	# `__event_trigger` keyword to resolve.
+	if not card.event_trigger.is_empty():
+		await _resolve_event_trigger(card)
+		card.queue_free()
+		stack._mark_resolution_complete()
+		return
 	# Resolution may await an interactive modal (e.g. Auron's "may play a
 	# Backup" choice). Stack.resolve_top_effect() waits for our
 	# _mark_resolution_complete() signal at the end of this function.

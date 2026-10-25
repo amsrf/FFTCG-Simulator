@@ -22,7 +22,7 @@ var focus_card_id = null
 ## NO_PRIORITY describe a declaration; PAYING_COST / TARGET /
 ## CHOOSE_CARD_IN_HAND are modals. BLOCKING is appended so the existing values
 ## keep their numbers (nothing persists them, but renumbering buys nothing).
-enum Player_Mode { FREE, PAYING_COST, ATTACKING, TARGET, NO_PRIORITY, INSTANT_SPEED_TIME, CHOOSE_CARD_IN_HAND, BLOCKING }
+enum Player_Mode { FREE, PAYING_COST, ATTACKING, TARGET, NO_PRIORITY, INSTANT_SPEED_TIME, CHOOSE_CARD_IN_HAND, BLOCKING, OPTIONAL_CHOICE }
 
 ## Current effective mode. Read it with get_player_mode(); it is recomputed by
 ## _refresh_mode() from the two layers below.

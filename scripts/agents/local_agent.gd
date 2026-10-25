@@ -79,6 +79,9 @@ func confirm_optional(_player_id: int, prompt: String) -> bool:
 	_optional_settled = false
 	_optional_answer = false
 	var text: String = prompt if prompt != "" else "Confirm"
+	# A MODAL, so the pass-phase button cannot sit on top of Confirm/Refuse. The button rack and its animation are
+	# unchanged; only the input mode is pushed.
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.OPTIONAL_CHOICE)
 	assistant.show_modal(text, "Refuse",
 		func():
 			_optional_answer = true
@@ -90,6 +93,7 @@ func confirm_optional(_player_id: int, prompt: String) -> bool:
 	while not _optional_settled:
 		await game.get_tree().process_frame
 	assistant.hide_buttons()
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.OPTIONAL_CHOICE)
 	return _optional_answer
 
 ## Free play from hand — the same window, over the hand instead of a zone.

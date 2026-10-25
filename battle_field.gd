@@ -515,9 +515,9 @@ func trigger_party_deals_damage(controller: String) -> void:
 ##   summon_cast       a Summon was cast                    context: {card}
 ##   forward_attacks   a Forward attacked                   context: {card}
 ##
-## A trigger's `filter` is evaluated from the trigger owner's perspective. `target` chooses what the instructions act
-## on by default: "source" (the trigger card, default), "event" (the card in the context), or "none". `choose_target`
-## overrides that with a normal targeting session. `may`, `once_per_turn` and `requires_active` are handled here.
+## A TRIGGERED ABILITY GOES ON THE STACK. The event only MATCHES and ENQUEUES here; `may`, target selection and the
+## instructions all happen at resolution (Game._resolve_event_trigger), so either player can respond first and a
+## "may" choice is made when the ability resolves, not when it triggers.
 func trigger_event(event_name: String, context: Dictionary) -> void:
 	var host: Node = get_parent()
 	if host == null:
@@ -539,8 +539,6 @@ func trigger_event(event_name: String, context: Dictionary) -> void:
 				continue
 			if not _event_filter_holds(source, trigger.get("filter", {}), context):
 				continue
-			if bool(trigger.get("requires_active", false)) and source.tapped:
-				continue
 			var once: bool = bool(trigger.get("once_per_turn", false))
 			var turn: int = int(host.get("turn_number"))
 			var fire_key: String = "%d:%d:%d" % [source.get_instance_id(), index, turn]
@@ -549,38 +547,7 @@ func trigger_event(event_name: String, context: Dictionary) -> void:
 				continue
 			if once and fired != null:
 				fired[fire_key] = true
-			if bool(trigger.get("may", false)):
-				var owner_id: int = 1 if source.controller == "player" else 2
-				var agent: Agent = host.call("agent_for", owner_id)
-				var use_it: bool = true
-				if agent != null:
-					use_it = await agent.confirm_optional(owner_id, str(trigger.get("may_prompt", "")))
-				if not use_it:
-					continue
-			var targets: Array = _event_targets(trigger, source, context)
-			host.set("_current_source_card", source)
-			host.set("_current_controller", source.controller)
-			host.set("_targets", targets)
-			var criteria = trigger.get("choose_target", null)
-			if criteria:
-				if not has_viable_target(criteria, source, "Ability"):
-					continue
-				request_target(criteria, source, false, "Ability")
-				# A NON-LOCAL AGENT FINISHES INSIDE request_target(). AIAgent.choose_target() calls
-				# set_target_card() and on_target_complete() synchronously, so the signal is already spent before
-				# we get here; awaiting it would hang forever. A local player has no picks yet, so wait for the click.
-				if targeting_picked.is_empty():
-					var assistant_node = host.get("assistant")
-					if assistant_node != null:
-						await assistant_node.target_complete
-				targets = targeting_picked.duplicate()
-				host.set("_targets", targets)
-			var instructions_json = trigger.get("instructions", [])
-			if instructions_json is Array and not instructions_json.is_empty():
-				var instructions: Array[Instruction] = source.create_instruction_from_json(instructions_json)
-				await host.call("_execute_instructions_and_wait", instructions)
-			else:
-				host.call("_clean_instruction_stack")
+			stack.enqueue_event_trigger(source, trigger, context)
 
 ## A trigger's filter is criteria on the event card, except for events with no card (damage_received), where only the
 ## controller comparison makes sense. "your"/"opponent" are relative to the trigger owner.

@@ -71,6 +71,10 @@ func set_effect_targets(picks: Array) -> void:
 ## rules ("cannot be chosen by opponent's Summons or abilities") identify the
 ## source of a targeting effect.
 @export var effect_kind: String = ""
+## Board-wide event trigger carried by an EFFECT COPY on the stack. The copy is a normal Card (so it can be seen
+## and responded to), but it resolves through Game._resolve_event_trigger instead of its own card data.
+var event_trigger: Dictionary = {}
+var event_context: Dictionary = {}
 ## Power currently granted by conditional continuous effects (e.g. Zack/Aerith).
 var current_conditional_bonus: int = 0
 

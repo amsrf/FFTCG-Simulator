@@ -557,6 +557,16 @@ func create_card(id, controller, keyword, source) -> Card:
 	
 	return card
 
+## Enqueue a board-wide event trigger as a normal stack object. It must be a Card so the UI can show it and the
+## ordinary priority loop can let either player respond; `event_trigger`/`event_context` make it resolve differently.
+func enqueue_event_trigger(source: Card, trigger: Dictionary, context: Dictionary) -> Card:
+	var card: Card = create_card(source.id, source.controller, "__event_trigger", source)
+	card.event_trigger = trigger.duplicate(true)
+	card.event_context = context.duplicate()
+	card.effect_kind = "Ability"
+	update_card_positions()
+	return card
+
 ## CANCEL a stack object without resolving it (Summoner 53 countering a Summon). It was already paid for, so the card
 ## goes to its owner's Break Zone. Removing it from `cards` is enough to stop it resolving — the priority loop takes
 ## the top of that list — and the fan is re-laid out immediately.

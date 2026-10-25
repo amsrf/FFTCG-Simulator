@@ -148,8 +148,10 @@ purpose, and no current effect changes a name in place. Add one in `enforce_game
   `set_target_card()` + `on_target_complete()` synchronously, so the signal is already spent when `request_target()`
   returns. Check `targeting_picked` first and only await `target_complete` when it is still empty; otherwise the
   trigger hangs forever.
-* Event triggers currently resolve immediately at the event rather than through the stack. Document that if a future
-  card needs to respond to the trigger itself.
+* Event triggers are **triggered abilities and go on the stack**. `Field.trigger_event()` only matches and enqueues
+  an effect copy; `Game._resolve_event_trigger()` does `may`, target selection and instructions at resolution. The
+  priority loop therefore lets either player respond first. Do not resolve an event trigger inline.
+* The optional Confirm/Refuse prompt pushes `OPTIONAL_CHOICE`; otherwise the pass-phase button can appear over it.
 
 ### Costs are read through Rules.effective_cost only
 

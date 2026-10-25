@@ -199,6 +199,7 @@ func show_pass_priority_button():
 		pm == GlobalVariables.Player_Mode.PAYING_COST
 		or pm == GlobalVariables.Player_Mode.TARGET
 		or pm == GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND
+		or pm == GlobalVariables.Player_Mode.OPTIONAL_CHOICE
 		or pm == GlobalVariables.Player_Mode.NO_PRIORITY
 	)
 	if modal_mode:

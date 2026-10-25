@@ -23,6 +23,10 @@ Supported events: `damage_received`, `card_left_field`, `summon_cast`, `forward_
 Supported trigger fields: `filter`, `target` (`source`/`event`/`none`), `may`, `may_prompt`,
 `once_per_turn`, `requires_active`, `choose_target`, `instructions`.
 
+**Triggered abilities go on the stack.** `Field.trigger_event()` only matches and enqueues an effect copy; the
+ordinary priority loop lets either player respond, and `Game._resolve_event_trigger()` makes the `may` choice, chooses
+targets and runs instructions at resolution. The passed rule also applies: the event does not resolve retroactively.
+
 Cards:
 * **108 Cecil** — when you receive damage, may deal 5000 to an opponent Forward.
 * **187 Cloud** — each Forward you control that attacks gains +1000. Cloud is now complete (cost, buff, Climhazzard).
@@ -31,8 +35,11 @@ Cards:
 * **215 Lenne** — when the opponent casts a Summon, untap her.
 * **213 Tidus** — its Yuna-leaves trigger draws 2; only the “Brave while you control Yuna” condition still needs code.
 
-`tests/event_triggers_probe.gd` (12 checks). Test Mode now has a **Cecil 108** ground: press Y to take damage, then
-Confirm and pick one of three sturdy opponent Forwards.
+The optional prompt now pushes `OPTIONAL_CHOICE`, so the pass-phase button cannot sit on top of Confirm/Refuse; the
+button rack and its animation are unchanged.
+
+`tests/event_triggers_probe.gd` (12 checks). Test Mode now has a **Cecil 108** ground: press Y to take damage, watch
+the trigger go on the stack, then Confirm and pick one of three sturdy opponent Forwards.
 
 Boot 0 errors; full suite green. Coverage: 99 implemented / 4 vanilla / 14 needs code.
 
