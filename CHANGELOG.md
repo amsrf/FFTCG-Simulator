@@ -61,16 +61,19 @@ damaged-only target. Full suite and boot are green.
 
 ### Effects: Event Specs and Resolution-Time Targets
 
-The code-effect interface no longer has three parallel declarations. A card publishes `event_specs()` returning a
-small descriptor per event:
+The code-effect interface no longer has three parallel declarations. **The event name is the hook name**:
 
 ```gdscript
-func event_specs() -> Array:
-	return [_event("when_enter_field", Callable(self, "_on_enter_field"))]
+func when_enter_field(ctx) -> void:
+	var targets: Array = await ctx.choose_targets({"is_type": "Forward"}, 1)
+	if targets.is_empty():
+		return
+	ctx.damage(targets, 4000)
 ```
 
-There is no `triggered_events()` list to drift from the hooks, and no global `target_criteria()` that cannot tell two
-effects apart.
+The base class answers `handles_event(event)` with `has_method(event)`, and the engine calls that same method at
+resolution. There is no `triggered_events()` list, no event manifest and no global `target_criteria()` that cannot tell
+two effects apart.
 
 Auto-abilities now choose targets **when they resolve**, which matches the rules and makes the hook self-contained:
 

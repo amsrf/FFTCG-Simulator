@@ -20,8 +20,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;
   `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch()` with a fresh context when that copy resolves.
   Do not call an effect hook immediately when the event happens.
-- A code effect publishes `event_specs()`; each spec carries the event name and a `Callable` hook. Do not add a
-  separate `triggered_events()` list — the two can drift.
+- A code effect declares an event by defining a method with **exactly the event name**: `func when_enter_field(ctx)`.
+  The base class answers `handles_event(event)` with `has_method(event)`, and the engine calls that same method at
+  resolution. There is no event manifest and no name mapping to drift.
 - **Auto-abilities choose targets when they resolve.** In a `when_enter_field` / `when_attack` hook, call
   `await ctx.choose_targets(criteria, count)` and use the returned array. This matches the rules and lets each event
   have its own targeting logic.

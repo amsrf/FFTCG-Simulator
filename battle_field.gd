@@ -882,9 +882,7 @@ func execute_card_effect(card,keyword):
 		var game_node: Node = get_parent()
 		var stack_node = game_node.get("stack") if game_node != null else null
 		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
-			var effect_obj = card.effect()
-			if effect_obj != null and not effect_obj.spec_for(keyword).is_empty():
-				stack_node.enqueue_code_trigger(card, keyword, {})
+			stack_node.enqueue_code_trigger(card, keyword, {})
 		return
 	if( not card.is_key_word_in_card_effect(keyword)):
 		return

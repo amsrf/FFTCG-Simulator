@@ -12,29 +12,11 @@ extends RefCounted
 ##
 ## This file deliberately contains no card logic. A card subclass overrides only the hooks it needs.
 
-## One spec per event this effect handles. A spec carries the event name and the Callable that implements it, so
-## there is no separate event list that can drift from the hooks. Each hook chooses its own targets (auto-abilities
-## choose at resolution) and is therefore self-contained.
-func event_specs() -> Array:
-	return []
-
-
-func spec_for(event: String) -> Dictionary:
-	for spec in event_specs():
-		if spec is Dictionary and str(spec.get("event", "")) == event:
-			return spec
-	return {}
-
-
-## True when this effect wants to be called for `event`.
+## EVENT METHODS ARE THE CONTRACT. A card defines a method named exactly like the engine event it handles, e.g.
+## `func when_enter_field(ctx)`. The engine asks `has_method(event)` and, at resolution, calls that same method.
+## There is no separate event list and no name mapping, so there is nothing to drift.
 func handles_event(event: String) -> bool:
-	return not spec_for(event).is_empty()
-
-
-## Small constructor for event_specs(). The hook is a Callable because the engine invokes it later, when the stack
-## object resolves.
-func _event(event_name: String, hook: Callable) -> Dictionary:
-	return {"event": event_name, "run": hook}
+	return has_method(event)
 
 
 # ---------------------------------------------------------------------------------------------------------------

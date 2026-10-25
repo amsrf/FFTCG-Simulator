@@ -2319,11 +2319,9 @@ func _resolve_code_effect(card: Card) -> void:
 	var picks: Array = card.effect_targets.duplicate()
 	if picks.is_empty() and card.effect_target != null:
 		picks = [card.effect_target]
-	var spec: Dictionary = effect_obj.spec_for(card.effect_event)
-	if spec.is_empty():
-		return
 	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, picks)
-	await spec["run"].call(ctx)
+	# The event name is the hook name: when_enter_field(), when_attack(), attack_phase_start(), ...
+	await effect_obj.call(card.effect_event, ctx)
 
 
 func _resolve_event_trigger(card: Card) -> void:

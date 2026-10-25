@@ -10,10 +10,6 @@ extends "res://scripts/effects/card_effect.gd"
 const SIX_ELEMENTS: Array[String] = ["火", "氷", "風", "土", "雷", "水"]
 
 
-func event_specs() -> Array:
-	return [_event("when_enter_field", Callable(self, "_on_enter_field"))]
-
-
 func current_elements(ctx, card) -> Array[String]:
 	var out: Array[String] = []
 	if card.element != "":
@@ -24,5 +20,5 @@ func current_elements(ctx, card) -> Array[String]:
 	return out
 
 
-func _on_enter_field(ctx) -> void:
+func when_enter_field(ctx) -> void:
 	ctx.remove_from_game(ctx.cards_in("field", {"is_type": "Forward"}))
