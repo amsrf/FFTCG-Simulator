@@ -151,6 +151,12 @@ func choose_deck_card(_owner_id: int, ids: Array, _filter: Dictionary) -> int:
 	await _settle()
 	return int(ids[0]) if not ids.is_empty() else -1
 
+## Choose one Element from `options` (Mime 173). Pull shape: returns the chosen element, or "" to cancel.
+func choose_element(_owner_id: int, options: Array, _prompt: String = "Choose an Element") -> String:
+	await _settle()
+	return str(options[0]) if not options.is_empty() else ""
+
+
 func choose_discard(_owner_id: int, _cards: Array) -> Card:
 	await _settle()
 	return null

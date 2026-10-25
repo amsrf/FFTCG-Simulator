@@ -1,7 +1,7 @@
 """Coverage/classification for the 100-216 card push.
 
 Every id must fall in exactly one bucket:
-  * implemented  - has an entry in assets/card_effects.json
+  * implemented  - has an entry in assets/card_effects.json or a script in assets/effects/
   * vanilla      - no rules text
   * needs code   - listed in NEEDS_CODE with the primitive it is waiting on
 Anything else is a gap and `--check` exits non-zero.
@@ -10,7 +10,9 @@ Usage:
     python3 tools/coverage_range.py
     python3 tools/coverage_range.py --check
 """
+import glob
 import json
+import os
 import sys
 
 FIRST, LAST = 100, 216
@@ -29,8 +31,6 @@ NEEDS_CODE = {
     181: 'return-self-to-hand cost',
     141: 'force a blocker',
     # B5 - complex
-    103: 'dynamic element identity',
-    107: 'dynamic element identity',
     111: 'variable X cost',
     135: 'multi-card search/play with distinct elements',
 }
@@ -39,10 +39,15 @@ NEEDS_CODE = {
 def main():
     db = json.load(open('assets/card_database.json', encoding='utf-8'))['cards']
     eff = json.load(open('assets/card_effects.json', encoding='utf-8'))
+    code_ids = set()
+    for path in glob.glob("assets/effects/card_*.gd"):
+        stem = os.path.basename(path)[5:-3]
+        if stem.isdigit():
+            code_ids.add(int(stem))
 
     implemented, vanilla, missing, gaps, conflicts = [], [], [], [], []
     for i in range(FIRST, LAST + 1):
-        has_entry = str(i) in eff
+        has_entry = str(i) in eff or i in code_ids
         if has_entry:
             implemented.append(i)
             if i in NEEDS_CODE:

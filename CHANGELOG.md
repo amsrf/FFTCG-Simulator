@@ -4,6 +4,38 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
 
+### Code-Defined Card Effects (migration started)
+
+The JSON effect language was becoming an untyped programming language: `apply_effect` mutated ambient state, target
+collection was split from the trigger that used it, and dynamic queries such as "Elements of all opponent Characters"
+had no honest representation.
+
+The first migration layer is now in place:
+
+- `scripts/effects/card_effect.gd` — the engine-facing interface. A card declares `triggered_events()` and overrides
+  the hooks it needs (`on_enter_field`, `on_attack`, ...); continuous behavior is exposed through ordinary queries such
+  as `current_elements()`.
+- `scripts/effects/effect_context.gd` — an explicit, short-lived context containing the source, controller, event and
+  region/choice/action helpers. Card code no longer reads `_targets`, `_current_source_card` or UI globals directly.
+- `scripts/effects/effect_registry.gd` — card id → effect script. Effects are stateless and cached; a card with no
+  registry entry keeps the existing JSON path, so migration can be incremental.
+- `Card` now owns `effect()`, `current_elements()` and dynamic `is_element()`. The printed `element` stays immutable;
+  element grants are computed at query time.
+- Code-defined triggered abilities are stack objects. `Field.execute_card_effect()` enqueues them through
+  `Stack.enqueue_code_trigger()`; `Game._on_stack_execute_card_effect()` resolves the event through
+  `CardEffect.dispatch(ctx)`. Board events (`trigger_event`) also recognize code effects.
+- `EffectContext` wraps `cards_in`, `choose`, `choose_element`, `damage`, `remove_from_game`, `add_status` and `draw`,
+  so effects operate through explicit APIs rather than touching Game/Field internals.
+
+Piloted cards:
+
+- **103 Kimahri** — `current_elements()` gains every opponent Character's Elements except Light and Dark.
+- **107 Shantotto** — six printed Elements plus a stack-based ETB that removes every Forward from the game.
+
+`tests/code_effect_probe.tscn` covers both, including duplicate-free element sets, English element aliases, the ETB
+stack object and both removed zones. Existing probes remain green; coverage for 100–216 is now 109 implemented,
+4 vanilla, 4 needing code (111, 135, 141, 181), with 173 still partial.
+
 ### Silence Status Icon
 
 Nullified field cards now show a silence bubble beside them. The balloon and tail are a single continuous transparent

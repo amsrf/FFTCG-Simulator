@@ -571,6 +571,16 @@ func create_card(id, controller, keyword, source) -> Card:
 
 ## Enqueue a board-wide event trigger as a normal stack object. It must be a Card so the UI can show it and the
 ## ordinary priority loop can let either player respond; `event_trigger`/`event_context` make it resolve differently.
+## A code-defined triggered ability. Its effect object is stateless; the stack copy carries the event name and a small
+## event payload until Game resolves it through CardEffect.dispatch.
+func enqueue_code_trigger(source: Card, event: String, data: Dictionary = {}) -> Card:
+	var card: Card = create_card(source.id, source.controller, "__code_event", source)
+	card.effect_event = event
+	card.effect_event_data = data.duplicate(true)
+	card.effect_kind = "Ability"
+	update_card_positions()
+	return card
+
 func enqueue_event_trigger(source: Card, trigger: Dictionary, context: Dictionary) -> Card:
 	var card: Card = create_card(source.id, source.controller, "__event_trigger", source)
 	card.event_trigger = trigger.duplicate(true)

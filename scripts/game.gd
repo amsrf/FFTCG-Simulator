@@ -661,8 +661,8 @@ func power_change_matching(criteria: Dictionary, amount: int = 0, duration: int 
 
 ## Draw `count` cards for the effect's controller. The generic "draw" instruction — every draw in the card pool goes
 ## through here so the empty-deck rule lives in one place.
-func draw_cards(count: int = 1) -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
+func draw_cards(count: int = 1, player_id: int = 0) -> void:
+	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == "player" else 2)
 	var d = deck if owner_id == 1 else opponent_deck
 	var h: Hand = hand_for(owner_id)
 	if d == null or h == null:
@@ -1899,6 +1899,9 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			print('PASSED PRIORITY')
 			pass
 		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
+			# "When your Attack Phase starts" is checked here, before priority. A code effect can queue its stack object
+			# in this window; the ordinary priority loop then gives both players a chance to respond.
+			field.trigger_event("attack_phase_start", {"player_id": turn_owner})
 			await priority()
 			# Signal UI to enable attacker selection
 			pass
@@ -2124,6 +2127,16 @@ func _send_card_to_removed(card: Card) -> void:
 
 ## REMOVE FROM THE GAME. "Your opponent removes it from the game." Unlike a break or a discard, this is NOT a
 ## Graveyard event: the card leaves play and nothing that watches the Break Zone sees it.
+## Public single-card form for code effects. Same two steps as the instruction, but without touching ambient `_targets`.
+func remove_card_from_game(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	print("[RemoveFromGame] ", card.card_name)
+	if card.is_on_field():
+		field.remove_card(card)
+	_send_card_to_removed(card)
+
+
 func remove_targets_from_game(_argument = null) -> void:
 	for card in _targets:
 		if card == null or not is_instance_valid(card):
@@ -2296,6 +2309,17 @@ static func phase_to_string(phase):
 
 ## Resolve a board-wide event trigger that was enqueued by Field.trigger_event(). It is a normal stack object, so
 ## priority has already passed around it; this is the RESOLUTION half: may -> choose target -> instructions.
+func _resolve_code_effect(card: Card) -> void:
+	var source: Card = card.effect_source
+	if source == null or not is_instance_valid(source):
+		return
+	var effect_obj = source.effect()
+	if effect_obj == null:
+		return
+	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data)
+	await effect_obj.dispatch(card.effect_event, ctx)
+
+
 func _resolve_event_trigger(card: Card) -> void:
 	var trigger: Dictionary = card.event_trigger
 	var context: Dictionary = card.event_context
@@ -2336,6 +2360,15 @@ func _resolve_event_trigger(card: Card) -> void:
 		_clean_instruction_stack()
 
 func _on_stack_execute_card_effect(card: Card) -> void:
+	# A code-defined triggered ability. The stack copy names the event; the effect object does the work with a fresh
+	# EffectContext. Targeting state is cleared around it for the same reason as the event-trigger path below.
+	if not card.effect_event.is_empty():
+		field.call("finish_targeting_state")
+		await _resolve_code_effect(card)
+		field.call("finish_targeting_state")
+		card.queue_free()
+		stack._mark_resolution_complete()
+		return
 	# A board-wide event trigger is a stack object with its own resolution path; its copied card data has no
 	# `__event_trigger` keyword to resolve.
 	if not card.event_trigger.is_empty():

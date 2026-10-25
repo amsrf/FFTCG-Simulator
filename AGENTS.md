@@ -5,6 +5,20 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 
 ## Agent Rules (read first)
 
+### Code-defined effects
+- `scripts/effects/card_effect.gd` is the interface. A card subclass declares `triggered_events()` and overrides only
+  the hooks it uses; `EffectContext` carries the source, controller, event data and explicit `cards_in`/`choose`/
+  `damage`/`remove_from_game` helpers. Effects are stateless and cached by `effect_registry.gd`.
+- A code hook wins over the JSON entry for the same event. Other events on the same card can remain JSON until they
+  are migrated: this is a hybrid, not a flag day.
+- Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;
+  `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch()` with a fresh context when that copy resolves.
+  Do not call an effect hook immediately when the event happens.
+- `Card.current_elements()` is a live query: printed `element` stays immutable, while `effect.current_elements(ctx,
+  card)` may add or replace Elements. `is_element()` and every criteria/cost check must go through it.
+- Keep class references by path (`preload("res://...")`) for new effect scripts; Godot's headless run does not have a
+  fresh global `class_name` cache.
+
 ### Running Godot (harness only — allowed)
 - **Three allowed invocations**, from the project root (all exit on their own; `--quit-after` is only a hang guard, and it counts FRAMES, so keep it generous — headless frames are fast):
   `"/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe" --headless res://tests/arrow_probe.tscn --quit-after 900`

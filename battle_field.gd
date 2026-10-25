@@ -541,6 +541,11 @@ func trigger_event(event_name: String, context: Dictionary) -> void:
 			triggers = [triggers]
 		if not (triggers is Array):
 			continue
+		# A CODE EFFECT OWNS THIS EVENT FOR THIS CARD. Do not also run its JSON trigger for the same event; a migrated
+		# hook and a leftover JSON entry would fire the ability twice.
+		if source.abilities_enabled() and source.effect_handles_event(event_name):
+			stack.enqueue_code_trigger(source, event_name, context)
+			continue
 		for index in range(triggers.size()):
 			var trigger = triggers[index]
 			if not (trigger is Dictionary):
@@ -870,6 +875,15 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
 	
 func execute_card_effect(card,keyword):
+	# CODE-DEFINED EFFECTS. A script that declares this event wins over the JSON entry for the same keyword, so a card
+	# can migrate one hook at a time while its remaining effects stay data-driven. The stack copy records the event;
+	# Game resolves it by calling CardEffect.dispatch with a fresh EffectContext.
+	if card.abilities_enabled() and card.effect_handles_event(keyword):
+		var game_node: Node = get_parent()
+		var stack_node = game_node.get("stack") if game_node != null else null
+		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
+			stack_node.enqueue_code_trigger(card, keyword, {})
+		return
 	if( not card.is_key_word_in_card_effect(keyword)):
 		return
 	# A TRIGGER-LEVEL CONDITION, checked BEFORE anything is put on the stack. Instruction conditions cannot do this

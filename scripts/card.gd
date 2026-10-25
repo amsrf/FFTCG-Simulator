@@ -45,12 +45,19 @@ var _printed_effects: Dictionary = {}
 ## The card's effects as they are ACTIVE right now. "Loses all abilities" is a temporary, per-card view, never a
 ## change to the shared JSON data: while abilities_nullified is present every printed ability lookup sees an empty
 ## dictionary, and the original data comes back when the status expires.
+const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
+var _card_effect = null
+var _elements_calculating: bool = false
 @export var card_effects: Dictionary:
 	get:
 		return {} if status_effects.has("abilities_nullified") else _printed_effects
 	set(value):
 		_printed_effects = value
 @export var key_word_effect: String
+## A code-defined event on a stack copy. Empty for ordinary JSON effects and real cards.
+var effect_event: String = ""
+var effect_event_data: Dictionary = {}
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
 ## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
 var effect_targets: Array[Card] = []
@@ -1503,12 +1510,53 @@ const ELEMENT_NAMES = {
 	"Dark": "闇",
 }
 
+## The stateless code effect for this card id, if one is registered. Falls back to the JSON path when null.
+func effect():
+	if _card_effect == null:
+		_card_effect = EFFECT_REGISTRY.for_card_id(id)
+	return _card_effect
+
+
+func effect_handles_event(event: String) -> bool:
+	var effect_obj = effect()
+	return effect_obj != null and effect_obj.handles_event(event)
+
+
+## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits
+## under Stack. Either way the Game is the grandparent and EffectContext resolves Field from it.
+func make_effect_context(event: String = "static", data: Dictionary = {}):
+	var parent: Node = get_parent()
+	var game: Node = parent.get_parent() if parent != null else null
+	return EFFECT_CONTEXT.new(game, self, event, data)
+
+
+## EVERY Element this card currently has, in the order it should be displayed. The printed `element` remains the
+## immutable base; a code effect may add or replace it. Re-entrancy returns the base element so two Kimahris cannot
+## recurse forever while each asks the other what Elements it has.
+func current_elements() -> Array[String]:
+	if _elements_calculating:
+		return [element] if element != "" else []
+	_elements_calculating = true
+	var out: Array[String] = []
+	if element != "":
+		out.append(element)
+	# "Loses all abilities" also loses a continuous element grant.
+	if abilities_enabled():
+		var effect_obj = effect()
+		if effect_obj != null and effect_obj.has_method("current_elements"):
+			var extra = effect_obj.current_elements(make_effect_context(), self)
+			if extra is Array:
+				for e in extra:
+					if e != null and str(e) != "" and not out.has(str(e)):
+						out.append(str(e))
+	_elements_calculating = false
+	return out
+
+
 func is_element(value: String) -> bool:
-	# Accepts either the English element name ("Fire") or the game's
-	# single-character element code ("火").
-	if element == value:
-		return true
-	return ELEMENT_NAMES.get(value, "") == element
+	# Accepts either the English element name ("Fire") or the game's single-character element code ("火").
+	var wanted: String = ELEMENT_NAMES.get(value, value)
+	return wanted in current_elements()
 
 func is_light_or_dark() -> bool:
 	return is_element("Light") or is_element("Dark")
