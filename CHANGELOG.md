@@ -87,7 +87,7 @@ descriptors rather than by the event path.
 
 ### Second Migrated Batch
 
-Moved `90, 202, 523, 549, 583, 719` to code as well, bringing the code-owned set to 20 cards. `EffectContext` gained
+Moved `90, 202, 523, 549, 583, 719` to code as well, bringing the code-owned set to 23 cards. `EffectContext` gained
 `return_to_hand()` for 90 and 719.
 
 Probes updated for the new timing: B1's Onion Knight 125, the 100–216 Magus 140 case, Rikku 90 in batch 1, and
