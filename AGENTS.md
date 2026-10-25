@@ -156,12 +156,15 @@ sets `_last_action_succeeded = true` before every other instruction, so an inter
 
 ### Silence status icon
 
-`assets/icons/silence_balloon.svg` is the static white balloon + black outline + tail. The three dots are separate
-`Sprite3D` nodes in `scripts/silence_icon.gd`, animated by that script; do not put animation into the SVG.
+`assets/icons/silence_balloon.svg` is one continuous path: white balloon, black outline and a joined tail with no
+internal seam. It is imported at 2x with mipmaps; the three dots are separate `Sprite3D` nodes in
+`scripts/silence_icon.gd`; do not put animation into the SVG.
 
-The icon is a child of `Card`, shown only when `current_zone == FIELD` and `abilities_nullified` is present. It is
-billboarded and placed beside the card; when near the right edge it moves left and mirrors so the tail points back.
-Balloon sprites need `render_priority` below the dots, or transparent sorting can hide the dots behind the white fill.
+The icon is a child of `Card`, shown only when `current_zone == FIELD` and `abilities_nullified` is present. Place it
+using the CAMERA's screen axes, not card-local +x: field cards are rotated, and the same local axis can appear on
+either screen side. The four-frame dot loop is 1, 2, 3, none; the empty beat matters. Balloon sprites need
+`render_priority` below the dots, and dots need to be ordered by the screen axis, or transparent sorting/rotation makes
+them appear hidden or shifted.
 
 `tests/silence_icon_probe.tscn` verifies show/hide and the dot loop. For a visual check, run the shot harness with
 `--scene res://tests/silence_preview.tscn --as-scene 1`.

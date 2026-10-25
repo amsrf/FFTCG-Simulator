@@ -885,9 +885,29 @@ func _refresh_silence_icon() -> void:
 	var icon_width: float = face.x * 0.45
 	silence_icon.call("set_icon_width", icon_width)
 	var go_left: bool = _silence_icon_belongs_left()
-	var gap: float = face.x * 0.07
-	var side: float = -1.0 if go_left else 1.0
-	silence_icon.position = Vector3(side * (face.x * 0.5 + icon_width * 0.5 + gap), 0.02, 0.0)
+	var gap: float = face.x * 0.015
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		# Place by the CAMERA's screen axes. The card's local +x is not a reliable "right" here: field cards are
+		# rotated, and the same local axis can appear on either side. This puts the bubble on screen-right by
+		# default, screen-left when the card is near the right edge, and lifts it slightly up the screen.
+		var card_scale: float = global_transform.basis.get_scale().x
+		var horizontal: float = (face.x * 0.5 + icon_width * 0.5 + gap) * card_scale
+		var vertical: float = face.y * 0.15 * card_scale
+		var origin_px: Vector2 = cam.unproject_position(global_position)
+		# `basis.x` is not guaranteed to project to screen-right for this board camera; test it.
+		var right_dir: Vector3 = cam.global_transform.basis.x.normalized()
+		if cam.unproject_position(global_position + right_dir * 0.10).x < origin_px.x:
+			right_dir = -right_dir
+		var up_dir: Vector3 = cam.global_transform.basis.y.normalized()
+		if cam.unproject_position(global_position + up_dir * 0.10).y > origin_px.y:
+			up_dir = -up_dir
+		var target_world: Vector3 = global_position
+		target_world += right_dir * (-horizontal if go_left else horizontal)
+		target_world += up_dir * vertical
+		silence_icon.global_position = target_world
+	else:
+		silence_icon.position = Vector3((-1.0 if go_left else 1.0) * (face.x * 0.5 + icon_width * 0.5 + gap), 0.02, 0.0)
 	silence_icon.call("set_mirrored", go_left)
 	silence_icon.call("set_active", true)
 

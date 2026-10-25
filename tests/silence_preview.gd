@@ -21,12 +21,20 @@ func _ready() -> void:
 	var card: Card = game.create_card(182, "player")
 	game.add_child(card)
 	field.play_card(card, false, false)
-	card.add_status_effect("abilities_nullified", 1)
-	await get_tree().process_frame
 
+	# MOVE THE CAMERA FIRST. The icon chooses its side from the camera at the moment it is built; moving the
+	# camera afterwards would leave the bubble placed for a view that no longer exists.
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam != null:
 		cam.global_position = card.global_position + Vector3(0.0, 2.6, 1.4)
 		cam.look_at(card.global_position, Vector3.UP)
 		if cam.projection == Camera3D.PROJECTION_ORTHOGONAL:
 			cam.size = 1.1
+	await get_tree().process_frame
+
+	card.add_status_effect("abilities_nullified", 1)
+	await get_tree().process_frame
+	if cam != null:
+		print("[SilencePreview] card_screen=", cam.unproject_position(card.global_position),
+			" icon_screen=", cam.unproject_position(card.silence_icon.global_position),
+			" icon_pos=", card.silence_icon.position, " icon_scale=", card.silence_icon.scale)

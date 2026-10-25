@@ -6,16 +6,18 @@ All notable changes to the FF TCG Simulator project.
 
 ### Silence Status Icon
 
-Nullified field cards now show a silence bubble beside them. The balloon and tail are a transparent SVG
-(`assets/icons/silence_balloon.svg`, white fill, black outline, no plaque); the three black dots are runtime Godot
-sprites, so the SVG stays static and the loop is driven by `scripts/silence_icon.gd`.
+Nullified field cards now show a silence bubble beside them. The balloon and tail are a single continuous transparent
+SVG path (`assets/icons/silence_balloon.svg`, white fill, black outline, no plaque and no seam at the tail join). The
+SVG is imported at 2x with mipmaps; the three black dots are runtime Godot sprites, so the SVG stays static and the
+loop is driven by `scripts/silence_icon.gd`.
 
-The icon is a child of `Card` and appears only while the card is on the field with `abilities_nullified`. It sits on
-the right by default, moves left when the card is near the right edge, and mirrors so the tail keeps pointing at the
-card. Dots reveal visually left-to-right as `* -> ** -> *** -> *`.
+The icon is a child of `Card` and appears only while the card is on the field with `abilities_nullified`. It is placed
+using the camera's screen axes so it sits on screen-right by default (screen-left near the right edge), slightly above
+the card's midpoint and close to its edge; the mirrored left-side version keeps the tail pointing back at the card.
+Dots reveal visually left-to-right as `* -> ** -> *** -> no dots -> *`, with a slower 0.55 s beat.
 
-`tests/silence_icon_probe.tscn` checks creation, activation, the three dot beats, placement, expiry and hiding when
-the card leaves the field. `tests/silence_preview.tscn` is available through the shot harness for visual inspection.
+`tests/silence_icon_probe.tscn` checks creation, activation, all four dot beats, placement, expiry and hiding when the
+card leaves the field. `tests/silence_preview.tscn` is available through the shot harness for visual inspection.
 
 ### Wakka 216: Ability Nullification and Temporary Power
 

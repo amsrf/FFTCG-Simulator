@@ -34,13 +34,19 @@ func _ready() -> void:
 	var icon: Node3D = card.silence_icon
 	_expect(icon != null and is_instance_valid(icon), "nullification builds the icon")
 	_expect(icon.visible and bool(icon.call("is_active")), "and it is active on the field")
+	# Reset the loop explicitly: a real frame may already have advanced it by the time the probe resumes.
+	icon.set("dot_seconds", 1.0)
+	icon.call("set_active", true)
+	icon.set_process(false)
 	_expect(int(icon.call("dot_count")) == 1, "the dot loop starts with one dot")
 	icon.set("dot_seconds", 0.08)
-	icon.call("_process", 0.09)
+	icon.call("advance_animation", 0.09)
 	_expect(int(icon.call("dot_count")) == 2, "after one beat, two dots are visible")
-	icon.call("_process", 0.09)
+	icon.call("advance_animation", 0.09)
 	_expect(int(icon.call("dot_count")) == 3, "after the next beat, all three are visible")
-	icon.call("_process", 0.09)
+	icon.call("advance_animation", 0.09)
+	_expect(int(icon.call("dot_count")) == 0, "then the balloon goes empty for one beat")
+	icon.call("advance_animation", 0.09)
 	_expect(int(icon.call("dot_count")) == 1, "and the loop returns to one")
 
 	_expect(icon.position.x > 0.0, "the icon sits beside the card by default")
