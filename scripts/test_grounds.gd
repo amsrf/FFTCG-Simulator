@@ -61,6 +61,9 @@ const MILL_THIEF := 69   # Thief, Forward: enters the field -> opponent mills 1
 const MILL_THIEF_BACKUP := 70  # Thief, Backup: same ETB, already on the board here
 const SUMMONER := 53     # Summoner: 《Ice》, put itself into the Break Zone: cancel a Summon on the STACK
 const CECIL := 108       # Cecil: "When you receive damage, choose 1 Forward opponent controls. You may deal it 5000 damage."
+const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or damage the chosen Forward.
+const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
+const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
 
 
 static func clean() -> Dictionary:
@@ -192,6 +195,29 @@ static func counter_summon() -> Dictionary:
 	return cfg
 
 
+## GILGAMESH 129. There is no CP cost: the ability is S + Dull, so the only setup is a same-name copy in hand
+## (the S cost) and a target Forward. The deck top is deliberately known so the reveal branch is deterministic.
+## `top_id` chooses which branch this ground demonstrates: a Forward for break, a Backup for 3000 damage.
+static func gilgamesh_ground(top_id: int, preset: String) -> Dictionary:
+	var cfg: Dictionary = _base()
+	cfg["preset"] = preset
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": GILGAMESH}]
+	cfg["player_hand"] = [GILGAMESH]
+	cfg["opponent_field"] = [{"id": ICE_A}]
+	cfg["opponent_hand"] = []
+	cfg["player_deck"] = [top_id] + range(PLAYER_DECK_START, PLAYER_DECK_START + DECK_SIZE - 1)
+	return cfg
+
+
+static func gilgamesh_reveal_forward() -> Dictionary:
+	return gilgamesh_ground(GILGAMESH_FORWARD_TOP, "ground_gilgamesh_forward")
+
+
+static func gilgamesh_reveal_backup() -> Dictionary:
+	return gilgamesh_ground(GILGAMESH_BACKUP_TOP, "ground_gilgamesh_backup")
+
+
 static func cecil_damage() -> Dictionary:
 	## 108 CECIL. Press Y to take 1 damage; Cecil's event trigger asks whether to deal 5000 to an opponent Forward.
 	## The three opponent Forwards are deliberately sturdy (6000/7000/8000) so 5000 shows as accumulated damage
@@ -243,6 +269,14 @@ const GROUNDS := {
 		"title": "Ground: Cecil 108 (damage received)",
 		"blurb": "Press Y to take 1 damage. Cecil may deal 5000 to one opponent Forward: Confirm, then click a target. All three opponent Forwards survive the hit.",
 	},
+	"gilgamesh_forward": {
+		"title": "Ground: Gilgamesh 129 (reveal a Forward)",
+		"blurb": "Use Gilgamesh's S + Dull ability; discard the copy in hand. The top card is Snow (Forward), so the chosen Forward is broken. Opponent is passive.",
+	},
+	"gilgamesh_backup": {
+		"title": "Ground: Gilgamesh 129 (reveal a Backup)",
+		"blurb": "Use Gilgamesh's S + Dull ability; discard the copy in hand. The top card is Chemist (Backup), so the chosen Forward takes 3000 instead. Opponent is passive.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -267,6 +301,10 @@ static func config(name: String) -> Dictionary:
 			return counter_summon()
 		"cecil":
 			return cecil_damage()
+		"gilgamesh_forward":
+			return gilgamesh_reveal_forward()
+		"gilgamesh_backup":
+			return gilgamesh_reveal_backup()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()

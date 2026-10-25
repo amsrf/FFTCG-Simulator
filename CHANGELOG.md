@@ -26,6 +26,10 @@ unguarded instruction in between would make `if_last_succeeded`/`if_last_did_not
 Probe: `tests/reveal_probe.tscn` — 22 checks covering order, hiding/inert state, search/move/bottom/removal and both
 Gilgamesh and Cait Sith branches.
 
+Test Mode gains two deterministic Gilgamesh grounds: `gilgamesh_forward` (top card Snow, breaks the target) and
+`gilgamesh_backup` (top card Chemist, deals 3000). Both put Gilgamesh on the field and a same-name copy in hand for
+the S cost.
+
 ### Reusable Mechanics: Any-Element Mana, Delayed Break, Riders, Conditional Status
 
 Five cards landed with primitives that are useful beyond them: **183 Cosmos**, **184 Chaos**, **104 Kefka**, **211 Rygdea**, **213 Tidus**.
