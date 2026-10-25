@@ -12,6 +12,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   Effects are stateless and cached by `effect_registry.gd`.
 - The registry is convention-based: a card's code effect lives at `assets/effects/card_<id>.gd` and is loaded on
   demand. Adding a card never means editing the registry.
+- "Name an Element" goes through `Agent.choose_element`; `LocalAgent` opens `element_choice.tscn`, while AI/remote agents
+  answer the same pull-shaped method. Temporary element replacement is the `element_override` status, read by
+  `Card.current_elements()` before the printed element.
 - A code hook wins over the JSON entry for the same event. Other events on the same card can remain JSON until they
   are migrated: this is a hybrid, not a flag day.
 - Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;

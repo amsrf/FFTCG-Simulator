@@ -33,10 +33,13 @@ Piloted cards:
 
 - **103 Kimahri** — `current_elements()` gains every opponent Character's Elements except Light and Dark.
 - **107 Shantotto** — six printed Elements plus a stack-based ETB that removes every Forward from the game.
+- **173 Mime** — an `attack_phase_start` stack trigger that asks the controller to name an Element, then applies a
+  temporary `element_override`. Its party-attack draw remains on the JSON path until that hook is migrated.
 
-`tests/code_effect_probe.tscn` covers both, including duplicate-free element sets, English element aliases, the ETB
-stack object and both removed zones, plus the temporary element override that Mime will use. Existing probes remain
-green; coverage for 100–216 is now 109 implemented, 4 vanilla, 4 needing code (111, 135, 141, 181), with 173 partial.
+`tests/code_effect_probe.tscn` covers all three, including duplicate-free element sets, English element aliases, the
+ETB stack object and both removed zones, the element override and its expiry. `tests/element_choice_probe.tscn` covers
+the new picker UI. Existing probes remain green; coverage for 100–216 is 109 implemented, 4 vanilla, 4 needing code
+(111, 135, 141, 181).
 
 ### Silence Status Icon
 

@@ -9,6 +9,15 @@ const MOCK := preload("res://scripts/agents/mock_agent.gd")
 
 const KIMAHRI := 103
 const SHANTOTTO := 107
+const MIME := 173
+
+
+class ChoiceAgent extends MockAgent:
+	var chosen: String = "雷"
+
+	func choose_element(_owner_id: int, _options: Array, _prompt: String = "") -> String:
+		return chosen
+
 
 var _checks: int = 0
 var _fails: int = 0
@@ -100,6 +109,26 @@ func _ready() -> void:
 		"the player's Forward went to the removed zone")
 	_expect(_game.opponent_removed.graveyard_cards.has(opponent_forward),
 		"the opponent's Forward went to the removed zone")
+
+	# --- 173: Attack Phase start, element choice, temporary override ---------------------------------
+	await _boot()
+	var mime: Card = _make(MIME, "player")
+	var chooser := ChoiceAgent.new()
+	chooser.bind(_game)
+	_game.player_agent = chooser
+	_field.trigger_event("attack_phase_start", {"player_id": 1})
+	_expect(_game.stack.stack_length() == 1, "Mime's attack-phase trigger is a stack object")
+	await _game.stack.resolve_top_effect()
+	_expect(mime.is_element("雷") and not mime.is_element("水"),
+		"the chosen Element replaces Mime's printed Water")
+	_expect(mime.status_effects.has("element_override"), "the override is a temporary status")
+	# The opponent's Attack Phase must not re-trigger the player's Mime.
+	_field.trigger_event("attack_phase_start", {"player_id": 2})
+	await _game.stack.resolve_top_effect()
+	_expect(mime.is_element("雷"), "the opponent's Attack Phase leaves the current element alone")
+	mime.turn_end()
+	_expect(mime.is_element("水") and not mime.status_effects.has("element_override"),
+		"the override expires with the turn")
 
 	print("[CodeEffect] %d checks | failures: %d" % [_checks, _fails])
 	print("[CodeEffect] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

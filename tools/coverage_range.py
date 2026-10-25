@@ -27,7 +27,6 @@ NEEDS_CODE = {
     # B3 - targeting / selection (implemented)
     # B4a - cost reductions (177 and 210 implemented)
     # B4b - event triggers (108, 187, 206, 214, 215 implemented)
-    173: 'Attack Phase start trigger + element override',
     181: 'return-self-to-hand cost',
     141: 'force a blocker',
     # B5 - complex

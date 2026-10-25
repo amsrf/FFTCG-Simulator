@@ -3,6 +3,18 @@ class_name LocalAgent
 ## Human playing at this machine: every decision is answered through the
 ## existing UI (pass button, card clicks, modal buttons).
 
+const ELEMENT_CHOICE := preload("res://element_choice.tscn")
+
+
+func choose_element(_owner_id: int, options: Array, prompt: String = "Choose an Element") -> String:
+	if options.is_empty():
+		return ""
+	var window = ELEMENT_CHOICE.instantiate()
+	game.add_child(window)
+	window.open(options, prompt)
+	return str(await window.finished)
+
+
 func take_priority(_player_id: int) -> bool:
 	# The human's priority window ends two ways: they press pass, or they
 	# perform an action — the rules hand priority to the opponent the moment an
