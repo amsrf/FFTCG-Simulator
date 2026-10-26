@@ -33,6 +33,10 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Every trigger path that can carry a code event must go through `execute_card_effect`; Break Zone triggers and
+  `when_chosen` originally checked only JSON and silently skipped code handlers.
+- A code event with a broad trigger (206 `card_left_field`) may enqueue for an event its own filter later declines;
+  test harnesses should drain the whole stack, not just the top object.
 - Code ETBs are triggered abilities: `execute_card_effect` enqueues a stack object, and the handler resolves later.
   Probes must start stack resolution and wait for the target prompt or a settled no-target effect; do not assume the
   old synchronous JSON timing.

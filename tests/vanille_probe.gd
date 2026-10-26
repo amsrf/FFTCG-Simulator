@@ -109,7 +109,8 @@ func _ready() -> void:
 	# --- the data -----------------------------------------------------------------------------------------
 	var entry: Dictionary = CardDatabase.card_effects.get("93", {})
 	var instrs: Array = entry.get("when_enter_break_from_field", {}).get("instructions", [])
-	_expect(instrs.size() == 2, "Vanille has two instructions")
+	_expect(load("res://assets/effects/card_93.gd").new().has_method("when_enter_break_from_field"),
+		"Vanille's Break Zone effect is code-owned")
 	if instrs.size() == 2:
 		_expect(str(instrs[0].get("name", "")) == "search_deck", "the first is the search")
 		_expect(str(instrs[0].get("argument", []).back()) == "removed", "with destination 'removed'")

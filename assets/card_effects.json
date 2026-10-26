@@ -1,187 +1,302 @@
-{   
-	"1":{
-		"when_cause_damage_to_player":[
+{
+	"1": {
+		"when_cause_damage_to_player": [
 			{
-				"instructions":[{"name":"may_play_for_free", "author":"player"}],
-				"choose_card":{"is_type":"Backup", "is_element":"Fire"}
+				"instructions": [
+					{
+						"name": "may_play_for_free",
+						"author": "player"
+					}
+				],
+				"choose_card": {
+					"is_type": "Backup",
+					"is_element": "Fire"
+				}
 			}
 		]
 	},
-	"4":{
-		"ex_burst":"when_cast",
-		"when_cast":
-			{
-				"instructions":[{"name":"suffer_damage", "author":"target", "argument":[4000]}],
-				"choose_target":{"is_type":"Forward"}
+	"4": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"instructions": [
+				{
+					"name": "suffer_damage",
+					"author": "target",
+					"argument": [
+						4000
+					]
+				}
+			],
+			"choose_target": {
+				"is_type": "Forward"
 			}
+		}
 	},
-	"6":{
-		"when_attack": 
-			{
-				"instructions":[{"name":"power_change", "author":"card", "argument":[4000,1]}],
-				"choose_target":false
-			}
-		
+	"6": {
+		"brave": true
 	},
-	"8":{
-		"activated_ability":[
+	"8": {
+		"activated_ability": [
 			{
-				"instructions":[{"name":"take_damage", "author":"target", "argument":[2000]}],
-				"tap":true,
-				"choose_target":{"is_type":"Forward", "is_cost_lower_than":3},
-				"cost": {"火": 1, "neutral":1}
+				"instructions": [
+					{
+						"name": "take_damage",
+						"author": "target",
+						"argument": [
+							2000
+						]
+					}
+				],
+				"tap": true,
+				"choose_target": {
+					"is_type": "Forward",
+					"is_cost_lower_than": 3
+				},
+				"cost": {
+					"火": 1,
+					"neutral": 1
+				}
 			}
 		]
 	},
-	"12":{
-		"when_enter_field":
-			{
-				"instructions":[{"name":"suffer_damage", "author":"target", "argument":[2000]}],
-				"choose_target":{"is_type":"Forward", "check_controller":"opponent"}
-			},
-		"conditional_power":[
-			{
-				"condition":{"check_controller":"player", "is_named":"Aerith"},
-				"value":2000
+	"12": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "suffer_damage",
+					"author": "target",
+					"argument": [
+						2000
+					]
+				}
+			],
+			"choose_target": {
+				"is_type": "Forward",
+				"check_controller": "opponent"
 			}
-		]
-	},
-	"64":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Backup","count":3,"exclude":{"is_named":"Aerith"}},
-			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
 		},
-		"skill":[
+		"conditional_power": [
 			{
-				"s_cost":true,
-				"tap":true,
-				"cost":{},
-				"apply_effect":{"is_type":"Forward","controller":"player"},
-				"instructions":[
-					{"name":"untap_targets","author":"game","argument":[]},
-					{"name":"add_status_to_targets","author":"game","argument":["cannot_be_chosen", 1]}
+				"condition": {
+					"check_controller": "player",
+					"is_named": "Aerith"
+				},
+				"value": 2000
+			}
+		]
+	},
+	"64": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Backup",
+				"count": 3,
+				"exclude": {
+					"is_named": "Aerith"
+				}
+			},
+			"instructions": [
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
+		},
+		"skill": [
+			{
+				"s_cost": true,
+				"tap": true,
+				"cost": {},
+				"apply_effect": {
+					"is_type": "Forward",
+					"controller": "player"
+				},
+				"instructions": [
+					{
+						"name": "untap_targets",
+						"author": "game",
+						"argument": []
+					},
+					{
+						"name": "add_status_to_targets",
+						"author": "game",
+						"argument": [
+							"cannot_be_chosen",
+							1
+						]
+					}
 				]
 			}
 		]
 	},
-	"31":{
-		"when_enter_field":
-			{
-				"instructions":[{"name":"tap", "author":"target"}], 
-				"choose_target":{"is_type":"Forward"}
+	"31": {
+		"when_enter_field": {
+			"instructions": [
+				{
+					"name": "tap",
+					"author": "target"
+				}
+			],
+			"choose_target": {
+				"is_type": "Forward"
 			}
-		
-	},
-	
-	"71":{
-		"cannot_be_chosen":{
-			"sources":["Summon", "Ability"],
-			"controller":"opponent"
 		}
 	},
-	
-"151": 	{
+	"71": {
+		"cannot_be_chosen": {
+			"sources": [
+				"Summon",
+				"Ability"
+			],
+			"controller": "opponent"
+		}
+	},
+	"151": {
 		"ex_burst": "when_enter_field",
 		"first_strike": true
 	},
-
-	"16":{
-		"haste":true
+	"16": {
+		"haste": true
 	},
-
-	"29":{
-		"first_strike":true
+	"29": {
+		"first_strike": true
 	},
-
-	"87":{
-		"first_strike":true
+	"87": {
+		"first_strike": true
 	},
-
-"7": 	{
+	"7": {
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
 		}
 	},
-
-	"62":{
-		"apply_effect":{"is_type":"Forward"},
-		"when_cast":{
-			"instructions":[{"name":"return_targets_to_hand","author":"game","argument":[]}]
-		}
-	},
-
-	"18":{
-		"when_cast":{
-			"choose_target":{"is_type":"Forward","controller":"opponent","count":2},
-			"instructions":[
-				{"name":"add_status_to_targets","author":"game","argument":["fragile", 1]},
-				{"name":"damage_targets","author":"game","argument":[10000]}
+	"62": {
+		"apply_effect": {
+			"is_type": "Forward"
+		},
+		"when_cast": {
+			"instructions": [
+				{
+					"name": "return_targets_to_hand",
+					"author": "game",
+					"argument": []
+				}
 			]
 		}
 	},
-
-	"43":{
-		"when_attack":{
-			"choose_target":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[
-				{"name":"dull_targets","author":"game","argument":[]},
-				{"name":"add_status_to_targets","author":"game","argument":["frozen", 1],"condition":"cast_this_turn:Shiva"}
+	"18": {
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent",
+				"count": 2
+			},
+			"instructions": [
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"fragile",
+						1
+					]
+				},
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						10000
+					]
+				}
 			]
 		}
 	},
-
-	"38":{
-		"ex_burst":"when_cast",
-		"when_cast":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[
-				{"name":"dull_targets", "author":"game", "argument":[]},
-				{"name":"add_status_to_targets", "author":"game", "argument":["frozen", 1]}
+	"43": {
+		"when_attack": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"frozen",
+						1
+					],
+					"condition": "cast_this_turn:Shiva"
+				}
 			]
 		}
 	},
-
-	"6":{
-		"brave":true
-	},
-
-	"14":{
-		"brave":true
-	},
-
-	"56":{
-		"brave":true
-	},
-
-	"97":{
-		"brave":true
-	},
-
-	"75":{
-		"haste":true
-	},
-
-	"93":{
-		"when_enter_break_from_field":{
-			"instructions":[
-				{"name":"search_deck","author":"game","argument":[{"name":"Hecatoncheir"}, "removed"]},
-				{"name":"return_from_break_zone","author":"game","argument":[true],"condition":"if_last_succeeded"}
+	"38": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"frozen",
+						1
+					]
+				}
 			]
 		}
 	},
-
-	"82":{
-		"when_enter_field":{
-			"choose_target":{"is_type":"Backup","controller":"player"},
-			"instructions":[
-				{"name":"untap_all_matching","author":"game","argument":[{"is_type":"Backup","controller":"player"}],"condition":"cast_this_turn:Alexander"},
-				{"name":"untap_targets","author":"game","argument":[],"condition":"if_last_did_not_succeed"}
+	"14": {
+		"brave": true
+	},
+	"56": {
+		"brave": true
+	},
+	"97": {
+		"brave": true
+	},
+	"75": {
+		"haste": true
+	},
+	"82": {
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Backup",
+				"controller": "player"
+			},
+			"instructions": [
+				{
+					"name": "untap_all_matching",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Backup",
+							"controller": "player"
+						}
+					],
+					"condition": "cast_this_turn:Alexander"
+				},
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": [],
+					"condition": "if_last_did_not_succeed"
+				}
 			]
 		}
 	},
-
-"42": 	{
+	"42": {
 		"conditional_power": [
 			{
 				"condition": {
@@ -192,78 +307,68 @@
 			}
 		]
 	},
-	"75":{
-		"haste": true,
-		"when_party_attack":{
-			"instructions":[
-				{"name":"power_change_party","author":"game","argument":[3000,1]}
+	"554": {
+		"party_brave": true
+	},
+	"1879": {
+		"when_party_attack": {
+			"choose_target": {
+				"is_character": true
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"frozen",
+						1
+					]
+				}
 			]
 		}
 	},
-	"76":{
-		"when_party_attack":{
-			"instructions":[
-				{"name":"power_change_party","author":"game","argument":[2000,1]}
+	"3261": {
+		"when_party_attack": {
+			"condition": "party_has_named:King of Eblan",
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						5000
+					]
+				}
 			]
 		}
 	},
-	"2588":{
-		"when_party_attack":{
-			"instructions":[
-				{"name":"power_change_party","author":"game","argument":[3000,1]}
+	"3023": {
+		"when_party_attack": {
+			"condition": "party_has_named:Yuri",
+			"choose_target": {
+				"is_type_any": [
+					"Forward",
+					"Monster"
+				]
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
 			]
 		}
 	},
-	"2808":{
-		"when_party_attacks":{
-			"instructions":[
-				{"name":"power_change_party","author":"game","argument":[1000,1]}
-			]
-		}
-	},
-	"554":{
-		"party_brave": true,
-		"when_party_attacks":{
-			"instructions":[
-				{"name":"power_change_party","author":"game","argument":[5000,1]}
-			]
-		}
-	},
-	"2795":{
-		"when_party_deals_damage":{
-			"instructions":[
-				{"name":"draw_cards","author":"game","argument":[1]}
-			]
-		}
-	},
-	"1879":{
-		"when_party_attack":{
-			"choose_target":{"is_character":true},
-			"instructions":[
-				{"name":"dull_targets","author":"game","argument":[]},
-				{"name":"add_status_to_targets","author":"game","argument":["frozen",1]}
-			]
-		}
-	},
-	"3261":{
-		"when_party_attack":{
-			"condition":"party_has_named:King of Eblan",
-			"choose_target":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[
-				{"name":"damage_targets","author":"game","argument":[5000]}
-			]
-		}
-	},
-	"3023":{
-		"when_party_attack":{
-			"condition":"party_has_named:Yuri",
-			"choose_target":{"is_type_any":["Forward","Monster"]},
-			"instructions":[
-				{"name":"break_targets","author":"game","argument":[]}
-			]
-		}
-	},
-"154": 	{
+	"154": {
 		"when_party_attack": {
 			"instructions": [
 				{
@@ -283,52 +388,91 @@
 			]
 		}
 	},
-	"173":{
-		"when_party_attack":{
-			"instructions":[
-				{"name":"draw_cards","author":"game","argument":[1]}
+	"173": {
+		"when_party_attack": {
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
 			]
 		}
 	},
-	"23":{
-		"ex_burst":"when_cast",
-		"when_cast":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[7000]}]
+	"23": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						7000
+					]
+				}
+			]
 		}
 	},
-"24": 	{
+	"24": {
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "opponent"
 		}
 	},
-	"39":{
-		"ex_burst":"when_cast",
-		"when_cast":{
-			"choose_target":{"is_type":"Forward","is_tapped":true},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[5000]}]
-		}
-	},
-"44": 	{
-		"first_strike": true
-	},
-	"55":{
-		"when_enter_break_from_field":{
-			"instructions":[{"name":"take_damage_to_controller","author":"game","argument":[1]}]
-		}
-	},
-	"74":{
-		"ex_burst":"when_cast",
-		"when_cast":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[
-				{"name":"untap_targets","author":"game","argument":[]},
-				{"name":"power_change_matching","author":"game","argument":[{"is_type":"Forward","controller":"player"},1000,1]}
+	"39": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_tapped": true
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						5000
+					]
+				}
 			]
 		}
 	},
-"94": 	{
+	"44": {
+		"first_strike": true
+	},
+	"74": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "power_change_matching",
+					"author": "game",
+					"argument": [
+						{
+							"is_type": "Forward",
+							"controller": "player"
+						},
+						1000,
+						1
+					]
+				}
+			]
+		}
+	},
+	"94": {
 		"when_attack": {
 			"instructions": [
 				{
@@ -342,48 +486,82 @@
 			]
 		}
 	},
-	"27":{
-		"cannot_be_blocked_by":{"greater_power":true},
-		"cannot_block":{"greater_power":true}
+	"27": {
+		"cannot_be_blocked_by": {
+			"greater_power": true
+		},
+		"cannot_block": {
+			"greater_power": true
+		}
 	},
-	"85":{
-		"cannot_be_blocked_by":{"min_cost":4},
-		"skill":[
+	"85": {
+		"cannot_be_blocked_by": {
+			"min_cost": 4
+		},
+		"skill": [
 			{
-				"s_cost":true,
-				"cost":{},
-				"tap":true,
-				"text":"《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like. (Unit must be 1000.)",
-				"choose_target":{"is_type":"Forward","count":3},
-				"instructions":[{"name":"divide_damage","author":"game","argument":[6000]}]
+				"s_cost": true,
+				"cost": {},
+				"tap": true,
+				"text": "《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like. (Unit must be 1000.)",
+				"choose_target": {
+					"is_type": "Forward",
+					"count": 3
+				},
+				"instructions": [
+					{
+						"name": "divide_damage",
+						"author": "game",
+						"argument": [
+							6000
+						]
+					}
+				]
 			}
 		]
 	},
-	"86":{
-		"cannot_be_blocked_by":{"min_cost":3}
-	},
-	"2":{
-		"protects":{
-			"targets":{"is_type":"Backup","controller":"player"},
-			"from":"opponent",
-			"by":["Summon","Ability"]
+	"86": {
+		"cannot_be_blocked_by": {
+			"min_cost": 3
 		}
 	},
-	"17":{
-		"shields":{
-			"targets":{"is_named":"Sazh"},
-			"from":"opponent",
-			"by":["Summon","Ability"]
+	"2": {
+		"protects": {
+			"targets": {
+				"is_type": "Backup",
+				"controller": "player"
+			},
+			"from": "opponent",
+			"by": [
+				"Summon",
+				"Ability"
+			]
 		}
 	},
-	"45":{
-		"shields":{
-			"targets":{"is_named":"Snow"},
-			"from":"opponent",
-			"by":["Ability"]
+	"17": {
+		"shields": {
+			"targets": {
+				"is_named": "Sazh"
+			},
+			"from": "opponent",
+			"by": [
+				"Summon",
+				"Ability"
+			]
 		}
 	},
-"46": 	{
+	"45": {
+		"shields": {
+			"targets": {
+				"is_named": "Snow"
+			},
+			"from": "opponent",
+			"by": [
+				"Ability"
+			]
+		}
+	},
+	"46": {
 		"cannot_be_chosen": {
 			"sources": [
 				"Summon"
@@ -391,26 +569,50 @@
 			"controller": "opponent"
 		}
 	},
-	"15":{
-		"power_per":{"count":{"is_type":"Forward","controller":"opponent"},"value":1000},
-		"skill":[
+	"15": {
+		"power_per": {
+			"count": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"value": 1000
+		},
+		"skill": [
 			{
-				"s_cost":true,
-				"cost":{"火":1,"neutral":2},
-				"tap":true,
-				"text":"Ultimate Jecht Shot 《S》《火》《2》《Dull》: Choose 1 Forward. Break it.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"break_targets","author":"game","argument":[]}]
+				"s_cost": true,
+				"cost": {
+					"火": 1,
+					"neutral": 2
+				},
+				"tap": true,
+				"text": "Ultimate Jecht Shot 《S》《火》《2》《Dull》: Choose 1 Forward. Break it.",
+				"choose_target": {
+					"is_type": "Forward"
+				},
+				"instructions": [
+					{
+						"name": "break_targets",
+						"author": "game",
+						"argument": []
+					}
+				]
 			}
 		]
 	},
-	"92":{
-		"power_per":{"count":"damage_received","value":1000}
+	"92": {
+		"power_per": {
+			"count": "damage_received",
+			"value": 1000
+		}
 	},
-	"98":{
-		"power_per":{"count":"damage_received","value":1000,"brave_at":6}
+	"98": {
+		"power_per": {
+			"count": "damage_received",
+			"value": 1000,
+			"brave_at": 6
+		}
 	},
-"47": 	{
+	"47": {
 		"when_enter_field": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -446,14 +648,37 @@
 			}
 		]
 	},
-	"9":{
-		"conditional_power":[{"condition":{"is_type":"Forward","controller":"player","is_category":"VII","exclude":{"is_named":"Cloud"}},"value":2000}],
-		"when_enter_field":{
-			"choose_target":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
+	"9": {
+		"conditional_power": [
+			{
+				"condition": {
+					"is_type": "Forward",
+					"controller": "player",
+					"is_category": "VII",
+					"exclude": {
+						"is_named": "Cloud"
+					}
+				},
+				"value": 2000
+			}
+		],
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						2000
+					]
+				}
+			]
 		}
 	},
-"20": 	{
+	"20": {
 		"when_attack": {
 			"instructions": [
 				{
@@ -467,7 +692,7 @@
 			]
 		}
 	},
-"28": 	{
+	"28": {
 		"ex_burst": "when_enter_field",
 		"skill": [
 			{
@@ -493,113 +718,245 @@
 			}
 		]
 	},
-	"58":{
-		"when_cause_damage_to_player":{
-			"choose_target":{"is_type":"Forward","is_tapped":true},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[7000]}]
+	"58": {
+		"when_cause_damage_to_player": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_tapped": true
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						7000
+					]
+				}
+			]
 		},
-		"skill":[
+		"skill": [
 			{
-				"s_cost":true,
-				"cost":{"氷":2},
-				"text":"Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage.",
-				"choose_target":{"is_type":"Forward","is_tapped":true},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[9000]}]
+				"s_cost": true,
+				"cost": {
+					"氷": 2
+				},
+				"text": "Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage.",
+				"choose_target": {
+					"is_type": "Forward",
+					"is_tapped": true
+				},
+				"instructions": [
+					{
+						"name": "damage_targets",
+						"author": "game",
+						"argument": [
+							9000
+						]
+					}
+				]
 			}
 		]
 	},
-	"59":{
-		"ex_burst":"when_enter_field",
-		"when_enter_field":{
-			"choose_target":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[
-				{"name":"dull_targets","author":"game","argument":[]},
-				{"name":"add_status_to_targets","author":"game","argument":["frozen",1],"condition":"controls:Squall"}
+	"59": {
+		"ex_burst": "when_enter_field",
+		"when_enter_field": {
+			"choose_target": {
+				"is_type": "Forward",
+				"controller": "opponent"
+			},
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": []
+				},
+				{
+					"name": "add_status_to_targets",
+					"author": "game",
+					"argument": [
+						"frozen",
+						1
+					],
+					"condition": "controls:Squall"
+				}
 			]
 		},
-		"conditional_power":[{"condition":{"is_named":"Squall","controller":"player"},"value":2000}]
+		"conditional_power": [
+			{
+				"condition": {
+					"is_named": "Squall",
+					"controller": "player"
+				},
+				"value": 2000
+			}
+		]
 	},
-	"61":{
-		"ex_burst":"when_cast",
-		"when_cast":{
-			"choose_target":{"is_type":"Forward","is_cost_at_least":5},
-			"instructions":[{"name":"break_targets","author":"game","argument":[]}]
+	"61": {
+		"ex_burst": "when_cast",
+		"when_cast": {
+			"choose_target": {
+				"is_type": "Forward",
+				"is_cost_at_least": 5
+			},
+			"instructions": [
+				{
+					"name": "break_targets",
+					"author": "game",
+					"argument": []
+				}
+			]
 		}
 	},
-"79": 	{
+	"79": {
 		"ex_burst": "when_enter_field"
 	},
-"80": 	{
+	"80": {
 		"ex_burst": "when_enter_field"
 	},
-	"81":{"all_jobs":true},
-"91": 	{
+	"81": {
+		"all_jobs": true
+	},
+	"91": {
 		"ex_burst": "when_enter_field"
 	},
-	"52":{
-		"when_cast":{
-			"choose_target":[
-				{"is_type":"Forward","controller":"opponent"},
-				{"is_type":"Backup","controller":"opponent"}
+	"52": {
+		"when_cast": {
+			"choose_target": [
+				{
+					"is_type": "Forward",
+					"controller": "opponent"
+				},
+				{
+					"is_type": "Backup",
+					"controller": "opponent"
+				}
 			],
-			"instructions":[
-				{"name":"dull_targets","author":"game","argument":[0]},
-				{"name":"return_targets_to_hand","author":"game","argument":[1]},
-				{"name":"opponent_discards","author":"game","argument":[1]}
+			"instructions": [
+				{
+					"name": "dull_targets",
+					"author": "game",
+					"argument": [
+						0
+					]
+				},
+				{
+					"name": "return_targets_to_hand",
+					"author": "game",
+					"argument": [
+						1
+					]
+				},
+				{
+					"name": "opponent_discards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
 			]
 		}
 	},
-	"72":{
-		"on_causing_damage_to_forward":{
-			"status":"cid_verdict",
-			"duration":1,
-			"on_enter_break_zone":[{"name":"opponent_mills","author":"game","argument":[2]}]
+	"72": {
+		"on_causing_damage_to_forward": {
+			"status": "cid_verdict",
+			"duration": 1,
+			"on_enter_break_zone": [
+				{
+					"name": "opponent_mills",
+					"author": "game",
+					"argument": [
+						2
+					]
+				}
+			]
 		},
-		"skill":[
+		"skill": [
 			{
-				"s_cost":true,
-				"tap":true,
-				"cost":{},
-				"text":"Highwind 《S》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone.",
-				"instructions":[{"name":"opponent_mills","author":"game","argument":[2]}]
+				"s_cost": true,
+				"tap": true,
+				"cost": {},
+				"text": "Highwind 《S》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone.",
+				"instructions": [
+					{
+						"name": "opponent_mills",
+						"author": "game",
+						"argument": [
+							2
+						]
+					}
+				]
 			}
 		]
 	},
-	"73":{
-		"on_causing_damage_to_forward":{
-			"status":"cid_verdict",
-			"duration":1,
-			"on_enter_break_zone":[{"name":"opponent_mills","author":"game","argument":[2]}]
+	"73": {
+		"on_causing_damage_to_forward": {
+			"status": "cid_verdict",
+			"duration": 1,
+			"on_enter_break_zone": [
+				{
+					"name": "opponent_mills",
+					"author": "game",
+					"argument": [
+						2
+					]
+				}
+			]
 		}
 	},
-	"37":{
-		"when_chosen":{
-			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
-		}
-	},
-	"41":{
-		"when_blocks":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[
-				{"name":"damage_targets","author":"game","argument":[6000],"may":true,"may_prompt":"Deal 6000"}
+	"41": {
+		"when_blocks": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						6000
+					],
+					"may": true,
+					"may_prompt": "Deal 6000"
+				}
 			]
 		},
-		"when_blocked":{
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[
-				{"name":"damage_targets","author":"game","argument":[6000],"may":true,"may_prompt":"Deal 6000"}
+		"when_blocked": {
+			"choose_target": {
+				"is_type": "Forward"
+			},
+			"instructions": [
+				{
+					"name": "damage_targets",
+					"author": "game",
+					"argument": [
+						6000
+					],
+					"may": true,
+					"may_prompt": "Deal 6000"
+				}
 			]
 		},
-		"skill":[
+		"skill": [
 			{
-				"s_cost":true,
-				"cost":{"氷":1},
-				"text":"Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn.",
-				"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]
+				"s_cost": true,
+				"cost": {
+					"氷": 1
+				},
+				"text": "Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn.",
+				"instructions": [
+					{
+						"name": "add_status_effect",
+						"author": "card",
+						"argument": [
+							"first_strike",
+							1
+						]
+					}
+				]
 			}
 		]
 	},
-"63": 	{
+	"63": {
 		"when_attack": {
 			"choose_target": {
 				"is_type": "Backup",
@@ -615,8 +972,8 @@
 			]
 		}
 	},
-	"122":{
-		"ex_burst_disabler":""
+	"122": {
+		"ex_burst_disabler": ""
 	},
 	"112": {
 		"when_enter_field": {
@@ -718,17 +1075,6 @@
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "opponent"
-		},
-		"when_attack": {
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						3000
-					]
-				}
-			]
 		},
 		"skill": [
 			{
@@ -1089,7 +1435,7 @@
 			]
 		}
 	},
-"101": 	{
+	"101": {
 		"ex_burst": "when_enter_field",
 		"apply_effect": {
 			"is_type": "Forward",
@@ -1113,20 +1459,6 @@
 					"author": "game",
 					"argument": [
 						"unbreakable",
-						1
-					]
-				}
-			]
-		}
-	},
-	"113": {
-		"when_blocks": {
-			"instructions": [
-				{
-					"name": "power_change",
-					"author": "card",
-					"argument": [
-						2000,
 						1
 					]
 				}
@@ -1183,51 +1515,6 @@
 	"148": {
 		"haste": true
 	},
-	"164": {
-		"when_attack": {
-			"instructions": [
-				{
-					"name": "power_change_matching",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward",
-							"controller": "player",
-							"is_element": "水"
-						},
-						1000,
-						1
-					]
-				}
-			]
-		}
-	},
-	"168": {
-		"when_enter_break_from_field": {
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
-	},
-	"179": {
-		"when_cause_damage_to_player": {
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
-	},
 	"208": {
 		"haste": true,
 		"conditional_power": [
@@ -1260,18 +1547,6 @@
 		}
 	},
 	"116": {
-		"when_blocks": {
-			"instructions": [
-				{
-					"name": "power_change",
-					"author": "card",
-					"argument": [
-						4000,
-						1
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"cost": {
@@ -1353,7 +1628,7 @@
 			}
 		]
 	},
-"153": 	{
+	"153": {
 		"skill": [
 			{
 				"tap": true,
@@ -1435,7 +1710,7 @@
 			]
 		}
 	},
-"188": 	{
+	"188": {
 		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"instructions": [
@@ -1646,7 +1921,7 @@
 		},
 		"break_zone_exile": true
 	},
-"109": 	{
+	"109": {
 		"ex_burst": "when_enter_field"
 	},
 	"162": {
@@ -1665,25 +1940,6 @@
 				"Ability"
 			],
 			"controller": "opponent"
-		}
-	},
-	"185": {
-		"when_enter_break_from_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"name": "The Emperor"
-						},
-						"field_dull",
-						true
-					],
-					"may": true,
-					"may_prompt": "Play The Emperor"
-				}
-			]
 		}
 	},
 	"201": {
@@ -1769,7 +2025,7 @@
 			}
 		]
 	},
-"187": 	{
+	"187": {
 		"skill": [
 			{
 				"s_cost": true,
@@ -1814,7 +2070,7 @@
 			}
 		]
 	},
-"210": 	{
+	"210": {
 		"haste": true,
 		"when_cause_damage_to_player": {
 			"choose_target": {
@@ -1830,8 +2086,7 @@
 			]
 		}
 	},
-	
-"213": 	{
+	"213": {
 		"triggers": [
 			{
 				"on": "card_left_field",
@@ -1879,37 +2134,6 @@
 						"author": "game",
 						"argument": [
 							5000
-						]
-					}
-				]
-			}
-		]
-	},
-	"206": {
-		"triggers": [
-			{
-				"on": "card_left_field",
-				"filter": {
-					"is_type": "Backup",
-					"controller": "your"
-				},
-				"instructions": [
-					{
-						"name": "apply_effect",
-						"author": "game",
-						"argument": [
-							{
-								"is_type": "Forward",
-								"controller": "opponent"
-							},
-							false
-						]
-					},
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							1000
 						]
 					}
 				]
@@ -2173,8 +2397,6 @@
 			"resolution": "Matched triggers are placed on the stack as effect copies. The may choice, target selection and instructions run when the stack object resolves, after either player may respond."
 		}
 	},
-
-	
 	"211": {
 		"when_enter_field": {
 			"choose_target": {
@@ -2219,18 +2441,14 @@
 			]
 		}
 	},
-
 	"183": {
 		"produces_any_element": true,
 		"light_dark_exempt": "light"
 	},
-
 	"184": {
 		"produces_any_element": true,
 		"light_dark_exempt": "dark"
 	},
-
-	
 	"129": {
 		"brave": true,
 		"skill": [
@@ -2285,9 +2503,6 @@
 			}
 		]
 	},
-
-	
-	
 	"131": {
 		"when_enter_field": {
 			"choose_target": {
@@ -2359,7 +2574,6 @@
 			}
 		]
 	},
-
 	"216": {
 		"when_attack": {
 			"choose_target": {

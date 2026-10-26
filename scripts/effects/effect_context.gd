@@ -326,6 +326,22 @@ func draw(player_id: int, count: int = 1) -> void:
 		game.draw_cards(count, player_id)
 
 
+func power_change_party(amount: int, duration: int = 1) -> void:
+	if game == null or field == null:
+		return
+	power_change(field.party_members(), amount, duration)
+
+
+func take_damage_to_controller(amount: int = 1) -> void:
+	_prime_game()
+	await game.take_damage_to_controller(amount)
+
+
+func return_from_break_zone(tapped: bool = true) -> void:
+	_prime_game()
+	await game.return_from_break_zone(tapped)
+
+
 func return_to_hand(cards: Array) -> void:
 	if game == null:
 		return

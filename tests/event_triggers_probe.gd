@@ -55,10 +55,10 @@ func _wait(seconds: float) -> void:
 func _trigger_and_resolve(event_name: String, context: Dictionary) -> void:
 	_field.trigger_event(event_name, context)
 	await get_tree().process_frame
-	if _game.stack.stack_length() > 0:
-		var top: Card = _game.stack.cards.back()
-		if not top.event_trigger.is_empty():
-			await _game.stack.resolve_top_effect()
+	# Drain every triggered object. A code-wide event (206 card_left_field) is enqueued even for events its own
+	# filter later ignores, so one event can leave more than one object on the stack.
+	while _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
 	await _wait(0.2)
 
 
@@ -128,8 +128,8 @@ func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(effects.get("108", {}).get("triggers", [{}])[0].get("on", "") == "damage_received",
 		"108 uses the generic triggers array")
-	_expect(effects.get("206", {}).get("triggers", [{}])[0].get("on", "") == "card_left_field",
-		"206 uses card_left_field")
+	_expect(load("res://assets/effects/card_206.gd").new().has_method("card_left_field"),
+		"206's card_left_field trigger is code-owned")
 	_expect(effects.get("214", {}).get("triggers", [{}])[0].get("once_per_turn", false),
 		"214 is marked once per turn")
 	_expect(effects.get("215", {}).get("triggers", [{}])[0].get("filter", {}).get("controller", "") == "opponent",

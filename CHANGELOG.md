@@ -148,6 +148,34 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Mechanical Event Triggers Migrated
+
+Moved 17 non-targeting event triggers to code:
+
+`37, 55, 75, 76, 93, 113, 116, 126, 164, 168, 179, 206, 554, 2588, 2795,
+2808`.
+
+Covered events: `when_attack`, `when_blocks`, `when_chosen`,
+`when_cause_damage_to_player`, `when_enter_break_from_field`,
+`when_party_attack`, `when_party_attacks`, `when_party_deals_damage`, and the
+generic `card_left_field` trigger.
+
+Two shared paths had to learn about code effects:
+
+- `Game.trigger_break_zone_keywords()` now goes through
+  `Field.execute_card_effect()` instead of emitting the stack signal directly;
+  otherwise code-defined Break Zone triggers never fired.
+- `Field.notify_targets_chosen()` now recognizes a code `when_chosen` handler,
+  not only a JSON keyword.
+
+`EffectContext` gained `power_change_party`, `take_damage_to_controller`, and
+`return_from_break_zone`. The event probe drains every stack object because a
+code-wide trigger such as 206's `card_left_field` is enqueued even when its own
+filter later declines the event.
+
+Targeting event cards remain data-driven until the local targeting lifecycle is
+verified. Full suite and boot are green.
+
 ### Mechanical ETB Migration
 
 Migrated the non-targeting `when_enter_field` cards to code:

@@ -2238,12 +2238,14 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 	if card == null or not is_instance_valid(card):
 		return
-	if card.card_effects.has("when_enter_break_from_field"):
+	# execute_card_effect() is the single gate: it knows both code effects and JSON keywords. Emitting the signal
+	# directly here skipped every code-defined Break Zone trigger.
+	if card.card_effects.has("when_enter_break_from_field") or card.effect_handles_event("when_enter_break_from_field"):
 		print("[BreakZone] ", card.card_name, " -> when_enter_break_from_field")
-		field.add_card_effect_to_stack.emit(card.id, "when_enter_break_from_field", card)
-	if was_broken and card.card_effects.has("when_break"):
+		field.execute_card_effect(card, "when_enter_break_from_field")
+	if was_broken and (card.card_effects.has("when_break") or card.effect_handles_event("when_break")):
 		print("[BreakZone] ", card.card_name, " -> when_break")
-		field.add_card_effect_to_stack.emit(card.id, "when_break", card)
+		field.execute_card_effect(card, "when_break")
 	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
 	# damaged card, so it fires here — the same choke point as the printed keywords, and only for cards arriving FROM
 	# THE FIELD (Graveyard.add_card gates that call).

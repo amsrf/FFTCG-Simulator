@@ -2028,7 +2028,7 @@ func notify_targets_chosen() -> void:
 			continue
 		if card.controller == chooser:
 			continue
-		if not card.is_key_word_in_card_effect("when_chosen"):
+		if not card.is_key_word_in_card_effect("when_chosen") and not card.effect_handles_event("when_chosen"):
 			continue
 		print("[Chosen] %s was chosen by the opponent's %s" % [card.card_name, kind])
 		execute_card_effect(card, "when_chosen")
