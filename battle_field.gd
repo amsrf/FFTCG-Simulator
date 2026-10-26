@@ -1383,7 +1383,12 @@ func _collect_continuous(source: Card, desired: Dictionary) -> void:
 			desired[key] = {"card": source, "kind": "power", "value": value, "conditional": true}
 
 	# 2. Count-based self-power.
-	var per_rules = source.card_effects.get("power_per", [])
+	var per_rules = []
+	var source_effect = source.effect()
+	if source_effect != null and source_effect.has_method("power_per_rules"):
+		per_rules = source_effect.power_per_rules()
+	if per_rules.is_empty():
+		per_rules = source.card_effects.get("power_per", [])
 	if per_rules is Dictionary:
 		per_rules = [per_rules]
 	if per_rules is Array:

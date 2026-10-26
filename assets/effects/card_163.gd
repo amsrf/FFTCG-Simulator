@@ -15,3 +15,6 @@ func activated_abilities() -> Array:
 func _skill_0(ctx) -> void:
 	ctx.add_status([ctx.source], "brave", 1)
 	ctx.extra_attacks_from_damage()
+
+func power_per_rules() -> Array:
+	return [{"count": {"is_type": "Forward", "controller": "player", "exclude": {"is_source": true}}, "value": 1000}]

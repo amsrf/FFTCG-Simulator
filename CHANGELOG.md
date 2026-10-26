@@ -148,6 +148,15 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Count-Based Power
+
+Migrated the five `power_per` rules to `CardEffect.power_per_rules()`. The
+unified continuous scan reads code first and keeps JSON only as a fallback.
+Jecht, Dark Knight, Gabranth, Ramza and Tidus now own their count rules in
+code.
+
+JSON numeric entries dropped from 49 to 44; zero `power_per` fields remain.
+
 ### Continuous Effects: One Field Scan
 
 Replaced the separate conditional, power-per and aura refresh paths with one

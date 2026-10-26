@@ -123,7 +123,8 @@ func _ready() -> void:
 	var summoner_specs: Array = summoner_effect.activated_abilities()
 	_expect(summoner_specs.size() == 1 and summoner_specs[0].run.is_valid(),
 		"Summoner 139's free-Summon ability is code-owned")
-	_expect(effects.get("163", {}).get("power_per", {}).get("count", {}).has("exclude"),
+	var tidus_rules: Array = load("res://assets/effects/card_163.gd").new().power_per_rules()
+	_expect(tidus_rules.size() == 1 and tidus_rules[0].get("count", {}).has("exclude"),
 		"Tidus 163 counts Forwards other than himself")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})

@@ -19,3 +19,6 @@ func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	if not targets.is_empty():
 		ctx.break_cards(targets)
+
+func power_per_rules() -> Array:
+	return [{"count": {"is_type": "Forward", "controller": "opponent"}, "value": 1000}]

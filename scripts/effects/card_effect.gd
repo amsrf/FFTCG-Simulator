@@ -44,6 +44,12 @@ func controls(source: Card, criteria: Dictionary) -> bool:
 	return field.controls_matching(source.controller, criteria, source)
 
 
+## Count-based continuous power rules. Each rule:
+## { "count": Dictionary-or-"damage_received", "value": int, "brave_at": int (optional) }.
+func power_per_rules() -> Array:
+	return []
+
+
 ## Which existing hook runs when this card becomes damage. The default is "no EX BURST"; only cards that have one
 ## override this and return "when_cast" or "when_enter_field". It is a pointer to the card's existing effect, never a
 ## second implementation.

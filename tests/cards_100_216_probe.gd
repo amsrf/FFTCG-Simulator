@@ -109,7 +109,8 @@ func _ready() -> void:
 		"Valefor 198's mass damage is code-owned")
 	_expect(effects.get("192", {}).get("on_causing_damage_to_forward", {}).has("on_enter_break_zone"),
 		"Cid Raines 192 attaches an on-break rider")
-	_expect(effects.get("144", {}).get("power_per", {}).get("value") == 1000,
+	var ramza_rules: Array = load("res://assets/effects/card_144.gd").new().power_per_rules()
+	_expect(ramza_rules.size() == 1 and int(ramza_rules[0].get("value", 0)) == 1000,
 		"Ramza 144 scales with your Backups")
 	var noel_cp: Array = load("res://assets/effects/card_208.gd").new().conditional_powers()
 	_expect(noel_cp.size() == 1 and int(noel_cp[0].get("value", 0)) == 2000,

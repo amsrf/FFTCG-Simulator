@@ -156,28 +156,6 @@
 			"controller": "opponent"
 		}
 	},
-	"15": {
-		"power_per": {
-			"count": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"value": 1000
-		}
-	},
-	"92": {
-		"power_per": {
-			"count": "damage_received",
-			"value": 1000
-		}
-	},
-	"98": {
-		"power_per": {
-			"count": "damage_received",
-			"value": 1000,
-			"brave_at": 6
-		}
-	},
 	"47": {
 		"when_enter_field": {
 			"choose_target": {
@@ -305,27 +283,6 @@
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
-		}
-	},
-	"144": {
-		"power_per": {
-			"count": {
-				"is_type": "Backup",
-				"controller": "player"
-			},
-			"value": 1000
-		}
-	},
-	"163": {
-		"power_per": {
-			"count": {
-				"is_type": "Forward",
-				"controller": "player",
-				"exclude": {
-					"is_source": true
-				}
-			},
-			"value": 1000
 		}
 	},
 	"188": {

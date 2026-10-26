@@ -16,3 +16,6 @@ func _skill_0(ctx) -> void:
 	ctx.power_change([ctx.source], 2000, 1)
 	ctx.add_status([ctx.source], "haste", 1)
 	ctx.add_status([ctx.source], "first_strike", 1)
+
+func power_per_rules() -> Array:
+	return [{"count": {"is_type": "Backup", "controller": "player"}, "value": 1000}]
