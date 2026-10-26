@@ -416,12 +416,7 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# Add card to appropriate array
 	var n = target_array.size()
 	target_array.append(card)
-	recompute_conditional_power()
-	register_card_auras(card)
-	register_power_per(card)
-	# A card ENTERING can change a count for someone already in play (Jecht counts the opponent's Forwards), and
-	# register_power_per only recomputes this card's own rules.
-	recompute_power_per()
+	refresh_continuous_effects()
 	
 	# Calculate position
 	var target_position = target_node.position
@@ -639,9 +634,7 @@ func end_phase_cleanup():
 		c.turn_end()
 	# Expiring abilities_nullified can make a source's auras/conditionals live again. Recompute after the statuses
 	# are actually gone; otherwise the board would keep the suppressed numbers until the next unrelated change.
-	recompute_conditional_power()
-	recompute_power_per()
-	refresh_auras()
+	refresh_continuous_effects()
 func try_activate_from_field(card: Card) -> void:
 	var skills: Array = card.activation_skills()
 	if skills.is_empty():
@@ -1340,15 +1333,11 @@ func clear_targeted_highlights() -> void:
 		card.set_targeted_highlight(false)
 
 func remove_card(card):
-	unregister_card_auras(card)
-	unregister_power_per(card)
 	front_cards.erase(card)
 	back_cards.erase(card)
 	opponent_front_cards.erase(card)
 	opponent_back_cards.erase(card)
-	recompute_conditional_power()
-	refresh_auras()
-	recompute_power_per()
+	refresh_continuous_effects()
 	# A member leaving the field leaves the party; fewer than two members disbands it. Done here because every way
 	# off the field (break, exile, return, effect) ends in remove_card, so no caller has to remember.
 	#
@@ -1356,6 +1345,145 @@ func remove_card(card):
 	# still say FIELD and the departing card would stay in the party. prune_party() then clears any other stale ones.
 	drop_party_member(card)
 	prune_party()
+
+## ONE PASS OVER THE BOARD FOR EVERY CONTINUOUS EFFECT.
+##
+## This replaces three separate refresh paths (conditional power, count-based power, auras) with one outer field
+## scan and one desired-grant ledger. It runs at the same invalidation points as before: a card entering, a card
+## leaving, abilities being nullified/restored, damage changing a count, and end-phase cleanup. It is never polled.
+##
+## The scan computes DESIRED entries first, then applies/revokes only the differences. Existing temporary buffs
+## therefore survive, and a rule whose source left or was silenced is revoked exactly once.
+var _continuous_ledger: Dictionary = {}
+
+
+func _rule_get(rule, key: String, fallback = null):
+	if rule is Dictionary:
+		return rule.get(key, fallback)
+	if rule == null:
+		return fallback
+	var value = rule.get(key)
+	return fallback if value == null else value
+
+
+func _collect_continuous(source: Card, desired: Dictionary) -> void:
+	var id: int = source.get_instance_id()
+
+	# 1. Conditional self-power.
+	var conditional: Array = _conditional_rules(source)
+	for i in range(conditional.size()):
+		var rule = conditional[i]
+		if not (rule is Dictionary):
+			continue
+		if not _conditional_holds(rule, source):
+			continue
+		var value: int = int(rule.get("value", 0))
+		if value != 0:
+			var key: String = "conditional:%d:%d" % [id, i]
+			desired[key] = {"card": source, "kind": "power", "value": value, "conditional": true}
+
+	# 2. Count-based self-power.
+	var per_rules = source.card_effects.get("power_per", [])
+	if per_rules is Dictionary:
+		per_rules = [per_rules]
+	if per_rules is Array:
+		for i in range(per_rules.size()):
+			var rule = per_rules[i]
+			if not (rule is Dictionary):
+				continue
+			var n: int = _power_per_count(rule.get("count", ""), source)
+			var value: int = n * int(rule.get("value", 0))
+			if value != 0:
+				var key: String = "power_per:%d:%d" % [id, i]
+				desired[key] = {"card": source, "kind": "power", "value": value}
+			var threshold: int = int(rule.get("brave_at", -1))
+			if threshold > 0 and n >= threshold:
+				var brave_key: String = "power_per_brave:%d:%d" % [id, i]
+				desired[brave_key] = {"card": source, "kind": "status", "status": "brave"}
+
+	# 3. Auras this card grants to other cards.
+	var auras = source.effect_auras()
+	if auras.is_empty() and source.card_effects.has("aura"):
+		auras = source.card_effects["aura"]
+	if auras is Dictionary:
+		auras = [auras]
+	if not (auras is Array):
+		return
+	for i in range(auras.size()):
+		var rule = auras[i]
+		var condition = _rule_get(rule, "condition", null)
+		if condition is Callable and condition.is_valid() and not bool(condition.call(source)):
+			continue
+		var method: String = str(_rule_get(rule, "method", ""))
+		var targets: Dictionary = _rule_get(rule, "targets", {})
+		for target in get_all_cards():
+			if target == null or not is_instance_valid(target) or not target.is_on_field():
+				continue
+			if not CARD_TARGET.matches(target, targets, source):
+				continue
+			var key: String = "aura:%d:%d:%d" % [id, i, target.get_instance_id()]
+			if method == "power_change":
+				var value: int = int(_rule_get(rule, "value", 0))
+				if value != 0:
+					desired[key] = {"card": target, "kind": "power", "value": value}
+			elif method == "grant_status":
+				var status: String = str(_rule_get(rule, "status", ""))
+				if not status.is_empty():
+					desired[key] = {"card": target, "kind": "status", "status": status}
+
+
+func _apply_continuous_entry(key: String, entry: Dictionary, previous: Dictionary) -> void:
+	var card: Card = entry.get("card")
+	if card == null or not is_instance_valid(card):
+		return
+	if entry.get("kind", "") == "power":
+		var old_value: int = int(previous.get("value", 0)) if not previous.is_empty() else 0
+		var value: int = int(entry.get("value", 0))
+		card.add_power_modifier(key, value)
+		if bool(entry.get("conditional", false)):
+			card.current_conditional_bonus = maxi(0, card.current_conditional_bonus + value - old_value)
+	elif entry.get("kind", "") == "status":
+		card.grant_status(str(entry.get("status", "")))
+
+
+func _revoke_continuous_entry(key: String, entry: Dictionary) -> void:
+	var card: Card = entry.get("card")
+	if card == null or not is_instance_valid(card):
+		return
+	if entry.get("kind", "") == "power":
+		card.remove_power_modifier(key)
+		if bool(entry.get("conditional", false)):
+			card.current_conditional_bonus = maxi(0, card.current_conditional_bonus - int(entry.get("value", 0)))
+	elif entry.get("kind", "") == "status":
+		card.revoke_status(str(entry.get("status", "")))
+
+
+func refresh_continuous_effects() -> void:
+	var desired: Dictionary = {}
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		if not card.abilities_enabled():
+			continue
+		_collect_continuous(card, desired)
+
+	for key in desired:
+		var entry: Dictionary = desired[key]
+		var previous: Dictionary = _continuous_ledger.get(key, {})
+		if previous.is_empty():
+			_apply_continuous_entry(key, entry, previous)
+		elif entry.get("kind", "") == "power" and int(previous.get("value", 0)) != int(entry.get("value", 0)):
+			_apply_continuous_entry(key, entry, previous)
+		elif entry.get("kind", "") == "status" and str(previous.get("status", "")) != str(entry.get("status", "")):
+			_revoke_continuous_entry(key, previous)
+			_apply_continuous_entry(key, entry, {})
+
+	for key in _continuous_ledger.keys():
+		if not desired.has(key):
+			_revoke_continuous_entry(key, _continuous_ledger[key])
+
+	_continuous_ledger = desired
+
 
 ## Conditional continuous effects ("if you control X, this gains power").
 ##
@@ -1365,10 +1493,6 @@ func remove_card(card):
 ##
 ## The ledger is still per rule: a card may have two conditional powers (Rikku 201: +2000 for Yuna, +2000 for
 ## Paine), and one shared bonus made them overwrite each other.
-var _conditional_granted: Dictionary = {}
-var _conditional_sources: Dictionary = {}
-
-
 func _conditional_rules(card: Card) -> Array:
 	var effect_obj = card.effect()
 	if effect_obj != null and effect_obj.has_method("conditional_powers"):
@@ -1391,45 +1515,8 @@ func _conditional_holds(rule: Dictionary, source: Card) -> bool:
 
 
 func recompute_conditional_power() -> void:
-	var active: Dictionary = {}
-	var active_sources: Dictionary = {}
-	for card in get_all_cards():
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		var rules: Array = _conditional_rules(card)
-		for i in range(rules.size()):
-			var rule = rules[i]
-			if not (rule is Dictionary):
-				continue
-			var key: String = "conditional:%d:%d" % [card.get_instance_id(), i]
-			active[key] = true
-			active_sources[key] = card
-			var desired: int = 0
-			if card.abilities_enabled() and _conditional_holds(rule, card):
-				desired = int(rule.get("value", 0))
-			var granted: int = int(_conditional_granted.get(key, 0))
-			if desired != granted:
-				if desired == 0:
-					card.remove_power_modifier(key)
-				else:
-					card.add_power_modifier(key, desired)
-				card.current_conditional_bonus = maxi(0, card.current_conditional_bonus + desired - granted)
-				_conditional_granted[key] = desired
-				_conditional_sources[key] = card
-	# Remove rules that disappeared with a source, a silence, or a changed card.
-	for key in _conditional_granted.keys():
-		if active.has(key):
-			continue
-		var source: Card = _conditional_sources.get(key)
-		var granted: int = int(_conditional_granted[key])
-		if source != null and is_instance_valid(source):
-			source.remove_power_modifier(key)
-			source.current_conditional_bonus = maxi(0, source.current_conditional_bonus - granted)
-		_conditional_granted.erase(key)
-		_conditional_sources.erase(key)
-	# Keep the source map fresh for rules that are currently active but whose card changed instance.
-	for key in active_sources:
-		_conditional_sources[key] = active_sources[key]
+	# Compatibility entry point. All continuous work now happens in one field scan.
+	refresh_continuous_effects()
 
 
 ## CONTINUOUS, COUNT-BASED POWER. "For each point of damage you have received, +1000" (Dark Knight 92, Gabranth 98)
@@ -1476,29 +1563,8 @@ func unregister_power_per(card: Card) -> void:
 	_power_per_effects = _power_per_effects.filter(func(r): return r["source"] != card)
 
 func recompute_power_per() -> void:
-	for rule in _power_per_effects:
-		var source: Card = rule["source"]
-		if source == null or not is_instance_valid(source) or not source.is_on_field():
-			continue
-		var n: int = _power_per_count(rule["count"], source)
-		var desired: int = n * int(rule["value"]) if source.abilities_enabled() else 0
-		if desired != int(rule["granted"]):
-			if desired == 0:
-				source.remove_power_modifier(str(rule.get("key", "")))
-			else:
-				source.add_power_modifier(str(rule.get("key", "")), desired)
-			rule["granted"] = desired
-		var threshold: int = int(rule["brave_at"])
-		if threshold > 0:
-			var should: bool = n >= threshold
-			# Only touch the status the RULE granted: a printed Brave lives in card_effects and must not be erased
-			# here, and neither should a status some other effect put there.
-			if should != bool(rule["brave_granted"]):
-				if should:
-					source.add_status_effect("brave", 1)
-				else:
-					source.status_effects.erase("brave")
-				rule["brave_granted"] = should
+	refresh_continuous_effects()
+
 
 ## How many things a power_per rule counts. "damage_received" is the cards in its controller's damage zone; anything
 ## else is a criteria block counted against the board.
@@ -1579,19 +1645,7 @@ func register_card_auras(card: Card) -> void:
 ## It is safe to run repeatedly only because AuraValue.granted makes add_aura_to_card() a no-op for a card it has already
 ## been applied to — without that guard this would stack a fresh +1000 on every field change.
 func refresh_auras() -> void:
-	for aura in _auras.values():
-		var source: Card = aura.source
-		if source == null or not is_instance_valid(source) or not source.abilities_enabled():
-			_revoke_aura(aura)
-			continue
-		if aura.condition.is_valid() and not bool(aura.condition.call(source)):
-			_revoke_aura(aura)
-			continue
-		if not source.is_on_field():
-			_revoke_aura(aura)
-			continue
-		for card in get_all_cards():
-			add_aura_to_card(aura, card)
+	refresh_continuous_effects()
 
 
 ## Undo exactly what an aura granted. Used both when its source leaves and while its source is ability-nullified.

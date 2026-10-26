@@ -306,8 +306,8 @@ func _updateUI():
 ## Kept as a thin call rather than deleted, so whatever parents a card into the field still triggers registration.
 func _executeAuraEffects():
 	var field_node: Node = get_parent()
-	if field_node != null and field_node.has_method("register_card_auras"):
-		field_node.register_card_auras(self)
+	if field_node != null and field_node.has_method("refresh_continuous_effects"):
+		field_node.refresh_continuous_effects()
 
 ## Loaded by PATH rather than by its `class_name`: a newly added global class is only registered
 ## in Godot's class cache by the editor, so a headless run would fail to parse this file with

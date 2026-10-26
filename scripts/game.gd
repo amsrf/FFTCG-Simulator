@@ -509,9 +509,7 @@ func nullify_abilities(duration: int = 1) -> void:
 		card.add_status_effect("abilities_nullified", duration)
 		print("[Nullify] %s loses its abilities" % card.card_name)
 	# A nullified source stops granting auras/conditionals immediately, not at the next unrelated board change.
-	field.recompute_conditional_power()
-	field.recompute_power_per()
-	field.refresh_auras()
+	field.refresh_continuous_effects()
 	enforce_game_state_rules()
 
 
@@ -1468,7 +1466,7 @@ func _on_player_side_damaged(side: PlayerSide) -> void:
 	# "For each point of damage you have received" (Dark Knight, Gabranth): the damage zone just grew, so every
 	# count-based power rule has to be re-evaluated — on BOTH sides' cards, since one player's damage feeds their own
 	# cards only, but the recompute is cheap and idempotent.
-	field.recompute_power_per()
+	field.refresh_continuous_effects()
 	if not match_over:
 		field.trigger_event("damage_received", {"player_id": 1 if side == player else 2})
 	if match_over or not side.is_defeated():

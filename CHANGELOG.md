@@ -148,6 +148,18 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Continuous Effects: One Field Scan
+
+Replaced the separate conditional, power-per and aura refresh paths with one
+`Field.refresh_continuous_effects()` scan. It computes conditional power,
+count-based power, Brave-at-count and aura grants in a single pass, diffs the
+desired grants against one ledger, and prunes entries whose source, rule,
+silence state or board presence disappeared.
+
+The old `recompute_conditional_power()`, `recompute_power_per()` and
+`refresh_auras()` entry points now forward to the unified scan, so existing
+callers cannot accidentally reintroduce separate scans.
+
 ### JSON Migration: Conditional Power Is Now a Board Scan
 
 Migrated the six `conditional_power` cards to `CardEffect.conditional_powers()`

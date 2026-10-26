@@ -100,10 +100,14 @@ func _ready() -> void:
 	_expect(gabranth.is_brave(), "and gains Brave at 6 damage")
 
 	# --- leaving the field unregisters cleanly --------------------------------------------------------------
-	var before: int = _field.get("_power_per_effects").size()
+	var gid: int = gabranth.get_instance_id()
+	var prefix: String = "power_per:%d:" % gid
 	_field.remove_card(gabranth)
-	_expect(_field.get("_power_per_effects").size() == before - 1,
-		"removing Gabranth drops its rule (%d → %d)" % [before, _field.get("_power_per_effects").size()])
+	var still_there: bool = false
+	for key in _field.get("_continuous_ledger").keys():
+		if str(key).begins_with(prefix):
+			still_there = true
+	_expect(not still_there, "removing Gabranth drops its continuous ledger rule")
 	_expect(jecht.power == 11000 and knight.power == 11000,
 		"and leaves the other cards' rules untouched (Jecht %d, Knight %d)" % [jecht.power, knight.power])
 
