@@ -16,21 +16,7 @@
 		]
 	},
 	"4": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"instructions": [
-				{
-					"name": "suffer_damage",
-					"author": "target",
-					"argument": [
-						4000
-					]
-				}
-			],
-			"choose_target": {
-				"is_type": "Forward"
-			}
-		}
+		"ex_burst": "when_cast"
 	},
 	"6": {
 		"brave": true
@@ -126,68 +112,8 @@
 			"controller": "player"
 		}
 	},
-	"62": {
-		"apply_effect": {
-			"is_type": "Forward"
-		},
-		"when_cast": {
-			"instructions": [
-				{
-					"name": "return_targets_to_hand",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
-	"18": {
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent",
-				"count": 2
-			},
-			"instructions": [
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"fragile",
-						1
-					]
-				},
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						10000
-					]
-				}
-			]
-		}
-	},
 	"38": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"frozen",
-						1
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"14": {
 		"brave": true
@@ -249,21 +175,7 @@
 		}
 	},
 	"23": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						7000
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"24": {
 		"apply_effect": {
@@ -272,52 +184,13 @@
 		}
 	},
 	"39": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_tapped": true
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"44": {
 		"first_strike": true
 	},
 	"74": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "power_change_matching",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward",
-							"controller": "player"
-						},
-						1000,
-						1
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"94": {
 		"when_attack": {
@@ -587,20 +460,7 @@
 		]
 	},
 	"61": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_cost_at_least": 5
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"79": {
 		"ex_burst": "when_enter_field"
@@ -613,43 +473,6 @@
 	},
 	"91": {
 		"ex_burst": "when_enter_field"
-	},
-	"52": {
-		"when_cast": {
-			"choose_target": [
-				{
-					"is_type": "Forward",
-					"controller": "opponent"
-				},
-				{
-					"is_type": "Backup",
-					"controller": "opponent"
-				}
-			],
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": [
-						0
-					]
-				},
-				{
-					"name": "return_targets_to_hand",
-					"author": "game",
-					"argument": [
-						1
-					]
-				},
-				{
-					"name": "opponent_discards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
 	},
 	"72": {
 		"on_causing_damage_to_forward": {
@@ -760,53 +583,11 @@
 			}
 		]
 	},
-	"117": {
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Backup",
-				"is_cost_at_least": 3
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
 	"118": {
 		"ex_burst": "when_enter_field"
 	},
-	"123": {
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_cost_at_most": 4
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
 	"124": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"126": {
 		"apply_effect": {
@@ -839,59 +620,13 @@
 		"haste": true
 	},
 	"143": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_tapped": false
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"170": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"178": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "return_targets_to_hand",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"182": {
 		"brave": true,
@@ -1012,33 +747,7 @@
 		]
 	},
 	"198": {
-		"ex_burst": "when_cast",
-		"apply_effect": {
-			"is_type": "Forward",
-			"controller": "opponent"
-		},
-		"when_cast": {
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						3000
-					]
-				},
-				{
-					"name": "untap_all_matching",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Backup",
-							"controller": "player"
-						}
-					],
-					"condition": "controls:Yuna"
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"212": {
 		"ex_burst": "when_enter_field"
@@ -1048,29 +757,6 @@
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
-		}
-	},
-	"110": {
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "player"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"unbreakable",
-						1
-					]
-				}
-			]
 		}
 	},
 	"144": {
@@ -1136,23 +822,7 @@
 		]
 	},
 	"106": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "power_change_targets_if_blocking",
-					"author": "game",
-					"argument": [
-						2000,
-						4000,
-						1
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"116": {
 		"skill": [
@@ -1283,25 +953,7 @@
 		]
 	},
 	"172": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						2
-					]
-				},
-				{
-					"name": "discard_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"188": {
 		"ex_burst": "when_enter_field",
@@ -1320,39 +972,7 @@
 		}
 	},
 	"190": {
-		"ex_burst": "when_cast",
-		"when_cast": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "discard_cards",
-					"author": "game",
-					"argument": [
-						1
-					],
-					"may": true,
-					"may_prompt": "Discard 1"
-				},
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						7000
-					],
-					"condition": "if_last_succeeded"
-				},
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					],
-					"condition": "if_last_did_not_succeed"
-				}
-			]
-		}
+		"ex_burst": "when_cast"
 	},
 	"194": {
 		"skill": [

@@ -68,6 +68,13 @@ func _drain() -> void:
 
 
 func _complete_target(card: Card) -> void:
+	var stack = _game.get("stack")
+	if stack.stack_length() > 0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	_field.set_target_card(card)
 	_game.get("assistant").call("on_target_complete")
 
@@ -78,7 +85,7 @@ func _ready() -> void:
 	for id in [23, 39, 44]:
 		_expect(effects.has(str(id)), "card %d has an entry" % id)
 	_expect(effects.get("23", {}).get("ex_burst") == "when_cast", "Brynhildr (23) is EX BURST -> when_cast")
-	_expect(effects.get("39", {}).get("when_cast", {}).get("choose_target", {}).get("is_tapped") == true,
+	_expect(load("res://assets/effects/card_39.gd").new().cast_target_criteria(null).get("is_tapped") == true,
 		"Shiva (39) targets a DULL Forward")
 	_expect(effects.get("44", {}).get("first_strike") == true, "Sephiroth (44) has First Strike")
 	var chick_specs: Array = load("res://assets/effects/card_19.gd").new().activated_abilities()
@@ -123,7 +130,7 @@ func _ready() -> void:
 	var buff_before: int = buff_me.power
 	var sylph: Card = _off_field(SYLPH, "player")
 	_field.execute_card_effect(sylph, "when_cast")
-	_complete_target(tap_me)
+	await _complete_target(tap_me)
 	await _drain()
 	print("[Batch1] Sylph: %s tapped=%s, %s %d -> %d" % [
 		tap_me.card_name, tap_me.tapped, buff_me.card_name, buff_before, buff_me.power])

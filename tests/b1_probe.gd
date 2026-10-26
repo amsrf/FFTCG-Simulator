@@ -14,13 +14,17 @@ const OVELIA := 156
 
 class PickAgent extends Agent:
 	var picked_target: Card = null
+	var wanted: Card = null
 
 	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
 		picked_target = null
-		for card in game.field.get_all_cards():
-			if card.is_valid_target:
-				picked_target = card
-				break
+		if wanted != null and is_instance_valid(wanted) and wanted.is_valid_target:
+			picked_target = wanted
+		else:
+			for card in game.field.get_all_cards():
+				if card.is_valid_target:
+					picked_target = card
+					break
 		if picked_target != null:
 			game.field.set_target_card(picked_target)
 			game.assistant.on_target_complete()
@@ -87,14 +91,23 @@ func _drain() -> void:
 
 
 func _pick(card: Card) -> void:
-	_field.set_target_card(card)
-	_assistant.call("on_target_complete")
+	# Tell the existing deterministic agent which card this probe means, then let it answer the session. That keeps
+	# the same agent around for the may/discard steps that follow the target.
+	var agent = _game.get("player_agent")
+	if agent != null:
+		agent.set("wanted", card)
+	if _stack.stack_length() > 0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		_stack.resolve_top_effect()
+	for _i in range(60):
+		if _stack.stack_length() == 0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 
 
 func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("106", {}).get("when_cast", {}).get("instructions", [{}])[0].get("name")
-		== "power_change_targets_if_blocking", "Golem 106 has the blocking-conditional power instruction")
+	_expect(load("res://assets/effects/card_106.gd").new().has_method("when_cast"),
+		"Golem 106's blocking-conditional cast effect is code-owned")
 	_expect(bool(effects.get("194", {}).get("skill", [{}])[0].get("only_if_blocking", false)),
 		"Snow 194's Vendetta is gated on blocking")
 	var wol_effect = load("res://assets/effects/card_155.gd").new()
@@ -154,11 +167,11 @@ func _ready() -> void:
 	var pb: int = blocking.power
 	var golem: Card = _off_field(106, "player")
 	_field.execute_card_effect(golem, "when_cast")
-	_pick(normal)
+	await _pick(normal)
 	await _drain()
 	var golem2: Card = _off_field(106, "player")
 	_field.execute_card_effect(golem2, "when_cast")
-	_pick(blocking)
+	await _pick(blocking)
 	await _drain()
 	print("[B1] Golem: normal %d->%d, blocking %d->%d" % [pn, normal.power, pb, blocking.power])
 	_expect(normal.power == pn + 2000, "Golem 106 gives +2000 to a non-blocking Forward")
@@ -256,11 +269,11 @@ func _ready() -> void:
 	_expect(hand.cards.size() == h1 + 1, "Moogle 172 draws 2 and discards 1")
 
 	# --- 190 Bahamut Fury: the discard changes 5000 into 7000 ----------------------------------------
-	var burn: Card = _make(152, "opponent")
+	var burn: Card = _make(47, "opponent")
 	var hand_before_190: int = hand.cards.size()
 	var fury: Card = _off_field(190, "player")
 	_field.execute_card_effect(fury, "when_cast")
-	_pick(burn)
+	await _pick(burn)
 	await _drain()
 	print("[B1] Bahamut Fury: damage %d, hand %d -> %d" % [burn.accumulated_damage,
 		hand_before_190, hand.cards.size()])

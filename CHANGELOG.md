@@ -148,6 +148,31 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Summons Migrated to Cast-Time Code Effects
+
+Migrated all 20 Summons from JSON `when_cast` blocks to `CardEffect` scripts:
+
+`4, 18, 23, 38, 39, 52, 61, 62, 74, 106, 110, 117, 123, 124, 143, 170, 172,
+178, 190, 198`.
+
+The cast-time seam is now:
+
+```text
+mana paid
+  -> Card.get_cast_target_criteria()
+  -> targets chosen and stored on the Summon card
+  -> _commit_summon_to_stack()
+  -> when_cast(ctx) resolves with ctx.targets
+```
+
+`CardEffect.cast_target_criteria()` returns a Dictionary for one target, an
+Array for staged targets (Hades), or `{}` for no target. `EffectContext.cast_targets()`
+reuses targets already captured at cast, with a resolution-time fallback for
+Summon EX BURST.
+
+Mass returns start every return animation before awaiting any of them, so
+"return all Forwards" resolves concurrently rather than one card at a time.
+
 ### Target-Dependent Event Triggers Migrated
 
 Migrated eight target-dependent event triggers to code:

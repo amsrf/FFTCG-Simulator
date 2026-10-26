@@ -33,6 +33,11 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Summon targets are chosen BEFORE the Summon enters `Stack.cards`, and are stored on the Summon card itself in
+  `effect_targets`. `_on_stack_execute_card_effect()` passes those same picks to `when_cast(ctx)`; do not re-target at
+  resolution. `cast_targets()` is only a fallback for EX BURST, where no cast step happened.
+- Mass return must START every `begin_return_card` tween before awaiting the first one. A plain sequential loop makes
+  "return all Forwards" animate one card at a time.
 - Code event conditions are resolved AFTER the trigger is queued. A broad `when_party_attack` code trigger can leave
   a stack object that later does nothing; tests should drain the stack, not equate one object with one effect.
 - A code event opens its target session INSIDE its handler. `_on_stack_execute_card_effect` must not pre-clear

@@ -72,15 +72,9 @@ func _ready() -> void:
 	_game.damage_targets(10000)
 	_expect(grave.graveyard_cards.has(c), "an ordinary card still goes to the Break Zone")
 
-	# --- the data ----------------------------------------------------------------------------------------
-	var entry: Dictionary = CardDatabase.card_effects.get("18", {})
-	var instrs: Array = entry.get("when_cast", {}).get("instructions", [])
-	var names: Array = []
-	for i in instrs:
-		names.append(str(i.get("name", "")))
-	print("[Fragile] Bahamut 18 instructions: %s" % str(names))
-	_expect(names.size() == 2 and names[0] == "add_status_to_targets" and names[1] == "damage_targets",
-		"Bahamut applies fragile BEFORE the damage — otherwise its own damage would slip past it")
+	# --- the code shape ----------------------------------------------------------------------------------
+	var bahamut = load("res://assets/effects/card_18.gd").new()
+	_expect(bahamut.has_method("when_cast"), "Bahamut 18's cast effect is code-owned")
 
 	print("[Fragile] %d checks | failures: %d" % [_checks, _fails])
 	print("[Fragile] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

@@ -2380,6 +2380,21 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
+	# A real Summon whose when_cast is code-owned. Its targets were chosen at cast time and live on this same card,
+	# so resolution is just the handler plus the normal trip to the Break Zone.
+	if card.type == "Summon" and card.effect_source == null and card.abilities_enabled() 			and card.effect_handles_event("when_cast"):
+		var summon_picks: Array = card.effect_targets.duplicate()
+		if summon_picks.is_empty() and card.effect_target != null:
+			summon_picks = [card.effect_target]
+		var summon_ctx = card.make_effect_context("when_cast", {}, card, summon_picks)
+		await card.effect().call("when_cast", summon_ctx)
+		field.call("finish_targeting_state")
+		if card.controller == "player":
+			player_graveyard.add_card(card)
+		else:
+			opponent_graveyard.add_card(card)
+		stack._mark_resolution_complete()
+		return
 	# A code-defined ACTIVATED ability. Costs and targets were settled during activation; the proxy carries the
 	# AbilitySpec snapshot, so resolution is just the handler with those targets.
 	if card.ability_spec != null:

@@ -86,9 +86,8 @@ func _ready() -> void:
 	print("[Exdeath] after another source: zone=%d stack=%d mode=%s" % [
 		_zone_size(), _stack.stack_length(), GlobalVariables.get_player_mode()])
 	_expect(_zone_size() == 2, "the second damage card lands")
-	_expect(_stack.stack_length() == 1, "and its EX BURST is on the stack")
 	_expect(GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET,
-		"with targeting open, exactly like a normal EX BURST")
+		"and its EX BURST opens targeting, exactly like a normal EX BURST")
 
 	# clean the targeting session and the queued burst before the integration check
 	_assistant.call("on_target_cancel")

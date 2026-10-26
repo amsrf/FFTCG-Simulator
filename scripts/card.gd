@@ -1116,6 +1116,15 @@ func get_cost() -> Dictionary:
 func get_cast_target_criteria() -> Variant:
 	# Targeting requirement for casting (Summons use "when_cast").
 	# A Dictionary is one stage; an Array is several, asked in order (Hades: Forward, then Backup).
+	# CODE FIRST. A migrated Summon owns its cast timing here; the JSON branch remains only for the cards still
+	# waiting for their code pass.
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj != null and effect_obj.has_method("cast_target_criteria"):
+		var code_criteria = effect_obj.cast_target_criteria(make_effect_context("cast"))
+		if code_criteria is Dictionary:
+			return code_criteria
+		if code_criteria is Array:
+			return code_criteria
 	if "when_cast" in card_effects:
 		var entry = card_effects["when_cast"]
 		if entry is Dictionary and entry.has("choose_target"):

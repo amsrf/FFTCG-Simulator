@@ -102,13 +102,15 @@ func choose_for(player_id: int, cards: Array, prompt: String = "Choose a card") 
 
 ## Open a targeting session and return every pick, in order. `count` maps to the existing `count` session key.
 ## `effect_card` is the stack copy whose top edge the arrow originates from.
-func choose_targets(criteria: Dictionary, count: int = 1, allow_cancel: bool = false,
+func choose_targets(criteria: Variant, count: int = 1, allow_cancel: bool = false,
 		source_kind: String = "Ability") -> Array:
 	if field == null:
 		return []
-	var session: Dictionary = criteria.duplicate()
-	if count > 1:
-		session["count"] = count
+	var session: Variant = criteria
+	if criteria is Dictionary:
+		session = criteria.duplicate()
+		if count > 1:
+			session["count"] = count
 	var origin: Card = effect_card if effect_card != null and is_instance_valid(effect_card) else source
 	if not field.has_viable_target(session, origin, source_kind):
 		return []
@@ -120,6 +122,14 @@ func choose_targets(criteria: Dictionary, count: int = 1, allow_cancel: bool = f
 	var picks: Array = field.targeting_picked.duplicate()
 	field.finish_targeting_state()
 	return picks
+
+
+## Targets for a Summon's when_cast. A real cast already has them on the card; an EX BURST has none and asks now,
+## at resolution. Keeping the fallback here lets one card file serve both paths.
+func cast_targets(criteria: Variant, count: int = 1) -> Array:
+	if not targets.is_empty():
+		return targets
+	return await choose_targets(criteria, count, false, "Summon")
 
 
 ## Single-target convenience over choose_targets().
@@ -195,9 +205,10 @@ func mill(player_id: int, count: int = 1) -> void:
 		await game.mill_player(player_id, count)
 
 
-func discard(player_id: int, count: int = 1) -> void:
+func discard(player_id: int, count: int = 1) -> int:
 	if game != null:
-		await game.discard_from(player_id, count)
+		return await game.discard_from(player_id, count)
+	return 0
 
 
 func set_element_until_end_of_turn(card: Card, element: String) -> void:
@@ -345,6 +356,9 @@ func return_from_break_zone(tapped: bool = true) -> void:
 func return_to_hand(cards: Array) -> void:
 	if game == null:
 		return
+	# START EVERY RETURN FIRST, then wait. Awaiting each tween inside the loop serialises the cards, which is exactly
+	# what a mass return must not do.
+	var tweens: Array = []
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
@@ -354,7 +368,9 @@ func return_to_hand(cards: Array) -> void:
 		game.field.remove_card(card)
 		var tween = owner_hand.begin_return_card(card)
 		if tween != null:
-			await tween.finished
+			tweens.append(tween)
+	for tween in tweens:
+		await tween.finished
 
 
 func _sides(owner: String) -> Array:

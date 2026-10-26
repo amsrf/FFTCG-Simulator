@@ -22,6 +22,13 @@ func handles_event(event: String) -> bool:
 	return has_method(event)
 
 
+## What this Summon asks the player to choose WHEN CAST, before it enters the stack. Return a Dictionary for one
+## target, an Array for staged targets, or {} for no target. The picks are stored on the card and passed to
+## when_cast() as ctx.targets at resolution.
+func cast_target_criteria(_ctx) -> Variant:
+	return {}
+
+
 ## Activated abilities this card offers. Event methods are zero-or-one per event; a card may have several activated
 ## abilities, and each one carries its own costs and target timing, so they get a descriptor.
 func activated_abilities() -> Array:
