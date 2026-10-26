@@ -76,10 +76,19 @@ func _wait_for(check: Callable, frames: int = 300) -> bool:
 
 
 func _choose_target(target: Card) -> void:
+	# Code event targets open only after the stack object resolves.
+	if _stack.stack_length() > 0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		_stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	_field.set_target_card(target)
 	await get_tree().process_frame
-	_assistant.call("on_target_complete")
-	await get_tree().process_frame
+	# A count > 1 session stays open until its last pick or until the player confirms early.
+	if _field.targeting_picked.size() >= _field.targeting_count:
+		_assistant.call("on_target_complete")
+		await get_tree().process_frame
 
 
 func _ready() -> void:
@@ -234,7 +243,8 @@ func _ready() -> void:
 	_expect(_stack.stack_length() >= 1, "declaring the block queues Squall's when_blocked")
 	if _stack.stack_length() > 0:
 		var top: Card = _stack.cards.back()
-		_expect(top.key_word_effect == "when_blocked", "and it is the when_blocked trigger")
+		_expect(top.effect_event == "when_blocked" or top.key_word_effect == "when_blocked",
+			"and it is the when_blocked trigger")
 	# it opened a target session; close it without resolving the effect
 	_field.call("_on_assistant_target_cancel")
 

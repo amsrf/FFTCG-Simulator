@@ -119,15 +119,14 @@ func _ready() -> void:
 
 	# --- the data ---------------------------------------------------------------------------------------
 	var d: Dictionary = CardDatabase.card_effects
-	for id in ["42", "43"]:
-		_expect(d.has(id), "card %s has an entry" % id)
+	_expect(d.has("42"), "card 42 has an entry")
+	_expect(load("res://assets/effects/card_43.gd").new().has_method("when_attack"),
+		"Snow's attack trigger is code-owned")
 	_expect(load("res://assets/effects/card_82.gd").new().has_method("when_enter_field"),
 		"Hope's conditional ETB is code-owned")
 	var sazh_effect = load("res://assets/effects/card_13.gd").new()
 	var sazh_specs: Array = sazh_effect.activated_abilities()
 	_expect(sazh_specs.size() == 1 and sazh_specs[0].run.is_valid(), "Sazh's conditional damage is code-owned")
-	_expect(str(d["43"]["when_attack"]["instructions"][1].get("condition", "")) == "cast_this_turn:Shiva",
-		"Snow's Freeze is conditional on casting Shiva")
 
 	print("[Condition] %d checks | failures: %d" % [_checks, _fails])
 	print("[Condition] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

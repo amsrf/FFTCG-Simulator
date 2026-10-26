@@ -166,30 +166,6 @@
 			]
 		}
 	},
-	"43": {
-		"when_attack": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"frozen",
-						1
-					],
-					"condition": "cast_this_turn:Shiva"
-				}
-			]
-		}
-	},
 	"38": {
 		"ex_burst": "when_cast",
 		"when_cast": {
@@ -238,64 +214,6 @@
 	},
 	"554": {
 		"party_brave": true
-	},
-	"1879": {
-		"when_party_attack": {
-			"choose_target": {
-				"is_character": true
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"frozen",
-						1
-					]
-				}
-			]
-		}
-	},
-	"3261": {
-		"when_party_attack": {
-			"condition": "party_has_named:King of Eblan",
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						5000
-					]
-				}
-			]
-		}
-	},
-	"3023": {
-		"when_party_attack": {
-			"condition": "party_has_named:Yuri",
-			"choose_target": {
-				"is_type_any": [
-					"Forward",
-					"Monster"
-				]
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
 	},
 	"154": {
 		"when_party_attack": {
@@ -633,21 +551,6 @@
 		]
 	},
 	"58": {
-		"when_cause_damage_to_player": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_tapped": true
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						7000
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -796,38 +699,6 @@
 		}
 	},
 	"41": {
-		"when_blocks": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						6000
-					],
-					"may": true,
-					"may_prompt": "Deal 6000"
-				}
-			]
-		},
-		"when_blocked": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						6000
-					],
-					"may": true,
-					"may_prompt": "Deal 6000"
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -1484,18 +1355,6 @@
 		}
 	},
 	"194": {
-		"when_blocks": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -2228,22 +2087,6 @@
 		]
 	},
 	"216": {
-		"when_attack": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "your"
-			},
-			"instructions": [
-				{
-					"name": "power_change_targets_per_forward",
-					"author": "game",
-					"argument": [
-						1000,
-						1
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,

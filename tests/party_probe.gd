@@ -4,14 +4,14 @@ extends Node
 ## The blocker's damage split is exercised through the Agent seam's default (greedy, 1000-point chunks); the human
 ## arrow window is slice 2 and is not tested here.
 ##
-## IDs are fixed on purpose: 41 Squall and 43 Snow are BOTH ice (party), 29 Red XIII is fire (must not join). The
+## IDs are fixed on purpose: 41 Squall and 55 Dark Knight are BOTH ice (party), 29 Red XIII is fire (must not join). The
 ## first version of this probe searched a candidate list and happily returned the reference card itself, which made
 ## "a second same-element Forward" a copy of the first.
 
 const GAME_SCENE := preload("res://game.tscn")
 
 const ICE_A := 41      # Squall, Forward, 氷
-const ICE_B := 43      # Snow,   Forward, 氷
+const ICE_B := 55      # Dark Knight, Forward, 氷 (no when_attack targeting)
 const FIRE_C := 29     # Red XIII, Forward, 火
 
 var _checks: int = 0

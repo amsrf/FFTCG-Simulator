@@ -148,6 +148,24 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Target-Dependent Event Triggers Migrated
+
+Migrated eight target-dependent event triggers to code:
+
+`41, 43, 58, 194, 216, 1879, 3261, 3023`.
+
+These cover `when_blocks` / `when_blocked` (Squall, Snow), `when_attack`
+(Snow, Wakka), `when_cause_damage_to_player` (Laguna), and
+`when_party_attack` (Red Mage, Queen of Eblan, Chelinka).
+
+Code event conditions are evaluated when the trigger resolves. A broad party
+trigger is therefore queued even when its condition is false; probes drain the
+whole stack rather than treating one queued object as proof of an effect.
+
+Auron 1-001H is deliberately still data-driven: its trigger chooses a Fire
+Backup from hand and plays it, not a field target, so it belongs to a separate
+hand-selection pass.
+
 ### Target-Dependent ETBs Migrated
 
 Migrated all 21 target-dependent enter-the-field effects to code:

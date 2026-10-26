@@ -12,6 +12,23 @@ var _wakka: Card = null
 var _cloud: Card = null
 
 
+## Picks the Forward this probe intends, then completes the session the way Confirm would.
+class PickingAgent extends Agent:
+	var wanted: Card = null
+
+	func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void:
+		var f = game.field
+		if wanted != null and wanted.is_valid_target:
+			f.set_target_card(wanted)
+			game.assistant.on_target_complete()
+			return
+		for c in f.get_all_cards():
+			if c.is_valid_target:
+				f.set_target_card(c)
+				game.assistant.on_target_complete()
+				return
+
+
 func _ready() -> void:
 	await get_tree().process_frame
 	MatchSetup.config = TEST_GROUNDS.config("clean")
@@ -90,7 +107,16 @@ func _check_attack_power() -> void:
 	var zack: Card = _place(12)
 	var before: int = zack.power
 	var count: int = _field.get_front_cards_for("player").size()
-	await _run_instructions(wakka, "when_attack", [zack])
+	var previous = _game.get("player_agent")
+	var picker = PickingAgent.new()
+	picker.bind(_game)
+	picker.wanted = zack
+	_game.set("player_agent", picker)
+	_field.execute_card_effect(wakka, "when_attack")
+	await get_tree().process_frame
+	if _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
+	_game.set("player_agent", previous)
 	_expect(zack.power == before + count * 1000,
 		"Wakka's attack trigger gives the chosen Forward +1000 per controlled Forward (%d -> %d, count %d)" % [
 			before, zack.power, count])

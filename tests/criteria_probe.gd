@@ -87,8 +87,9 @@ func _ready() -> void:
 
 	# --- the data is present and well-formed -------------------------------------------------------------
 	var db = CardDatabase.card_effects
-	_expect(FileAccess.file_exists("res://assets/effects/card_100.gd") and db.has("43"),
-		"card 100 is code-owned and card 43 remains in the effects file")
+	_expect(FileAccess.file_exists("res://assets/effects/card_100.gd")
+		and FileAccess.file_exists("res://assets/effects/card_43.gd"),
+		"cards 100 and 43 are both code-owned")
 	print("[Criteria] 100 -> %s" % str(db.get("100", {})))
 	print("[Criteria] 43  -> %s" % str(db.get("43", {})))
 

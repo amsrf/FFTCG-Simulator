@@ -73,8 +73,16 @@ func _drain() -> void:
 
 ## Finish a pending targeting request the way a click plus Confirm would.
 func _complete_target(card: Card) -> void:
+	var stack = _game.get("stack")
+	if stack.stack_length() > 0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	_field.set_target_card(card)
-	_game.get("assistant").call("on_target_complete")
+	if _field.targeting_picked.size() >= _field.targeting_count:
+		_game.get("assistant").call("on_target_complete")
 
 
 func _ready() -> void:
@@ -122,7 +130,7 @@ func _ready() -> void:
 	_field.execute_card_attack()
 	_expect(not _field.targeting_picked.is_empty() or _game.get("stack").stack_length() > 0,
 		"Queen of Eblan: the trigger asks for a target")
-	_complete_target(victim_a)
+	await _complete_target(victim_a)
 	await _drain()
 	print("[PartyCards] Queen of Eblan dealt %d to %s" % [victim_a.accumulated_damage, victim_a.card_name])
 	_expect(victim_a.accumulated_damage == 5000, "Queen of Eblan: 5000 damage to the chosen opponent Forward")
@@ -137,6 +145,8 @@ func _ready() -> void:
 	var picks_before: int = _field.targeting_picked.size()
 	_field.execute_card_attack()
 	await get_tree().process_frame
+	# A code trigger is enqueued for every party attack; its condition is evaluated when it resolves.
+	await _drain()
 	print("[PartyCards] Queen without King: stack=%d picks %d -> %d mode=%s" % [
 		_game.get("stack").stack_length(), picks_before, _field.targeting_picked.size(),
 		GlobalVariables.get_player_mode()])
@@ -152,7 +162,7 @@ func _ready() -> void:
 	await _drain()
 	_party(chelinka, yuri)
 	_field.execute_card_attack()
-	_complete_target(victim_b)
+	await _complete_target(victim_b)
 	await _drain()
 	print("[PartyCards] Chelinka: %s on field after the break = %s" % [victim_b.card_name, victim_b.is_on_field()])
 	_expect(not victim_b.is_on_field(), "Chelinka: the chosen Forward is broken")
@@ -194,7 +204,7 @@ func _ready() -> void:
 	await _drain()
 	_party(red_mage, squall_b)
 	_field.execute_card_attack()
-	_complete_target(victim_d)
+	await _complete_target(victim_d)
 	await _drain()
 	print("[PartyCards] Red Mage: %s tapped=%s frozen=%s" % [
 		victim_d.card_name, victim_d.tapped, victim_d.status_effects.has("frozen")])
