@@ -5,3 +5,7 @@ extends "res://scripts/effects/card_effect.gd"
 func when_enter_field(ctx) -> void:
 	if await ctx.may("Play a Forward"):
 		await ctx.play_from_hand({"is_type": "Forward", "element": "風", "is_cost_lower_than": 4})
+
+func when_attack(ctx) -> void:
+	var targets: Array = await ctx.choose_targets({"is_type": "Backup", "controller": "player"}, 2)
+	ctx.untap(targets)

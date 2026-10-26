@@ -22,6 +22,12 @@ func handles_event(event: String) -> bool:
 	return has_method(event)
 
 
+## Optional event filter for code-defined triggers. The Field checks this before enqueueing the stack object, so a
+## card can listen to a shared event (card_left_field, summon_cast, ...) without reacting to every instance of it.
+func event_matches(_event: String, _source: Card, _data: Dictionary) -> bool:
+	return true
+
+
 ## What this Summon asks the player to choose WHEN CAST, before it enters the stack. Return a Dictionary for one
 ## target, an Array for staged targets, or {} for no target. The picks are stored on the card and passed to
 ## when_cast() as ctx.targets at resolution.

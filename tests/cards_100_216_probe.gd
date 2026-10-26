@@ -107,8 +107,9 @@ func _ready() -> void:
 		"Cloud 182's Meteorain is a code ability")
 	_expect(load("res://assets/effects/card_198.gd").new().has_method("when_cast"),
 		"Valefor 198's mass damage is code-owned")
-	_expect(effects.get("192", {}).get("on_causing_damage_to_forward", {}).has("on_enter_break_zone"),
-		"Cid Raines 192 attaches an on-break rider")
+	var raines_riders: Array = load("res://assets/effects/card_192.gd").new().damage_caused_riders()
+	_expect(raines_riders.size() == 1 and raines_riders[0].has("on_enter_break_zone"),
+		"Cid Raines 192 attaches a code-owned on-break rider")
 	var ramza_rules: Array = load("res://assets/effects/card_144.gd").new().power_per_rules()
 	_expect(ramza_rules.size() == 1 and int(ramza_rules[0].get("value", 0)) == 1000,
 		"Ramza 144 scales with your Backups")

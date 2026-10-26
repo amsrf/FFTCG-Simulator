@@ -58,15 +58,18 @@ func _ready() -> void:
 	var snow: Card = _card(SNOW)
 	var knight: Card = _card(KNIGHT_55)
 
-	var etb: Dictionary = terra.card_effects.get("when_enter_field", {})
-	_expect(int(etb.get("choose_target", {}).get("count", 1)) == 2, "the ETB allows up to 2 targets")
-	_expect(bool(etb.get("choose_target", {}).get("is_tapped", false)), "and only DULL Forwards")
+	var terra_effect = load("res://assets/effects/card_47.gd").new()
+	_expect(terra_effect.has_method("when_enter_field"), "the ETB is code-owned")
 
 	# --- the ETB, end to end ------------------------------------------------------------------------------
 	_field.execute_card_effect(terra, "when_enter_field")
 	await get_tree().process_frame
-	_expect(GlobalVariables.get_player_mode() == GlobalVariables.Player_mode_TARGET \
-			if false else GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET,
+	_game.stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
+	_expect(GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET,
 		"the ETB opens a targeting session")
 	_expect(squall.is_valid_target, "a dull Forward is a legal target")
 	_expect(not snow.is_valid_target, "an active Forward is not")

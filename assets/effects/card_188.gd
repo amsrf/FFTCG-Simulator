@@ -14,3 +14,6 @@ func auras() -> Array:
 
 func ex_burst_event() -> String:
 	return "when_enter_field"
+
+func when_enter_field(ctx) -> void:
+	await ctx.search_deck({"name": "Tifa"})

@@ -33,6 +33,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Code-defined event triggers filter through `CardEffect.event_matches(event, source, data)` before a stack object
+  is created; `card_left_field`, `summon_cast`, `damage_received` and similar shared events must not react to every
+  instance. Once-per-turn triggers use `Card.claim_event_once(key, turn)`.
 - Static protection and damage rule blocks are code-owned through `CardEffect.static_rules()`; `Card.static_rule()`
   is the single reader and falls back to JSON only while migration is incomplete.
 - `power_per` rules are code-owned through `CardEffect.power_per_rules()`; the unified continuous scan reads code

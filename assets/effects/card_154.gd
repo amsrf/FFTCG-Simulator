@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_enter_field(ctx) -> void:
 	ctx.draw(ctx.owner_id, 1)
+
+func when_party_attack(ctx) -> void:
+	ctx.draw(ctx.owner_id, 1)
+	await ctx.discard(ctx.owner_id, 1)

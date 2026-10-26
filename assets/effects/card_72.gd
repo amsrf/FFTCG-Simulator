@@ -15,3 +15,10 @@ func activated_abilities() -> Array:
 
 func _skill_0(ctx) -> void:
 	await ctx.opponent_mills(2)
+
+func damage_caused_riders() -> Array:
+	return [{
+		"status": "cid_verdict",
+		"duration": 1,
+		"on_enter_break_zone": [{"name": "opponent_mills", "author": "game", "argument": [2]}],
+	}]

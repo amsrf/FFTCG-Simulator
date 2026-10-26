@@ -108,6 +108,16 @@ var copied_skill_token: int = 0
 ## and responded to), but it resolves through Game._resolve_event_trigger instead of its own card data.
 var event_trigger: Dictionary = {}
 var event_context: Dictionary = {}
+var _event_once: Dictionary = {}
+
+
+## True the first time this key is claimed in `turn`, false afterwards. Used by once-per-turn event triggers.
+func claim_event_once(key: String, turn: int) -> bool:
+	var tag: String = "%s:%d" % [key, turn]
+	if _event_once.has(tag):
+		return false
+	_event_once[tag] = true
+	return true
 ## Power currently granted by conditional continuous effects (e.g. Zack/Aerith).
 var current_conditional_bonus: int = 0
 ## KIMAHRI 1-102H. One copied Special Ability, not a library. Empty means no permission. The stack copy takes a
@@ -1055,7 +1065,7 @@ func is_brave() -> bool:
 ## A keyword granted while a board condition holds ("If you control Yuna, Tidus gains Brave"). Evaluated live, like
 ## conditional_power; no status is written, so the board changing is enough to turn it off.
 func has_conditional_status(status: String) -> bool:
-	var rules = card_effects.get("conditional_status", [])
+	var rules = static_rule("conditional_status", [])
 	if rules is Dictionary:
 		rules = [rules]
 	if not (rules is Array):

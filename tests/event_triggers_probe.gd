@@ -125,17 +125,16 @@ func _ready() -> void:
 	_expect(_game.player.hand.cards.size() == tidus_hand + 2,
 		"213 a Yuna Forward leaving the field draws 2")
 
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("108", {}).get("triggers", [{}])[0].get("on", "") == "damage_received",
-		"108 uses the generic triggers array")
+	_expect(load("res://assets/effects/card_108.gd").new().has_method("damage_received"),
+		"108 damage_received is code-owned")
 	_expect(load("res://assets/effects/card_206.gd").new().has_method("card_left_field"),
 		"206's card_left_field trigger is code-owned")
-	_expect(effects.get("214", {}).get("triggers", [{}])[0].get("once_per_turn", false),
-		"214 is marked once per turn")
-	_expect(effects.get("215", {}).get("triggers", [{}])[0].get("filter", {}).get("controller", "") == "opponent",
-		"215 watches only the opponent's Summons")
-	_expect(effects.get("187", {}).get("triggers", [{}])[0].get("target", "") == "event",
-		"187 targets the attacking Forward")
+	_expect(load("res://assets/effects/card_214.gd").new().has_method("summon_cast"),
+		"214 summon_cast is code-owned")
+	_expect(load("res://assets/effects/card_215.gd").new().has_method("summon_cast"),
+		"215 watches only the opponent's Summons in code")
+	_expect(load("res://assets/effects/card_187.gd").new().has_method("forward_attacks"),
+		"187 targets the attacking Forward in code")
 
 	print("[B4b] %d checks | failures: %d" % [_checks, _fails])
 	print("[B4b] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

@@ -8,3 +8,6 @@ func modify_cost_for(ctx, subject: Card, cost: Dictionary) -> Dictionary:
 	if subject.type != "Summon" or subject.card_name != "Bahamut":
 		return cost
 	return ctx.adjust(cost, -2)
+
+func when_attack(ctx) -> void:
+	ctx.add_status([ctx.source], "first_strike", 1)

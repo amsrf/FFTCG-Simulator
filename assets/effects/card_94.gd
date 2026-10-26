@@ -18,3 +18,6 @@ func activated_abilities() -> Array:
 
 func _berserk_dance(ctx) -> void:
 	ctx.damage(ctx.targets, 6000)
+
+func when_attack(ctx) -> void:
+	ctx.add_status([ctx.source], "first_strike", 1)

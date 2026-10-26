@@ -17,3 +17,6 @@ func attack_phase_start(ctx) -> void:
 	var chosen: String = await ctx.choose_element(CHOOSABLE, "Name an Element")
 	if chosen != "":
 		ctx.set_element_until_end_of_turn(ctx.source, chosen)
+
+func when_party_attack(ctx) -> void:
+	ctx.draw(ctx.owner_id, 1)

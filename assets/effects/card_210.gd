@@ -10,3 +10,7 @@ func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
 
 func keywords() -> Array[String]:
 	return ["haste"]
+
+func when_cause_damage_to_player(ctx) -> void:
+	var targets: Array = await ctx.choose_targets({"is_type": "Forward", "controller": "opponent"})
+	ctx.dull(targets)

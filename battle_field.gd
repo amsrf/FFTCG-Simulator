@@ -560,7 +560,10 @@ func trigger_event(event_name: String, context: Dictionary) -> void:
 		# A CODE EFFECT OWNS THIS EVENT FOR THIS CARD. Do not also run its JSON trigger for the same event; a migrated
 		# hook and a leftover JSON entry would fire the ability twice.
 		if source.abilities_enabled() and source.effect_handles_event(event_name):
-			stack.enqueue_code_trigger(source, event_name, context)
+			var source_effect = source.effect()
+			if source_effect == null or not source_effect.has_method("event_matches") \
+					or source_effect.event_matches(event_name, source, context):
+				stack.enqueue_code_trigger(source, event_name, context)
 			continue
 		for index in range(triggers.size()):
 			var trigger = triggers[index]
@@ -1931,7 +1934,12 @@ func cause_damage(target: Card, amount: int, source: Card = null, source_kind: S
 ## Forward leaves the field. That is what makes it survive Cid leaving play, and carrying the CONTROLLER with it is
 ## what sends the mill to the right player. `Card.turn_end()` expires it like any other status.
 func _apply_damage_caused_riders(source: Card, target: Card) -> void:
-	var rules = source.card_effects.get("on_causing_damage_to_forward", [])
+	var rules = []
+	var rider_effect = source.effect() if source.abilities_enabled() else null
+	if rider_effect != null and rider_effect.has_method("damage_caused_riders"):
+		rules = rider_effect.damage_caused_riders()
+	if rules.is_empty():
+		rules = source.card_effects.get("on_causing_damage_to_forward", [])
 	if rules is Dictionary:
 		rules = [rules]
 	if not (rules is Array):

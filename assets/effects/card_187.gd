@@ -25,3 +25,16 @@ func activated_abilities() -> Array:
 func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.damage(targets, 8000)
+
+func event_matches(event: String, source: Card, data: Dictionary) -> bool:
+	if event != "forward_attacks":
+		return false
+	var event_card: Card = data.get("card")
+	return event_card != null and is_instance_valid(event_card) \
+		and event_card.is_type("Forward") and event_card.controller == source.controller
+
+
+func forward_attacks(ctx) -> void:
+	var event_card: Card = ctx.event_data.get("card")
+	if event_card != null and is_instance_valid(event_card):
+		ctx.power_change([event_card], 1000, 1)

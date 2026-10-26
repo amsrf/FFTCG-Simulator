@@ -193,6 +193,11 @@ func _ready() -> void:
 	backup_b.tap()
 	_field.execute_card_effect(vaan, "when_attack")
 	await get_tree().process_frame
+	_stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	_expect(_field.get("targeting_count") == 2, "the attack trigger asks for up to 2 Backups")
 	await _choose_target(backup_a)
 	await _choose_target(backup_b)

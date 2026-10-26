@@ -148,6 +148,18 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Event Triggers and Riders
+
+Moved the remaining event hooks into code:
+when_attack, when_party_attack, when_enter_field, when_cause_damage_to_player,
+forward_attacks, card_left_field, damage_received and summon_cast, plus the
+on_causing_damage_to_forward rider blocks. Added CardEffect.event_matches() so
+shared events can be filtered before a stack object is created, and
+Card.claim_event_once() for once-per-turn triggers.
+
+Removed the four residual apply_effect entries whose code hooks already owned
+the behaviour. JSON numeric entries dropped from 28 to 8.
+
 ### JSON Migration: Static Protection and Damage Rules
 
 Added `CardEffect.static_rules()` and a `Card.static_rule()` reader, then moved
