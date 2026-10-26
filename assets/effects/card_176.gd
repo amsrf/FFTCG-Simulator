@@ -9,3 +9,6 @@ func when_enter_field(ctx) -> void:
 
 func ex_burst_event() -> String:
 	return "when_enter_field"
+
+func static_rules() -> Dictionary:
+	return {"break_zone_exile": true}

@@ -53,10 +53,10 @@ func _ready() -> void:
 	var minwu_rules: Array = load("res://assets/effects/card_171.gd").new().static_rules().get("damage_modifiers", [])
 	_expect(minwu_rules.size() == 1 and minwu_rules[0].get("conditions", [{}])[0].has("compare_values"),
 		"Minwu 171 uses the generic compare_values condition")
-	var yuna: Dictionary = effects.get("176", {})
-	_expect(load("res://assets/effects/card_176.gd").new().ex_burst_event() == "when_enter_field"
-		and load("res://assets/effects/card_176.gd").new().has_method("when_enter_field")
-		and bool(yuna.get("break_zone_exile", false)),
+	var yuna_effect = load("res://assets/effects/card_176.gd").new()
+	_expect(yuna_effect.ex_burst_event() == "when_enter_field"
+		and yuna_effect.has_method("when_enter_field")
+		and yuna_effect.static_rules().get("break_zone_exile", false) == true,
 		"Yuna 176 has her return ETB, code EX Burst and exile rule")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})

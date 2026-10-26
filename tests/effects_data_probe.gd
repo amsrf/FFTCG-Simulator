@@ -93,7 +93,7 @@ func _ready() -> void:
 			if target == null or not target.has_method(what):
 				bad.append("%s: '%s' has no method '%s'" % [key, who, what])
 	_expect(effects.has("_definitions"), "the JSON carries its own definitions block")
-	_expect(instructions > 0, "the file contains instructions to validate (%d)" % instructions)
+	_expect(instructions == 0, "no JSON card instructions remain (the file is definitions only)")
 	_expect(bad.is_empty(), "every instruction name resolves to a real method %s" % ("" if bad.is_empty() else str(bad)))
 
 	# --- validate damage_modifiers ------------------------------------------------------------------------

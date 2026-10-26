@@ -1435,7 +1435,7 @@ func cause_damage():
 	# member suppresses EX Burst, the damage it puts in the zone is covered.
 	var source: Card = field.attacker_card
 	for member in field.party_members():
-		if member != null and is_instance_valid(member) 				and (member.card_effects.has("ex_burst_disabler") or member.status_effects.has("ex_burst_disabler")):
+		if member != null and is_instance_valid(member) 				and (member.static_rule("ex_burst_disabler", false) == true or member.status_effects.has("ex_burst_disabler")):
 			source = member
 			break
 	# The DEFENDING player (whoever isn't taking the turn) takes the damage, so
@@ -2121,7 +2121,7 @@ func _send_card_to_graveyard(card: Card) -> bool:
 
 func _yuna_exiles_break_zone() -> bool:
 	for other in field.get_all_cards():
-		if other != null and other.card_effects.has("break_zone_exile"):
+		if other != null and other.static_rule("break_zone_exile", false) == true:
 			return true
 	return false
 
@@ -2193,11 +2193,11 @@ func would_break_light_dark_limit(card: Card) -> bool:
 			same_kind = true
 		else:
 			other_kind = true
-		if str(other.card_effects.get("light_dark_exempt", "")) == kind:
+		if str(other.static_rule("light_dark_exempt", "")) == kind:
 			enabled_by_field = true
 	# The exceptional card itself may enter beside cards of its OWN kind, never beside the opposite kind. While it
 	# is on the field it lifts the limit for that kind (the "you can play 2 or more Light Characters" clause).
-	if str(card.card_effects.get("light_dark_exempt", "")) == kind:
+	if str(card.static_rule("light_dark_exempt", "")) == kind:
 		return other_kind
 	if enabled_by_field:
 		return false

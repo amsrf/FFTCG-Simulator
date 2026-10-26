@@ -345,7 +345,7 @@ func _apply_entry_rules(entering: Card) -> void:
 			continue
 		if not source.abilities_enabled():
 			continue
-		var rules = source.card_effects.get("on_character_enter", [])
+		var rules = source.static_rule("on_character_enter", [])
 		if rules is Dictionary:
 			rules = [rules]
 		if not (rules is Array):
@@ -617,7 +617,7 @@ func party_grants_brave(card: Card) -> bool:
 	if card == null or attacking_party.size() < 2 or not attacking_party.has(card):
 		return false
 	for c in get_all_cards():
-		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.card_effects.has("party_brave"):
+		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.static_rule("party_brave", false) == true:
 			return true
 	return false
 	

@@ -148,6 +148,17 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration Complete: Card Data Is Code Owned
+
+Migrated the last static hooks: Ranger's activated ability, Gippal's party
+Brave, Bartz's all-jobs, Exdeath's EX BURST disabler, Ultimecia's enter-dull
+rule, Yuna's Break Zone exile, and Cosmos/Chaos any-element plus Light/Dark
+exemptions.
+
+Every reader now asks `Card.static_rule()` or a code effect hook first. The
+numeric section of `card_effects.json` is empty: zero card entries remain. The
+file is now only the `_definitions` reference block.
+
 ### JSON Migration: Event Triggers and Riders
 
 Moved the remaining event hooks into code:

@@ -59,7 +59,7 @@ func _run_ex_burst(card: Card, source: Card = null) -> void:
 	# EXDEATH 122: "Any card put in the Damage Zone due to Exdeath cannot use its EX Burst."
 	# Checked against the SOURCE of the damage, not globally: another attacker's damage still bursts normally.
 	if source != null and is_instance_valid(source) \
-			and (source.card_effects.has("ex_burst_disabler") or source.status_effects.has("ex_burst_disabler")):
+			and (source.static_rule("ex_burst_disabler", false) == true or source.status_effects.has("ex_burst_disabler")):
 		print("[ExBurst] suppressed for %s (damage dealt by %s)" % [card.card_name, source.card_name])
 		return
 	if game == null or not game.has_method("run_ex_burst"):

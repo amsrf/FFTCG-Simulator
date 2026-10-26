@@ -53,8 +53,7 @@ func _count_on_field(side: String, card_name: String) -> int:
 
 
 func _ready() -> void:
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	var rule: Dictionary = effects.get("152", {}).get("on_character_enter", [{}])[0]
+	var rule: Dictionary = load("res://assets/effects/card_152.gd").new().static_rules().get("on_character_enter", [{}])[0]
 	_expect(rule.get("action") == "dull", "Ultimecia 152 has an on_character_enter dull rule")
 	_expect(rule.get("targets", {}).get("exclude", {}).get("is_named") == "Ultimecia",
 		"and excludes every card named Ultimecia")

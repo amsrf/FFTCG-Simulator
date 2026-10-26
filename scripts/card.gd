@@ -1609,7 +1609,7 @@ func is_cost_at_most(value: int) -> bool:
 ## "Bartz has all the jobs" (81). Every job check succeeds for him, so a future "choose 1 [Job (X)]" finds him.
 ## A normal card matches by SUBSTRING, the same way the deck editor's job filter reads it.
 func is_job(value: String) -> bool:
-	if card_effects.has("all_jobs"):
+	if static_rule("all_jobs", false) == true:
 		return true
 	var data: Dictionary = CardDatabase.card_database[id - 1]
 	return str(value).to_lower() in str(data.get("job_en", "")).to_lower()
@@ -1732,7 +1732,7 @@ func light_dark_kind() -> String:
 ## A Backup can print "produces CP of any Element" (Cosmos/Chaos). The card only behaves that way while it is on
 ## the field; `mana_element()` is what the payment UI asks instead of reading `element` directly.
 func produces_any_element() -> bool:
-	return is_on_field() and (card_effects.has("produces_any_element") or status_effects.has("produces_any_element"))
+	return is_on_field() and (static_rule("produces_any_element", false) == true or status_effects.has("produces_any_element"))
 
 func mana_element() -> String:
 	return "any" if produces_any_element() else element

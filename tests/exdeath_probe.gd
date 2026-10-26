@@ -64,7 +64,7 @@ func _ready() -> void:
 	var exdeath: Card = _card(EXDEATH)
 	var squall: Card = _card(SQUALL)
 	var other_source: Card = _game.call("create_card", SQUALL, "player")
-	_expect(exdeath != null and exdeath.card_effects.has("ex_burst_disabler"),
+	_expect(exdeath != null and exdeath.static_rule("ex_burst_disabler", false) == true,
 		"Exdeath carries the ex_burst_disabler property")
 	_expect(_opponent.deck.deck_cards[0].id == IFRIT, "the next damage card is the EX BURST Ifrit")
 

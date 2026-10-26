@@ -1,53 +1,4 @@
 {
-	"8": {
-		"activated_ability": [
-			{
-				"instructions": [
-					{
-						"name": "take_damage",
-						"author": "target",
-						"argument": [
-							2000
-						]
-					}
-				],
-				"tap": true,
-				"choose_target": {
-					"is_type": "Forward",
-					"is_cost_lower_than": 3
-				},
-				"cost": {
-					"火": 1,
-					"neutral": 1
-				}
-			}
-		]
-	},
-	"554": {
-		"party_brave": true
-	},
-	"81": {
-		"all_jobs": true
-	},
-	"122": {
-		"ex_burst_disabler": ""
-	},
-	"152": {
-		"on_character_enter": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"exclude": {
-						"is_named": "Ultimecia"
-					}
-				},
-				"action": "dull"
-			}
-		]
-	},
-	"176": {
-		"break_zone_exile": true
-	},
 	"_definitions": {
 		"about": "Machine-readable reference for this file. Keys beginning with _ are documentation, not card ids.",
 		"context": {
@@ -259,13 +210,5 @@
 			"fields": "may, may_prompt, once_per_turn, requires_active, choose_target, instructions.",
 			"resolution": "Matched triggers are placed on the stack as effect copies. The may choice, target selection and instructions run when the stack object resolves, after either player may respond."
 		}
-	},
-	"183": {
-		"produces_any_element": true,
-		"light_dark_exempt": "light"
-	},
-	"184": {
-		"produces_any_element": true,
-		"light_dark_exempt": "dark"
 	}
 }
