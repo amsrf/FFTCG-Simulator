@@ -84,6 +84,12 @@ func _pick(card: Card) -> void:
 
 
 func _pick_many(cards: Array) -> void:
+	if _stack != null and _stack.stack_length() > 0 			and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		_stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	for c in cards:
 		_field.set_target_card(c)
 	_assistant.call("on_target_complete")
@@ -225,7 +231,7 @@ func _ready() -> void:
 	var f2: Card = _make(SQUALL, "opponent")
 	var jihl: Card = _make(193, "player")
 	_field.execute_card_effect(jihl, "when_enter_field")
-	_pick_many([f1, f2])
+	await _pick_many([f1, f2])
 	await _drain()
 	_expect(f1.status_effects.has("frozen") and f2.status_effects.has("frozen"),
 		"Jihl 193 freezes both chosen Forwards")

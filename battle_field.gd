@@ -2034,15 +2034,15 @@ func notify_targets_chosen() -> void:
 		execute_card_effect(card, "when_chosen")
 
 func _on_stack_execute_card_effect(card: Card) -> void:
-	# Targeting session is over: clear all targeting state so the next
-	# session starts fresh.
-	# EVERY arc, not just the aiming one. A multi-target session leaves a locked arc on each pick, and freeing only
-	# `arrow` left the rest of them in the scene pointing at nothing.
-	_clear_target_arrows()
-	target_card = null
-	source_card = null
-	targeting_allow_cancel = false
-	reset_targets()
+	# CODE EVENTS OPEN THEIR TARGETING SESSION INSIDE THE HANDLER, so this pre-clear would wipe the arc the handler
+	# just spawned. Their post-resolution cleanup is enough. JSON effects and event triggers still need the old
+	# pre-clear because their target session existed before resolution.
+	if card.effect_event.is_empty():
+		_clear_target_arrows()
+		target_card = null
+		source_card = null
+		targeting_allow_cancel = false
+		reset_targets()
 
 ## Free every arc this session spawned: the aiming one and the locked ones. Called wherever a session ends.
 func _clear_target_arrows() -> void:

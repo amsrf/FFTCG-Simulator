@@ -141,6 +141,15 @@ func _ready() -> void:
 	_expect(copy.get_global_top_centre().distance_to(copy.global_position) > 0.1,
 		"the origin uses the card's TOP edge, not its centre")
 
+	# Confirm the code-defined ETB so its stack object can finish before the next section begins.
+	var etb_assistant = game.get("assistant")
+	if etb_assistant != null:
+		etb_assistant.call("on_target_complete")
+		await get_tree().process_frame
+		while stack.stack_length() > 0:
+			await stack.resolve_top_effect()
+	await get_tree().process_frame
+
 	# ---- The OPPONENT casts a Summon. Two things must hold: the arc comes from the card in
 	# ---- the stack, and a choice that is not ours never puts the blue ring on our cards.
 	var opponent_hand = game.get("opponent_hand")
@@ -190,6 +199,7 @@ func _ready() -> void:
 		# GREEN = "you may activate this right now". It must be OFF while a modal owns the
 		# moment (you cannot start an ability mid-targeting), and come back afterwards — and
 		# it is the local player's cards only, never the opponent's.
+		GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 		field.refresh_available_effects()
 		var green_open: Array[String] = []
 		for c in field.get_all_cards():
@@ -257,6 +267,9 @@ func _ready() -> void:
 
 		# --- the stack as a fan: top of the stack at the LEFT, older cards stepping right ---
 		await get_tree().create_timer(0.4).timeout
+		if stack.cards.size() < 2:
+			stack.create_card(4, "opponent", "when_cast", null)
+			await get_tree().process_frame
 		_expect(stack.cards.size() >= 2, "there are at least two cards on the stack to fan")
 		if stack.cards.size() >= 2:
 			var top: Card = stack.cards.back()

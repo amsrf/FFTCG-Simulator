@@ -60,21 +60,6 @@
 		]
 	},
 	"12": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "suffer_damage",
-					"author": "target",
-					"argument": [
-						2000
-					]
-				}
-			],
-			"choose_target": {
-				"is_type": "Forward",
-				"check_controller": "opponent"
-			}
-		},
 		"conditional_power": [
 			{
 				"condition": {
@@ -86,22 +71,6 @@
 		]
 	},
 	"64": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Backup",
-				"count": 3,
-				"exclude": {
-					"is_named": "Aerith"
-				}
-			},
-			"instructions": [
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -128,19 +97,6 @@
 				]
 			}
 		]
-	},
-	"31": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "tap",
-					"author": "target"
-				}
-			],
-			"choose_target": {
-				"is_type": "Forward"
-			}
-		}
 	},
 	"71": {
 		"cannot_be_chosen": {
@@ -268,33 +224,6 @@
 	},
 	"75": {
 		"haste": true
-	},
-	"82": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Backup",
-				"controller": "player"
-			},
-			"instructions": [
-				{
-					"name": "untap_all_matching",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Backup",
-							"controller": "player"
-						}
-					],
-					"condition": "cast_this_turn:Alexander"
-				},
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": [],
-					"condition": "if_last_did_not_succeed"
-				}
-			]
-		}
 	},
 	"42": {
 		"conditional_power": [
@@ -661,22 +590,7 @@
 				},
 				"value": 2000
 			}
-		],
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						2000
-					]
-				}
-			]
-		}
+		]
 	},
 	"20": {
 		"when_attack": {
@@ -759,28 +673,6 @@
 	},
 	"59": {
 		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				},
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"frozen",
-						1
-					],
-					"condition": "controls:Squall"
-				}
-			]
-		},
 		"conditional_power": [
 			{
 				"condition": {
@@ -976,19 +868,6 @@
 		"ex_burst_disabler": ""
 	},
 	"112": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_character": true,
-				"controller": "player"
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -1026,20 +905,7 @@
 		}
 	},
 	"118": {
-		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_tapped": true
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_enter_field"
 	},
 	"123": {
 		"when_cast": {
@@ -1096,66 +962,10 @@
 		]
 	},
 	"132": {
-		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
-	"136": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_cost_at_most": 2
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
-	"137": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_cost_at_most": 3
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_enter_field"
 	},
 	"142": {
-		"haste": true,
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent"
-			},
-			"instructions": [
-				{
-					"name": "dull_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"haste": true
 	},
 	"143": {
 		"ex_burst": "when_cast",
@@ -1257,36 +1067,9 @@
 		]
 	},
 	"186": {
-		"first_strike": true,
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Backup"
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"first_strike": true
 	},
 	"191": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "power_change",
-					"author": "target",
-					"argument": [
-						3000,
-						1
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -1324,42 +1107,10 @@
 					]
 				}
 			]
-		},
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent",
-				"is_tapped": false
-			},
-			"instructions": [
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						4000
-					]
-				}
-			]
 		}
 	},
 	"193": {
 		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"count": 2
-			},
-			"instructions": [
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"frozen",
-						1
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -1419,21 +1170,7 @@
 		}
 	},
 	"212": {
-		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"controller": "opponent",
-				"is_cost_at_most": 3
-			},
-			"instructions": [
-				{
-					"name": "return_targets_to_hand",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+		"ex_burst": "when_enter_field"
 	},
 	"101": {
 		"ex_burst": "when_enter_field",
@@ -1584,21 +1321,6 @@
 	},
 	"127": {
 		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "power_change",
-					"author": "target",
-					"argument": [
-						-5000,
-						1
-					]
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,
@@ -1907,18 +1629,6 @@
 	},
 	"176": {
 		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward"
-			},
-			"instructions": [
-				{
-					"name": "return_targets_to_hand",
-					"author": "game",
-					"argument": []
-				}
-			]
-		},
 		"break_zone_exile": true
 	},
 	"109": {
@@ -2397,50 +2107,6 @@
 			"resolution": "Matched triggers are placed on the stack as effect copies. The may choice, target selection and instructions run when the stack object resolves, after either player may respond."
 		}
 	},
-	"211": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Forward",
-				"is_tapped": false
-			},
-			"instructions": [
-				{
-					"name": "add_status_to_targets",
-					"author": "game",
-					"argument": [
-						"rygdea_mark",
-						1,
-						{
-							"on_enter_break_zone": [
-								{
-									"name": "choose_target",
-									"author": "game",
-									"argument": [
-										{
-											"is_type": "Forward",
-											"controller": "opponent"
-										}
-									]
-								},
-								{
-									"name": "dull_targets",
-									"author": "game",
-									"argument": []
-								}
-							]
-						}
-					]
-				},
-				{
-					"name": "damage_targets",
-					"author": "game",
-					"argument": [
-						3000
-					]
-				}
-			]
-		}
-	},
 	"183": {
 		"produces_any_element": true,
 		"light_dark_exempt": "light"
@@ -2504,19 +2170,6 @@
 		]
 	},
 	"131": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Backup",
-				"is_cost_at_most": 1
-			},
-			"instructions": [
-				{
-					"name": "break_targets",
-					"author": "game",
-					"argument": []
-				}
-			]
-		},
 		"skill": [
 			{
 				"s_cost": true,

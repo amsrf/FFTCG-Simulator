@@ -165,7 +165,8 @@ func _check_cait_sith_skill() -> void:
 
 func _check_cait_sith_data() -> void:
 	var cait: Card = _place(131, "player")
-	_expect(cait.card_effects.has("when_enter_field"), "Cait Sith has its ETB break-Backup effect")
+	_expect(load("res://assets/effects/card_131.gd").new().has_method("when_enter_field"),
+		"Cait Sith's ETB break-Backup effect is code-owned")
 	_expect(cait.card_effects.has("skill"), "and its Slots skill")
 	var slots: Dictionary = cait.card_effects["skill"][0]
 	_expect(str(slots.get("s_cost", "")).to_lower() == "true" or bool(slots.get("s_cost", false)),

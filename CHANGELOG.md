@@ -148,6 +148,26 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Target-Dependent ETBs Migrated
+
+Migrated all 21 target-dependent enter-the-field effects to code:
+
+`9, 12, 31, 59, 64, 82, 112, 118, 127, 131, 132, 136, 137, 142, 176, 186, 191,
+192, 193, 211, 212`.
+
+The handler now chooses targets when the stack object resolves, using
+`EffectContext.choose_targets()`. The local player can pick, Confirm, Cancel and
+step back through the normal targeting UI; agents use the same seam.
+
+One lifecycle fix made this possible: `_on_stack_execute_card_effect()` no longer
+pre-clears targeting state for a code event. A code event opens its target
+session inside the handler, so the old pre-clear wiped the arc it had just
+created. JSON effects and event triggers keep the pre-clear.
+
+The flow probe now confirms the code ETB target and resolves the stack before
+its later sections; it also forces its own modal for the green-suppression check
+and adds a second stack object for the fan check.
+
 ### Mechanical Event Triggers Migrated
 
 Moved 17 non-targeting event triggers to code:

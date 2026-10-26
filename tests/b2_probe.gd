@@ -53,9 +53,9 @@ func _ready() -> void:
 		"Minwu 171 uses the generic compare_values condition")
 	var yuna: Dictionary = effects.get("176", {})
 	_expect(yuna.get("ex_burst") == "when_enter_field"
-		and yuna.get("when_enter_field", {}).get("choose_target", {}).get("is_type") == "Forward"
+		and load("res://assets/effects/card_176.gd").new().has_method("when_enter_field")
 		and bool(yuna.get("break_zone_exile", false)),
-		"Yuna 176 has the return ETB, its EX Burst and the exile rule")
+		"Yuna 176 has her return ETB, EX Burst and exile rule")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})
 	_game = GAME_SCENE.instantiate()
