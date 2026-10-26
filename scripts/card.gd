@@ -1548,7 +1548,11 @@ func effect_handles_event(event: String) -> bool:
 ## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits
 ## under Stack. Either way the Game is the grandparent and EffectContext resolves Field from it.
 func make_effect_context(event: String = "static", data: Dictionary = {}, effect_card: Card = null, targets: Array = []):
-	var parent: Node = get_parent()
+	# USE THE STACK COPY TO FIND THE GAME. A self-sacrificing ability's source has already left the field by the time
+	# the ability resolves, so walking up from this card reaches the Break Zone's PlayerSide, not the Game. The effect
+	# copy is on the Stack, whose parent IS the Game, and that is the stable path for every resolving ability.
+	var anchor: Node = effect_card if effect_card != null and is_instance_valid(effect_card) and effect_card.is_inside_tree() else self
+	var parent: Node = anchor.get_parent()
 	var game: Node = parent.get_parent() if parent != null else null
 	return EFFECT_CONTEXT.new(game, self, event, data, effect_card, targets)
 

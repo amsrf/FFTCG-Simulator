@@ -161,7 +161,7 @@ func shatter_paid(target_card: Card = null) -> void:
 ##
 ## The script is preloaded rather than named as a class: a brand-new `class_name` is not in Godot's global class cache
 ## until the editor rescans, so referring to PaymentOrb by name works in the editor and fails headless.
-func _launch_orb(world_parent: Node, from: Vector3, colour: Color, target_card: Card) -> Node3D:
+func _launch_orb(world_parent: Node, from: Vector3, colour: Color, target_card) -> Node3D:
 	if target_card == null or not is_instance_valid(target_card):
 		return null
 	var orb: Node3D = preload("res://scripts/payment_orb.gd").new()

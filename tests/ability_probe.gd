@@ -98,6 +98,30 @@ func _ready() -> void:
 	_expect(victim.accumulated_damage == 6000, "Vincent's Berserk Dance deals 6000 to the chosen Forward")
 	_expect(not hand.cards.has(duplicate), "the S cost discarded the same-named card")
 
+	# 66 Dancer: a no-target, no-mana ability. After the tap it asks for the normal Confirm, then the handler damages
+	# every opponent Forward.
+	var dancer: Card = _make(66, "player")
+	var f1: Card = _make(41, "opponent")
+	var f2: Card = _make(43, "opponent")
+	_game.set("priority_holder", 1)
+	GlobalVariables.refresh_mode()
+	field.begin_skill_activation(dancer, 0)
+	stack.confirm_skill_without_target_then_priority()
+	var guard2: int = 0
+	while stack.stack_length() == 0 and guard2 < 60:
+		await get_tree().create_timer(0.05).timeout
+		guard2 += 1
+	if stack.stack_length() > 0:
+		await stack.resolve_top_effect()
+	_expect(f1.accumulated_damage == 1000 and f2.accumulated_damage == 1000,
+		"Dancer's code ability damages every opponent Forward")
+
+	# Multi-ability descriptors are exposed in order, with their own texts.
+	var firion_effect = load("res://assets/effects/card_22.gd").new()
+	_expect(firion_effect.activated_abilities().size() == 4, "Firion exposes four activated abilities")
+	var yshtola_effect = load("res://assets/effects/card_84.gd").new()
+	_expect(yshtola_effect.activated_abilities().size() == 2, "Y'shtola exposes two activated abilities")
+
 	print("[Ability] %d checks | failures: %d" % [_checks, _fails])
 	print("[Ability] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

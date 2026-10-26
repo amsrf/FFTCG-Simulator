@@ -133,7 +133,20 @@ creating duplicates.
 The JSON `skill` entries for `3`, `47`, `49`, `145` were removed once their specs landed; card 47 keeps its
 `when_enter_field` entry. Vincent `94` followed as the first **S-cost** code ability (`s_cost`, Dull, target, 6000
 damage), and the S-cost picker now reads `activation_skill()` instead of indexing `card_effects["skill"]`, so code
-abilities can use the same S payment flow. The ability probe is now 9 checks. Full suite and boot are green.
+abilities can use the same S payment flow.
+
+The next activated-ability batch moved `10`, `22`, `36`, `54`, `66`, `78`, `84`, `88`, `100`, `114`, `120`, `121`
+and `189` to code as well. It exercises self-sacrifice, discard costs, S costs, all-opponent damage, multi-ability
+ordering (Firion's four and Y'shtola's two), and target-bound power changes.
+
+Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
+
+- `Card.make_effect_context()` now finds the Game through the **stack copy**, not through the source. A sacrificed
+  source is already in the Break Zone when its ability resolves, so the old walk reached `PlayerSide`.
+- `CrystalCost._launch_orb()` accepts an untyped target and checks validity there; a freed proxy target otherwise
+  failed Godot's argument type check before the function body could guard it.
+
+The ability probe is now 12 checks and the self-sacrifice probe is 14 checks. Full suite and boot are green.
 
 ### Silence Status Icon
 
