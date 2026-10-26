@@ -45,7 +45,7 @@ func _ready() -> void:
 	_field = _game.get("field")
 
 	var mystic: Card = _card(MYSTIC)
-	var skills: Array = mystic.card_effects.get("skill", [])
+	var skills: Array = mystic.activation_skills()
 	_expect(skills.size() == 1, "Mystic has her one ability")
 	_expect(skills.size() == 1 and skills[0].has("sacrifice"), "and its cost is a sacrifice")
 

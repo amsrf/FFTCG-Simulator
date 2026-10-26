@@ -69,8 +69,8 @@ func _ready() -> void:
 	_expect(_field.can_activate_now(yshtola), "and so are Y'shtola's")
 
 	# --- the data -----------------------------------------------------------------------------------------
-	var firion_skills: Array = firion.card_effects.get("skill", [])
-	var yshtola_skills: Array = yshtola.card_effects.get("skill", [])
+	var firion_skills: Array = firion.activation_skills()
+	var yshtola_skills: Array = yshtola.activation_skills()
 	print("[Activated] Firion %d abilities, Y'shtola %d" % [firion_skills.size(), yshtola_skills.size()])
 	_expect(firion_skills.size() == 4, "Firion has all four abilities")
 	_expect(not bool(firion_skills[0].get("tap", false)), "none of them dulls him")

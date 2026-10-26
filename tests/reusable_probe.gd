@@ -98,7 +98,7 @@ func _cheque_cosmos_chaos() -> void:
 func _check_kefka() -> void:
 	var kefka: Card = _place(104, "player")
 	var target: Card = _place(41, "player")
-	_expect(kefka.card_effects.has("skill"), "Kefka 104 has its Dull skill")
+	_expect(kefka.activation_skills().size() == 1, "Kefka 104 has its code-defined Dull ability")
 	target.add_status_effect("break_at_end_of_turn", 1)
 	_field.end_phase_cleanup()
 	_expect(not target.is_on_field(), "Kefka's delayed-break status breaks the Forward at end of turn")

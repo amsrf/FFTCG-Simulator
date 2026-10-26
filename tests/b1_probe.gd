@@ -101,8 +101,10 @@ func _ready() -> void:
 		"Warrior of Light 155 grants First Strike as a status aura")
 	_expect(effects.get("188", {}).get("aura", [{}])[0].get("status") == "haste",
 		"Zangan 188 grants Haste")
-	_expect(effects.get("139", {}).get("skill", [{}])[0].get("instructions", [{}])[0].get("name")
-		== "cast_summon_for_free", "Summoner 139 casts a Summon for free")
+	var summoner_effect = load("res://assets/effects/card_139.gd").new()
+	var summoner_specs: Array = summoner_effect.activated_abilities()
+	_expect(summoner_specs.size() == 1 and summoner_specs[0].run.is_valid(),
+		"Summoner 139's free-Summon ability is code-owned")
 	_expect(effects.get("163", {}).get("power_per", {}).get("count", {}).has("exclude"),
 		"Tidus 163 counts Forwards other than himself")
 

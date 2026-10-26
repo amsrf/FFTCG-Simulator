@@ -83,13 +83,12 @@ func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(effects.get("70", {}).has("when_enter_field")
 		or FileAccess.file_exists("res://assets/effects/card_70.gd"), "Thief (70) has an ETB entry")
-	var rikku_skills: Array = effects.get("89", {}).get("skill", [])
-	_expect(rikku_skills.size() == 2, "Rikku (89) has two abilities")
-	var s_skill: Dictionary = rikku_skills[1] if rikku_skills.size() > 1 else {}
-	var s_instructions: Array = s_skill.get("instructions", [])
-	_expect(bool(s_skill.get("s_cost", false)) and not s_instructions.is_empty()
-			and str(s_instructions[0].get("name", "")) == "opponent_mills",
-		"Rikku's S ability is the mill-2 one")
+	var rikku_effect = load("res://assets/effects/card_89.gd").new()
+	var rikku_specs: Array = rikku_effect.activated_abilities()
+	_expect(rikku_specs.size() == 2, "Rikku (89) has two code abilities")
+	var s_skill = rikku_specs[1] if rikku_specs.size() > 1 else null
+	_expect(s_skill != null and s_skill.s_cost and s_skill.run.is_valid(),
+		"Rikku's S ability is the code-owned mill-2 one")
 
 	print("[Mill] %d checks | failures: %d" % [_checks, _fails])
 	print("[Mill] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

@@ -31,6 +31,8 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - Activated abilities use `AbilitySpec` (`scripts/effects/ability_spec.gd`) via `activated_abilities()` and
   `_ability(...)`: one object carries text, costs, target timing and the handler. Event hooks do not get this
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
+- When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
+  the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
 - `Card.current_elements()` is a live query: printed `element` stays immutable, while `effect.current_elements(ctx,
   card)` may add or replace Elements. `is_element()` and every criteria/cost check must go through it.
 - Keep class references by path (`preload("res://...")`) for new effect scripts; Godot's headless run does not have a

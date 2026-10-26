@@ -65,7 +65,7 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
-	var skills: Array = rikku.card_effects.get("skill", [])
+	var skills: Array = rikku.activation_skills()
 	_expect(skills.size() == 2, "Rikku has two abilities (%d)" % skills.size())
 	_expect(skills.size() == 2 and not str(skills[0].get("text", "")).is_empty()
 			and not str(skills[1].get("text", "")).is_empty(),

@@ -65,7 +65,7 @@ func _ready() -> void:
 	var chemist: Card = _card(CHEMIST)
 
 	# --- 10 Black Mage: sacrifice, pay fire, 4000 damage ----------------------------------------------------
-	var mage_skill: Dictionary = mage.card_effects["skill"][0]
+	var mage_skill: Dictionary = mage.activation_skills()[0]
 	_expect(bool(mage_skill.get("sacrifice", {}).get("is_source", false)),
 		"Black Mage's cost sacrifices the source itself")
 	_expect(_field.can_activate_now(mage), "the ability is available")
@@ -97,7 +97,7 @@ func _ready() -> void:
 
 	# --- 88 Archer: sacrifice, pay wind, break a cheap Backup ----------------------------------------------
 	_game.set("priority_holder", 1)
-	var archer_skill: Dictionary = archer.card_effects["skill"][0]
+	var archer_skill: Dictionary = archer.activation_skills()[0]
 	_expect(bool(archer_skill.get("sacrifice", {}).get("is_source", false)),
 		"Archer sacrifices itself too")
 	_expect(bool(archer_skill.get("choose_target", {}).get("is_cost_at_most", false)),

@@ -125,12 +125,6 @@
 		}
 	},
 
-	"100":{
-		"skill":[{"tap":true, "cost":{"土":1},
-			"choose_target":{"is_type":"Forward","is_blocking":true},
-			"instructions":[{"name":"power_change","author":"target","argument":[1000, 1]}]}]
-	},
-
 	"62":{
 		"apply_effect":{"is_type":"Forward"},
 		"when_cast":{
@@ -156,18 +150,6 @@
 				{"name":"add_status_to_targets","author":"game","argument":["frozen", 1],"condition":"cast_this_turn:Shiva"}
 			]
 		}
-	},
-
-	"54":{
-		"skill":[{"tap":true, "cost":{"氷":2},
-			"apply_effect":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]}]
-	},
-
-	"66":{
-		"skill":[{"tap":true, "cost":{},
-			"apply_effect":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]}]
 	},
 
 	"38":{
@@ -212,18 +194,6 @@
 				{"name":"return_from_break_zone","author":"game","argument":[true],"condition":"if_last_succeeded"}
 			]
 		}
-	},
-
-	"13":{
-		"skill":[{
-			"cost":{},
-			"tap":true,
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[
-				{"name":"damage_targets","author":"game","argument":[4000],"condition":"cast_this_turn:Brynhildr"},
-				{"name":"damage_targets","author":"game","argument":[2000],"condition":"if_last_did_not_succeed"}
-			]
-		}]
 	},
 
 	"82":{
@@ -336,14 +306,6 @@
 			]
 		}
 	},
-	"19":{
-		"skill":[{
-			"cost":{"火":1},
-			"tap":true,
-			"choose_target":{"is_type":"Backup","is_element":"Fire","controller":"player"},
-			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
-		}]
-	},
 	"23":{
 		"ex_burst":"when_cast",
 		"when_cast":{
@@ -356,22 +318,6 @@
 		"when_enter_field":{
 			"instructions":[{"name":"damage_targets","author":"game","argument":[3000]}]
 		}
-	},
-	"34":{
-		"skill":[{
-			"cost":{"氷":3},
-			"tap":true,
-			"apply_effect":{"is_type":"Forward","controller":"opponent"},
-			"instructions":[{"name":"dull_targets","author":"game","argument":[]}]
-		}]
-	},
-	"35":{
-		"skill":[{
-			"cost":{"氷":2},
-			"tap":true,
-			"choose_target":{"is_type":"Forward"},
-			"instructions":[{"name":"dull_targets","author":"game","argument":[]}]
-		}]
 	},
 	"39":{
 		"ex_burst":"when_cast",
@@ -414,26 +360,6 @@
 				}
 			]
 		}
-	},
-	"89":{
-		"skill":[
-			{
-				"cost":{"風":1},
-				"tap":true,
-				"text":"《風》《Dull》 Your opponent puts 1 card from the top of their deck into the Break Zone.",
-				"instructions":[{"name":"opponent_mills","author":"game","argument":[1]}]
-			},
-			{
-				"s_cost":true,
-				"cost":{"風":1},
-				"tap":true,
-				"text":"《S》《風》《Dull》 Your opponent puts the top 2 cards of their deck into the Break Zone. You draw 1 card.",
-				"instructions":[
-					{"name":"opponent_mills","author":"game","argument":[2]},
-					{"name":"draw_cards","author":"game","argument":[1]}
-				]
-			}
-		]
 	},
 	"27":{
 		"cannot_be_blocked_by":{"greater_power":true},
@@ -600,115 +526,6 @@
 		"ex_burst":"when_enter_field",
 		"when_enter_field":{"instructions":[{"name":"untap_all_matching","author":"game","argument":[{"is_character":true,"controller":"player","is_element":"風"}]}]}
 	},
-	"22":{
-		"skill":[
-			{
-				"cost":{"neutral":1},
-				"text":"《1》: Firion gains First Strike until the end of the turn.",
-				"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]
-			},
-			{
-				"cost":{"neutral":1},
-				"text":"《1》: Firion gains Brave until the end of the turn.",
-				"instructions":[{"name":"add_status_effect","author":"card","argument":["brave",1]}]
-			},
-			{
-				"cost":{"neutral":2},
-				"text":"《2》: Choose 1 Forward. Deal it 1000 damage.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
-			},
-			{
-				"cost":{"neutral":2},
-				"text":"《2》: Firion gains +1000 power until the end of the turn.",
-				"instructions":[{"name":"power_change","author":"card","argument":[1000,1]}]
-			}
-		]
-	},
-	"84":{
-		"skill":[
-			{
-				"cost":{"風":1},
-				"text":"《Wind》: Choose 1 Forward. Deal it 1000 damage.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[1000]}]
-			},
-			{
-				"tap":true,
-				"cost":{},
-				"text":"《Dull》: Choose 1 Forward. Deal it 2000 damage.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
-			}
-		]
-	},
-	"96":{
-		"skill":[
-			{
-				"sacrifice":{"is_type":"Backup","controller":"player"},
-				"cost":{},
-				"text":"Put 1 Backup into the Break Zone: Mystic gains +3000 power until the end of the turn.",
-				"instructions":[{"name":"power_change","author":"card","argument":[3000,1]}]
-			}
-		]
-	},
-	"10":{
-		"skill":[
-			{
-				"cost":{"火":1},
-				"tap":true,
-				"sacrifice":{"is_source":true},
-				"text":"《Fire》《Dull》, put Black Mage into the Break Zone: Choose 1 Forward. Deal it 4000 damage.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[4000]}]
-			}
-		]
-	},
-	"36":{
-		"skill":[
-			{
-				"cost":{"氷":1},
-				"tap":true,
-				"sacrifice":{"is_source":true},
-				"text":"《Ice》《Dull》, put Bard into the Break Zone: Your opponent discards 1 card from their hand.",
-				"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
-			}
-		]
-	},
-	"88":{
-		"skill":[
-			{
-				"cost":{"風":2},
-				"tap":true,
-				"sacrifice":{"is_source":true},
-				"text":"《Wind》《Wind》《Dull》, put Archer into the Break Zone: Choose 1 Backup of cost 3 or less. Break it.",
-				"choose_target":{"is_type":"Backup","is_cost_at_most":3},
-				"instructions":[{"name":"break_targets","author":"game","argument":[]}]
-			}
-		]
-	},
-	"53":{
-		"skill":[
-			{
-				"cost":{"氷":1},
-				"sacrifice":{"is_source":true},
-				"text":"《Ice》, put Summoner into the Break Zone: Choose 1 Summon. Cancel its effect.",
-				"choose_target":{"in":"stack","is_type":"Summon"},
-				"instructions":[{"name":"cancel_targets","author":"game","argument":[]}]
-			}
-		]
-	},
-	"78":{
-		"skill":[
-			{
-				"cost":{"風":1},
-				"discard":1,
-				"text":"《Wind》, discard 1 card from your hand: Choose 1 Forward. Deal it 2000 damage.",
-				"choose_target":{"is_type":"Forward"},
-				"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
-			}
-		]
-	},
 	"81":{"all_jobs":true},
 	"91":{
 		"ex_burst":"when_enter_field",
@@ -758,20 +575,6 @@
 		"when_chosen":{
 			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
 		}
-	},
-	"48":{
-		"skill":[
-			{
-				"tap":true,
-				"sacrifice":{"is_source":true},
-				"cost":{},
-				"only_your_turn":true,
-				"text":"Dull, put Devout into the Break Zone: Choose 1 Forward of cost 4 or less from your Break Zone. Play it onto the field. Use only during your turn.",
-				"instructions":[
-					{"name":"play_from_break_zone","author":"game","argument":[{"is_type":"Forward","is_cost_lower_than":5}]}
-				]
-			}
-		]
 	},
 	"77":{
 		"when_enter_field":{
@@ -853,37 +656,6 @@
 						"name": "break_targets",
 						"author": "game",
 						"argument": []
-					}
-				]
-			}
-		]
-	},
-	"114": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"土": 2
-				},
-				"text": "Hammer Blow 《S》《Earth》《Earth》: Choose 1 Forward. Deal it 4000 damage. Barret gains +4000 power until the end of the turn.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							4000
-						]
-					},
-					{
-						"name": "power_change",
-						"author": "card",
-						"argument": [
-							4000,
-							1
-						]
 					}
 				]
 			}
@@ -1065,74 +837,6 @@
 			]
 		}
 	},
-	"149": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"sacrifice": {
-					"is_type": "Backup",
-					"controller": "player"
-				},
-				"text": "《Dull》, put 1 Backup into the Break Zone: Choose 1 Forward. Deal it 5000 damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							5000
-						]
-					}
-				]
-			},
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"雷": 1
-				},
-				"text": "Thundaga 《S》《Lightning》《Dull》: Choose 1 Forward. Deal it 10000 damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							10000
-						]
-					}
-				]
-			}
-		]
-	},
-	"157": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Dull》, put Scholar into the Break Zone: Choose 1 Forward you control. Return it to its owner's hand.",
-				"choose_target": {
-					"is_type": "Forward",
-					"controller": "player"
-				},
-				"instructions": [
-					{
-						"name": "return_targets_to_hand",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
-	},
 	"170": {
 		"ex_burst": "when_cast",
 		"when_cast": {
@@ -1228,34 +932,6 @@
 				}
 			]
 		}
-	},
-	"189": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"火": 1
-				},
-				"text": "Waterkick 《S》《Fire》: Choose 1 Forward. Dull it and deal it 6000 damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "dull_targets",
-						"author": "game",
-						"argument": []
-					},
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							6000
-						]
-					}
-				]
-			}
-		]
 	},
 	"191": {
 		"when_enter_field": {
@@ -1404,54 +1080,6 @@
 			]
 		}
 	},
-	"205": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {},
-				"text": "Grenade Bomb 《S》: Deal 2000 damage to all the Forwards opponent controls.",
-				"apply_effect": {
-					"is_type": "Forward",
-					"controller": "opponent"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							2000
-						]
-					}
-				]
-			}
-		]
-	},
-	"209": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {
-					"雷": 1
-				},
-				"text": "《Lightning》《Dull》: Choose 1 attacking Lightning Forward. It gains First Strike until the end of the turn.",
-				"choose_target": {
-					"is_type": "Forward",
-					"is_attacking": true,
-					"is_element": "雷"
-				},
-				"instructions": [
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"first_strike",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
 	"212": {
 		"ex_burst": "when_enter_field",
 		"when_enter_field": {
@@ -1525,57 +1153,6 @@
 			]
 		}
 	},
-	"120": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {
-					"土": 1
-				},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Earth》《Dull》, put Monk into the Break Zone: Choose 1 Forward. It gains +2000 power until the end of the turn.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "power_change",
-						"author": "target",
-						"argument": [
-							2000,
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"121": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {
-					"雷": 1
-				},
-				"text": "《Lightning》《Dull》: Choose 1 Forward. It gains Haste until the end of the turn.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"haste",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
 	"134": {
 		"when_enter_field": {
 			"instructions": [
@@ -1628,32 +1205,6 @@
 						"author": "card",
 						"argument": [
 							"first_strike",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"146": {
-		"skill": [
-			{
-				"cost": {
-					"雷": 1
-				},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Lightning》, put Ricard into the Break Zone: Choose 1 Forward. It cannot be broken this turn.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"unbreakable",
 							1
 						]
 					}
@@ -1807,29 +1358,6 @@
 				}
 			]
 		}
-	},
-	"200": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Dull》, put Baralai into the Break Zone: Choose up to 2 Forwards. Activate them.",
-				"choose_target": {
-					"is_type": "Forward",
-					"count": 2
-				},
-				"instructions": [
-					{
-						"name": "untap_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
 	},
 	"203": {
 		"when_enter_field": {
@@ -1987,74 +1515,6 @@
 			}
 		]
 	},
-	"128": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"雷": 2
-				},
-				"text": "Gilgamesh Morphing Time 《S》《Lightning》《Lightning》: Double its power and gain First Strike and Brave. It can attack twice this turn. Use only during your turn.",
-				"instructions": [
-					{
-						"name": "double_power",
-						"author": "card",
-						"argument": [
-							1
-						]
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"first_strike",
-							1
-						]
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"brave",
-							1
-						]
-					},
-					{
-						"name": "set_extra_attacks",
-						"author": "card",
-						"argument": [
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"130": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {
-					"雷": 2
-				},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Lightning》《Lightning》《Dull》, put Black Mage into the Break Zone: Choose 1 damaged Forward. Break it.",
-				"choose_target": {
-					"is_type": "Forward",
-					"is_damaged": true
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
-	},
 	"133": {
 		"when_enter_field": {
 			"instructions": [
@@ -2076,30 +1536,6 @@
 				}
 			]
 		}
-	},
-	"139": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"sacrifice": {
-					"is_source": true
-				},
-				"text": "《Dull》, put Summoner into the Break Zone: Cast 1 Summon of cost 6 or less from your hand without paying its cost.",
-				"instructions": [
-					{
-						"name": "cast_summon_for_free",
-						"author": "game",
-						"argument": [
-							{
-								"is_type": "Summon",
-								"is_cost_at_most": 6
-							}
-						]
-					}
-				]
-			}
-		]
 	},
 	"153": {
 		"self_cost": {
@@ -2183,22 +1619,6 @@
 					},
 					{
 						"name": "extra_attacks_from_damage",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
-	},
-	"169": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"text": "《Dull》: Look at the top card of your deck. You may place it at the bottom of your deck.",
-				"instructions": [
-					{
-						"name": "look_top_may_bottom",
 						"author": "game",
 						"argument": []
 					}
@@ -2382,29 +1802,6 @@
 						"argument": [
 							"frozen",
 							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"160": {
-		"skill": [
-			{
-				"cost": {},
-				"tap": true,
-				"text": "《Dull》: The next damage dealt to Gordon becomes 0 this turn.",
-				"instructions": [
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"next_receiving_damage",
-							1,
-							{
-								"operation": "set",
-								"value": 0
-							}
 						]
 					}
 				]
@@ -3128,38 +2525,6 @@
 		}
 	},
 
-	"104": {
-		"skill": [
-			{
-				"cost": {},
-				"tap": true,
-				"text": "Dull: Choose 1 Forward you control. It gains +5000 power until the end of the turn. At the end of the turn, break it.",
-				"choose_target": {
-					"is_type": "Forward",
-					"controller": "your"
-				},
-				"instructions": [
-					{
-						"name": "power_change_targets",
-						"author": "game",
-						"argument": [
-							5000,
-							1
-						]
-					},
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"break_at_end_of_turn",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-
 	
 	"211": {
 		"when_enter_field": {
@@ -3339,34 +2704,6 @@
 						"author": "game",
 						"argument": [
 							0
-						]
-					}
-				]
-			}
-		]
-	},
-
-	"102": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"土": 2
-				},
-				"text": "Ronso Rage 《S》《土》《土》: Choose 1 Forward opponent controls. Kimahri gains its Special Ability until the end of the turn. You can use this ability without paying any cost but only once.",
-				"choose_target": {
-					"is_type": "Forward",
-					"controller": "opponent",
-					"has_special_ability": true
-				},
-				"instructions": [
-					{
-						"name": "copy_skill",
-						"author": "game",
-						"argument": [
-							{
-								"type": "special_ability"
-							}
 						]
 					}
 				]

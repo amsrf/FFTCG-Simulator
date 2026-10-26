@@ -225,6 +225,50 @@ func opponent_discards(count: int = 1) -> void:
 	await discard(3 - owner_id, count)
 
 
+func opponent_mills(count: int = 1) -> void:
+	await mill(3 - owner_id, count)
+
+
+## The following helpers prime Game's ambient instruction state from this context before calling a Game instruction.
+## They exist only for the instructions whose Game implementation still reads `_current_source_card`/`_current_controller`.
+func _prime_game() -> void:
+	if game == null:
+		return
+	game.set("_current_source_card", source)
+	game.set("_current_controller", controller)
+
+
+func play_from_break_zone(criteria: Dictionary = {}) -> void:
+	_prime_game()
+	await game.play_from_break_zone(criteria)
+
+
+func cast_summon_for_free(criteria: Dictionary = {}) -> void:
+	_prime_game()
+	await game.cast_summon_for_free(criteria)
+
+
+func look_top_may_bottom() -> void:
+	_prime_game()
+	await game.look_top_may_bottom()
+
+
+func cancel_stack_card(target: Card) -> void:
+	if game == null or target == null or not is_instance_valid(target):
+		return
+	var stack_node = game.get("stack")
+	if stack_node != null:
+		stack_node.cancel_stack_card(target)
+
+
+func copy_skill(target: Card) -> void:
+	if game == null or target == null or not is_instance_valid(target):
+		return
+	_prime_game()
+	game.set("_targets", [target])
+	await game.copy_skill()
+
+
 func each_player_discards(count: int = 1) -> void:
 	await discard(owner_id, count)
 	await discard(3 - owner_id, count)

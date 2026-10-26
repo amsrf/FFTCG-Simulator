@@ -83,8 +83,9 @@ func _pick_many(cards: Array) -> void:
 func _ready() -> void:
 	# --- data shapes that cannot be inferred from a card being present --------------------------------
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("149", {}).get("skill", []).size() == 2, "Lulu 149 has two abilities")
-	_expect(effects.get("149", {}).get("skill", [{}, {}])[0].has("sacrifice"),
+	var lulu_specs: Array = load("res://assets/effects/card_149.gd").new().activated_abilities()
+	_expect(lulu_specs.size() == 2, "Lulu 149 has two code abilities")
+	_expect(not lulu_specs.is_empty() and not lulu_specs[0].sacrifice.is_empty(),
 		"and the first one sacrifices a Backup")
 	_expect(effects.get("182", {}).get("skill", [{}, {}])[0].get("apply_effect", {}).get("controller") == "opponent",
 		"Cloud 182's Meteorain carries its own apply_effect (mass damage)")

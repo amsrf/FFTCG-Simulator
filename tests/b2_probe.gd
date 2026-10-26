@@ -39,10 +39,10 @@ func _make(id: int, side: String) -> Card:
 
 func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	var gordon_arg: Array = effects.get("160", {}).get("skill", [{}])[0].get("instructions", [{}])[0].get("argument", [])
-	_expect(gordon_arg[0] == "next_receiving_damage"
-		and gordon_arg[2].get("operation") == "set" and int(gordon_arg[2].get("value", -1)) == 0,
-		"Gordon 160 grants a next-receiving-damage payload that sets it to 0")
+	var gordon_effect = load("res://assets/effects/card_160.gd").new()
+	var gordon_specs: Array = gordon_effect.activated_abilities()
+	_expect(gordon_specs.size() == 1 and gordon_specs[0].run.is_valid(),
+		"Gordon 160's next-receiving-damage ability is code-owned")
 	_expect(not effects.get("160", {}).has("damage_modifiers"),
 		"the shield is carried by the status payload, not a static modifier")
 	_expect(effects.get("165", {}).get("damage_modifiers", [{}])[0].get("operation") == "set"

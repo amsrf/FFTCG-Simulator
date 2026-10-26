@@ -146,7 +146,30 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 - `CrystalCost._launch_orb()` accepts an untyped target and checks validity there; a freed proxy target otherwise
   failed Godot's argument type check before the function body could guard it.
 
-The ability probe is now 12 checks and the self-sacrifice probe is 14 checks. Full suite and boot are green.
+The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
+
+### Skill-Only Migration Complete
+
+The remaining skill-only cards were moved to `AbilitySpec` and their JSON entries removed:
+
+`13, 19, 34, 35, 48, 53, 89, 96, 102, 104, 128, 130, 139, 146, 149, 157, 160, 169, 200, 205, 209`.
+
+That closes the **entire skill-only group**: 34 cards, 39 abilities. The batch adds:
+
+- stack-targeting cancellation (Summoner 53)
+- Break Zone / free-Summon / top-of-deck helpers on `EffectContext`
+- copy-skill dispatch through the stack context
+- multi-ability cards such as Thief 89, Lulu 149 and Baralai 200
+- damage/status/turn-condition handlers that used to be instruction JSON
+
+`skill_only_probe` checks all 34 scripts expose the expected abilities, display text and valid handlers (91 checks).
+The probe readers that inspected the old JSON blocks were moved to `activation_skills()` / `AbilitySpec`.
+
+A test-only lifetime trap was fixed: do NOT write `load(path).new().activated_abilities()` and drop the effect
+object. The `Callable`s inside the specs point at that object, and without a live reference they become invalid.
+Keep the effect object in a local while inspecting its abilities.
+
+Full suite and boot are green.
 
 ### Silence Status Icon
 
