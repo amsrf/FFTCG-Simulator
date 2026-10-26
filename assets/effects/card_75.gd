@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_party_attack(ctx) -> void:
 	ctx.power_change_party(3000, 1)
+
+
+func keywords() -> Array[String]:
+	return ["haste"]

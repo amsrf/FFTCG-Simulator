@@ -7,3 +7,7 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.dull(targets)
+
+
+func keywords() -> Array[String]:
+	return ["haste"]

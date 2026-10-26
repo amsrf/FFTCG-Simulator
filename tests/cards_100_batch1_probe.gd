@@ -82,12 +82,12 @@ func _complete_target(card: Card) -> void:
 func _ready() -> void:
 	# The data-shape checks do not need a game, so they run first and cannot be disturbed by board state.
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	for id in [23, 39, 44]:
+	for id in [23, 39]:
 		_expect(effects.has(str(id)), "card %d has an entry" % id)
 	_expect(effects.get("23", {}).get("ex_burst") == "when_cast", "Brynhildr (23) is EX BURST -> when_cast")
 	_expect(load("res://assets/effects/card_39.gd").new().cast_target_criteria(null).get("is_tapped") == true,
 		"Shiva (39) targets a DULL Forward")
-	_expect(effects.get("44", {}).get("first_strike") == true, "Sephiroth (44) has First Strike")
+	_expect("first_strike" in load("res://assets/effects/card_44.gd").new().keywords(), "Sephiroth (44) has First Strike")
 	var chick_specs: Array = load("res://assets/effects/card_19.gd").new().activated_abilities()
 	_expect(chick_specs.size() == 1 and chick_specs[0].tap, "Chocobo Chick (19) is a dull ability")
 

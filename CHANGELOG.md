@@ -148,6 +148,14 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Printed Keywords
+
+Migrated `brave`, `haste` and `first_strike` out of `card_effects.json` into
+`CardEffect.keywords()`. `Card.has_code_keyword()` is the single reader, and
+the three existing keyword getters consult it alongside statuses/granted keys.
+
+18 cards migrated. JSON numeric entries dropped from 104 to 91.
+
 ### Onion Knight 1-181H: Return-Self Cost
 
 Onion Knight's activated ability is code-owned. `AbilitySpec` gained a

@@ -29,6 +29,12 @@ func cast_target_criteria(_ctx) -> Variant:
 	return {}
 
 
+## Printed keywords owned by code. The keyword readers on Card ask this before the JSON view; migrate one keyword
+## family at a time without changing the readers.
+func keywords() -> Array[String]:
+	return []
+
+
 ## Activated abilities this card offers. Event methods are zero-or-one per event; a card may have several activated
 ## abilities, and each one carries its own costs and target timing, so they get a descriptor.
 func activated_abilities() -> Array:

@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_enter_field(ctx) -> void:
 	await ctx.search_deck({"is_named": "Ovelia"})
+
+
+func keywords() -> Array[String]:
+	return ["first_strike"]

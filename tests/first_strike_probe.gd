@@ -69,8 +69,8 @@ func _ready() -> void:
 ## Returns [damage on attacker, damage on blocker, attacker alive, blocker alive].
 func _clash(attacker_strong: bool, attacker_fs: bool, blocker_fs: bool) -> Array:
 	var field = _game.get("field")
-	var attacker: Card = _game.create_card(29, "player")
-	var blocker: Card = _game.create_card(29, "player")
+	var attacker: Card = _game.create_card(55, "player")
+	var blocker: Card = _game.create_card(55, "player")
 	for card in [attacker, blocker]:
 		_game.add_child(card)
 		field.play_card(card, false, false)

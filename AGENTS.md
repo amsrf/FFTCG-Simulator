@@ -33,6 +33,8 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Printed keywords are code-owned through `CardEffect.keywords()`; `Card.has_code_keyword()` is the only reader.
+  Add to that list rather than teaching each keyword getter a new source.
 - `return_self` is a commit-time ability cost: the source can be in hand when the ability resolves, so never find Game
   by a fixed two-level parent walk. `Card.make_effect_context()` searches ancestors for the Game seam methods.
 - Damage-to-player triggers must branch on `effect_handles_event()` before calling `begin_triggered_ability()`;

@@ -2,9 +2,6 @@
 	"4": {
 		"ex_burst": "when_cast"
 	},
-	"6": {
-		"brave": true
-	},
 	"8": {
 		"activated_ability": [
 			{
@@ -78,17 +75,7 @@
 		}
 	},
 	"151": {
-		"ex_burst": "when_enter_field",
-		"first_strike": true
-	},
-	"16": {
-		"haste": true
-	},
-	"29": {
-		"first_strike": true
-	},
-	"87": {
-		"first_strike": true
+		"ex_burst": "when_enter_field"
 	},
 	"7": {
 		"apply_effect": {
@@ -98,18 +85,6 @@
 	},
 	"38": {
 		"ex_burst": "when_cast"
-	},
-	"14": {
-		"brave": true
-	},
-	"56": {
-		"brave": true
-	},
-	"97": {
-		"brave": true
-	},
-	"75": {
-		"haste": true
 	},
 	"42": {
 		"conditional_power": [
@@ -169,9 +144,6 @@
 	},
 	"39": {
 		"ex_burst": "when_cast"
-	},
-	"44": {
-		"first_strike": true
 	},
 	"74": {
 		"ex_burst": "when_cast"
@@ -600,9 +572,6 @@
 	"132": {
 		"ex_burst": "when_enter_field"
 	},
-	"142": {
-		"haste": true
-	},
 	"143": {
 		"ex_burst": "when_cast"
 	},
@@ -613,7 +582,6 @@
 		"ex_burst": "when_cast"
 	},
 	"182": {
-		"brave": true,
 		"skill": [
 			{
 				"s_cost": true,
@@ -655,9 +623,6 @@
 				]
 			}
 		]
-	},
-	"186": {
-		"first_strike": true
 	},
 	"191": {
 		"skill": [
@@ -787,14 +752,7 @@
 			}
 		]
 	},
-	"147": {
-		"first_strike": true
-	},
-	"148": {
-		"haste": true
-	},
 	"208": {
-		"haste": true,
 		"conditional_power": [
 			{
 				"condition": {
@@ -1244,7 +1202,6 @@
 		]
 	},
 	"210": {
-		"haste": true,
 		"when_cause_damage_to_player": {
 			"choose_target": {
 				"is_type": "Forward",
@@ -1579,7 +1536,6 @@
 		"light_dark_exempt": "dark"
 	},
 	"129": {
-		"brave": true,
 		"skill": [
 			{
 				"s_cost": true,

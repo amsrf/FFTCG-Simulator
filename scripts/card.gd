@@ -1012,14 +1012,19 @@ func _silence_icon_belongs_left() -> bool:
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
 ## what something gave it, and anything asking "can this tap" needs one answer.
 func has_haste() -> bool:
-	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste")
+	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste") 		or has_code_keyword("haste")
+
+
+func has_code_keyword(keyword: String) -> bool:
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj != null and keyword in effect_obj.keywords()
 
 ## BRAVE: attacking does not dull this card, so it can attack and still block (or attack again). Same split as
 ## Brave — printed "brave": true in card_effects.json, granted as a status named "brave", or granted by a party effect
 ## on the field ("The Forwards forming a party you control gain Brave", Gippal). The Field is the only thing that knows
 ## who is currently in a party, so it is asked rather than duplicating the rule here.
 func is_brave() -> bool:
-	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave"):
+	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave") 			or has_code_keyword("brave"):
 		return true
 	if has_conditional_status("brave"):
 		return true
@@ -1047,7 +1052,7 @@ func has_conditional_status(status: String) -> bool:
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
 ## the question it asks.
 func is_first_strike() -> bool:
-	return card_effects.has("first_strike") or status_effects.has("first_strike") or has_granted("first_strike")
+	return card_effects.has("first_strike") or status_effects.has("first_strike") or has_granted("first_strike") 		or has_code_keyword("first_strike")
 
 ## FROZEN: does not activate during its controller's next Active Phase. Granted only - no card prints Freeze, they
 ## all say "Freeze it" - so unlike Haste, Brave and First Strike there is no printed half. The status is CONSUMED

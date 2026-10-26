@@ -88,9 +88,9 @@ func _ready() -> void:
 	var cloud_effect = load("res://assets/effects/card_187.gd").new()
 	_expect(yuna_effect.has_method("modify_cost_for"), "Yuna's Water filter is code-owned")
 	_expect(cloud_effect.has_method("modify_cost"), "Cloud's counted reduction is code-owned")
-	_expect(bool(effects.get("210", {}).get("haste", false))
+	_expect("haste" in load("res://assets/effects/card_210.gd").new().keywords()
 		and effects.get("210", {}).has("when_cause_damage_to_player"),
-		"Lightning has Haste and the damage trigger")
+		"Lightning has code-owned Haste and the JSON damage trigger")
 	_expect(bool(effects.get("187", {}).get("skill", [{}])[0].get("s_cost", false)),
 		"Cloud's Climhazzard is an S ability")
 

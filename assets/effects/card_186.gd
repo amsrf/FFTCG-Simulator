@@ -7,3 +7,7 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.break_cards(targets)
+
+
+func keywords() -> Array[String]:
+	return ["first_strike"]
