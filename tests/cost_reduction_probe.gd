@@ -84,10 +84,10 @@ func _ready() -> void:
 		"Tidus costs 4 with two Category X Forwards")
 
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(bool(effects.get("177", {}).get("cost_aura", {}).get("element") == "水"),
-		"Yuna's aura is filtered to Water")
-	_expect(int(effects.get("187", {}).get("self_cost", {}).get("delta", 0)) == -1,
-		"Cloud's cost reduction is data")
+	var yuna_effect = load("res://assets/effects/card_177.gd").new()
+	var cloud_effect = load("res://assets/effects/card_187.gd").new()
+	_expect(yuna_effect.has_method("modify_cost_for"), "Yuna's Water filter is code-owned")
+	_expect(cloud_effect.has_method("modify_cost"), "Cloud's counted reduction is code-owned")
 	_expect(bool(effects.get("210", {}).get("haste", false))
 		and effects.get("210", {}).has("when_cause_damage_to_player"),
 		"Lightning has Haste and the damage trigger")

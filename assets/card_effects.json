@@ -381,9 +381,13 @@
 			"by":["Ability"]
 		}
 	},
-	"46":{
-		"cost_aura":{"for":"Summon","from":"opponent","delta":1},
-		"cannot_be_chosen":{"sources":["Summon"],"controller":"opponent"}
+"46": 	{
+		"cannot_be_chosen": {
+			"sources": [
+				"Summon"
+			],
+			"controller": "opponent"
+		}
 	},
 	"15":{
 		"power_per":{"count":{"is_type":"Forward","controller":"opponent"},"value":1000},
@@ -447,9 +451,19 @@
 			"instructions":[{"name":"damage_targets","author":"game","argument":[2000]}]
 		}
 	},
-	"20":{
-		"cost_aura":{"for":"Summon","name":"Bahamut","from":"own","delta":-2},
-		"when_attack":{"instructions":[{"name":"add_status_effect","author":"card","argument":["first_strike",1]}]}
+"20": 	{
+		"when_attack": {
+			"instructions": [
+				{
+					"name": "add_status_effect",
+					"author": "card",
+					"argument": [
+						"first_strike",
+						1
+					]
+				}
+			]
+		}
 	},
 	"28":{
 		"ex_burst":"when_enter_field",
@@ -1477,13 +1491,7 @@
 			]
 		}
 	},
-	"153": {
-		"self_cost": {
-			"if_controls": {
-				"is_named": "Ovelia"
-			},
-			"delta": -1
-		},
+"153": 	{
 		"skill": [
 			{
 				"tap": true,
@@ -1993,24 +2001,7 @@
 			}
 		]
 	},
-	"177": {
-		"cost_aura": {
-			"for": "Summon",
-			"element": "水",
-			"from": "own",
-			"delta": -1,
-			"min": 1
-		}
-	},
-	"187": {
-		"self_cost": {
-			"per": {
-				"is_category": "VII",
-				"is_type": "Forward",
-				"controller": "your"
-			},
-			"delta": -1
-		},
+"187": 	{
 		"skill": [
 			{
 				"s_cost": true,
@@ -2055,15 +2046,7 @@
 			}
 		]
 	},
-	"210": {
-		"self_cost": {
-			"per": {
-				"is_category": "XIII",
-				"is_type": "Forward",
-				"controller": "your"
-			},
-			"delta": -1
-		},
+"210": 	{
 		"haste": true,
 		"when_cause_damage_to_player": {
 			"choose_target": {
@@ -2080,15 +2063,7 @@
 		}
 	},
 	
-	"213": {
-		"self_cost": {
-			"per": {
-				"is_category": "X",
-				"is_type": "Forward",
-				"controller": "your"
-			},
-			"delta": -1
-		},
+"213": 	{
 		"triggers": [
 			{
 				"on": "card_left_field",

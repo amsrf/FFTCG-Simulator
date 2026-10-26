@@ -1,6 +1,7 @@
 extends RefCounted
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
 const AURA_SPEC := preload("res://scripts/effects/aura_spec.gd")
+const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
 ## A card effect is STATELESS: the per-event state lives in the EffectContext passed to the hook. One instance can be
@@ -50,8 +51,13 @@ func _aura(data: Dictionary) -> RefCounted:
 func current_elements(_ctx, card) -> Array[String]:
 	return [card.element]
 
-## Change a cost. Return the same dictionary shape.
+## Change the cost of THIS card (self-modifiers such as "if you control Ovelia, this costs 1 less").
 func modify_cost(_ctx, _card, cost: Dictionary) -> Dictionary:
+	return cost
+
+
+## Change what ANOTHER card costs while this source is on the field ("your Water Summons cost 1 less").
+func modify_cost_for(_ctx, _subject: Card, cost: Dictionary) -> Dictionary:
 	return cost
 
 ## Change incoming damage before it lands.

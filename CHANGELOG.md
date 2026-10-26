@@ -148,6 +148,29 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Cost Modifiers Migrated
+
+Cost modification is now a continuous query in the code-effect layer:
+
+- `CostContext` carries the subject, controller, purpose, source and the accumulated minimum.
+- `CardEffect.modify_cost()` handles self costs.
+- `CardEffect.modify_cost_for()` handles costs this source modifies for another card.
+- `Rules.effective_cost()` applies the subject's hook, then every active source's hook, and applies the minimum once.
+- Printed cost is never mutated; both the payment modal and AI use the same result.
+
+Migrated: `20`, `46`, `153`, `177`, `187`, `210`, `213`.
+
+Examples:
+
+- Fang's Bahamut costs 2 less.
+- Terra raises the opponent's Summon costs by 1.
+- Alma costs 1 less while Ovelia is controlled.
+- Yuna discounts Water Summons, floored at 1.
+- Cloud, Lightning and Tidus count other Category VII/XIII/X Forwards.
+
+The old JSON `self_cost` and `cost_aura` keys were removed. `cost_modifier_probe` adds 19 checks; the existing
+`cost_reduction_probe` and `cost_aura_probe` remain green. Full suite and boot are green.
+
 ### Aura Cards Migrated
 
 All nine aura cards moved from `card_effects.json` to `AuraSpec`:

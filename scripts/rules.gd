@@ -35,82 +35,91 @@ func _cards() -> Array:
 ##
 ## One function, because there are exactly two cost readers — the payment modal and the AI's affordability check — and
 ## they must agree.
-func effective_cost(card: Card) -> Dictionary:
+const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
+
+
+## The cost ACTUALLY paid for `card`, after every continuous modifier. `Card.get_cost()` remains the printed cost.
+##
+## The calculation is a QUERY, not a mutation:
+##   1. the subject card's own effect gets `modify_cost()`
+##   2. every ability-enabled card on the field gets `modify_cost_for()`
+##   3. the accumulated minimum is applied once
+##
+## Both readers — Assistant's payment modal and AIAgent's affordability check — call this, so they cannot disagree.
+func effective_cost(card: Card, purpose: String = "cast") -> Dictionary:
+	if card == null:
+		return {}
+	var ctx = COST_CONTEXT.new(card, purpose, field)
 	var paid: Dictionary = card.get_cost()
-	var delta: int = 0
-	var min_total: int = 0
-	# A cost modifier printed ON the card itself (\"If you control Ovelia, the cost to play Alma is reduced by 1\").
-	# `if_controls` is a one-shot condition; `per` is a counted condition (\""for each Category VII Forward you
-	# control\"") and applies delta once per matching card. Both are evaluated from this card's perspective; `per`
-	# only counts the controller's own cards, so it cannot accidentally count the opponent's board.
-	var self_rule = card.card_effects.get("self_cost", {})
-	if self_rule is Dictionary and not self_rule.is_empty():
-		var per = self_rule.get("per", {})
-		if per is Dictionary and not per.is_empty():
-			var count: int = 0
-			for other in _cards():
-				if other == null or other == card:
-					continue
-				if other.controller != card.controller:
-					continue
-				if other.matches_criteria(per, card):
-					count += 1
-			delta += int(self_rule.get("delta", 0)) * count
-		else:
-			var condition = self_rule.get("if_controls", {})
-			var condition_met: bool = condition is Dictionary and condition.is_empty()
-			if condition is Dictionary and not condition.is_empty():
-				for other in _cards():
-					if other != null and other != card and other.controller == card.controller \
-							and other.matches_criteria(condition, card):
-						condition_met = true
-						break
-			if condition_met:
-				delta += int(self_rule.get("delta", 0))
-		min_total = maxi(min_total, int(self_rule.get("min", 0)))
+
+	# Self modifiers ("while you control Ovelia, this costs 1 less").
+	var own = card.effect() if card.abilities_enabled() else null
+	if own != null and own.has_method("modify_cost"):
+		paid = own.modify_cost(ctx, card, paid)
+	else:
+		paid = _json_self_cost(card, ctx, paid)
+
+	# External modifiers ("your Water Summons cost 1 less", "opponent Summons cost 1 more").
 	for source in _cards():
 		if source == null or not is_instance_valid(source):
 			continue
-		var rules = source.card_effects.get("cost_aura", [])
-		if rules is Dictionary:
-			rules = [rules]
-		if not (rules is Array):
+		if not source.is_on_field() or not source.abilities_enabled():
 			continue
-		for rule in rules:
-			if not (rule is Dictionary):
-				continue
-			var for_type: String = str(rule.get("for", ""))
-			if for_type != "" and card.type != for_type:
-				continue
-			# \"…to cast [Card Name (Bahamut)]\" — the modifier can name ONE card instead of a whole type.
-			var for_name: String = str(rule.get("name", ""))
-			if for_name != "" and card.card_name != for_name:
-				continue
-			# \"…your Water Summons cost 1 less\" (Yuna 177).
-			var for_element: String = str(rule.get("element", ""))
-			if for_element != "" and not card.is_element(for_element):
-				continue
-			var scope: String = str(rule.get("from", ""))
-			if scope == "opponent" and card.controller == source.controller:
-				continue
-			if (scope == "own" or scope == "controller") and card.controller != source.controller:
-				continue
-			delta += int(rule.get("delta", 0))
-			min_total = maxi(min_total, int(rule.get("min", 0)))
-	if delta != 0:
-		var total_before: int = _cost_total(paid)
-		var neutral: int = maxi(0, int(paid.get("neutral", 0)) + delta)
-		if neutral > 0:
-			paid["neutral"] = neutral
+		var effect_obj = source.effect()
+		if effect_obj != null and effect_obj.has_method("modify_cost_for"):
+			ctx.source = source
+			paid = effect_obj.modify_cost_for(ctx, card, paid)
 		else:
-			paid.erase("neutral")
-		# \"It cannot become 0\" (Yuna 177). Only lower the reduction enough to keep the floor; never raise a cost
-		# that was already below the floor before modifiers.
-		if min_total > 0:
-			var total_after: int = _cost_total(paid)
-			if total_before >= min_total and total_after < min_total:
-				paid["neutral"] = int(paid.get("neutral", 0)) + (min_total - total_after)
+			paid = _json_cost_aura(source, card, ctx, paid)
+
+	return ctx.apply_floor(paid)
+
+
+## Fallback for a card that has not been migrated yet.
+func _json_self_cost(card: Card, ctx, paid: Dictionary) -> Dictionary:
+	var rule = card.card_effects.get("self_cost", {})
+	if not (rule is Dictionary) or rule.is_empty():
+		return paid
+	var delta: int = 0
+	var per = rule.get("per", {})
+	if per is Dictionary and not per.is_empty():
+		delta += int(rule.get("delta", 0)) * ctx.cards_in_field(per, true).size()
+	else:
+		var condition = rule.get("if_controls", {})
+		if condition is Dictionary and not condition.is_empty() and ctx.controls(condition):
+			delta += int(rule.get("delta", 0))
+		elif not (condition is Dictionary) or condition.is_empty():
+			delta += int(rule.get("delta", 0))
+	return ctx.adjust(paid, delta, int(rule.get("min", 0)))
+
+
+## Fallback for a source that still carries a JSON cost_aura.
+func _json_cost_aura(source: Card, subject: Card, ctx, paid: Dictionary) -> Dictionary:
+	var rules = source.card_effects.get("cost_aura", [])
+	if rules is Dictionary:
+		rules = [rules]
+	if not (rules is Array):
+		return paid
+	for rule in rules:
+		if not (rule is Dictionary):
+			continue
+		var for_type: String = str(rule.get("for", ""))
+		if for_type != "" and subject.type != for_type:
+			continue
+		var for_name: String = str(rule.get("name", ""))
+		if for_name != "" and subject.card_name != for_name:
+			continue
+		var for_element: String = str(rule.get("element", ""))
+		if for_element != "" and not subject.is_element(for_element):
+			continue
+		var scope: String = str(rule.get("from", ""))
+		if scope == "opponent" and subject.controller == source.controller:
+			continue
+		if (scope == "own" or scope == "controller") and subject.controller != source.controller:
+			continue
+		paid = ctx.adjust(paid, int(rule.get("delta", 0)), int(rule.get("min", 0)))
 	return paid
+
 
 func _cost_total(cost: Dictionary) -> int:
 	var total: int = 0
