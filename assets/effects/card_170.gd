@@ -10,3 +10,7 @@ func when_cast(ctx) -> void:
 	var targets: Array = await ctx.cast_targets({"is_type": "Forward"})
 	ctx.untap(targets)
 	ctx.draw(ctx.owner_id, 1)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

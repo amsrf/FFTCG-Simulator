@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_enter_field(ctx) -> void:
 	ctx.untap_all_matching({"is_character": true, "controller": "your", "is_element": "風"})
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

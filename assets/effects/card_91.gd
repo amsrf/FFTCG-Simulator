@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_enter_field(ctx) -> void:
 	await ctx.search_deck({"any": [{"name": "Lightning"}, {"name": "Snow"}]})
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

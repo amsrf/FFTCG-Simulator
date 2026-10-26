@@ -127,9 +127,8 @@ func _ready() -> void:
 	_expect(CARD_FILTER.matches(lightning, or_filter), "the OR filter accepts Lightning")
 	_expect(CARD_FILTER.matches(snow, or_filter), "and Snow")
 	_expect(not CARD_FILTER.matches(auron, or_filter), "but not an unrelated card")
-	var amodar_effects: Dictionary = CardDatabase.card_effects.get("91", {})
-	_expect(amodar_effects.get("ex_burst", "") == "when_enter_field",
-		"Amodar's EX burst runs its enter-the-field search")
+	_expect(load("res://assets/effects/card_91.gd").new().ex_burst_event() == "when_enter_field",
+		"Amodar's code EX burst runs its enter-the-field search")
 
 	print("[Chip] %d checks | failures: %d" % [_checks, _fails])
 	print("[Chip] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

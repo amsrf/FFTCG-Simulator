@@ -29,6 +29,13 @@ func cast_target_criteria(_ctx) -> Variant:
 	return {}
 
 
+## Which existing hook runs when this card becomes damage. The default is "no EX BURST"; only cards that have one
+## override this and return "when_cast" or "when_enter_field". It is a pointer to the card's existing effect, never a
+## second implementation.
+func ex_burst_event() -> String:
+	return ""
+
+
 ## Printed keywords owned by code. The keyword readers on Card ask this before the JSON view; migrate one keyword
 ## family at a time without changing the readers.
 func keywords() -> Array[String]:

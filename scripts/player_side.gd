@@ -45,9 +45,9 @@ func take_damage(amount: int = 1, source: Card = null) -> void:
 const EX_BURST_DELAY := 2.0
 
 func ex_burst_key(card: Card) -> String:
-	if card == null or not card.card_effects.has("ex_burst"):
+	if card == null:
 		return ""
-	return str(card.card_effects["ex_burst"])
+	return card.ex_burst_event()
 
 func has_ex_burst(card: Card) -> bool:
 	return not ex_burst_key(card).is_empty()

@@ -14,3 +14,7 @@ func when_cast(ctx) -> void:
 	if await ctx.may("Discard 1"):
 		discarded = await ctx.discard(ctx.owner_id, 1)
 	ctx.damage(targets, 7000 if discarded > 0 else 5000)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

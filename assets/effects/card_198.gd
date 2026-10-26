@@ -7,3 +7,7 @@ func when_cast(ctx) -> void:
 	ctx.damage(forwards, 3000)
 	if ctx.condition("controls:Yuna"):
 		ctx.untap_all_matching({"is_type": "Backup", "controller": "player"})
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

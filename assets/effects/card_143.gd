@@ -9,3 +9,7 @@ func cast_target_criteria(_ctx) -> Variant:
 func when_cast(ctx) -> void:
 	var targets: Array = await ctx.cast_targets({"is_type": "Forward", "is_tapped": false})
 	ctx.damage(targets, 5000)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

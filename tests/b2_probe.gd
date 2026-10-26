@@ -52,10 +52,10 @@ func _ready() -> void:
 		.get("conditions", [{}])[0].has("compare_values"),
 		"Minwu 171 uses the generic compare_values condition")
 	var yuna: Dictionary = effects.get("176", {})
-	_expect(yuna.get("ex_burst") == "when_enter_field"
+	_expect(load("res://assets/effects/card_176.gd").new().ex_burst_event() == "when_enter_field"
 		and load("res://assets/effects/card_176.gd").new().has_method("when_enter_field")
 		and bool(yuna.get("break_zone_exile", false)),
-		"Yuna 176 has her return ETB, EX Burst and exile rule")
+		"Yuna 176 has her return ETB, code EX Burst and exile rule")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})
 	_game = GAME_SCENE.instantiate()

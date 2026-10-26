@@ -7,3 +7,7 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.dull(targets)
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

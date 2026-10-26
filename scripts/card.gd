@@ -1011,6 +1011,16 @@ func _silence_icon_belongs_left() -> bool:
 ## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
 ## what something gave it, and anything asking "can this tap" needs one answer.
+## Which event an EX BURST runs. Code wins; JSON is the fallback for the handful of cards not yet migrated.
+func ex_burst_event() -> String:
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj != null and effect_obj.has_method("ex_burst_event"):
+		var code_event: String = effect_obj.ex_burst_event()
+		if code_event != "":
+			return code_event
+	return str(card_effects.get("ex_burst", ""))
+
+
 func has_haste() -> bool:
 	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste") 		or has_code_keyword("haste")
 

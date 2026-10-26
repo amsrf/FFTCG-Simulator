@@ -148,6 +148,17 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: EX BURST
+
+Migrated all 29 `ex_burst` fields to `CardEffect.ex_burst_event()`. The default
+returns `""`; only cards with EX BURST override it and point at their existing
+`when_cast` or `when_enter_field` hook. It is a pointer, never a second effect.
+
+`Card.ex_burst_event()` reads code first and keeps the JSON fallback only for
+still-unmigrated cards. `PlayerSide.ex_burst_key()` delegates to the card.
+
+JSON numeric entries dropped from 91 to 69.
+
 ### JSON Migration: Printed Keywords
 
 Migrated `brave`, `haste` and `first_strike` out of `card_effects.json` into

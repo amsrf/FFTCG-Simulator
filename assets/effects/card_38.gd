@@ -12,3 +12,7 @@ func when_cast(ctx) -> void:
 		return
 	ctx.dull(targets)
 	ctx.add_status(targets, "frozen", 1)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

@@ -1,7 +1,4 @@
 {
-	"4": {
-		"ex_burst": "when_cast"
-	},
 	"8": {
 		"activated_ability": [
 			{
@@ -74,17 +71,11 @@
 			"controller": "opponent"
 		}
 	},
-	"151": {
-		"ex_burst": "when_enter_field"
-	},
 	"7": {
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
 		}
-	},
-	"38": {
-		"ex_burst": "when_cast"
 	},
 	"42": {
 		"conditional_power": [
@@ -133,20 +124,11 @@
 			]
 		}
 	},
-	"23": {
-		"ex_burst": "when_cast"
-	},
 	"24": {
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "opponent"
 		}
-	},
-	"39": {
-		"ex_burst": "when_cast"
-	},
-	"74": {
-		"ex_burst": "when_cast"
 	},
 	"94": {
 		"when_attack": {
@@ -354,7 +336,6 @@
 		}
 	},
 	"28": {
-		"ex_burst": "when_enter_field",
 		"skill": [
 			{
 				"cost": {
@@ -404,7 +385,6 @@
 		]
 	},
 	"59": {
-		"ex_burst": "when_enter_field",
 		"conditional_power": [
 			{
 				"condition": {
@@ -415,20 +395,8 @@
 			}
 		]
 	},
-	"61": {
-		"ex_burst": "when_cast"
-	},
-	"79": {
-		"ex_burst": "when_enter_field"
-	},
-	"80": {
-		"ex_burst": "when_enter_field"
-	},
 	"81": {
 		"all_jobs": true
-	},
-	"91": {
-		"ex_burst": "when_enter_field"
 	},
 	"72": {
 		"on_causing_damage_to_forward": {
@@ -539,12 +507,6 @@
 			}
 		]
 	},
-	"118": {
-		"ex_burst": "when_enter_field"
-	},
-	"124": {
-		"ex_burst": "when_cast"
-	},
 	"126": {
 		"apply_effect": {
 			"is_type": "Forward",
@@ -568,18 +530,6 @@
 				]
 			}
 		]
-	},
-	"132": {
-		"ex_burst": "when_enter_field"
-	},
-	"143": {
-		"ex_burst": "when_cast"
-	},
-	"170": {
-		"ex_burst": "when_cast"
-	},
-	"178": {
-		"ex_burst": "when_cast"
 	},
 	"182": {
 		"skill": [
@@ -665,7 +615,6 @@
 		}
 	},
 	"193": {
-		"ex_burst": "when_enter_field",
 		"skill": [
 			{
 				"s_cost": true,
@@ -695,14 +644,7 @@
 			}
 		]
 	},
-	"198": {
-		"ex_burst": "when_cast"
-	},
-	"212": {
-		"ex_burst": "when_enter_field"
-	},
 	"101": {
-		"ex_burst": "when_enter_field",
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
@@ -763,9 +705,6 @@
 			}
 		]
 	},
-	"106": {
-		"ex_burst": "when_cast"
-	},
 	"116": {
 		"skill": [
 			{
@@ -803,7 +742,6 @@
 		]
 	},
 	"127": {
-		"ex_burst": "when_enter_field",
 		"skill": [
 			{
 				"s_cost": true,
@@ -894,11 +832,7 @@
 			}
 		]
 	},
-	"172": {
-		"ex_burst": "when_cast"
-	},
 	"188": {
-		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"instructions": [
 				{
@@ -912,9 +846,6 @@
 				}
 			]
 		}
-	},
-	"190": {
-		"ex_burst": "when_cast"
 	},
 	"194": {
 		"skill": [
@@ -1049,11 +980,7 @@
 		]
 	},
 	"176": {
-		"ex_burst": "when_enter_field",
 		"break_zone_exile": true
-	},
-	"109": {
-		"ex_burst": "when_enter_field"
 	},
 	"162": {
 		"must_be_chosen": {

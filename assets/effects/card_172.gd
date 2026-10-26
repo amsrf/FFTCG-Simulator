@@ -5,3 +5,7 @@ extends "res://scripts/effects/card_effect.gd"
 func when_cast(ctx) -> void:
 	ctx.draw(ctx.owner_id, 2)
 	await ctx.discard(ctx.owner_id, 1)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

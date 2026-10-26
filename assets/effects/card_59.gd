@@ -9,3 +9,7 @@ func when_enter_field(ctx) -> void:
 	ctx.dull(targets)
 	if ctx.condition("controls:Squall"):
 		ctx.add_status(targets, "frozen", 1)
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

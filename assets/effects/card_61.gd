@@ -11,3 +11,7 @@ func when_cast(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.break_cards(targets)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

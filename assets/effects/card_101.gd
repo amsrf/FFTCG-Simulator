@@ -4,3 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func when_enter_field(ctx) -> void:
 	ctx.power_change(ctx.cards_in("field", {"is_type": "Forward", "controller": "your"}), 4000, 1)
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

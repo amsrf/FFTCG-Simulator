@@ -10,3 +10,7 @@ func auras() -> Array:
 			"status": "haste",
 		}),
 	]
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

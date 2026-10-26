@@ -12,3 +12,7 @@ func when_cast(ctx) -> void:
 		return
 	var blocking: bool = targets[0].status_effects.has("blocking")
 	ctx.power_change(targets, 4000 if blocking else 2000, 1)
+
+
+func ex_burst_event() -> String:
+	return "when_cast"

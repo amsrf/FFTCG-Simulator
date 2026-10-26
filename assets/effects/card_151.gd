@@ -8,3 +8,7 @@ func when_enter_field(ctx) -> void:
 
 func keywords() -> Array[String]:
 	return ["first_strike"]
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"

@@ -7,3 +7,7 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.power_change(targets, -5000, 1)
+
+
+func ex_burst_event() -> String:
+	return "when_enter_field"
