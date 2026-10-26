@@ -7,3 +7,10 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.damage(targets, 2000)
+
+func conditional_powers() -> Array:
+	return [{"value": 2000, "condition": Callable(self, "_has_category_vii")}]
+
+
+func _has_category_vii(source: Card) -> bool:
+	return controls(source, {"is_type": "Forward", "is_category": "VII", "exclude": {"is_named": "Cloud"}})

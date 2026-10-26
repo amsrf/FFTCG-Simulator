@@ -29,6 +29,21 @@ func cast_target_criteria(_ctx) -> Variant:
 	return {}
 
 
+## Conditional power rules this card applies to itself. Each rule is
+## { "value": int, "condition": Callable(source) -> bool }.
+func conditional_powers() -> Array:
+	return []
+
+
+## Does this card's controller control a card matching `criteria`? Relative controller words resolve against
+## `source`'s controller, which is what "you" means on a card.
+func controls(source: Card, criteria: Dictionary) -> bool:
+	var field = source.get_parent()
+	if field == null or not field.has_method("controls_matching"):
+		return false
+	return field.controls_matching(source.controller, criteria, source)
+
+
 ## Which existing hook runs when this card becomes damage. The default is "no EX BURST"; only cards that have one
 ## override this and return "when_cast" or "when_enter_field". It is a pointer to the card's existing effect, never a
 ## second implementation.

@@ -13,3 +13,10 @@ func when_enter_field(ctx) -> void:
 
 func ex_burst_event() -> String:
 	return "when_enter_field"
+
+func conditional_powers() -> Array:
+	return [{"value": 2000, "condition": Callable(self, "_has_squall")}]
+
+
+func _has_squall(source: Card) -> bool:
+	return controls(source, {"is_named": "Squall"})

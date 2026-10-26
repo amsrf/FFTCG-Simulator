@@ -111,8 +111,9 @@ func _ready() -> void:
 		"Cid Raines 192 attaches an on-break rider")
 	_expect(effects.get("144", {}).get("power_per", {}).get("value") == 1000,
 		"Ramza 144 scales with your Backups")
-	_expect(effects.get("208", {}).get("conditional_power", [{}])[0].get("value") == 2000,
-		"Noel 208 has a conditional +2000")
+	var noel_cp: Array = load("res://assets/effects/card_208.gd").new().conditional_powers()
+	_expect(noel_cp.size() == 1 and int(noel_cp[0].get("value", 0)) == 2000,
+		"Noel 208 has a code conditional +2000")
 	_expect(load("res://assets/effects/card_196.gd").new().has_method("when_enter_field"),
 		"Mog 196's Category XIII search is code-owned")
 

@@ -148,6 +148,20 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Conditional Power Is Now a Board Scan
+
+Migrated the six `conditional_power` cards to `CardEffect.conditional_powers()`
+with Code `Callable` conditions. Nine, Zack, Laguna, Squall, Noel and Rikku now
+own their conditions in code.
+
+The registry was removed. `recompute_conditional_power()` scans the field at
+the same invalidation points as the other continuous systems and keeps a
+per-rule granted-modifier ledger. Rules are not registered, so leaving the
+field, silence, or a changed rule cannot leave a stale entry.
+
+JSON numeric entries dropped from 54 to 49; zero `conditional_power` fields
+remain.
+
 ### JSON Migration: Activated Skills
 
 Migrated the last 24 `skill` arrays to `AbilitySpec`. Targeted abilities use the

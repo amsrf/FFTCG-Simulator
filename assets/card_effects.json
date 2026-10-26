@@ -23,17 +23,6 @@
 			}
 		]
 	},
-	"12": {
-		"conditional_power": [
-			{
-				"condition": {
-					"check_controller": "player",
-					"is_named": "Aerith"
-				},
-				"value": 2000
-			}
-		]
-	},
 	"71": {
 		"cannot_be_chosen": {
 			"sources": [
@@ -48,17 +37,6 @@
 			"is_type": "Forward",
 			"controller": "player"
 		}
-	},
-	"42": {
-		"conditional_power": [
-			{
-				"condition": {
-					"check_controller": "player",
-					"is_named": "Laguna"
-				},
-				"value": 3000
-			}
-		]
 	},
 	"554": {
 		"party_brave": true
@@ -236,21 +214,6 @@
 			}
 		]
 	},
-	"9": {
-		"conditional_power": [
-			{
-				"condition": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_category": "VII",
-					"exclude": {
-						"is_named": "Cloud"
-					}
-				},
-				"value": 2000
-			}
-		]
-	},
 	"20": {
 		"when_attack": {
 			"instructions": [
@@ -264,17 +227,6 @@
 				}
 			]
 		}
-	},
-	"59": {
-		"conditional_power": [
-			{
-				"condition": {
-					"is_named": "Squall",
-					"controller": "player"
-				},
-				"value": 2000
-			}
-		]
 	},
 	"81": {
 		"all_jobs": true
@@ -363,17 +315,6 @@
 			},
 			"value": 1000
 		}
-	},
-	"208": {
-		"conditional_power": [
-			{
-				"condition": {
-					"check_controller": "player",
-					"is_named": "Serah"
-				},
-				"value": 2000
-			}
-		]
 	},
 	"163": {
 		"power_per": {
@@ -501,22 +442,6 @@
 		}
 	},
 	"201": {
-		"conditional_power": [
-			{
-				"condition": {
-					"is_named": "Yuna",
-					"controller": "your"
-				},
-				"value": 2000
-			},
-			{
-				"condition": {
-					"is_named": "Paine",
-					"controller": "your"
-				},
-				"value": 2000
-			}
-		],
 		"conditional_cannot_be_chosen": [
 			{
 				"if_controls": {

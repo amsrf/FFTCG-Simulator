@@ -6,3 +6,10 @@ func when_enter_field(ctx) -> void:
 	await ctx.each_player_discards(1)
 	if ctx.condition("controls:Laguna"):
 		await ctx.opponent_discards(1)
+
+func conditional_powers() -> Array:
+	return [{"value": 3000, "condition": Callable(self, "_has_laguna")}]
+
+
+func _has_laguna(source: Card) -> bool:
+	return controls(source, {"is_named": "Laguna"})

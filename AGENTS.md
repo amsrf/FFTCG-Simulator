@@ -33,6 +33,8 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- `conditional_power` is a BOARD SCAN, not a registry. Scan the field at the continuous-effect invalidation
+  points, keep a per-rule granted ledger for only the difference, and prune keys that disappear. Never poll per frame.
 - Code abilities receive activation-time picks in `ctx.targets`; do not call `choose_targets()` again in the resolver.
 - Yuffie-style "divide damage" abilities set `AbilitySpec.divide_total`, which makes the Stack choose the split before
   commit; the resolver applies it with `ctx.apply_damage_division()`.

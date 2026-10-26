@@ -416,7 +416,6 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# Add card to appropriate array
 	var n = target_array.size()
 	target_array.append(card)
-	register_conditional_effects(card)
 	recompute_conditional_power()
 	register_card_auras(card)
 	register_power_per(card)
@@ -1341,7 +1340,6 @@ func clear_targeted_highlights() -> void:
 		card.set_targeted_highlight(false)
 
 func remove_card(card):
-	unregister_conditional_effects(card)
 	unregister_card_auras(card)
 	unregister_power_per(card)
 	front_cards.erase(card)
@@ -1360,33 +1358,79 @@ func remove_card(card):
 	prune_party()
 
 ## Conditional continuous effects ("if you control X, this gains power").
-## Re-evaluated only when the field composition changes: play_card/remove_card.
-var _conditional_effects: Array[Dictionary] = []
+##
+## A BOARD SCAN, not a registry. The board is tiny, every condition already queried the board, and a registry
+## needed a matching unregister at every exit from the field. The scan runs from the same invalidation points as
+## the other continuous systems (play_card, remove_card, silence/restore, end cleanup), never per frame.
+##
+## The ledger is still per rule: a card may have two conditional powers (Rikku 201: +2000 for Yuna, +2000 for
+## Paine), and one shared bonus made them overwrite each other.
+var _conditional_granted: Dictionary = {}
+var _conditional_sources: Dictionary = {}
 
-func register_conditional_effects(card: Card) -> void:
-	if "conditional_power" in card.card_effects:
-		for i in range(card.card_effects["conditional_power"].size()):
-			var effect = card.card_effects["conditional_power"][i]
-			_conditional_effects.append({
-				"source": card,
-				"condition": effect.get("condition", {}),
-				"value": int(effect.get("value", 0)),
-				"key": "conditional:%d:%d" % [card.get_instance_id(), i],
-				# EACH RULE KEEPS ITS OWN LEDGER. A card may have two conditional powers (Rikku 201: +2000 for
-				# Yuna, +2000 for Paine); one shared current_conditional_bonus made them overwrite each other, so
-				# the second always undid the first.
-				"granted": 0,
-			})
 
-func unregister_conditional_effects(card: Card) -> void:
-	var granted_total: int = 0
-	for effect in _conditional_effects:
-		if effect["source"] == card:
-			granted_total += int(effect.get("granted", 0))
-			card.remove_power_modifier(str(effect.get("key", "")))
-	_conditional_effects = _conditional_effects.filter(func(e): return e["source"] != card)
-	if granted_total != 0:
-		card.current_conditional_bonus = maxi(0, card.current_conditional_bonus - granted_total)
+func _conditional_rules(card: Card) -> Array:
+	var effect_obj = card.effect()
+	if effect_obj != null and effect_obj.has_method("conditional_powers"):
+		var code_rules = effect_obj.conditional_powers()
+		if code_rules is Array and not code_rules.is_empty():
+			return code_rules
+	var rules = card.card_effects.get("conditional_power", [])
+	if rules is Dictionary:
+		rules = [rules]
+	return rules if rules is Array else []
+
+
+func _conditional_holds(rule: Dictionary, source: Card) -> bool:
+	var condition = rule.get("condition", null)
+	if condition is Callable:
+		return bool(condition.call(source))
+	if condition is Dictionary:
+		return _condition_met(condition, source)
+	return false
+
+
+func recompute_conditional_power() -> void:
+	var active: Dictionary = {}
+	var active_sources: Dictionary = {}
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var rules: Array = _conditional_rules(card)
+		for i in range(rules.size()):
+			var rule = rules[i]
+			if not (rule is Dictionary):
+				continue
+			var key: String = "conditional:%d:%d" % [card.get_instance_id(), i]
+			active[key] = true
+			active_sources[key] = card
+			var desired: int = 0
+			if card.abilities_enabled() and _conditional_holds(rule, card):
+				desired = int(rule.get("value", 0))
+			var granted: int = int(_conditional_granted.get(key, 0))
+			if desired != granted:
+				if desired == 0:
+					card.remove_power_modifier(key)
+				else:
+					card.add_power_modifier(key, desired)
+				card.current_conditional_bonus = maxi(0, card.current_conditional_bonus + desired - granted)
+				_conditional_granted[key] = desired
+				_conditional_sources[key] = card
+	# Remove rules that disappeared with a source, a silence, or a changed card.
+	for key in _conditional_granted.keys():
+		if active.has(key):
+			continue
+		var source: Card = _conditional_sources.get(key)
+		var granted: int = int(_conditional_granted[key])
+		if source != null and is_instance_valid(source):
+			source.remove_power_modifier(key)
+			source.current_conditional_bonus = maxi(0, source.current_conditional_bonus - granted)
+		_conditional_granted.erase(key)
+		_conditional_sources.erase(key)
+	# Keep the source map fresh for rules that are currently active but whose card changed instance.
+	for key in active_sources:
+		_conditional_sources[key] = active_sources[key]
+
 
 ## CONTINUOUS, COUNT-BASED POWER. "For each point of damage you have received, +1000" (Dark Knight 92, Gabranth 98)
 ## and "for each Forward your opponent controls, +1000" (Jecht 15).
@@ -1474,24 +1518,6 @@ func _power_per_count(counter, source: Card) -> int:
 				total += 1
 		return total
 	return 0
-
-func recompute_conditional_power() -> void:
-	for effect in _conditional_effects:
-		var source: Card = effect["source"]
-		if source == null or not is_instance_valid(source) or not source.is_inside_tree():
-			continue
-		var desired: int = int(effect["value"]) if source.abilities_enabled() and _condition_met(effect["condition"], source) else 0
-		var granted: int = int(effect.get("granted", 0))
-		if desired != granted:
-			var key: String = str(effect.get("key", ""))
-			if desired == 0:
-				source.remove_power_modifier(key)
-			else:
-				source.add_power_modifier(key, desired)
-			effect["granted"] = desired
-			# current_conditional_bonus remains the SUM across this card's rules, for cleanup and diagnostics;
-			# the per-rule `granted` above is what prevents two rules from undoing each other.
-			source.current_conditional_bonus += desired - granted
 
 ## Is the condition true FOR THIS SOURCE CARD? The source is the card that owns the conditional ("if you control
 ## Aerith" belongs to Zack), because "you" means its controller — without it the criteria would be read literally

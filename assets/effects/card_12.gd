@@ -7,3 +7,10 @@ func when_enter_field(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.damage(targets, 2000)
+
+func conditional_powers() -> Array:
+	return [{"value": 2000, "condition": Callable(self, "_has_aerith")}]
+
+
+func _has_aerith(source: Card) -> bool:
+	return controls(source, {"is_named": "Aerith"})
