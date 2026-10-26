@@ -36,6 +36,13 @@ var mat: ShaderMaterial
 @export var field_actions : Array = []
 @export var status_effects = {}
 @export var power_array = []
+## CONTINUOUS POWER CONTRIBUTIONS, keyed by source (aura:<source id>:<index>, conditional:<card id>:<rule>, ...).
+## `power` is a cache of base_power + these + power_array + _manual_power_delta; nothing outside recompute_power()
+## should write it for a normal effect.
+var _continuous_power: Dictionary = {}
+## Legacy permanent deltas that were expressed as power_change(amount, -1) before the ledger existed.
+var _manual_power_delta: int = 0
+signal power_changed(value: int)
 ## Keywords GRANTED by a continuous effect (an aura), as opposed to printed in card_effects. A COUNT, not a bool,
 ## because two auras can grant the same keyword and losing one must not lose the other.
 var granted_statuses: Dictionary = {}
@@ -157,6 +164,9 @@ func load_card_data():
 		type = card_data.get('type_en','Unknown type')
 		card_name = card_data.get("name_en", "Unknown")
 		base_power = int(card_data.get("power", 0))
+		_continuous_power.clear()
+		power_array.clear()
+		_manual_power_delta = 0
 		power = base_power
 		cost = int(card_data.get("cost", 0))
 		code = card_data.get("code", "Unknown")
@@ -647,15 +657,18 @@ func clear_damage():
 ## not broken. `power` is a running value, so temporary buffs have to be SUBTRACTED before their list is dropped —
 ## clearing power_array alone would leave the bonus baked into `power` forever.
 func reset_for_field_arrival() -> void:
-	for buff in power_array:
-		power -= int(buff[0])
+	# A card returning from a non-field zone is a new object. Drop every modifier, then recompute once; there is no
+	# arithmetic to reverse because `power` is only a cache.
+	_continuous_power.clear()
 	power_array.clear()
+	_manual_power_delta = 0
 	status_effects.clear()
 	granted_statuses.clear()
 	extra_attacks = 0
 	clear_damage()
 	broken = false
 	untap()
+	recompute_power()
 
 ## A status is a duration (int) or a payload Dictionary with a "duration" inside. The optional `payload` form is how
 ## a one-shot damage rule is carried: {"operation": "set", "value": 0} or {"operation": "subtract", "value": 2000}.
@@ -737,21 +750,18 @@ func turn_end():
 	var remaining_buffs: Array = []
 	for p in power_array:
 		var dur = p[1]
-		# Same float trap: "+1000 until end of turn" from the card data is a duration of 1.0, so the old `is int`
-		# test skipped it and the power never came back down.
+		# Same float trap: "+1000 until end of turn" from the card data is a duration of 1.0, so an `is int` test
+		# would skip it and the power would never come back down.
 		if (dur is int or dur is float) and int(dur) > 0:
 			var left: int = int(dur) - 1
 			if left > 0:
 				p[1] = left
 				remaining_buffs.append(p)
-			else:
-				power -= p[0]
 		else:
-			# Permanent modifiers (aura: duration -1 or null) never expire.
+			# Permanent entries in power_array are legacy; new continuous effects live in _continuous_power.
 			remaining_buffs.append(p)
 	power_array = remaining_buffs
-	if power_label:
-		power_label.changePower(power)
+	recompute_power()
 	# "can attack twice THIS turn" - the allowance expires with the turn, not with the card.
 	extra_attacks = 0
 	clear_damage()
@@ -763,14 +773,61 @@ func set_power_value(value: int, duration: int = 1) -> void:
 	power_change(value - power, duration)
 
 
-func power_change(amount, duration):
-	# duration < 0 (or null) means permanent (used by auras).
-	if duration == null:
-		duration = -1
-	power_array.append([amount, duration])
-	power += amount
+## The one place that computes the displayed/current power. It never changes base_power, and it is safe to call as
+## often as a board refresh needs to; the signal only fires when the number actually changes.
+## Test/setup hook: change the printed base and recompute from it. Production card data sets base_power during load.
+func set_base_power(value: int) -> void:
+	base_power = value
+	recompute_power()
+
+
+func recompute_power() -> void:
+	var next: int = base_power + _manual_power_delta
+	for amount in _continuous_power.values():
+		next += int(amount)
+	for buff in power_array:
+		if buff is Array and not buff.is_empty():
+			next += int(buff[0])
+	if next == power:
+		return
+	power = next
 	if power_label:
 		power_label.changePower(power)
+	power_changed.emit(power)
+
+
+## Register/revoke a continuous contribution. The key names the OWNER of the effect, so two auras on one target sum
+## independently and revoking one cannot remove the other's amount.
+func add_power_modifier(key: String, amount: int) -> void:
+	if key.is_empty():
+		return
+	_continuous_power[key] = int(amount)
+	recompute_power()
+
+
+func remove_power_modifier(key: String) -> void:
+	if _continuous_power.erase(key):
+		recompute_power()
+
+
+func clear_power_modifiers() -> void:
+	_continuous_power.clear()
+	_manual_power_delta = 0
+	recompute_power()
+
+
+## Legacy API for temporary buffs: duration > 0 is a timed entry, duration <= 0/null is a permanent manual delta.
+## New continuous effects (auras, conditional power, power_per) should use add_power_modifier() with a stable key.
+func power_change(amount, duration):
+	if int(amount) == 0:
+		return
+	if duration == null:
+		duration = -1
+	if int(duration) > 0:
+		power_array.append([int(amount), duration])
+	else:
+		_manual_power_delta += int(amount)
+	recompute_power()
 	
 ## Skills the card can actually activate right now: printed skills plus Kimahri's copied ability.
 func activation_skills() -> Array:

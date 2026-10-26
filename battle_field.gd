@@ -237,6 +237,8 @@ class AuraValue:
 	## source's instance id — which is what limited a card to one aura: a second entry under the same key overwrote the
 	## first before anything had applied it, and the teardown only ever undid the survivor.
 	var source: Card = null
+	## Stable ledger key for a power contribution. Two auras on one card must not share it.
+	var key: String = ""
 	## The cards this aura has ALREADY been applied to. Without it the same card can be reached twice — a card arriving
 	## runs add_all_auras_to_card(), and an aura arriving runs activate_aura_in_field() over everything — and a
 	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
@@ -259,6 +261,7 @@ func add_aura(aura: Dictionary, source: Card) -> AuraValue:
 	var aura_value := AuraValue.new(str(aura.get('method', '')), aura.get('targets', {}),
 		int(aura.get('value', 0)), str(aura.get('status', '')))
 	aura_value.source = source
+	aura_value.key = "aura:%d:%d" % [source.get_instance_id(), _next_aura_id]
 	_auras[_next_aura_id] = aura_value
 	_next_aura_id += 1
 	return aura_value
@@ -287,8 +290,9 @@ func add_aura_to_card(aura: AuraValue, card: Card):
 		return
 	aura.granted[card] = true
 	if aura.method == 'power_change':
-		# -1 = permanent modifier (does not expire at end of turn).
-		card.power_change(aura.value, -1)
+		# Add a CONTINUOUS entry, not a delta to the cached number. Revoking this key later removes exactly this
+		# aura's contribution, even if another aura or temporary buff is present.
+		card.add_power_modifier(aura.key, aura.value)
 	elif aura.method == 'grant_status' and not aura.status.is_empty():
 		# Keywords from a continuous effect ("the Standard Unit Forwards gain First Strike"). Counted, so two
 		# sources can grant the same keyword and one leaving does not revoke the other's.
@@ -1343,11 +1347,13 @@ var _conditional_effects: Array[Dictionary] = []
 
 func register_conditional_effects(card: Card) -> void:
 	if "conditional_power" in card.card_effects:
-		for effect in card.card_effects["conditional_power"]:
+		for i in range(card.card_effects["conditional_power"].size()):
+			var effect = card.card_effects["conditional_power"][i]
 			_conditional_effects.append({
 				"source": card,
 				"condition": effect.get("condition", {}),
 				"value": int(effect.get("value", 0)),
+				"key": "conditional:%d:%d" % [card.get_instance_id(), i],
 				# EACH RULE KEEPS ITS OWN LEDGER. A card may have two conditional powers (Rikku 201: +2000 for
 				# Yuna, +2000 for Paine); one shared current_conditional_bonus made them overwrite each other, so
 				# the second always undid the first.
@@ -1359,12 +1365,10 @@ func unregister_conditional_effects(card: Card) -> void:
 	for effect in _conditional_effects:
 		if effect["source"] == card:
 			granted_total += int(effect.get("granted", 0))
+			card.remove_power_modifier(str(effect.get("key", "")))
 	_conditional_effects = _conditional_effects.filter(func(e): return e["source"] != card)
 	if granted_total != 0:
-		card.power -= granted_total
 		card.current_conditional_bonus = maxi(0, card.current_conditional_bonus - granted_total)
-		if card.power_label:
-			card.power_label.changePower(card.power)
 
 ## CONTINUOUS, COUNT-BASED POWER. "For each point of damage you have received, +1000" (Dark Knight 92, Gabranth 98)
 ## and "for each Forward your opponent controls, +1000" (Jecht 15).
@@ -1399,15 +1403,14 @@ func register_power_per(card: Card) -> void:
 			"brave_at": int(rule.get("brave_at", -1)),
 			"granted": 0,
 			"brave_granted": false,
+			"key": "power_per:%d:%d" % [card.get_instance_id(), _power_per_effects.size()],
 		})
 	recompute_power_per()
 
 func unregister_power_per(card: Card) -> void:
 	for rule in _power_per_effects:
 		if rule["source"] == card and is_instance_valid(card):
-			var granted: int = int(rule["granted"])
-			if granted != 0:
-				card.power_change(-granted, -1)
+			card.remove_power_modifier(str(rule.get("key", "")))
 	_power_per_effects = _power_per_effects.filter(func(r): return r["source"] != card)
 
 func recompute_power_per() -> void:
@@ -1418,7 +1421,10 @@ func recompute_power_per() -> void:
 		var n: int = _power_per_count(rule["count"], source)
 		var desired: int = n * int(rule["value"]) if source.abilities_enabled() else 0
 		if desired != int(rule["granted"]):
-			source.power_change(desired - int(rule["granted"]), -1)
+			if desired == 0:
+				source.remove_power_modifier(str(rule.get("key", "")))
+			else:
+				source.add_power_modifier(str(rule.get("key", "")), desired)
 			rule["granted"] = desired
 		var threshold: int = int(rule["brave_at"])
 		if threshold > 0:
@@ -1459,14 +1465,15 @@ func recompute_conditional_power() -> void:
 		var desired: int = int(effect["value"]) if source.abilities_enabled() and _condition_met(effect["condition"], source) else 0
 		var granted: int = int(effect.get("granted", 0))
 		if desired != granted:
-			var delta: int = desired - granted
-			source.power += delta
+			var key: String = str(effect.get("key", ""))
+			if desired == 0:
+				source.remove_power_modifier(key)
+			else:
+				source.add_power_modifier(key, desired)
 			effect["granted"] = desired
 			# current_conditional_bonus remains the SUM across this card's rules, for cleanup and diagnostics;
 			# the per-rule `granted` above is what prevents two rules from undoing each other.
-			source.current_conditional_bonus += delta
-			if source.power_label:
-				source.power_label.changePower(source.power)
+			source.current_conditional_bonus += desired - granted
 
 ## Is the condition true FOR THIS SOURCE CARD? The source is the card that owns the conditional ("if you control
 ## Aerith" belongs to Zack), because "you" means its controller — without it the criteria would be read literally
@@ -1535,7 +1542,7 @@ func _revoke_aura(aura: AuraValue) -> void:
 		if not is_instance_valid(other):
 			continue
 		if aura.method == "power_change":
-			other.power_change(-aura.value, -1)
+			other.remove_power_modifier(aura.key)
 		elif aura.method == "grant_status" and not aura.status.is_empty():
 			other.revoke_status(aura.status)
 	aura.granted.clear()

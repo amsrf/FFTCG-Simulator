@@ -122,9 +122,9 @@ func _ready() -> void:
 	var p: Card = pair2[0]
 	var q: Card = pair2[1]
 	var blocker: Card = _make_forward(ICE_A, "opponent")
-	blocker.power = 20000
-	p.power = 3000
-	q.power = 5000
+	blocker.set_base_power(20000)
+	p.set_base_power(3000)
+	q.set_base_power(5000)
 	_expect(_field.party_members().size() == 2, "party formed for the combat check")
 	_expect(_field.party_has_first_strike() == false, "no First Strike on the party")
 	_field.set("blocker_card", blocker)

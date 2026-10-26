@@ -77,8 +77,8 @@ func _clash(attacker_strong: bool, attacker_fs: bool, blocker_fs: bool) -> Array
 		card.status_effects.clear()
 		card.card_effects.clear()
 		card.accumulated_damage = 0
-	attacker.power = STRONG if attacker_strong else WEAK
-	blocker.power = WEAK if attacker_strong else STRONG
+	attacker.set_base_power(STRONG if attacker_strong else WEAK)
+	blocker.set_base_power(WEAK if attacker_strong else STRONG)
 	if attacker_fs:
 		attacker.status_effects["first_strike"] = 99
 	if blocker_fs:

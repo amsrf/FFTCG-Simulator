@@ -148,6 +148,32 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Derived Power: One Source of Truth
+
+Power is now a cached result, not a number that every effect mutates in place.
+
+```text
+current power = base_power
+              + _continuous_power entries
+              + temporary power_array entries
+              + legacy _manual_power_delta
+```
+
+- `recompute_power()` is the only normal writer of `power`.
+- The power display is updated there, so auras, conditionals and temporary buffs do not each need their own UI code.
+- `power_changed` is emitted only when the value actually changes.
+- `add_power_modifier(key, amount)` / `remove_power_modifier(key)` give every continuous effect a stable key.
+- Auras now write `aura:<source>:<index>` entries instead of doing `power_change(+value)` / `power_change(-value)`.
+- `conditional_power` and `power_per` now use `conditional:<card>:<rule>` and `power_per:<card>:<rule>` entries.
+- Temporary buffs remain in `power_array`; legacy permanent `power_change(amount, -1)` calls remain as a manual delta.
+- `set_base_power()` exists for test/setup code; normal card setup loads the printed base once.
+
+The UI keeps its existing tween, but repeated recomputes during one board refresh now kill the previous tween, so the
+last value wins instead of two tweens fighting.
+
+New `power_ledger_probe` (8 checks) proves two independent keys, partial removal, base preservation, the label
+settling on the computed value, temporary buff stacking and expiry. Full suite and boot are green.
+
 ### Skill-Only Migration Complete
 
 The remaining skill-only cards were moved to `AbilitySpec` and their JSON entries removed:

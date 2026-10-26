@@ -31,7 +31,7 @@ func _new_card(id: int, power: int) -> Card:
 	_field.play_card(card, false, false)
 	card.status_effects.clear()
 	card.card_effects.clear()
-	card.power = power
+	card.set_base_power(power)
 	return card
 
 

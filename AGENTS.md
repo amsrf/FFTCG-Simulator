@@ -33,6 +33,10 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Power is derived and cached: `base_power` + `_continuous_power` + `power_array` + `_manual_power_delta`.
+  `recompute_power()` is the one normal writer of `power` and the one place the label changes. Continuous effects use
+  `add_power_modifier(key, amount)` / `remove_power_modifier(key)`; do not add-and-deduct `power` directly.
+- Test setup that needs a different printed power uses `set_base_power()`, not an assignment to the cached `power`.
 - `Card.current_elements()` is a live query: printed `element` stays immutable, while `effect.current_elements(ctx,
   card)` may add or replace Elements. `is_element()` and every criteria/cost check must go through it.
 - Keep class references by path (`preload("res://...")`) for new effect scripts; Godot's headless run does not have a

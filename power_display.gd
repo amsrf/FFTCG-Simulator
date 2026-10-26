@@ -4,6 +4,10 @@ var power: int
 var accumulated_damage: int
 
 # Called when the node enters the scene tree for the first time.
+var _power_tween: Tween = null
+var _damage_tween: Tween = null
+
+
 func _ready() -> void:
 	power = get_parent().power
 	accumulated_damage = get_parent().accumulated_damage
@@ -16,14 +20,20 @@ func changeAccumulatedDamage(newDamage):
 	animate_accumulated_damage_change(newDamage)
 
 func animate_power_change(end_power: int, duration: float = 0.75):
-	var tween = create_tween()
-	tween.tween_method(update_power_display, power, end_power, duration).set_ease(Tween.EASE_OUT)
-	tween.tween_callback(pulse_label)
+	# A board refresh can recompute several times in one frame. Kill the previous tween so the last value wins and
+	# two tweens cannot fight over `power`.
+	if _power_tween != null and _power_tween.is_valid():
+		_power_tween.kill()
+	_power_tween = create_tween()
+	_power_tween.tween_method(update_power_display, power, end_power, duration).set_ease(Tween.EASE_OUT)
+	_power_tween.tween_callback(pulse_label)
 
 func animate_accumulated_damage_change(end_damage: int, duration: float = 0.75):
-	var tween = create_tween()
-	tween.tween_method(update_accumulated_damage_display, accumulated_damage, end_damage, duration).set_ease(Tween.EASE_OUT)
-	tween.tween_callback(pulse_label)
+	if _damage_tween != null and _damage_tween.is_valid():
+		_damage_tween.kill()
+	_damage_tween = create_tween()
+	_damage_tween.tween_method(update_accumulated_damage_display, accumulated_damage, end_damage, duration).set_ease(Tween.EASE_OUT)
+	_damage_tween.tween_callback(pulse_label)
 
 func update_power_display(newPower: int):
 	power = newPower

@@ -79,7 +79,7 @@ func _ready() -> void:
 	var target: Card = _game.call("create_card", 41, "opponent")
 	_game.add_child(target)
 	field.play_card(target, true, false, false)
-	target.power = 10000
+	target.set_base_power(10000)
 	target.accumulated_damage = 0
 	_game.set("_targets", [target])
 

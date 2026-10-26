@@ -72,7 +72,7 @@ func _ready() -> void:
 	# --- 2. POWER ZERO: arrival only ------------------------------------------------------------------
 	var zero: Card = _new_forward()
 	before = stack.stack_length()
-	zero.power = 0
+	zero.set_base_power(0)
 	_game.enforce_game_state_rules()
 	got = _new_keywords(before)
 	print("[BreakZone] power 0 -> %s" % str(got))
