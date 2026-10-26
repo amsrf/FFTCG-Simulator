@@ -441,6 +441,17 @@ func commit_skill_activation_costs_if_pending() -> void:
 	field.apply_deferred_skill_mana_payment()
 	hand.apply_deferred_skill_mana_payment()
 	_apply_skill_source_tap_from_proxy()
+	# RETURN-THIS-CARD-TO-HAND COST (Onion Knight 181). Done at commit, not activation, so backing out of payment
+	# leaves the source on the field. The ability proxy already owns the spec, so the source may leave safely.
+	if skill_activation_proxy != null:
+		var return_def: Dictionary = skill_activation_proxy.skill_def_override
+		if bool(return_def.get("return_self", false)):
+			var return_src: Card = skill_activation_proxy.effect_source
+			if return_src != null and is_instance_valid(return_src):
+				var owner_hand: Hand = get_parent().hand_for(1 if return_src.controller == "player" else 2)
+				if owner_hand != null:
+					field.remove_card(return_src)
+					owner_hand.add_card(return_src)
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
 		hand.discard_card(s_cost_selected_card)

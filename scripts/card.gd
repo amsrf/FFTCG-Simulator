@@ -1630,8 +1630,15 @@ func make_effect_context(event: String = "static", data: Dictionary = {}, effect
 	# the ability resolves, so walking up from this card reaches the Break Zone's PlayerSide, not the Game. The effect
 	# copy is on the Stack, whose parent IS the Game, and that is the stable path for every resolving ability.
 	var anchor: Node = effect_card if effect_card != null and is_instance_valid(effect_card) and effect_card.is_inside_tree() else self
-	var parent: Node = anchor.get_parent()
-	var game: Node = parent.get_parent() if parent != null else null
+	# WALK UP TO THE GAME. The old two-step assumption (card -> owner -> Game) breaks for a card that has moved to
+	# hand/deck before resolution. Identify Game by the seam methods it owns instead.
+	var game: Node = null
+	var node: Node = anchor.get_parent()
+	while node != null:
+		if node.has_method("agent_for") and node.has_method("hand_for"):
+			game = node
+			break
+		node = node.get_parent()
 	return EFFECT_CONTEXT.new(game, self, event, data, effect_card, targets)
 
 

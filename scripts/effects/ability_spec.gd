@@ -11,6 +11,7 @@ var tap: bool = false
 var s_cost: bool = false
 var discard: int = 0
 var sacrifice: Dictionary = {}
+var return_self: bool = false
 
 var targets = null              # choose_target criteria; Dictionary or Array
 var target_count: int = 1
@@ -58,6 +59,7 @@ func as_skill_dict() -> Dictionary:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice,
+		"return_self": return_self,
 		"only_your_turn": only_your_turn,
 		"only_if_blocking": only_if_blocking,
 		"only_if_damage_received": only_if_damage_received,
@@ -88,6 +90,7 @@ func duplicate_spec() -> RefCounted:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice.duplicate(true),
+		"return_self": return_self,
 		"targets": targets.duplicate(true) if targets is Dictionary or targets is Array else targets,
 		"target_count": target_count,
 		"target_chooser": target_chooser,

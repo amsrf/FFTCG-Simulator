@@ -33,6 +33,8 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- `return_self` is a commit-time ability cost: the source can be in hand when the ability resolves, so never find Game
+  by a fixed two-level parent walk. `Card.make_effect_context()` searches ancestors for the Game seam methods.
 - Damage-to-player triggers must branch on `effect_handles_event()` before calling `begin_triggered_ability()`;
   the latter only knows JSON. Auron was the last target-dependent card blocked by this.
 - Hand-play effects use `EffectContext.may_play_from_hand()`: shortlist, may, choose, play for free, optional dull.

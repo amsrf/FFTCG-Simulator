@@ -148,6 +148,16 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Onion Knight 1-181H: Return-Self Cost
+
+Onion Knight's activated ability is code-owned. `AbilitySpec` gained a
+`return_self` cost: at commit, the source is removed from the field and put
+into its owner's hand, while the stack proxy keeps the ability snapshot.
+
+The effect then uses `may_play_from_hand()` to put an Onion Knight from hand
+onto the field. `Card.make_effect_context()` now walks ancestors to find Game,
+because the source can be in hand by the time the ability resolves.
+
 ### Auron 1-001H: May Play a Fire Backup
 
 Auron's damage trigger is code-owned and also closes the last target-dependent
