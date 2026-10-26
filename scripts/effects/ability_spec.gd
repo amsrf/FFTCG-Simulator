@@ -11,6 +11,7 @@ var tap: bool = false
 var s_cost: bool = false
 var discard: int = 0
 var sacrifice: Dictionary = {}
+var divide_total: int = 0
 var return_self: bool = false
 
 var targets = null              # choose_target criteria; Dictionary or Array
@@ -36,6 +37,7 @@ func _init(data: Dictionary = {}) -> void:
 	s_cost = bool(data.get("s_cost", false))
 	discard = int(data.get("discard", 0))
 	sacrifice = data.get("sacrifice", {})
+	divide_total = int(data.get("divide_total", 0))
 	targets = data.get("targets", null)
 	target_count = maxi(1, int(data.get("target_count", 1)))
 	target_chooser = str(data.get("target_chooser", "self"))
@@ -59,6 +61,7 @@ func as_skill_dict() -> Dictionary:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice,
+		"divide_total": divide_total,
 		"return_self": return_self,
 		"only_your_turn": only_your_turn,
 		"only_if_blocking": only_if_blocking,
@@ -90,6 +93,7 @@ func duplicate_spec() -> RefCounted:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice.duplicate(true),
+		"divide_total": divide_total,
 		"return_self": return_self,
 		"targets": targets.duplicate(true) if targets is Dictionary or targets is Array else targets,
 		"target_count": target_count,

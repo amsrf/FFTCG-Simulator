@@ -148,6 +148,20 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Activated Skills
+
+Migrated the last 24 `skill` arrays to `AbilitySpec`. Targeted abilities use the
+activation-time picks (`ctx.targets`) in their handlers; they never re-open
+targeting at resolution.
+
+New reusable support: `AbilitySpec.divide_total` keeps Yuffie's divide pool in
+the activation step (so Cancel can return to targeting), while
+`EffectContext.apply_damage_division()` applies the stored split at resolution.
+Context also gained `check_revealed`, `remove_revealed_from_game`, `set_power`
+and `extra_attacks_from_damage`.
+
+JSON numeric entries dropped from 69 to 54.
+
 ### JSON Migration: EX BURST
 
 Migrated all 29 `ex_burst` fields to `CardEffect.ex_burst_event()`. The default

@@ -322,6 +322,71 @@ func opponent_discards(count: int = 1) -> void:
 	await discard(3 - owner_id, count)
 
 
+## Divide `total` damage among `cards` through the agent seam. Used by Yuffie 85.
+func divide_damage(cards: Array, total: int) -> void:
+	if cards.is_empty() or total <= 0 or game == null:
+		return
+	var agent = game.agent_for(owner_id)
+	if agent == null:
+		return
+	var split: Array = await agent.choose_damage_split(owner_id, cards, total)
+	for i in range(cards.size()):
+		var card: Card = cards[i]
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var amount: int = int(split[i]) if i < split.size() else 0
+		if amount > 0:
+			game.field.cause_damage(card, amount, source, "Ability", controller)
+
+
+## Apply the split chosen during ability activation (before commit) to ctx.targets. Used by Yuffie 85.
+func apply_damage_division(total: int) -> void:
+	if game == null or targets.is_empty():
+		return
+	var amounts = game.get("_damage_division")
+	if amounts == null or amounts.is_empty():
+		amounts = []
+	for i in range(targets.size()):
+		var card: Card = targets[i]
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		var amount: int = int(amounts[i]) if i < amounts.size() else 0
+		if amount > 0:
+			game.field.cause_damage(card, amount, source, "Ability", controller)
+	game.set("_damage_division", [])
+
+
+## Look at the staging area without moving the card. The count/limit checks live here so a card handler does not
+## need to know the Game's reveal internals.
+func check_revealed(index: int = 0, criteria: Dictionary = {}) -> bool:
+	if game == null:
+		return false
+	var staged = game.get("revealed_cards")
+	if staged == null or index < 0 or index >= staged.size():
+		return false
+	var card: Card = staged[index]
+	return card != null and is_instance_valid(card) \
+		and (criteria.is_empty() or card.matches_criteria(criteria, source))
+
+
+func remove_revealed_from_game(index: int = 0) -> void:
+	if game != null:
+		game.remove_revealed_from_game(index)
+
+
+## Make a card's power exactly `value` for `duration` turns.
+func set_power(cards: Array, value: int, duration: int = 1) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.set_power_value(value, duration)
+
+
+## Tidus 163: this Forward may attack as many times as its controller's damage count.
+func extra_attacks_from_damage() -> void:
+	if game != null:
+		game.extra_attacks_from_damage()
+
+
 func opponent_mills(count: int = 1) -> void:
 	await mill(3 - owner_id, count)
 

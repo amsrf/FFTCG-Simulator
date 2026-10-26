@@ -224,14 +224,14 @@ func _ready() -> void:
 	_expect(_opponent_hand.cards.size() == opp_hand_before, "a refusal leaves the opponent's hand alone")
 
 	# --- E2. Renzokuken: the skill grants ITSELF First Strike ------------------------------------------------
-	var skills: Array = squall.card_effects.get("skill", [])
-	_expect(skills.size() == 1 and bool(skills[0].get("s_cost", false)),
-		"Renzokuken is an S ability")
-	_expect(skills.size() == 1 and skills[0].get("cost", {}).has("氷"), "and it also costs ice mana")
-	if skills.size() == 1:
-		var self_ins: Array[Instruction] = squall.create_instruction_from_json(skills[0]["instructions"])
-		_game.set("_current_source_card", squall)
-		_game.call("_execute_instructions", self_ins)
+	var effect_obj = load("res://assets/effects/card_41.gd").new()
+	var specs: Array = effect_obj.activated_abilities()
+	_expect(specs.size() == 1 and specs[0].s_cost,
+		"Renzokuken is a code S ability")
+	_expect(specs.size() == 1 and specs[0].cost.has("氷"), "and it also costs ice mana")
+	if specs.size() == 1:
+		var ctx = squall.make_effect_context("activated_ability")
+		await specs[0].run.call(ctx)
 		await get_tree().process_frame
 		_expect(squall.is_first_strike(), "resolving it gives Squall First Strike")
 

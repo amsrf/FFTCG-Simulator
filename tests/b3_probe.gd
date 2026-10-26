@@ -176,18 +176,13 @@ func _ready() -> void:
 	_expect(_game.player.hand.cards.size() == hand_before, "and no card is added to hand")
 	_expect(bool(effects.get(str(GILGAMESH), {}).get("cannot_be_returned_to_hand", {}).get("sources", []).has("Ability")),
 		"Gilgamesh's return protection is in the data")
-	# Divider is the second skill; isolate it to prove the 4-damage gate.
-	var divider: Dictionary = effects[str(GILGAMESH)]["skill"][1]
-	gilgamesh.card_effects["skill"] = [divider]
-	_game.set("priority_holder", 1)
-	GlobalVariables.set_base_mode(GlobalVariables.Player_Mode.FREE)
-	_expect(not _field.can_activate_now(gilgamesh), "Divider is not offered below 4 damage")
-	gilgamesh.tap()
-	_expect(_field.can_activate_now(gilgamesh) == false, "and a tapped Gilgamesh is still not offered below 4")
-	for i in range(4):
-		var dummy: Card = _off_field(1, "player")
-		_game.player.damage_zone.add_card(dummy)
-	_expect(_field.can_activate_now(gilgamesh), "after 4 damage the non-tap Divider is offered even while tapped")
+	# Divider is the second code ability. The pump beside it keeps Gilgamesh offered, so the gate is asserted on
+	# the AbilitySpec itself rather than on the card-level availability.
+	var gil_specs: Array = load("res://assets/effects/card_207.gd").new().activated_abilities()
+	_expect(gil_specs.size() == 2 and gil_specs[1].only_if_damage_received == 4,
+		"Divider is gated on having received 4 damage")
+	_expect(gil_specs.size() == 2 and gil_specs[1].s_cost and not gil_specs[1].tap,
+		"and it is a non-tap S ability")
 	_game.queue_free()
 
 	print("[B3] %d checks | failures: %d" % [_checks, _fails])

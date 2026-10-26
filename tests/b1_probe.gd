@@ -108,7 +108,8 @@ func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(load("res://assets/effects/card_106.gd").new().has_method("when_cast"),
 		"Golem 106's blocking-conditional cast effect is code-owned")
-	_expect(bool(effects.get("194", {}).get("skill", [{}])[0].get("only_if_blocking", false)),
+	var snow_specs: Array = load("res://assets/effects/card_194.gd").new().activated_abilities()
+	_expect(snow_specs.size() == 1 and snow_specs[0].only_if_blocking,
 		"Snow 194's Vendetta is gated on blocking")
 	var wol_effect = load("res://assets/effects/card_155.gd").new()
 	var wol_auras: Array = wol_effect.auras()

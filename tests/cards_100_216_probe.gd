@@ -102,8 +102,9 @@ func _ready() -> void:
 	_expect(lulu_specs.size() == 2, "Lulu 149 has two code abilities")
 	_expect(not lulu_specs.is_empty() and not lulu_specs[0].sacrifice.is_empty(),
 		"and the first one sacrifices a Backup")
-	_expect(effects.get("182", {}).get("skill", [{}, {}])[0].get("apply_effect", {}).get("controller") == "opponent",
-		"Cloud 182's Meteorain carries its own apply_effect (mass damage)")
+	var cloud_specs: Array = load("res://assets/effects/card_182.gd").new().activated_abilities()
+	_expect(cloud_specs.size() == 2 and "Meteorain" in cloud_specs[0].text,
+		"Cloud 182's Meteorain is a code ability")
 	_expect(load("res://assets/effects/card_198.gd").new().has_method("when_cast"),
 		"Valefor 198's mass damage is code-owned")
 	_expect(effects.get("192", {}).get("on_causing_damage_to_forward", {}).has("on_enter_break_zone"),

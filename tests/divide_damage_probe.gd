@@ -52,10 +52,10 @@ func _ready() -> void:
 		_cards[c.id] = c
 
 	var yuffie: Card = _cards[YUFFIE]
-	var skills: Array = yuffie.card_effects.get("skill", [])
-	_expect(skills.size() == 1, "Yuffie 85 has her Bloodfest ability")
-	_expect(skills.size() == 1 and str(skills[0].get("text", "")).begins_with("《S》"),
-		"and it is the S ability, with display text")
+	var specs: Array = yuffie.effect().activated_abilities()
+	_expect(specs.size() == 1, "Yuffie 85 has her Bloodfest ability")
+	_expect(specs.size() == 1 and str(specs[0].text).begins_with("《S》") and specs[0].divide_total == 6000,
+		"and it is the S ability, with display text and a divide pool")
 
 	# --- the window on its own ------------------------------------------------------------------------------
 	var window = PARTY_SPLIT.instantiate()

@@ -765,6 +765,8 @@ func _on_assistant_target_complete() -> void:
 func _divide_damage_total(proxy: Card) -> int:
 	if proxy == null:
 		return -1
+	if proxy.ability_spec != null and proxy.ability_spec.divide_total > 0:
+		return proxy.ability_spec.divide_total
 	var def: Dictionary = proxy.skill_def_override
 	if def.is_empty():
 		if proxy.skill_activation_index < 0:

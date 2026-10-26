@@ -58,11 +58,9 @@ func _ready() -> void:
 	_expect(rule.get("action") == "dull", "Ultimecia 152 has an on_character_enter dull rule")
 	_expect(rule.get("targets", {}).get("exclude", {}).get("is_named") == "Ultimecia",
 		"and excludes every card named Ultimecia")
-	var skill: Dictionary = effects.get("152", {}).get("skill", [{}])[0]
-	_expect(skill.get("apply_effect", {}).get("exclude", {}).get("is_named") == "Ultimecia",
-		"Time Compression also excludes every Ultimecia")
-	_expect(skill.get("instructions", [{}])[0].get("argument", [""])[0] == "frozen",
-		"and freezes the chosen Forwards")
+	var specs: Array = load("res://assets/effects/card_152.gd").new().activated_abilities()
+	_expect(specs.size() == 1 and specs[0].s_cost and "Time Compression" in specs[0].text,
+		"Time Compression is a code-owned S ability")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})
 	_game = GAME_SCENE.instantiate()

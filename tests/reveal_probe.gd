@@ -114,12 +114,9 @@ func _run_gilgamesh(top_id: int) -> Dictionary:
 	_seed_deck([top_id])
 	var gilm: Card = _place(129, "player")
 	var target: Card = _place(41, "player")
-	var instructions_json: Array = gilm.card_effects["skill"][0]["instructions"]
-	var instructions: Array[Instruction] = gilm.create_instruction_from_json(instructions_json)
-	_game._current_source_card = gilm
-	_game._current_controller = "player"
-	_game._targets = [target]
-	await _game._execute_instructions_and_wait(instructions)
+	var specs: Array = gilm.effect().activated_abilities()
+	var ctx = gilm.make_effect_context("activated_ability", {}, null, [target])
+	await specs[0].run.call(ctx)
 	var out: Dictionary = {
 		"target": target,
 		"target_on_field": target.is_on_field(),
@@ -144,12 +141,9 @@ func _run_cait_sith(top_id: int) -> int:
 	_seed_deck([top_id])
 	var cait: Card = _place(131, "player")
 	var victim: Card = _place(55, "opponent")
-	var instructions_json: Array = cait.card_effects["skill"][0]["instructions"]
-	var instructions: Array[Instruction] = cait.create_instruction_from_json(instructions_json)
-	_game._current_source_card = cait
-	_game._current_controller = "player"
-	_game._targets = []
-	await _game._execute_instructions_and_wait(instructions)
+	var specs: Array = cait.effect().activated_abilities()
+	var ctx = cait.make_effect_context("activated_ability", {}, null, [])
+	await specs[0].run.call(ctx)
 	var dealt: int = victim.accumulated_damage
 	_field.remove_card(cait)
 	_field.remove_card(victim)
@@ -167,8 +161,6 @@ func _check_cait_sith_data() -> void:
 	var cait: Card = _place(131, "player")
 	_expect(load("res://assets/effects/card_131.gd").new().has_method("when_enter_field"),
 		"Cait Sith's ETB break-Backup effect is code-owned")
-	_expect(cait.card_effects.has("skill"), "and its Slots skill")
-	var slots: Dictionary = cait.card_effects["skill"][0]
-	_expect(str(slots.get("s_cost", "")).to_lower() == "true" or bool(slots.get("s_cost", false)),
-		"Slots has an S cost")
+	var specs: Array = load("res://assets/effects/card_131.gd").new().activated_abilities()
+	_expect(specs.size() == 1 and specs[0].s_cost, "and its code-owned Slots S ability")
 	_field.remove_card(cait)

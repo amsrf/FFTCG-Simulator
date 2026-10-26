@@ -34,34 +34,6 @@
 			}
 		]
 	},
-	"64": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {},
-				"apply_effect": {
-					"is_type": "Forward",
-					"controller": "player"
-				},
-				"instructions": [
-					{
-						"name": "untap_targets",
-						"author": "game",
-						"argument": []
-					},
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"cannot_be_chosen",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
 	"71": {
 		"cannot_be_chosen": {
 			"sources": [
@@ -155,28 +127,7 @@
 	"85": {
 		"cannot_be_blocked_by": {
 			"min_cost": 4
-		},
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {},
-				"tap": true,
-				"text": "《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like. (Unit must be 1000.)",
-				"choose_target": {
-					"is_type": "Forward",
-					"count": 3
-				},
-				"instructions": [
-					{
-						"name": "divide_damage",
-						"author": "game",
-						"argument": [
-							6000
-						]
-					}
-				]
-			}
-		]
+		}
 	},
 	"86": {
 		"cannot_be_blocked_by": {
@@ -234,28 +185,7 @@
 				"controller": "opponent"
 			},
 			"value": 1000
-		},
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"火": 1,
-					"neutral": 2
-				},
-				"tap": true,
-				"text": "Ultimate Jecht Shot 《S》《火》《2》《Dull》: Choose 1 Forward. Break it.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
+		}
 	},
 	"92": {
 		"power_per": {
@@ -335,55 +265,6 @@
 			]
 		}
 	},
-	"28": {
-		"skill": [
-			{
-				"cost": {
-					"火": 1,
-					"neutral": 1
-				},
-				"tap": true,
-				"text": "《Fire》《1》《Dull》: Choose 1 Lann. It gains +1000 power until the end of the turn.",
-				"choose_target": {
-					"is_named": "Lann"
-				},
-				"instructions": [
-					{
-						"name": "power_change_targets",
-						"author": "game",
-						"argument": [
-							1000,
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"58": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"氷": 2
-				},
-				"text": "Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage.",
-				"choose_target": {
-					"is_type": "Forward",
-					"is_tapped": true
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							9000
-						]
-					}
-				]
-			}
-		]
-	},
 	"59": {
 		"conditional_power": [
 			{
@@ -411,24 +292,7 @@
 					]
 				}
 			]
-		},
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {},
-				"text": "Highwind 《S》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone.",
-				"instructions": [
-					{
-						"name": "opponent_mills",
-						"author": "game",
-						"argument": [
-							2
-						]
-					}
-				]
-			}
-		]
+		}
 	},
 	"73": {
 		"on_causing_damage_to_forward": {
@@ -444,27 +308,6 @@
 				}
 			]
 		}
-	},
-	"41": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"氷": 1
-				},
-				"text": "Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn.",
-				"instructions": [
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"first_strike",
-							1
-						]
-					}
-				]
-			}
-		]
 	},
 	"63": {
 		"when_attack": {
@@ -485,119 +328,11 @@
 	"122": {
 		"ex_burst_disabler": ""
 	},
-	"112": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"土": 1
-				},
-				"text": "Northswain's Strike 《S》《Earth》: Choose 1 Forward blocking Delita. Break it.",
-				"choose_target": {
-					"is_type": "Forward",
-					"is_blocking": true
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
-	},
 	"126": {
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "opponent"
-		},
-		"skill": [
-			{
-				"cost": {
-					"雷": 2
-				},
-				"text": "《Lightning》《Lightning》: Orlandeau gains Haste until the end of the turn.",
-				"instructions": [
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"haste",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"182": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"neutral": 1
-				},
-				"text": "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all the Forwards opponent controls.",
-				"apply_effect": {
-					"is_type": "Forward",
-					"controller": "opponent"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							4000
-						]
-					}
-				]
-			},
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"neutral": 3
-				},
-				"text": "Omnislash 《S》《3》《Dull》: Choose 1 Forward. Break it.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
-	},
-	"191": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"火": 4
-				},
-				"text": "Cosmo Memory 《S》《Fire》《Fire》《Fire》《Fire》《Dull》: Deal 6000 damage to all the Forwards opponent controls.",
-				"apply_effect": {
-					"is_type": "Forward",
-					"controller": "opponent"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							6000
-						]
-					}
-				]
-			}
-		]
+		}
 	},
 	"192": {
 		"on_causing_damage_to_forward": {
@@ -614,36 +349,6 @@
 			]
 		}
 	},
-	"193": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"氷": 1
-				},
-				"text": "Sadistic Surge 《S》《Ice》《Dull》: Choose 1 Forward. Dull it and Freeze it.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "dull_targets",
-						"author": "game",
-						"argument": []
-					},
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"frozen",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
 	"101": {
 		"apply_effect": {
 			"is_type": "Forward",
@@ -657,42 +362,7 @@
 				"controller": "player"
 			},
 			"value": 1000
-		},
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"雷": 1
-				},
-				"text": "Shout 《S》《Lightning》: Until the end of the turn, Ramza gains +2000 power, Haste and First Strike.",
-				"instructions": [
-					{
-						"name": "power_change",
-						"author": "card",
-						"argument": [
-							2000,
-							1
-						]
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"haste",
-							1
-						]
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"first_strike",
-							1
-						]
-					}
-				]
-			}
-		]
+		}
 	},
 	"208": {
 		"conditional_power": [
@@ -702,97 +372,6 @@
 					"is_named": "Serah"
 				},
 				"value": 2000
-			}
-		]
-	},
-	"116": {
-		"skill": [
-			{
-				"cost": {
-					"土": 1
-				},
-				"text": "《Earth》: Prishe gains Brave until the end of the turn.",
-				"instructions": [
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"brave",
-							1
-						]
-					}
-				]
-			},
-			{
-				"s_cost": true,
-				"cost": {
-					"土": 1
-				},
-				"text": "Auroral Uppercut 《S》《Earth》: Double the power of Prishe until the end of the turn.",
-				"instructions": [
-					{
-						"name": "double_power",
-						"author": "card",
-						"argument": [
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"127": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"雷": 2
-				},
-				"text": "Dragoon's Pride 《S》《Lightning》《Lightning》《Dull》: Choose 1 Forward. Break it. Kain will not activate during your next Active Phase.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"skip_next_active",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
-	"153": {
-		"skill": [
-			{
-				"tap": true,
-				"cost": {},
-				"text": "《Dull》: Draw 1 card, then discard 1 card from your hand.",
-				"instructions": [
-					{
-						"name": "draw_cards",
-						"author": "game",
-						"argument": [
-							1
-						]
-					},
-					{
-						"name": "discard_cards",
-						"author": "game",
-						"argument": [
-							1
-						]
-					}
-				]
 			}
 		]
 	},
@@ -806,31 +385,7 @@
 				}
 			},
 			"value": 1000
-		},
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"水": 2
-				},
-				"text": "Blitz Ace 《S》《Water》《Water》: Until the end of the turn Tidus gains Brave. Tidus can attack as many times as your points of damage this turn.",
-				"instructions": [
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"brave",
-							1
-						]
-					},
-					{
-						"name": "extra_attacks_from_damage",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
+		}
 	},
 	"188": {
 		"when_enter_field": {
@@ -847,36 +402,6 @@
 			]
 		}
 	},
-	"194": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"氷": 1
-				},
-				"only_if_blocking": true,
-				"text": "Vendetta 《S》《Ice》: Until the end of the turn, Snow gains +2000 power and First Strike. Use only while Snow is blocking.",
-				"instructions": [
-					{
-						"name": "power_change",
-						"author": "card",
-						"argument": [
-							2000,
-							1
-						]
-					},
-					{
-						"name": "add_status_effect",
-						"author": "card",
-						"argument": [
-							"first_strike",
-							1
-						]
-					}
-				]
-			}
-		]
-	},
 	"152": {
 		"on_character_enter": [
 			{
@@ -887,31 +412,6 @@
 					}
 				},
 				"action": "dull"
-			}
-		],
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"水": 3
-				},
-				"text": "Time Compression 《S》《Water》《Water》《Water》: Freeze all the Forwards other than Ultimecia.",
-				"apply_effect": {
-					"is_type": "Forward",
-					"exclude": {
-						"is_named": "Ultimecia"
-					}
-				},
-				"instructions": [
-					{
-						"name": "add_status_to_targets",
-						"author": "game",
-						"argument": [
-							"frozen",
-							1
-						]
-					}
-				]
 			}
 		]
 	},
@@ -1043,70 +543,9 @@
 				"Ability"
 			],
 			"controller": "opponent"
-		},
-		"skill": [
-			{
-				"cost": {
-					"雷": 2
-				},
-				"tap": false,
-				"text": "《雷》《雷》: Gilgamesh gains +1000 power until the end of the turn.",
-				"instructions": [
-					{
-						"name": "power_change",
-						"author": "card",
-						"argument": [
-							1000,
-							1
-						]
-					}
-				]
-			},
-			{
-				"s_cost": true,
-				"cost": {
-					"雷": 2
-				},
-				"tap": false,
-				"only_if_damage_received": 4,
-				"text": "Divider 《S》《雷》《雷》: Choose 1 Forward. Break it. Use only if you have received 4+ damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": []
-					}
-				]
-			}
-		]
+		}
 	},
 	"187": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"火": 1,
-					"neutral": 1
-				},
-				"tap": true,
-				"text": "Climhazzard 《S》《Fire》《1》《Dull》: Choose 1 Forward. Deal it 8000 damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							8000
-						]
-					}
-				]
-			}
-		],
 		"triggers": [
 			{
 				"on": "forward_attacks",
@@ -1461,147 +900,5 @@
 	"184": {
 		"produces_any_element": true,
 		"light_dark_exempt": "dark"
-	},
-	"129": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {},
-				"text": "Strongest Sword 《S》《Dull》: Choose 1 Forward. Remove the top card of your deck from the game. If the removed card is a Forward, break it. If not, deal it 3000 damage.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "reveal_top",
-						"author": "game",
-						"argument": [
-							1
-						]
-					},
-					{
-						"name": "check_revealed",
-						"author": "game",
-						"argument": [
-							0,
-							{
-								"is_type": "Forward"
-							}
-						]
-					},
-					{
-						"name": "break_targets",
-						"author": "game",
-						"argument": [],
-						"condition": "if_last_succeeded"
-					},
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							3000
-						],
-						"condition": "if_last_did_not_succeed"
-					},
-					{
-						"name": "remove_revealed_from_game",
-						"author": "game",
-						"argument": [
-							0
-						]
-					}
-				]
-			}
-		]
-	},
-	"131": {
-		"skill": [
-			{
-				"s_cost": true,
-				"tap": true,
-				"cost": {
-					"雷": 1
-				},
-				"text": "Slots 《S》《Lightning》《Dull》: Remove the top card of your deck from the game. If it is a Forward, deal 7000 damage to all the active Forwards opponent controls.",
-				"instructions": [
-					{
-						"name": "reveal_top",
-						"author": "game",
-						"argument": [
-							1
-						]
-					},
-					{
-						"name": "check_revealed",
-						"author": "game",
-						"argument": [
-							0,
-							{
-								"is_type": "Forward"
-							}
-						]
-					},
-					{
-						"name": "apply_effect",
-						"author": "game",
-						"argument": [
-							{
-								"is_type": "Forward",
-								"controller": "opponent",
-								"is_tapped": false
-							}
-						],
-						"condition": "if_last_succeeded"
-					},
-					{
-						"name": "damage_targets",
-						"author": "game",
-						"argument": [
-							7000
-						],
-						"condition": "if_last_succeeded"
-					},
-					{
-						"name": "remove_revealed_from_game",
-						"author": "game",
-						"argument": [
-							0
-						]
-					}
-				]
-			}
-		]
-	},
-	"216": {
-		"skill": [
-			{
-				"s_cost": true,
-				"cost": {
-					"水": 1
-				},
-				"text": "Status Reels 《S》《水》: Choose 1 Forward. Until the end of the turn, it loses all its abilities and its power becomes 1000.",
-				"choose_target": {
-					"is_type": "Forward"
-				},
-				"instructions": [
-					{
-						"name": "nullify_abilities",
-						"author": "game",
-						"argument": [
-							1
-						]
-					},
-					{
-						"name": "set_targets_power",
-						"author": "game",
-						"argument": [
-							1000,
-							1
-						]
-					}
-				]
-			}
-		]
 	}
 }

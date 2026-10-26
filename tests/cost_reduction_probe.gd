@@ -91,8 +91,9 @@ func _ready() -> void:
 	_expect("haste" in load("res://assets/effects/card_210.gd").new().keywords()
 		and effects.get("210", {}).has("when_cause_damage_to_player"),
 		"Lightning has code-owned Haste and the JSON damage trigger")
-	_expect(bool(effects.get("187", {}).get("skill", [{}])[0].get("s_cost", false)),
-		"Cloud's Climhazzard is an S ability")
+	var cloud_specs: Array = load("res://assets/effects/card_187.gd").new().activated_abilities()
+	_expect(cloud_specs.size() == 1 and cloud_specs[0].s_cost,
+		"Cloud's Climhazzard is a code S ability")
 
 	print("[B4a] %d checks | failures: %d" % [_checks, _fails])
 	print("[B4a] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

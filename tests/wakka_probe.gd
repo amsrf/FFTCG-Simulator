@@ -69,7 +69,13 @@ func _place(id: int, controller: String = "player") -> Card:
 
 
 func _run_instructions(card: Card, key: String, targets: Array) -> void:
-	var raw: Array = card.card_effects[key]["instructions"] if key != "skill" 		else card.card_effects["skill"][0]["instructions"]
+	if key == "skill":
+		var specs: Array = card.effect().activated_abilities()
+		if not specs.is_empty():
+			var ctx = card.make_effect_context("activated_ability", {}, null, targets)
+			await specs[0].run.call(ctx)
+			return
+	var raw: Array = card.card_effects[key]["instructions"]
 	var instructions: Array[Instruction] = card.create_instruction_from_json(raw)
 	_game._current_source_card = card
 	_game._current_controller = "player"
@@ -87,7 +93,7 @@ func _check_nullify_and_power() -> void:
 	GlobalVariables.set_base_mode(GlobalVariables.Player_Mode.FREE)
 
 	var base_power: int = cloud.power
-	_expect(cloud.card_effects.has("skill"), "setup: Cloud has printed abilities")
+	_expect(cloud.activation_skills().size() == 2, "setup: Cloud has printed abilities")
 	_expect(cloud.activation_skills().size() == 2, "setup: Cloud has two Special Abilities")
 	_expect(_field.can_activate_now(cloud), "setup: Cloud can activate one of them")
 
@@ -129,6 +135,6 @@ func _check_expiry() -> void:
 	await _run_instructions(wakka, "skill", [cloud])
 	_expect(cloud.power == 1000, "setup: Cloud was set to 1000")
 	cloud.turn_end()
-	_expect(not cloud.card_effects.is_empty(), "end of turn restores the printed ability view")
+	_expect(cloud.abilities_enabled(), "end of turn restores the printed ability view")
 	_expect(cloud.activation_skills().size() == 2, "and its abilities are usable again")
 	_expect(cloud.power == power_before, "the temporary power setting expires")
