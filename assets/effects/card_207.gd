@@ -27,3 +27,6 @@ func _skill_1(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	if not targets.is_empty():
 		ctx.break_cards(targets)
+
+func static_rules() -> Dictionary:
+	return {"cannot_be_returned_to_hand": {"sources": ["Summon", "Ability"], "controller": "opponent"}}

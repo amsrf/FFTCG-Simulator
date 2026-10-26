@@ -13,3 +13,6 @@ func _has_yuna(source: Card) -> bool:
 
 func _has_paine(source: Card) -> bool:
 	return controls(source, {"is_named": "Paine"})
+
+func static_rules() -> Dictionary:
+	return {"conditional_cannot_be_chosen": [{"if_controls": {"is_named": "Yuna"}, "sources": ["Summon"]}, {"if_controls": {"is_named": "Paine"}, "sources": ["Ability"]}]}

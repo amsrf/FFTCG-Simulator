@@ -21,3 +21,6 @@ func _skill_0(ctx) -> void:
 	if targets.is_empty():
 		return
 	ctx.apply_damage_division(6000)
+
+func static_rules() -> Dictionary:
+	return {"cannot_be_blocked_by": {"min_cost": 4}}

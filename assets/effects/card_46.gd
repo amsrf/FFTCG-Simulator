@@ -8,3 +8,6 @@ func modify_cost_for(ctx, subject: Card, cost: Dictionary) -> Dictionary:
 	if subject.type != "Summon":
 		return cost
 	return ctx.adjust(cost, 1)
+
+func static_rules() -> Dictionary:
+	return {"cannot_be_chosen": {"sources": ["Summon"], "controller": "opponent"}}

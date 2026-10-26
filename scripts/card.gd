@@ -1025,6 +1025,17 @@ func has_haste() -> bool:
 	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste") 		or has_code_keyword("haste")
 
 
+## A static rule block: code first, JSON fallback during migration.
+func static_rule(key: String, fallback = null):
+	if abilities_enabled():
+		var effect_obj = effect()
+		if effect_obj != null and effect_obj.has_method("static_rules"):
+			var rules = effect_obj.static_rules()
+			if rules is Dictionary and rules.has(key):
+				return rules[key]
+	return card_effects.get(key, fallback)
+
+
 func has_code_keyword(keyword: String) -> bool:
 	var effect_obj = effect() if abilities_enabled() else null
 	return effect_obj != null and keyword in effect_obj.keywords()
@@ -1099,7 +1110,7 @@ func can_attack():
 func allows_blocker(blocker: Card) -> bool:
 	if blocker == null:
 		return false
-	var rule = card_effects.get("cannot_be_blocked_by", {})
+	var rule = static_rule("cannot_be_blocked_by", {})
 	if not (rule is Dictionary):
 		return true
 	if rule.has("min_cost") and int(blocker.cost) >= int(rule["min_cost"]):
@@ -1113,7 +1124,7 @@ func allows_blocker(blocker: Card) -> bool:
 func can_block_attacker(attacker: Card) -> bool:
 	if attacker == null:
 		return true
-	var rule = card_effects.get("cannot_block", {})
+	var rule = static_rule("cannot_block", {})
 	if not (rule is Dictionary):
 		return true
 	if rule.has("min_cost") and int(attacker.cost) >= int(rule["min_cost"]):
@@ -1751,13 +1762,12 @@ func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 	# Unlike choose_target, these are evaluated against the SOURCE of the targeting effect, not against this card.
 	if source == null:
 		return true
-	if card_effects.has("cannot_be_chosen"):
-		var rule = card_effects["cannot_be_chosen"]
-		if rule is Dictionary and _protection_applies(rule, source, source_kind):
-			return false
+	var printed_rule = static_rule("cannot_be_chosen", null)
+	if printed_rule is Dictionary and _protection_applies(printed_rule, source, source_kind):
+		return false
 	# CONDITIONAL protection (Rikku 201: while you control Yuna she cannot be chosen by Summons, while you control Paine
 	# she cannot be chosen by abilities). A live board query, so it follows the named cards leaving or arriving.
-	var conditional = card_effects.get("conditional_cannot_be_chosen", [])
+	var conditional = static_rule("conditional_cannot_be_chosen", [])
 	if conditional is Dictionary:
 		conditional = [conditional]
 	if conditional is Array:
@@ -1798,9 +1808,7 @@ func _controls_matching(criteria: Dictionary) -> bool:
 func must_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 	if source == null:
 		return false
-	if not card_effects.has("must_be_chosen"):
-		return false
-	var rule = card_effects["must_be_chosen"]
+	var rule = static_rule("must_be_chosen", null)
 	if not (rule is Dictionary):
 		return false
 	return _protection_applies(rule, source, source_kind)
@@ -1809,9 +1817,7 @@ func must_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 func can_be_returned_to_hand_by(source: Card, source_kind: String = "") -> bool:
 	if source == null:
 		return true
-	if not card_effects.has("cannot_be_returned_to_hand"):
-		return true
-	var rule = card_effects["cannot_be_returned_to_hand"]
+	var rule = static_rule("cannot_be_returned_to_hand", null)
 	if not (rule is Dictionary):
 		return true
 	return not _protection_applies(rule, source, source_kind)

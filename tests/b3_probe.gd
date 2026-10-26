@@ -76,8 +76,9 @@ func _ready() -> void:
 	var own_summon: Card = _off_field(4, "player")
 	_field.set_viable_targets({"is_type": "Forward"}, own_summon, "Summon")
 	_expect(cecil.is_valid_target and other.is_valid_target, "your own Summon may choose any Forward")
-	_expect(bool(effects.get(str(CECIL), {}).get("must_be_chosen", {}).get("sources", []).has("Summon")),
-		"Cecil's must-be-chosen rule is in the data")
+	var cecil_rules: Dictionary = load("res://assets/effects/card_162.gd").new().static_rules()
+	_expect(bool(cecil_rules.get("must_be_chosen", {}).get("sources", []).has("Summon")),
+		"Cecil's must-be-chosen rule is code-owned")
 	_game.queue_free()
 	await get_tree().process_frame
 
@@ -94,8 +95,9 @@ func _ready() -> void:
 	_expect(rikku.power == 10000, "Paine adds another +2000")
 	_expect(not rikku.can_be_chosen_by(ability_source, "Ability"), "Paine makes Rikku untargetable by abilities")
 	_expect(not rikku.can_be_chosen_by(foe_summon_2, "Summon"), "and the Summon protection remains")
-	_expect(bool(effects.get(str(RIKKU), {}).get("conditional_cannot_be_chosen", []).size() == 2),
-		"Rikku's two conditional shields are in the data")
+	var rikku_rules: Dictionary = load("res://assets/effects/card_201.gd").new().static_rules()
+	_expect(rikku_rules.get("conditional_cannot_be_chosen", []).size() == 2,
+		"Rikku's two conditional shields are code-owned")
 	_game.queue_free()
 	await get_tree().process_frame
 
@@ -174,8 +176,9 @@ func _ready() -> void:
 	await _game.return_targets_to_hand()
 	_expect(gilgamesh.is_on_field(), "an opponent's Summon cannot return Gilgamesh")
 	_expect(_game.player.hand.cards.size() == hand_before, "and no card is added to hand")
-	_expect(bool(effects.get(str(GILGAMESH), {}).get("cannot_be_returned_to_hand", {}).get("sources", []).has("Ability")),
-		"Gilgamesh's return protection is in the data")
+	var gil_rules: Dictionary = load("res://assets/effects/card_207.gd").new().static_rules()
+	_expect(bool(gil_rules.get("cannot_be_returned_to_hand", {}).get("sources", []).has("Ability")),
+		"Gilgamesh's return protection is code-owned")
 	# Divider is the second code ability. The pump beside it keeps Gilgamesh offered, so the gate is asserted on
 	# the AbilitySpec itself rather than on the card-level availability.
 	var gil_specs: Array = load("res://assets/effects/card_207.gd").new().activated_abilities()

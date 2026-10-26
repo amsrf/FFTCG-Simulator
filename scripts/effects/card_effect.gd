@@ -44,6 +44,12 @@ func controls(source: Card, criteria: Dictionary) -> bool:
 	return field.controls_matching(source.controller, criteria, source)
 
 
+## Static rule blocks owned by code (protections, shields, damage modifiers and similar). The readers ask
+## Card.static_rule() key by key, so a card can move one family out of JSON at a time.
+func static_rules() -> Dictionary:
+	return {}
+
+
 ## Count-based continuous power rules. Each rule:
 ## { "count": Dictionary-or-"damage_received", "value": int, "brave_at": int (optional) }.
 func power_per_rules() -> Array:

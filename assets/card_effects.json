@@ -23,15 +23,6 @@
 			}
 		]
 	},
-	"71": {
-		"cannot_be_chosen": {
-			"sources": [
-				"Summon",
-				"Ability"
-			],
-			"controller": "opponent"
-		}
-	},
 	"7": {
 		"apply_effect": {
 			"is_type": "Forward",
@@ -94,68 +85,6 @@
 			]
 		}
 	},
-	"27": {
-		"cannot_be_blocked_by": {
-			"greater_power": true
-		},
-		"cannot_block": {
-			"greater_power": true
-		}
-	},
-	"85": {
-		"cannot_be_blocked_by": {
-			"min_cost": 4
-		}
-	},
-	"86": {
-		"cannot_be_blocked_by": {
-			"min_cost": 3
-		}
-	},
-	"2": {
-		"protects": {
-			"targets": {
-				"is_type": "Backup",
-				"controller": "player"
-			},
-			"from": "opponent",
-			"by": [
-				"Summon",
-				"Ability"
-			]
-		}
-	},
-	"17": {
-		"shields": {
-			"targets": {
-				"is_named": "Sazh"
-			},
-			"from": "opponent",
-			"by": [
-				"Summon",
-				"Ability"
-			]
-		}
-	},
-	"45": {
-		"shields": {
-			"targets": {
-				"is_named": "Snow"
-			},
-			"from": "opponent",
-			"by": [
-				"Ability"
-			]
-		}
-	},
-	"46": {
-		"cannot_be_chosen": {
-			"sources": [
-				"Summon"
-			],
-			"controller": "opponent"
-		}
-	},
 	"47": {
 		"when_enter_field": {
 			"choose_target": {
@@ -174,23 +103,6 @@
 				}
 			]
 		}
-	},
-	"5": {
-		"damage_modifiers": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"is_cost_at_least": 4
-				},
-				"conditions": [
-					{
-						"source_is_self": true
-					}
-				],
-				"operation": "multiply",
-				"value": 2
-			}
-		]
 	},
 	"20": {
 		"when_attack": {
@@ -313,119 +225,8 @@
 			}
 		]
 	},
-	"165": {
-		"damage_modifiers": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"exclude": {
-						"is_source": true
-					}
-				},
-				"conditions": [
-					{
-						"in_party_with_self": true
-					}
-				],
-				"operation": "set",
-				"value": 0
-			}
-		]
-	},
-	"166": {
-		"damage_modifiers": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"exclude": {
-						"is_source": true
-					}
-				},
-				"conditions": [
-					{
-						"in_party_with_self": true
-					}
-				],
-				"operation": "set",
-				"value": 0
-			}
-		]
-	},
-	"171": {
-		"damage_modifiers": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player"
-				},
-				"conditions": [
-					{
-						"compare_values": {
-							"left": {
-								"context": "amount"
-							},
-							"op": "lt",
-							"right": {
-								"context": "target",
-								"property": "power"
-							}
-						}
-					}
-				],
-				"operation": "set",
-				"value": 0
-			}
-		]
-	},
 	"176": {
 		"break_zone_exile": true
-	},
-	"162": {
-		"must_be_chosen": {
-			"sources": [
-				"Summon",
-				"Ability"
-			],
-			"controller": "opponent"
-		}
-	},
-	"174": {
-		"must_be_chosen": {
-			"sources": [
-				"Summon",
-				"Ability"
-			],
-			"controller": "opponent"
-		}
-	},
-	"201": {
-		"conditional_cannot_be_chosen": [
-			{
-				"if_controls": {
-					"is_named": "Yuna"
-				},
-				"sources": [
-					"Summon"
-				]
-			},
-			{
-				"if_controls": {
-					"is_named": "Paine"
-				},
-				"sources": [
-					"Ability"
-				]
-			}
-		]
-	},
-	"207": {
-		"cannot_be_returned_to_hand": {
-			"sources": [
-				"Summon",
-				"Ability"
-			],
-			"controller": "opponent"
-		}
 	},
 	"187": {
 		"triggers": [

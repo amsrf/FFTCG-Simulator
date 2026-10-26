@@ -148,6 +148,20 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### JSON Migration: Static Protection and Damage Rules
+
+Added `CardEffect.static_rules()` and a `Card.static_rule()` reader, then moved
+the remaining static protection and damage-modifier families out of JSON:
+damage modifiers, cannot-be-chosen, conditional cannot-be-chosen, shields,
+must-be-chosen, protects, cannot-be-blocked-by, cannot-block, and
+cannot-be-returned-to-hand.
+
+The readers (Card targeting/blocking and the Rules damage/break protector
+queries) ask code first and keep the JSON lookup only as a migration fallback.
+
+JSON numeric entries dropped from 44 to 28; all nine families are at zero JSON
+fields.
+
 ### JSON Migration: Count-Based Power
 
 Migrated the five `power_per` rules to `CardEffect.power_per_rules()`. The

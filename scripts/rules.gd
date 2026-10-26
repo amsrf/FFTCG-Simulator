@@ -139,7 +139,7 @@ func is_protected_from_being_chosen(card: Card, source: Card, source_kind: Strin
 	for protector in _cards():
 		if protector == null or not is_instance_valid(protector):
 			continue
-		var rules = protector.card_effects.get("shields", [])
+		var rules = protector.static_rule("shields", [])
 		if rules is Dictionary:
 			rules = [rules]
 		if not (rules is Array):
@@ -175,7 +175,7 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 	for protector in _cards():
 		if protector == null or not is_instance_valid(protector):
 			continue
-		var rules = protector.card_effects.get("protects", [])
+		var rules = protector.static_rule("protects", [])
 		if rules is Dictionary:
 			rules = [rules]
 		if not (rules is Array):
@@ -244,7 +244,7 @@ func modify_damage(source: Card, target: Card, amount: int, source_kind: String 
 		if owner == null or not is_instance_valid(owner):
 			continue
 		context["self"] = owner
-		var rules = owner.card_effects.get("damage_modifiers", [])
+		var rules = owner.static_rule("damage_modifiers", [])
 		if rules is Dictionary:
 			rules = [rules]
 		if not (rules is Array):

@@ -45,11 +45,13 @@ func _ready() -> void:
 		"Gordon 160's next-receiving-damage ability is code-owned")
 	_expect(not effects.get("160", {}).has("damage_modifiers"),
 		"the shield is carried by the status payload, not a static modifier")
-	_expect(effects.get("165", {}).get("damage_modifiers", [{}])[0].get("operation") == "set"
-		and effects.get("166", {}).get("damage_modifiers", [{}])[0].get("operation") == "set",
-		"both Knights carry a generic damage modifier")
-	_expect(effects.get("171", {}).get("damage_modifiers", [{}])[0]
-		.get("conditions", [{}])[0].has("compare_values"),
+	var k165: Array = load("res://assets/effects/card_165.gd").new().static_rules().get("damage_modifiers", [])
+	var k166: Array = load("res://assets/effects/card_166.gd").new().static_rules().get("damage_modifiers", [])
+	_expect(k165.size() == 1 and k165[0].get("operation") == "set"
+		and k166.size() == 1 and k166[0].get("operation") == "set",
+		"both Knights carry a code-owned damage modifier")
+	var minwu_rules: Array = load("res://assets/effects/card_171.gd").new().static_rules().get("damage_modifiers", [])
+	_expect(minwu_rules.size() == 1 and minwu_rules[0].get("conditions", [{}])[0].has("compare_values"),
 		"Minwu 171 uses the generic compare_values condition")
 	var yuna: Dictionary = effects.get("176", {})
 	_expect(load("res://assets/effects/card_176.gd").new().ex_burst_event() == "when_enter_field"
