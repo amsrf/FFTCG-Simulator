@@ -56,6 +56,8 @@ const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 var _card_effect = null
 var _elements_calculating: bool = false
+## Auras granted to this card by another effect, or supplied by a test. Definitions are dictionaries or AuraSpecs.
+var extra_auras: Array = []
 @export var card_effects: Dictionary:
 	get:
 		return {} if status_effects.has("abilities_nullified") else _printed_effects
@@ -1600,6 +1602,16 @@ func effect():
 func effect_handles_event(event: String) -> bool:
 	var effect_obj = effect()
 	return effect_obj != null and effect_obj.handles_event(event)
+
+
+func effect_auras() -> Array:
+	var effect_obj = effect()
+	var out: Array = []
+	if effect_obj != null and effect_obj.has_method("auras"):
+		out.append_array(effect_obj.auras())
+	if not extra_auras.is_empty():
+		out.append_array(extra_auras)
+	return out
 
 
 ## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits

@@ -118,7 +118,7 @@ func _ready() -> void:
 		var other_base: int = other.power
 
 		var twin: Card = game.create_card(AURA_CARD, "player")
-		twin.card_effects["aura"].append({
+		twin.extra_auras.append({
 			"targets": {"is_type": "Forward"},
 			"method": "power_change",
 			"value": 500,

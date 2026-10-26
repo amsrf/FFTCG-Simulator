@@ -64,15 +64,6 @@
 			}
 		]
 	},
-	"30":{
-		"aura":[
-			{
-				"targets":{"type":"Forward", "controller":"player", "element":"火"},
-				"method":"power_change", 
-				"value":1000
-			}
-		]
-	},
 	"31":{
 		"when_enter_field":
 			{
@@ -96,14 +87,6 @@
 			{
 				"instructions":[{"name":"search_deck", "author":"game", "argument":[{"name":"Ovelia"}]}]
 			}
-	},
-
-	"57":{
-		"aura":[{"targets":{"type":"Forward","controller":"player","element":"氷"},"method":"power_change","value":1000}]
-	},
-
-	"83":{
-		"aura":[{"targets":{"type":"Forward","controller":"player"},"method":"power_change","value":1000}]
 	},
 
 	"16":{
@@ -181,10 +164,6 @@
 
 	"75":{
 		"haste":true
-	},
-
-	"95":{
-		"aura":[{"targets":{"type":"Forward","controller":"player","element":"土"},"method":"power_change","value":1000}]
 	},
 
 	"93":{
@@ -1218,32 +1197,6 @@
 	"148": {
 		"haste": true
 	},
-	"150": {
-		"aura": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_element": "雷"
-				},
-				"method": "power_change",
-				"value": 1000
-			}
-		]
-	},
-	"156": {
-		"aura": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_job": "Knight"
-				},
-				"method": "power_change",
-				"value": 1000
-			}
-		]
-	},
 	"164": {
 		"when_attack": {
 			"instructions": [
@@ -1288,19 +1241,6 @@
 				}
 			]
 		}
-	},
-	"180": {
-		"aura": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_element": "水"
-				},
-				"method": "power_change",
-				"value": 1000
-			}
-		]
 	},
 	"196": {
 		"when_enter_field": {
@@ -1568,28 +1508,6 @@
 			}
 		]
 	},
-	"155": {
-		"aura": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_job": "Standard Unit"
-				},
-				"method": "power_change",
-				"value": 2000
-			},
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_job": "Standard Unit"
-				},
-				"method": "grant_status",
-				"status": "first_strike"
-			}
-		]
-	},
 	"163": {
 		"power_per": {
 			"count": {
@@ -1665,7 +1583,7 @@
 			]
 		}
 	},
-	"188": {
+"188": 	{
 		"ex_burst": "when_enter_field",
 		"when_enter_field": {
 			"instructions": [
@@ -1679,19 +1597,7 @@
 					]
 				}
 			]
-		},
-		"aura": [
-			{
-				"targets": {
-					"is_type": "Forward",
-					"controller": "player",
-					"is_named": "Tifa",
-					"is_cost_at_most": 4
-				},
-				"method": "grant_status",
-				"status": "haste"
-			}
-		]
+		}
 	},
 	"190": {
 		"ex_burst": "when_cast",

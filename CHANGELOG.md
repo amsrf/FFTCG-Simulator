@@ -148,6 +148,25 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Aura Cards Migrated
+
+All nine aura cards moved from `card_effects.json` to `AuraSpec`:
+
+`30, 57, 83, 95, 150, 155, 156, 180, 188`.
+
+`AuraSpec` carries target criteria, method, value/status and an optional condition. `CardEffect.auras()` returns the
+definitions; `Field` owns the runtime grant and the `aura:<source>:<index>` ledger entry.
+
+- Code auras win over a JSON `aura` block for the same card.
+- `Field.refresh_auras()` re-evaluates matches, applies only missing grants and revokes entries that no longer match.
+- A source that leaves the field, is silenced, fails its condition, or stops being on the field has its grants
+  revoked.
+- `extra_auras` exists for auras granted by another effect (and for probe fixtures); a dictionary entry is accepted.
+- Aura power uses the derived ledger, so removing an aura erases its contribution instead of subtracting a number.
+
+`aura_migration_probe` checks all nine definitions (44 checks), including two auras on Warrior of Light and
+Zangan's Haste grant/revoke. The existing `aura_probe` remains 13 checks. Full suite and boot are green.
+
 ### Derived Power: One Source of Truth
 
 Power is now a cached result, not a number that every effect mutates in place.

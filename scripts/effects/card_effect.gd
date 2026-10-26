@@ -1,5 +1,6 @@
 extends RefCounted
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
+const AURA_SPEC := preload("res://scripts/effects/aura_spec.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
 ## A card effect is STATELESS: the per-event state lives in the EffectContext passed to the hook. One instance can be
@@ -28,6 +29,16 @@ func activated_abilities() -> Array:
 
 func _ability(data: Dictionary) -> RefCounted:
 	return ABILITY_SPEC.new(data)
+
+
+## Continuous effects this card grants while it is on the field. Unlike activated_abilities(), these are not chosen
+## or paid for; Field applies them to every matching card and keeps the teardown ledger.
+func auras() -> Array:
+	return []
+
+
+func _aura(data: Dictionary) -> RefCounted:
+	return AURA_SPEC.new(data)
 
 
 # ---------------------------------------------------------------------------------------------------------------

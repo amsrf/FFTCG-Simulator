@@ -239,6 +239,8 @@ class AuraValue:
 	var source: Card = null
 	## Stable ledger key for a power contribution. Two auras on one card must not share it.
 	var key: String = ""
+	## Optional code-defined predicate, called with the source card.
+	var condition: Callable
 	## The cards this aura has ALREADY been applied to. Without it the same card can be reached twice — a card arriving
 	## runs add_all_auras_to_card(), and an aura arriving runs activate_aura_in_field() over everything — and a
 	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
@@ -265,6 +267,18 @@ func add_aura(aura: Dictionary, source: Card) -> AuraValue:
 	_auras[_next_aura_id] = aura_value
 	_next_aura_id += 1
 	return aura_value
+
+
+func add_aura_spec(spec, source: Card) -> AuraValue:
+	if spec is Dictionary:
+		return add_aura(spec, source)
+	var aura_value := AuraValue.new(str(spec.method), spec.targets, int(spec.value), str(spec.status))
+	aura_value.source = source
+	aura_value.condition = spec.condition
+	aura_value.key = "aura:%d:%d" % [source.get_instance_id(), _next_aura_id]
+	_auras[_next_aura_id] = aura_value
+	_next_aura_id += 1
+	return aura_value
 	
 func activate_aura_in_field(aura:AuraValue):
 	var all_cards: Array[Card] = get_all_cards()
@@ -283,6 +297,10 @@ func add_aura_to_card(aura: AuraValue, card: Card):
 	# `aura.source` is the card GRANTING the aura, so "your Fire Forwards" is read from its controller — not from a
 	# fixed seat. An AI-owned aura would otherwise buff the human's board.
 	if aura.source != null and (not is_instance_valid(aura.source) or not aura.source.abilities_enabled()):
+		return
+	if aura.source != null and not aura.source.is_on_field():
+		return
+	if aura.condition.is_valid() and not bool(aura.condition.call(aura.source)):
 		return
 	if not CARD_TARGET.matches(card, aura.targets, aura.source):
 		return
@@ -1513,9 +1531,17 @@ func register_card_auras(card: Card) -> void:
 			return
 	# ADD THE AURA AND ACTIVATE IT, one id per aura. Keyed by the card's instance id, a card granting two things kept only
 	# the second — the first was overwritten in the dictionary before anything applied it.
-	if "aura" in card.card_effects:
-		for effect in card.card_effects["aura"]:
-			activate_aura_in_field(add_aura(effect, card))
+	# CODE AURAS WIN over a JSON aura list for the same card, exactly like activated abilities. A card can be migrated
+	# without keeping a duplicate definition in card_effects.json.
+	var code_auras: Array = card.effect_auras()
+	if not code_auras.is_empty():
+		for spec in code_auras:
+			if spec != null:
+				activate_aura_in_field(add_aura_spec(spec, card))
+	else:
+		if "aura" in card.card_effects:
+			for effect in card.card_effects["aura"]:
+				activate_aura_in_field(add_aura(effect, card))
 	add_all_auras_to_card(card)
 	refresh_auras()
 
@@ -1530,6 +1556,12 @@ func refresh_auras() -> void:
 	for aura in _auras.values():
 		var source: Card = aura.source
 		if source == null or not is_instance_valid(source) or not source.abilities_enabled():
+			_revoke_aura(aura)
+			continue
+		if aura.condition.is_valid() and not bool(aura.condition.call(source)):
+			_revoke_aura(aura)
+			continue
+		if not source.is_on_field():
 			_revoke_aura(aura)
 			continue
 		for card in get_all_cards():
