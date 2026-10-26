@@ -148,6 +148,31 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Mechanical ETB Migration
+
+Migrated the non-targeting `when_enter_field` cards to code:
+
+`7, 24, 28, 42, 44, 60, 63, 77, 79, 80, 91, 101, 109, 133, 134, 151, 154, 158,
+175, 196, 197, 199, 203, 204`.
+
+These cover direct power/damage, draws/discards/mill, searches, Break Zone
+choices, optional plays, and the both-players keep-one case. `EffectContext`
+gained the mechanical wrappers they need: `may_for`, `condition`,
+`untap_all_matching`, `play_from_hand`, `break_zone_to_hand`,
+`choose_break_zone_card`, `put_card_into_hand`, `put_hand_card_on_bottom`, and
+`choose_for`.
+
+Two lifecycle fixes were needed:
+
+- `run_ex_burst()` now accepts a code event even when the card has no JSON key
+  for it, and does not wait for a pre-resolution target on a code ETB.
+- Probe helpers now start stack resolution and wait for the target or a settled
+  no-target effect instead of assuming ETBs are synchronous.
+
+Targeting ETBs remain JSON for now: their local targeting-session lifecycle
+needs a separate verified pass. The full suite and boot are green after this
+batch.
+
 ### Cost Modifiers Migrated
 
 Cost modification is now a continuous query in the code-effect layer:

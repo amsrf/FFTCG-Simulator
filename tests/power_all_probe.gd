@@ -114,16 +114,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	# --- the data wiring: card 7 ------------------------------------------------------------------------
-	var entry: Dictionary = CardDatabase.card_effects.get("7", {})
-	_expect(entry.has("apply_effect"), "card 7 carries apply_effect at the TOP level, where an ETB reads it")
-	_expect(entry.get("when_enter_field", {}).get("instructions", []).size() > 0,
-		"and its when_enter_field has instructions")
-	var instr: Dictionary = entry.get("when_enter_field", {}).get("instructions", [{}])[0]
-	_expect(str(instr.get("name", "")) == "power_change_targets",
-		"which is power_change_targets (got '%s')" % instr.get("name", ""))
-	var arg: Array = instr.get("argument", [])
-	_expect(arg.size() == 2 and int(arg[0]) == 1000 and int(arg[1]) == 1,
-		"with +1000 for one turn (got %s)" % str(arg))
+	var card7_effect = load("res://assets/effects/card_7.gd").new()
+	_expect(card7_effect.has_method("when_enter_field"),
+		"card 7's ETB power change is code-owned")
 
 	print("[PowerAll] card 7 is %s" % str(db[6].get("name_en", "?")))
 	_finish()

@@ -84,12 +84,17 @@ func cards_in(region: String, criteria: Dictionary = {}, owner: String = "any") 
 
 ## Ask the owner's agent to choose one of `cards`. Returns null when the list is empty or the choice is cancelled.
 func choose(cards: Array, prompt: String = "Choose a card") -> Card:
-	if cards.is_empty():
+	return await choose_for(owner_id, cards, prompt)
+
+
+## Choose on behalf of a specific player, for "each player chooses" effects.
+func choose_for(player_id: int, cards: Array, prompt: String = "Choose a card") -> Card:
+	if cards.is_empty() or game == null:
 		return null
-	var agent: Agent = game.agent_for(owner_id)
+	var agent: Agent = game.agent_for(player_id)
 	if agent == null:
 		return cards[0]
-	var chosen: Card = await agent.choose_field_card(owner_id, cards, prompt)
+	var chosen: Card = await agent.choose_field_card(player_id, cards, prompt)
 	if chosen != null and cards.has(chosen):
 		return chosen
 	return null
@@ -125,12 +130,54 @@ func choose_target(criteria: Dictionary, prompt: String = "Choose a card") -> Ca
 
 ## Resolve an optional "you may" clause through the owning agent.
 func may(prompt: String) -> bool:
+	return await may_for(owner_id, prompt)
+
+
+## Ask a specific player, for effects that say "your opponent may...".
+func may_for(player_id: int, prompt: String) -> bool:
 	if game == null:
 		return true
-	var agent = game.agent_for(owner_id)
+	var agent = game.agent_for(player_id)
 	if agent == null:
 		return true
-	return bool(await agent.confirm_optional(owner_id, prompt))
+	return bool(await agent.confirm_optional(player_id, prompt))
+
+
+## Evaluate an existing engine condition string ("controls:Laguna", "cast_this_turn:Alexander") from this effect's
+## perspective. This is a compatibility bridge while the instruction-string conditions are migrated to code.
+func condition(expression: String) -> bool:
+	_prime_game()
+	return bool(game._condition_holds(expression))
+
+
+func untap_all_matching(criteria: Dictionary) -> void:
+	untap(cards_in("field", criteria))
+
+
+func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
+	_prime_game()
+	await game.play_from_hand(criteria, by)
+
+
+func break_zone_to_hand(filter: Dictionary = {}) -> void:
+	_prime_game()
+	await game.break_zone_to_hand(filter)
+
+
+func choose_break_zone_card(criteria: Dictionary, chooser: String = "self",
+		prompt: String = "Choose a card in your Break Zone") -> void:
+	_prime_game()
+	await game.choose_break_zone_card(criteria, chooser, prompt)
+
+
+func put_card_into_hand() -> void:
+	_prime_game()
+	await game.put_card_into_hand()
+
+
+func put_hand_card_on_bottom() -> void:
+	_prime_game()
+	await game.put_hand_card_on_bottom()
 
 
 func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false) -> void:

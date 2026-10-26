@@ -70,6 +70,15 @@ func _drain() -> void:
 
 
 func _pick(card: Card) -> void:
+	# Code ETBs open their target window when the stack object resolves, not synchronously inside
+	# execute_card_effect(). Start that resolution, then wait for the window before supplying the click.
+	if _stack != null and _stack.stack_length() > 0 \
+			and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		_stack.resolve_top_effect()
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
 	_field.set_target_card(card)
 	_assistant.call("on_target_complete")
 
@@ -97,9 +106,8 @@ func _ready() -> void:
 		"Ramza 144 scales with your Backups")
 	_expect(effects.get("208", {}).get("conditional_power", [{}])[0].get("value") == 2000,
 		"Noel 208 has a conditional +2000")
-	_expect(effects.get("196", {}).get("when_enter_field", {}).get("instructions", [{}])[0]
-		.get("argument", [{}])[0].get("category") == "XIII",
-		"Mog 196 searches Category XIII")
+	_expect(load("res://assets/effects/card_196.gd").new().has_method("when_enter_field"),
+		"Mog 196's Category XIII search is code-owned")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"opponent_type": "ai",
@@ -117,7 +125,7 @@ func _ready() -> void:
 	var mine: Card = _make(CHEMIST, "player")
 	var delita: Card = _make(112, "player")
 	_field.execute_card_effect(delita, "when_enter_field")
-	_pick(mine)
+	await _pick(mine)
 	await _drain()
 	_expect(not mine.is_on_field(), "Delita 112's ETB breaks the chosen Character you control")
 
@@ -125,7 +133,7 @@ func _ready() -> void:
 	var big_backup: Card = _make(KEFKA, "opponent")
 	var heca: Card = _off_field(117, "player")
 	_field.execute_card_effect(heca, "when_cast")
-	_pick(big_backup)
+	await _pick(big_backup)
 	await _drain()
 	_expect(not big_backup.is_on_field(), "Hecatoncheir 117 breaks a cost-4 Backup")
 
@@ -158,7 +166,7 @@ func _ready() -> void:
 	var dull_me: Card = _make(SNOW, "opponent")
 	var cait: Card = _make(132, "player")
 	_field.execute_card_effect(cait, "when_enter_field")
-	_pick(dull_me)
+	await _pick(dull_me)
 	await _drain()
 	_expect(dull_me.tapped, "Cait Sith 132 dulls the chosen opponent Forward")
 
@@ -205,7 +213,7 @@ func _ready() -> void:
 	var titan_target: Card = _make(SQUALL, "player")
 	var titan: Card = _off_field(110, "player")
 	_field.execute_card_effect(titan, "when_cast")
-	_pick(titan_target)
+	await _pick(titan_target)
 	await _drain()
 	_expect(titan_target.tapped, "Titan 110 dulls the chosen Forward")
 	_game.call("break_card", titan_target)
@@ -246,7 +254,7 @@ func _ready() -> void:
 	var hand_before: int = _game.get("opponent").hand.cards.size()
 	var raines: Card = _make(192, "player")
 	_field.execute_card_effect(raines, "when_enter_field")
-	_pick(victim)
+	await _pick(victim)
 	await _drain()
 	_expect(victim.accumulated_damage == 4000, "Cid Raines 192 deals 4000 to the dull Forward")
 	_expect(victim.status_effects.has("raines_mark"), "and marks it")

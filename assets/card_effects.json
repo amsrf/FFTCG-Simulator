@@ -80,13 +80,9 @@
 		}
 	},
 	
-	"151":{
+"151": 	{
 		"ex_burst": "when_enter_field",
-		"first_strike": true,
-		"when_enter_field":
-			{
-				"instructions":[{"name":"search_deck", "author":"game", "argument":[{"name":"Ovelia"}]}]
-			}
+		"first_strike": true
 	},
 
 	"16":{
@@ -101,10 +97,10 @@
 		"first_strike":true
 	},
 
-	"7":{
-		"apply_effect":{"is_type":"Forward","controller":"player"},
-		"when_enter_field":{
-			"instructions":[{"name":"power_change_targets","author":"game","argument":[1000, 1]}]
+"7": 	{
+		"apply_effect": {
+			"is_type": "Forward",
+			"controller": "player"
 		}
 	},
 
@@ -185,14 +181,16 @@
 		}
 	},
 
-	"42":{
-		"conditional_power":[{"condition":{"check_controller":"player","is_named":"Laguna"},"value":3000}],
-		"when_enter_field":{
-			"instructions":[
-				{"name":"each_player_discards","author":"game","argument":[1]},
-				{"name":"opponent_discards","author":"game","argument":[1],"condition":"controls:Laguna"}
-			]
-		}
+"42": 	{
+		"conditional_power": [
+			{
+				"condition": {
+					"check_controller": "player",
+					"is_named": "Laguna"
+				},
+				"value": 3000
+			}
+		]
 	},
 	"75":{
 		"haste": true,
@@ -265,16 +263,23 @@
 			]
 		}
 	},
-	"154":{
-		"when_enter_field":{
-			"instructions":[
-				{"name":"draw_cards","author":"game","argument":[1]}
-			]
-		},
-		"when_party_attack":{
-			"instructions":[
-				{"name":"draw_cards","author":"game","argument":[1]},
-				{"name":"controller_discards","author":"game","argument":[1]}
+"154": 	{
+		"when_party_attack": {
+			"instructions": [
+				{
+					"name": "draw_cards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				},
+				{
+					"name": "controller_discards",
+					"author": "game",
+					"argument": [
+						1
+					]
+				}
 			]
 		}
 	},
@@ -292,10 +297,10 @@
 			"instructions":[{"name":"damage_targets","author":"game","argument":[7000]}]
 		}
 	},
-	"24":{
-		"apply_effect":{"is_type":"Forward","controller":"opponent"},
-		"when_enter_field":{
-			"instructions":[{"name":"damage_targets","author":"game","argument":[3000]}]
+"24": 	{
+		"apply_effect": {
+			"is_type": "Forward",
+			"controller": "opponent"
 		}
 	},
 	"39":{
@@ -305,11 +310,8 @@
 			"instructions":[{"name":"damage_targets","author":"game","argument":[5000]}]
 		}
 	},
-	"44":{
-		"first_strike":true,
-		"when_enter_field":{
-			"instructions":[{"name":"each_player_discards","author":"game","argument":[2]}]
-		}
+"44": 	{
+		"first_strike": true
 	},
 	"55":{
 		"when_enter_break_from_field":{
@@ -465,16 +467,29 @@
 			]
 		}
 	},
-	"28":{
-		"ex_burst":"when_enter_field",
-		"when_enter_field":{"instructions":[{"name":"search_deck","author":"game","argument":[{"is_named":"Lann"}]}]},
-		"skill":[
+"28": 	{
+		"ex_burst": "when_enter_field",
+		"skill": [
 			{
-				"cost":{"火":1,"neutral":1},
-				"tap":true,
-				"text":"《Fire》《1》《Dull》: Choose 1 Lann. It gains +1000 power until the end of the turn.",
-				"choose_target":{"is_named":"Lann"},
-				"instructions":[{"name":"power_change_targets","author":"game","argument":[1000,1]}]
+				"cost": {
+					"火": 1,
+					"neutral": 1
+				},
+				"tap": true,
+				"text": "《Fire》《1》《Dull》: Choose 1 Lann. It gains +1000 power until the end of the turn.",
+				"choose_target": {
+					"is_named": "Lann"
+				},
+				"instructions": [
+					{
+						"name": "power_change_targets",
+						"author": "game",
+						"argument": [
+							1000,
+							1
+						]
+					}
+				]
 			}
 		]
 	},
@@ -511,22 +526,15 @@
 			"instructions":[{"name":"break_targets","author":"game","argument":[]}]
 		}
 	},
-	"79":{
-		"ex_burst":"when_enter_field",
-		"when_enter_field":{"instructions":[{"name":"search_deck","author":"game","argument":[{"is_named":"Hope"}]}]}
+"79": 	{
+		"ex_burst": "when_enter_field"
 	},
-	"80":{
-		"ex_burst":"when_enter_field",
-		"when_enter_field":{"instructions":[{"name":"untap_all_matching","author":"game","argument":[{"is_character":true,"controller":"player","is_element":"風"}]}]}
+"80": 	{
+		"ex_burst": "when_enter_field"
 	},
 	"81":{"all_jobs":true},
-	"91":{
-		"ex_burst":"when_enter_field",
-		"when_enter_field":{
-			"instructions":[
-				{"name":"search_deck","author":"game","argument":[{"any":[{"name":"Lightning"},{"name":"Snow"}]}]}
-			]
-		}
+"91": 	{
+		"ex_burst": "when_enter_field"
 	},
 	"52":{
 		"when_cast":{
@@ -569,13 +577,6 @@
 			"instructions":[{"name":"opponent_discards","author":"game","argument":[1]}]
 		}
 	},
-	"77":{
-		"when_enter_field":{
-			"instructions":[
-				{"name":"play_from_break_zone","author":"game","argument":[{"is_type":"Forward","is_cost_lower_than":3}]}
-			]
-		}
-	},
 	"41":{
 		"when_blocks":{
 			"choose_target":{"is_type":"Forward"},
@@ -598,22 +599,20 @@
 			}
 		]
 	},
-	"60":{
-		"when_enter_field":{
-			"instructions":[
-				{"name":"play_from_hand","author":"game","argument":[{"is_character":true},"opponent"],"may":true,"may_by":"opponent","may_prompt":"Play a Character"}
+"63": 	{
+		"when_attack": {
+			"choose_target": {
+				"is_type": "Backup",
+				"controller": "player",
+				"count": 2
+			},
+			"instructions": [
+				{
+					"name": "untap_targets",
+					"author": "game",
+					"argument": []
+				}
 			]
-		}
-	},
-	"63":{
-		"when_enter_field":{
-			"instructions":[
-				{"name":"play_from_hand","author":"game","argument":[{"is_type":"Forward","element":"風","is_cost_lower_than":4}],"may":true,"may_prompt":"Play a Forward"}
-			]
-		},
-		"when_attack":{
-			"choose_target":{"is_type":"Backup","controller":"player","count":2},
-			"instructions":[{"name":"untap_targets","author":"game","argument":[]}]
 		}
 	},
 	"122":{
@@ -1090,23 +1089,11 @@
 			]
 		}
 	},
-	"101": {
+"101": 	{
 		"ex_burst": "when_enter_field",
 		"apply_effect": {
 			"is_type": "Forward",
 			"controller": "player"
-		},
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "power_change_targets",
-					"author": "game",
-					"argument": [
-						4000,
-						1
-					]
-				}
-			]
 		}
 	},
 	"110": {
@@ -1141,21 +1128,6 @@
 					"argument": [
 						2000,
 						1
-					]
-				}
-			]
-		}
-	},
-	"134": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"job": "Knight"
-						}
 					]
 				}
 			]
@@ -1251,94 +1223,6 @@
 					"author": "game",
 					"argument": [
 						1
-					]
-				}
-			]
-		}
-	},
-	"196": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"category": "XIII",
-							"type": "Forward"
-						}
-					]
-				}
-			]
-		}
-	},
-	"197": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"category": "X",
-							"type": "Forward"
-						}
-					]
-				}
-			]
-		}
-	},
-	"199": {
-		"when_enter_field": {
-			"choose_target": {
-				"is_type": "Backup",
-				"controller": "player",
-				"count": 3
-			},
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					],
-					"condition": "controls:Yuna"
-				},
-				{
-					"name": "untap_targets",
-					"author": "game",
-					"argument": [],
-					"condition": "controls:Rikku"
-				}
-			]
-		}
-	},
-	"203": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"name": "Biggs"
-						}
-					]
-				}
-			]
-		}
-	},
-	"204": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "search_deck",
-					"author": "game",
-					"argument": [
-						{
-							"category": "VII",
-							"type": "Forward"
-						}
 					]
 				}
 			]
@@ -1469,28 +1353,6 @@
 			}
 		]
 	},
-	"133": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "break_zone_to_hand",
-					"author": "game",
-					"argument": [
-						{
-							"any": [
-								{
-									"type": "Forward"
-								},
-								{
-									"type": "Backup"
-								}
-							]
-						}
-					]
-				}
-			]
-		}
-	},
 "153": 	{
 		"skill": [
 			{
@@ -1569,24 +1431,6 @@
 					"argument": [
 						1
 					]
-				}
-			]
-		}
-	},
-	"175": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "draw_cards",
-					"author": "game",
-					"argument": [
-						1
-					]
-				},
-				{
-					"name": "put_hand_card_on_bottom",
-					"author": "game",
-					"argument": []
 				}
 			]
 		}
@@ -1802,84 +1646,8 @@
 		},
 		"break_zone_exile": true
 	},
-	"109": {
-		"ex_burst": "when_enter_field",
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "choose_break_zone_card",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward"
-						},
-						"self",
-						"Choose a Forward in your Break Zone"
-					]
-				},
-				{
-					"name": "choose_break_zone_card",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward"
-						},
-						"opponent",
-						"Choose a Forward in your Break Zone"
-					]
-				},
-				{
-					"name": "put_card_into_hand",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
-	},
-	"158": {
-		"when_enter_field": {
-			"instructions": [
-				{
-					"name": "choose_card",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward",
-							"controller": "your"
-						},
-						"self",
-						"Choose a Forward to keep"
-					]
-				},
-				{
-					"name": "choose_card",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward",
-							"controller": "theirs"
-						},
-						"opponent",
-						"Choose a Forward to keep"
-					]
-				},
-				{
-					"name": "apply_effect",
-					"author": "game",
-					"argument": [
-						{
-							"is_type": "Forward"
-						},
-						true
-					]
-				},
-				{
-					"name": "put_targets_into_break_zone",
-					"author": "game",
-					"argument": []
-				}
-			]
-		}
+"109": 	{
+		"ex_burst": "when_enter_field"
 	},
 	"162": {
 		"must_be_chosen": {

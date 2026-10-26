@@ -116,12 +116,8 @@ func _ready() -> void:
 	_expect(not _game.player.graveyard.graveyard_cards.has(player_bz_forward), "and it leaves the Break Zone")
 	_expect(_game.player.graveyard.graveyard_cards.has(player_bz_backup), "a Backup is not a legal pick")
 	_expect(_game.opponent.hand.cards.has(opponent_bz_forward), "P2 gets its chosen Forward back")
-	var serafie_steps: Array = effects.get(str(SERAFIE), {}).get("when_enter_field", {}).get("instructions", [])
-	_expect(effects.get(str(SERAFIE), {}).get("ex_burst") == "when_enter_field"
-		and serafie_steps.size() == 3
-		and str(serafie_steps[0].get("name", "")) == "choose_break_zone_card"
-		and str(serafie_steps[2].get("name", "")) == "put_card_into_hand",
-		"Serafie is composed from choose_break_zone_card + put_card_into_hand")
+	_expect(load("res://assets/effects/card_109.gd").new().has_method("when_enter_field"),
+		"Serafie's Break Zone choice is code-owned")
 	_game.queue_free()
 	await get_tree().process_frame
 
@@ -140,13 +136,8 @@ func _ready() -> void:
 	_expect(_field.get_front_cards_for("opponent").size() == 1, "P2 keeps exactly one Forward")
 	_expect(not p_other.is_on_field() and not o_other.is_on_field(),
 		"the unselected Forwards leave the field")
-	var cloud_steps: Array = effects.get(str(CLOUD), {}).get("when_enter_field", {}).get("instructions", [])
-	_expect(cloud_steps.size() == 4
-		and str(cloud_steps[0].get("name", "")) == "choose_card"
-		and str(cloud_steps[1].get("name", "")) == "choose_card"
-		and str(cloud_steps[2].get("name", "")) == "apply_effect"
-		and str(cloud_steps[3].get("name", "")) == "put_targets_into_break_zone",
-		"Cloud of Darkness is composed from choose/apply/put instructions")
+	_expect(load("res://assets/effects/card_158.gd").new().has_method("when_enter_field"),
+		"Cloud of Darkness's keep-one choice is code-owned")
 	_game.queue_free()
 	await get_tree().process_frame
 

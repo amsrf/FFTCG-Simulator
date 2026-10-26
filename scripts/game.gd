@@ -1611,9 +1611,10 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 	if card == null or not is_instance_valid(card):
 		return
-	if not card.card_effects.has(keyword):
+	var code_event: bool = card.abilities_enabled() and card.effect_handles_event(keyword)
+	var effect: Dictionary = card.card_effects.get(keyword, {})
+	if not code_event and effect.is_empty():
 		return
-	var effect: Dictionary = card.card_effects[keyword]
 	print("[ExBurst] %s -> '%s' (P%s)" % [card.card_name, keyword, 1 if side == player else 2])
 
 	# THE FAKE STACK CARD, and it is the user's design, which is better than the one it replaces.
@@ -1630,7 +1631,10 @@ func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 	# TARGETED BURSTS WAIT FOR THE PICK; NO-TARGET BURSTS HAVE NOTHING TO WAIT FOR. Either way the effect copy is now
 	# on the stack and must be resolved HERE, because a burst bypasses the priority loop entirely — leaving a no-target
 	# burst on the stack would make Moogle or Gippal do nothing until some later priority round.
-	if effect.has("choose_target"):
+	# CODE-DEFINED ETBs CHOOSE THEIR TARGET DURING RESOLUTION. The JSON branch below still chooses before the
+	# resolution starts, so only that branch waits for the pick here. Waiting for a code ETB's target before resolving
+	# it would block forever: the code handler has not run yet.
+	if effect.has("choose_target") and not code_event:
 		await assistant.target_complete
 	# IMMEDIATELY: no priority round, nobody responds. The stack's own resolution does the work - the same code every
 	# other effect goes through, so instructions, targets and cleanup all behave identically.
@@ -2367,7 +2371,8 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	# A code-defined triggered ability. The stack copy names the event; the effect object does the work with a fresh
 	# EffectContext. Targeting state is cleared around it for the same reason as the event-trigger path below.
 	if not card.effect_event.is_empty():
-		field.call("finish_targeting_state")
+		# Do NOT clear targeting BEFORE resolving: request_target() starts a new session and owns that state. The
+		# old pre-clear could wipe the very session the code handler had just opened.
 		await _resolve_code_effect(card)
 		field.call("finish_targeting_state")
 		card.queue_free()

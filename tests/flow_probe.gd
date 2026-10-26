@@ -75,7 +75,15 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
-	# 2. The arrow's source is the COPY, not the card on the field.
+	# Code ETBs are resolved by the stack. Start the resolution and wait until the target window opens.
+	await get_tree().create_timer(0.1).timeout
+	if field.arrow == null and stack.stack_length() > 0:
+		stack.resolve_top_effect()
+	for _i in range(60):
+		if field.arrow != null:
+			break
+		await get_tree().process_frame
+
 	var arrow = field.arrow
 	_expect(arrow != null, "targeting started an arrow")
 	if arrow == null:

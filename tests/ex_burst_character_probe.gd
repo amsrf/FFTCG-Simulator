@@ -39,7 +39,15 @@ func _to_damage(card_id: int) -> Card:
 	_game.get("deck").deck_cards.push_front(card)
 	_game.get("player").take_damage(1)
 	await get_tree().create_timer(2.3).timeout          # EX_BURST_DELAY is 2.0
-	await get_tree().process_frame
+	# Code ETBs are resolved on the stack, so the targeting window can open a frame after the burst delay.
+	# A stack object can already be popped while its handler is awaiting a target; wait for the prompt itself.
+	for _i in range(60):
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			break
+		await get_tree().process_frame
+	# A no-target code ETB resolves without opening a target window; give it time to finish before the test reads
+	# the board.
+	await get_tree().create_timer(0.2).timeout
 	return card
 
 
