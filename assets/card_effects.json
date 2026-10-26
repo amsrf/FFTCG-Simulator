@@ -1,20 +1,4 @@
 {
-	"1": {
-		"when_cause_damage_to_player": [
-			{
-				"instructions": [
-					{
-						"name": "may_play_for_free",
-						"author": "player"
-					}
-				],
-				"choose_card": {
-					"is_type": "Backup",
-					"is_element": "Fire"
-				}
-			}
-		]
-	},
 	"4": {
 		"ex_burst": "when_cast"
 	},

@@ -148,6 +148,19 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Auron 1-001H: May Play a Fire Backup
+
+Auron's damage trigger is code-owned and also closes the last target-dependent
+event. `when_cause_damage_to_player` now branches to a code trigger for code
+effects instead of assuming JSON.
+
+`EffectContext` gained the reusable hand-play shape: shortlist hand cards,
+ask may, choose one, play it for free, optionally dull. Auron uses it to play
+a Fire Backup from hand, arriving dull.
+
+Probe: `tests/auron_probe.tscn` covers trigger, stack entry, may choice,
+playing from hand and the dull arrival.
+
 ### Summons Migrated to Cast-Time Code Effects
 
 Migrated all 20 Summons from JSON `when_cast` blocks to `CardEffect` scripts:
@@ -187,9 +200,8 @@ Code event conditions are evaluated when the trigger resolves. A broad party
 trigger is therefore queued even when its condition is false; probes drain the
 whole stack rather than treating one queued object as proof of an effect.
 
-Auron 1-001H is deliberately still data-driven: its trigger chooses a Fire
-Backup from hand and plays it, not a field target, so it belongs to a separate
-hand-selection pass.
+Auron 1-001H was subsequently migrated to code (see the Auron section above):
+its damage trigger now uses the hand-play context helper.
 
 ### Target-Dependent ETBs Migrated
 

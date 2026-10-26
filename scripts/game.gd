@@ -1445,7 +1445,11 @@ func cause_damage():
 	side_for(3 - turn_owner).take_damage(1, source)
 	# Triggered auto-ability: "when this card deals damage to the opponent".
 	if field.attacker_card != null:
-		stack.begin_triggered_ability(field.attacker_card, "when_cause_damage_to_player")
+		var attacker: Card = field.attacker_card
+		if attacker.abilities_enabled() and attacker.effect_handles_event("when_cause_damage_to_player"):
+			stack.enqueue_code_trigger(attacker, "when_cause_damage_to_player")
+		else:
+			stack.begin_triggered_ability(attacker, "when_cause_damage_to_player")
 	
 func cause_attacking_damage():
 	if field.blocker_card == null:

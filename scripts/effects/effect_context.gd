@@ -169,6 +169,45 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 	await game.play_from_hand(criteria, by)
 
 
+## Pick one card from an explicit list. Used by hand-play effects where the caller controls the shortlist.
+func choose_hand_card(cards: Array, prompt: String = "Choose a card") -> Card:
+	if cards.is_empty() or game == null:
+		return null
+	var agent: Agent = game.agent_for(owner_id)
+	if agent == null:
+		return null
+	return await agent.choose_field_card(owner_id, cards, prompt)
+
+
+## Play one already-chosen card from hand for free;  is the "onto the field dull" rider.
+func play_from_hand_card(card: Card, dull: bool = false) -> void:
+	if card == null or not is_instance_valid(card) or game == null:
+		return
+	var owner_hand: Hand = game.hand_for(1 if card.controller == "player" else 2)
+	if owner_hand == null:
+		return
+	owner_hand.remove_for_play(card)
+	card.reset_for_field_arrival()
+	game.field.play_card(card, card.controller == "opponent", true)
+	if dull:
+		card.tap()
+
+
+## The common "you may play a card from hand" shape: shortlist, ask, choose, play.
+func may_play_from_hand(criteria: Dictionary, dull: bool = false,
+		prompt: String = "Play a card") -> bool:
+	var candidates: Array = cards_in("hand", criteria, "self")
+	if candidates.is_empty():
+		return false
+	if not await may(prompt):
+		return false
+	var picked: Card = await choose_hand_card(candidates, prompt)
+	if picked == null:
+		return false
+	await play_from_hand_card(picked, dull)
+	return true
+
+
 func break_zone_to_hand(filter: Dictionary = {}) -> void:
 	_prime_game()
 	await game.break_zone_to_hand(filter)
