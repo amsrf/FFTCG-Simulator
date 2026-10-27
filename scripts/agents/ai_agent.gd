@@ -98,7 +98,10 @@ func pay_cost(player_id: int, cost: Dictionary) -> bool:
 		else:
 			rest.append(card)
 	for card in matching + rest:
-		field.add_card_to_mana_conversion(card)
+		var chosen: String = await card.generate_mana(card.make_effect_context("mana"))
+		if chosen.is_empty():
+			continue
+		field.add_card_to_mana_conversion(card, chosen)
 		if assistant.can_pay_cost():
 			return true
 	return assistant.can_pay_cost()

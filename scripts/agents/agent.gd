@@ -157,6 +157,13 @@ func choose_element(_owner_id: int, options: Array, _prompt: String = "Choose an
 	return str(options[0]) if not options.is_empty() else ""
 
 
+## The colour a multi-colour source produces. Local play takes this to the UI; AI/remote play answers it without
+## opening a window. Default is deterministic and never blocks.
+func choose_mana_color(_owner_id: int, _card: Card, options: Array) -> String:
+	await _settle()
+	return str(options[0]) if not options.is_empty() else ""
+
+
 func choose_discard(_owner_id: int, _cards: Array) -> Card:
 	await _settle()
 	return null

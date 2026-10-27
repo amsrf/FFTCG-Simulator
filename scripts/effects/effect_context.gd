@@ -309,9 +309,10 @@ func choose_crystal_in_circle(elements: Array) -> String:
 		return ""
 	if elements.size() == 1:
 		return str(elements[0])
-	if field == null or source == null:
-		return str(elements[0])
-	return str(await field.call("open_mana_choice", source, elements))
+	var agent = game.agent_for(owner_id) if game != null else null
+	if agent != null and agent.has_method("choose_mana_color"):
+		return str(await agent.choose_mana_color(owner_id, source, elements))
+	return str(elements[0])
 
 
 ## Damage all cards in `cards` from the effect's source. All damage goes through Field.cause_damage, the single

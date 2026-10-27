@@ -417,12 +417,17 @@ hit were routed through `Field.cause_damage` for this reason.
   `ctx.choose_crystal_in_circle(ctx.source.mana_elements())`; a one-element list returns immediately, so ordinary
   Backups never open a picker and every code card gets the behaviour for free. Card code only overrides this when
   it wants a different option list.
-- `EffectContext.choose_crystal_in_circle()` delegates the UI to `Field.open_mana_choice()`, which builds
-  `mana_choice.tscn` — small static `ManaCrystal` buttons in a camera-plane circle, hover-growing, click-to-choose.
-  The chosen colour is stored in `Field.selected_mana_elements` so `remove_card_from_mana_conversion()` refunds
-  exactly that colour. Do not re-derive a refund from `card.mana_element()` after a choice.
+- `EffectContext.choose_crystal_in_circle()` asks the owning agent via `Agent.choose_mana_color()`. `LocalAgent`
+  routes that to `Field.open_mana_choice()` (the circle); AI/remote agents answer without opening a window. Field
+  builds `mana_choice.tscn` — small static `ManaCrystal` buttons in a camera-plane circle, hover-growing,
+  click-to-choose. The chosen colour is stored in `Field.selected_mana_elements` so
+  `remove_card_from_mana_conversion()` refunds exactly that colour. Do not re-derive a refund from
+  `card.mana_element()` after a choice.
 - `add_card_to_mana_conversion(card, element)` accepts the chosen element; `element == "any"` remains valid for
   agents/payment paths that deliberately produce wild CP.
+- Backup charging goes through this card method from both the click path (`Field.begin_mana_choice`) and
+  `AIAgent.pay_cost()`. Hand cards are intentionally outside this picker: their 2-CP source path still uses
+  `Hand.add_card_to_mana_conversion()`.
 
 ### Break replacement: one context, one boolean
 

@@ -6,6 +6,17 @@ class_name LocalAgent
 const ELEMENT_CHOICE := preload("res://element_choice.tscn")
 
 
+func choose_mana_color(_owner_id: int, card: Card, options: Array) -> String:
+	if options.is_empty():
+		return ""
+	if options.size() == 1:
+		return str(options[0])
+	var field = game.field if game != null else null
+	if field == null:
+		return str(options[0])
+	return str(await field.call("open_mana_choice", card, options))
+
+
 func choose_element(_owner_id: int, options: Array, prompt: String = "Choose an Element") -> String:
 	if options.is_empty():
 		return ""

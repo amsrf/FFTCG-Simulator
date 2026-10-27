@@ -178,6 +178,11 @@ The choice now belongs to the card effect: `Card.generate_mana(ctx)` delegates t
 A one-element list is returned immediately, so ordinary Backups never open the picker. Card 183 (Cosmos) uses
 the same hook with its full element list. Field only supplies the UI through `open_mana_choice()`.
 
+Backup mana charging is now consistent: clicks call `Card.generate_mana` through `Field.begin_mana_choice`, and
+`AIAgent.pay_cost()` calls the same method before adding the chosen colour. `EffectContext.choose_crystal_in_circle`
+asks the owning agent via `Agent.choose_mana_color`; `LocalAgent` opens the circle while AI/remote agents answer
+without UI. Hand-card mana is deliberately unchanged.
+
 ### Multi-Colour Mana Picker
 
 A Backup that can produce more than one colour now opens a radial picker instead of generating silently:
