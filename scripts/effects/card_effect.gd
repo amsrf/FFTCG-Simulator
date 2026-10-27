@@ -131,3 +131,8 @@ func modify_cost_for(_ctx, _subject: Card, cost: Dictionary) -> Dictionary:
 ## Change incoming damage before it lands.
 func modify_damage(ctx) -> int:
 	return ctx.amount
+
+
+## Replace a break: return true to stop it. The default protects nothing.
+func prevents_break(_ctx) -> bool:
+	return false

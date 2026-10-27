@@ -1,5 +1,7 @@
 extends RefCounted
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
+const BREAK_CONTEXT := preload("res://scripts/effects/break_context.gd")
+const BREAK_CAUSE := preload("res://scripts/effects/break_cause.gd")
 ## RULES — the continuous-effect QUERY layer.
 ##
 ## The board (Field) owns the cards; the rules that READ them live here. A rule can then be asked a question without
@@ -170,12 +172,34 @@ func is_protected_from_being_chosen(card: Card, source: Card, source_kind: Strin
 ##                "from": "opponent", "by": ["Summon", "Ability"]}
 ## `targets` is read from the PROTECTOR's perspective, and `by` may be omitted to mean any effect.
 func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
-	if card == null or source_kind.is_empty():
-		# An empty kind is combat damage — no Summon or ability to be protected from.
+	if card == null:
 		return false
+	var cause = BREAK_CAUSE.new()
+	cause.source_controller = source_controller
+	cause.source_kind = source_kind
+	if source_kind == "Summon":
+		cause.kind = BREAK_CAUSE.Kind.SUMMON
+	elif source_kind == "Ability":
+		cause.kind = BREAK_CAUSE.Kind.ABILITY
+	elif source_kind == "" and source_controller == "":
+		cause.kind = BREAK_CAUSE.Kind.COMBAT
+	else:
+		cause.kind = BREAK_CAUSE.Kind.EFFECT
+	var ctx = BREAK_CONTEXT.new()
+	ctx.card = card
+	ctx.cause = cause
+	ctx.field = field
 	for protector in _cards():
 		if protector == null or not is_instance_valid(protector):
 			continue
+		ctx.rule_owner = protector
+		var effect_obj = protector.effect() if protector.abilities_enabled() else null
+		if effect_obj != null and effect_obj.has_method("prevents_break") 				and not protector.card_effects.has("protects"):
+			if bool(effect_obj.prevents_break(ctx)):
+				print("[Protect] %s is protected by %s" % [card.card_name, protector.card_name])
+				return true
+			continue
+		# Legacy fallback for a card that still carries a static protects block.
 		var rules = protector.static_rule("protects", [])
 		if rules is Dictionary:
 			rules = [rules]

@@ -173,6 +173,13 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+### Break Replacement as a Card Query
+
+`Game.break_card()` now builds a `BreakContext` (`card`, `rule_owner`, typed `BreakCause`) and asks every
+field card's `CardEffect.prevents_break(ctx)`. The default returns false; a true result stops the break.
+Auron 2 moved off `static_rules()["protects"]` and now owns the check in code. Break protection is asked only
+by `break_card()`; `put_card_into_graveyard()` remains ordinary removal and bypasses it.
+
 ### Damage Modifiers as Card Queries
 
 Damage modification is now a pure card method:

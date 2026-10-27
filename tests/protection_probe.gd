@@ -54,6 +54,11 @@ func _ready() -> void:
 	var chemist_b: Card = _card(CHEMIST_B)
 	var enemy_backup: Card = _card(RED_MAGE)
 	var forward: Card = _card(SQUALL)
+	var auron_effect = load("res://assets/effects/card_2.gd").new()
+	_expect(auron_effect.has_method("prevents_break"),
+		"Auron's protection is a code-owned break replacement")
+	_expect(auron_effect.static_rules().is_empty(),
+		"and no longer relies on a static protects block")
 
 	# --- the query itself -----------------------------------------------------------------------------------
 	_expect(_field.is_protected_from_break(chemist_a, "opponent", "Ability"),
@@ -93,6 +98,9 @@ func _ready() -> void:
 	# --- your own ability breaks the Backup ------------------------------------------------------------------
 	_game.call("break_card", chemist_b, "player", "Ability")
 	_expect(not chemist_b.is_on_field(), "your own Ability breaks your Backup as normal")
+	# --- removal that is not a break bypasses the protection -------------------------------------------------
+	_game.call("put_card_into_graveyard", chemist_a)
+	_expect(not chemist_a.is_on_field(), "put_card_into_graveyard() is not a break and is not protected")
 
 	print("[Protect] %d checks | failures: %d" % [_checks, _fails])
 	print("[Protect] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

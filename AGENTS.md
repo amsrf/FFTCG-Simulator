@@ -387,22 +387,12 @@ abilities land.
 
 ### Damage modifiers: one pipeline, one context
 
-`Rules.modify_damage()` is the only place damage is modified. It scans `damage_modifiers` on every card on the field,
-then applies `set` / `multiply` / `add` / `subtract` before `suffer_damage`. `damage_double`, `party_damage_zero` and
-`damage_zero_if_below_power` are gone; do not reintroduce per-card booleans for damage.
-
-The CONTEXT is a generic dictionary built at the damage event:
-
-* `self` — the card whose rule is being evaluated
-* `source` — the card that caused the damage (may be null)
-* `target` — the card receiving it
-* `amount` — the current amount, updated after each modifier
-* `source_kind`, `source_controller` — when known
-
-`targets` is evaluated with `self` as source, so `is_source` means “target == this card” and `controller: "player"`
-means “same controller as this card”. Conditions are a list of blocks; all must be true. Numeric relations use
-`compare_values` with value refs (`{"context": "amount"}`, `{"context": "target", "property": "power"}`). Named
-conditions are only for non-numeric relations: `source_is_self`, `in_party_with_self`, `status`, `source_kind`.
+`Rules.modify_damage()` is the only place damage is modified. It builds one typed `DamageContext` and asks every
+field card's `CardEffect.modify_damage(ctx)` in turn; the default returns the amount unchanged. Source-side
+(Warrior of Light), receiver-side (Knight) and field-wide (Minwu) rules all use this one pure hook. Context fields:
+`amount`, `original_amount`, `source`, `source_controller`, `source_kind`, `target`, `kind`, `rule_owner`, `field`.
+`DamageContext.Kind` distinguishes combat, ability, Summon, EX BURST and generic effect damage. Do not add damage or
+mutate state inside `modify_damage()`.
 
 PENDING ONE-SHOT DAMAGE RULES are status payloads, not named flags. `add_status_effect(status, duration, payload)`
 stores the payload; any status whose payload has `operation` and `value` is applied to damage dealt to that card. The
@@ -412,6 +402,14 @@ not reintroduce a `next_damage_zero`-style boolean — use a payload such as
 
 Do NOT add a direct `card.suffer_damage()` call anywhere: it bypasses modifiers. `divide_damage` and the party-to-blocker
 hit were routed through `Field.cause_damage` for this reason.
+
+### Break replacement: one context, one boolean
+
+`Game.break_card()` asks `Rules.is_protected_from_break()`, which builds a `BreakContext` (`card` about to break,
+`rule_owner`, typed `BreakCause`) and scans every field card's `CardEffect.prevents_break(ctx)`. The default returns
+false; if any protector returns true the break is stopped. Only `break_card()` asks this question:
+`put_card_into_graveyard()` is removal, not a break, and must bypass break protection. `unbreakable` remains a
+separate status checked before the scan.
 
 Yuna 176's `break_zone_exile` is auto-accepted (known simplification: the “may” would need an async pre-break step);
 it is gated on `current_zone == FIELD`, so unique-name duplicates from hand/stack are not exiled.
