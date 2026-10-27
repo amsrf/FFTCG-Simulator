@@ -5,6 +5,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Berserk Dance 《S》《Dull》: Choose 1 Forward. Deal it 6000 damage.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
+	}
+
+
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _berserk_dance(ctx) -> void:

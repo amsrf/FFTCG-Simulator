@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-216S Wakka
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
+	}
+
+
 func when_attack(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR)))
 	if targets.is_empty():

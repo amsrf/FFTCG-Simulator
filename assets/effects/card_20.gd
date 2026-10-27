@@ -2,6 +2,12 @@ extends "res://scripts/effects/card_effect.gd"
 ## Fang 1-020R: your Bahamut Summons cost 2 less.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
+	}
+
+
 func modify_cost_for(ctx, subject: Card, cost: Dictionary) -> Dictionary:
 	if ctx.source == null or subject.controller != ctx.source.controller:
 		return cost

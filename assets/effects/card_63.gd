@@ -4,6 +4,13 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-063 enter-the-field ability
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
+	}
+
+
 func when_enter_field(ctx) -> void:
 	if await ctx.may("Play a Forward"):
 		await ctx.play_from_hand(CARD_QUERY.new().of_type("Forward").of_element("風").where({"is_cost_lower_than": 4}))

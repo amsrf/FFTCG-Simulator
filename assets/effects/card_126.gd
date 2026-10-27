@@ -3,6 +3,12 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-126 Orlandeau: when it attacks, deal 3000 to every opponent Forward.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
+	}
+
+
 func when_attack(ctx) -> void:
 	ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), 3000)
 

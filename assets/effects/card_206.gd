@@ -3,6 +3,12 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-206 Biggs: when one of your Backups leaves the field, damage every opponent Forward.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.CARD_LEFT_FIELD: Callable(self, "card_left_field"),
+	}
+
+
 func card_left_field(ctx) -> void:
 	var left: Card = ctx.event_data.get("card")
 	if left == null or not is_instance_valid(left):

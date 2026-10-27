@@ -54,6 +54,7 @@ var _printed_effects: Dictionary = {}
 ## dictionary, and the original data comes back when the status expires.
 const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 var _card_effect = null
 var _elements_calculating: bool = false
 ## Auras granted to this card by another effect, or supplied by a test. Definitions are dictionaries or AuraSpecs.
@@ -64,8 +65,8 @@ var extra_auras: Array = []
 	set(value):
 		_printed_effects = value
 @export var key_word_effect: String
-## A code-defined event on a stack copy. Empty for ordinary JSON effects and real cards.
-var effect_event: String = ""
+## A code-defined event on a stack copy. NONE for ordinary JSON effects and real cards.
+var effect_event: int = EVENTS.Event.NONE
 var effect_event_data: Dictionary = {}
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
 ## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
@@ -1022,13 +1023,13 @@ func _silence_icon_belongs_left() -> bool:
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
 ## what something gave it, and anything asking "can this tap" needs one answer.
 ## Which event an EX BURST runs. Code wins; JSON is the fallback for the handful of cards not yet migrated.
-func ex_burst_event() -> String:
+func ex_burst_event() -> int:
 	var effect_obj = effect() if abilities_enabled() else null
 	if effect_obj != null and effect_obj.has_method("ex_burst_event"):
-		var code_event: String = effect_obj.ex_burst_event()
-		if code_event != "":
+		var code_event: int = int(effect_obj.ex_burst_event())
+		if code_event != EVENTS.Event.NONE:
 			return code_event
-	return str(card_effects.get("ex_burst", ""))
+	return EVENTS.from_name(str(card_effects.get("ex_burst", "")))
 
 
 func has_haste() -> bool:
@@ -1646,9 +1647,17 @@ func effect():
 	return _card_effect
 
 
-func effect_handles_event(event: String) -> bool:
+func effect_handles_event(event) -> bool:
 	var effect_obj = effect()
-	return effect_obj != null and effect_obj.handles_event(event)
+	if effect_obj == null:
+		return false
+    # Accept a legacy string at the boundary while call sites migrate to EVENTS.Event.
+	return effect_obj.handles_event(EVENTS.normalize(event))
+
+
+## Human-readable event name for logs, stack snapshots and tests.
+func effect_event_name() -> String:
+	return EVENTS.name_of(effect_event)
 
 
 func effect_auras() -> Array:
@@ -1663,7 +1672,7 @@ func effect_auras() -> Array:
 
 ## Build the explicit world for one effect invocation. A source card normally sits under Field; a stack copy sits
 ## under Stack. Either way the Game is the grandparent and EffectContext resolves Field from it.
-func make_effect_context(event: String = "static", data: Dictionary = {}, effect_card: Card = null, targets: Array = []):
+func make_effect_context(event = "static", data: Dictionary = {}, effect_card: Card = null, targets: Array = []):
 	# USE THE STACK COPY TO FIND THE GAME. A self-sacrificing ability's source has already left the field by the time
 	# the ability resolves, so walking up from this card reaches the Break Zone's PlayerSide, not the Game. The effect
 	# copy is on the Stack, whose parent IS the Game, and that is the stable path for every resolving ability.

@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Cloud 1-187R: costs 1 less for each other Category VII Forward you control.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.FORWARD_ATTACKS: Callable(self, "forward_attacks"),
+	}
+
+
 func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
 	var count: int = ctx.cards_in_field(
 		{"is_category": "VII", "is_type": "Forward", "controller": "your"}, true).size()
@@ -16,8 +22,8 @@ func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.damage(targets, 8000)
 
-func event_matches(event: String, source: Card, data: Dictionary) -> bool:
-	if event != "forward_attacks":
+func event_matches(event: int, source: Card, data: Dictionary) -> bool:
+	if event != EVENTS.Event.FORWARD_ATTACKS:
 		return false
 	var event_card: Card = data.get("card")
 	return event_card != null and is_instance_valid(event_card) \

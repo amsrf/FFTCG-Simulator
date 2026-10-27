@@ -1,29 +1,45 @@
 extends RefCounted
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
 const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
 ## A card effect is STATELESS: the per-event state lives in the EffectContext passed to the hook. One instance can be
 ## cached per card id and shared by every copy of that card.
 ##
 ## There are three kinds of hook:
-##   * triggered events   -- declare the event in triggered_events(); the engine puts a stack object on the stack and
-##                           calls the matching on_* method when it resolves
+##   * triggered events   -- declare event -> method in handlers(); the engine puts a stack object on the stack and
+##                           calls dispatch() with that event when it resolves
 ##   * continuous queries -- normal calls (current_elements, modify_cost, ...) made whenever the engine needs an answer
 ##   * replacement hooks  -- intercept something before it happens (future work)
 ##
 ## This file deliberately contains no card logic. A card subclass overrides only the hooks it needs.
 
-## EVENT METHODS ARE THE CONTRACT. A card defines a method named exactly like the engine event it handles, e.g.
-## `func when_enter_field(ctx)`. The engine asks `has_method(event)` and, at resolution, calls that same method.
-## There is no separate event list and no name mapping, so there is nothing to drift.
-func handles_event(event: String) -> bool:
-	return has_method(event)
+## THE TRIGGER DECLARATION. A card that handles an event puts exactly one entry here:
+##
+##   func handlers() -> Dictionary:
+##       return { EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field") }
+##
+## The engine reads the KEYS before putting anything on the stack; dispatch() reads the Callable later. One entry
+## answers both "should this trigger?" and "what runs?". The base is empty, so a card with no triggers costs nothing.
+func handlers() -> Dictionary:
+	return {}
+
+
+func handles_event(event: int) -> bool:
+	return handlers().has(event)
+
+
+## One place maps the event id to the card's method. No has_method() lookup and no string method name at the call site.
+func dispatch(event: int, ctx) -> void:
+	var handler: Callable = handlers().get(event, Callable())
+	if handler.is_valid():
+		await handler.call(ctx)
 
 
 ## Optional event filter for code-defined triggers. The Field checks this before enqueueing the stack object, so a
 ## card can listen to a shared event (card_left_field, summon_cast, ...) without reacting to every instance of it.
-func event_matches(_event: String, _source: Card, _data: Dictionary) -> bool:
+func event_matches(_event: int, _source: Card, _data: Dictionary) -> bool:
 	return true
 
 
@@ -66,10 +82,9 @@ func properties(_ctx) -> Array[String]:
 
 
 ## Which existing hook runs when this card becomes damage. The default is "no EX BURST"; only cards that have one
-## override this and return "when_cast" or "when_enter_field". It is a pointer to the card's existing effect, never a
-## second implementation.
-func ex_burst_event() -> String:
-	return ""
+## override this and return an Event id. It is a pointer to the card's existing effect, never a second implementation.
+func ex_burst_event() -> int:
+	return EVENTS.Event.NONE
 
 
 ## Printed keywords owned by code. The keyword readers on Card ask this before the JSON view; migrate one keyword

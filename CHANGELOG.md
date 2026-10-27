@@ -173,6 +173,22 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+### Typed Card Events
+
+Card hooks now use a closed event vocabulary in `scripts/effects/events.gd`:
+
+```gdscript
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+```
+
+`handles_event()` reads the map keys, so the engine knows whether to enqueue a stack object without calling the
+hook. `dispatch(event, ctx)` resolves the matching Callable. All 123 event-bearing card scripts were migrated;
+EX BURST now returns an `EVENTS.Event` id. Legacy strings are accepted only at the input boundary while tests and
+data migrate. The new `event_dispatch_probe` validates vocabularies, handler targets and EX BURST pointers.
+
 ### Dynamic Power and Properties
 
 `power_per_rules` is gone. A card now supplies its own contribution:

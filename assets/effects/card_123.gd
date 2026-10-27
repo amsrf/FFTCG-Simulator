@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-123R Odin
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.CAST: Callable(self, "when_cast"),
+	}
+
+
 func cast_target_criteria(_ctx) -> Variant:
 	return TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").cost_at_most(4))
 

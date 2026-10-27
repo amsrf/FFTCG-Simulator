@@ -1,4 +1,5 @@
 extends Node
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## B2: damage replacement / prevention (160, 165, 166, 171) and Yuna's break-zone exile (176).
 
 const GAME_SCENE := preload("res://game.tscn")
@@ -54,7 +55,7 @@ func _ready() -> void:
 	_expect(minwu_rules.size() == 1 and minwu_rules[0].get("conditions", [{}])[0].has("compare_values"),
 		"Minwu 171 uses the generic compare_values condition")
 	var yuna_effect = load("res://assets/effects/card_176.gd").new()
-	_expect(yuna_effect.ex_burst_event() == "when_enter_field"
+	_expect(yuna_effect.ex_burst_event() == EVENTS.Event.ENTER_FIELD
 		and yuna_effect.has_method("when_enter_field")
 		and yuna_effect.static_rules().get("break_zone_exile", false) == true,
 		"Yuna 176 has her return ETB, code EX Burst and exile rule")

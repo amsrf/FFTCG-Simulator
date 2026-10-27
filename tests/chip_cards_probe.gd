@@ -1,4 +1,5 @@
 extends Node
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## CHIP CARDS probe — the three that needed one small piece of vocabulary each:
 ##   78 Ninja    《Wind》, discard 1 card from hand: 2000 damage to a Forward   (discard as a COST)
 ##   81 Bartz    "Bartz has all the jobs"                                        (job checks always succeed)
@@ -127,7 +128,7 @@ func _ready() -> void:
 	_expect(CARD_FILTER.matches(lightning, or_filter), "the OR filter accepts Lightning")
 	_expect(CARD_FILTER.matches(snow, or_filter), "and Snow")
 	_expect(not CARD_FILTER.matches(auron, or_filter), "but not an unrelated card")
-	_expect(load("res://assets/effects/card_91.gd").new().ex_burst_event() == "when_enter_field",
+	_expect(load("res://assets/effects/card_91.gd").new().ex_burst_event() == EVENTS.Event.ENTER_FIELD,
 		"Amodar's code EX burst runs its enter-the-field search")
 
 	print("[Chip] %d checks | failures: %d" % [_checks, _fails])

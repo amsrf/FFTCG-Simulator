@@ -4,6 +4,13 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-041L Squall
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.BLOCKS: Callable(self, "when_blocks"),
+		EVENTS.Event.BLOCKED: Callable(self, "when_blocked"),
+	}
+
+
 func when_blocks(ctx) -> void:
 	await _may_deal_6000(ctx)
 

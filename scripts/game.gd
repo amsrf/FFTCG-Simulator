@@ -30,6 +30,7 @@ const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 ## Search filters use the CardFilter vocabulary (name/type/category/job/element/any). Preloaded by path for the same
 ## reason as the two above.
 const CARD_FILTER := preload("res://scripts/card_filter.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 
 ## REVEAL staging. Cards are taken off the top of the deck, shown one at a time, then hidden/inert and kept here
 ## until the effect moves them somewhere. This array is the search domain for reveal-style cards.
@@ -1444,8 +1445,8 @@ func cause_damage():
 	# Triggered auto-ability: "when this card deals damage to the opponent".
 	if field.attacker_card != null:
 		var attacker: Card = field.attacker_card
-		if attacker.abilities_enabled() and attacker.effect_handles_event("when_cause_damage_to_player"):
-			stack.enqueue_code_trigger(attacker, "when_cause_damage_to_player")
+		if attacker.abilities_enabled() and attacker.effect_handles_event(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER):
+			stack.enqueue_code_trigger(attacker, EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER)
 		else:
 			stack.begin_triggered_ability(attacker, "when_cause_damage_to_player")
 	
@@ -1468,7 +1469,7 @@ func _on_player_side_damaged(side: PlayerSide) -> void:
 	# cards only, but the recompute is cheap and idempotent.
 	field.refresh_continuous_effects()
 	if not match_over:
-		field.trigger_event("damage_received", {"player_id": 1 if side == player else 2})
+		field.trigger_event(EVENTS.Event.DAMAGE_RECEIVED, {"player_id": 1 if side == player else 2})
 	if match_over or not side.is_defeated():
 		return
 	# Compare against the node, like side_for(), so there is only one definition
@@ -1610,14 +1611,15 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 ## the damage card. There is no stack copy to point at here, because there is no stack object at all — that is the
 ## whole feature. The await is what makes targeting work: the instructions must not run until a target is picked,
 ## exactly like the stack-routed path resolves after its target rather than before it.
-func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
+func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	if card == null or not is_instance_valid(card):
 		return
-	var code_event: bool = card.abilities_enabled() and card.effect_handles_event(keyword)
-	var effect: Dictionary = card.card_effects.get(keyword, {})
+	var event_key: String = EVENTS.name_of(event)
+	var code_event: bool = card.abilities_enabled() and card.effect_handles_event(event)
+	var effect: Dictionary = card.card_effects.get(event_key, {})
 	if not code_event and effect.is_empty():
 		return
-	print("[ExBurst] %s -> '%s' (P%s)" % [card.card_name, keyword, 1 if side == player else 2])
+	print("[ExBurst] %s -> '%s' (P%s)" % [card.card_name, event_key, 1 if side == player else 2])
 
 	# THE FAKE STACK CARD, and it is the user's design, which is better than the one it replaces.
 	#
@@ -1628,7 +1630,7 @@ func run_ex_burst(side: PlayerSide, card: Card, keyword: String) -> void:
 	#
 	# It is safe because nothing else is on the stack at this moment: a card becoming damage cannot happen while
 	# anything is resolving.
-	field.execute_card_effect(card, keyword)
+	field.execute_card_effect(card, event)
 
 	# TARGETED BURSTS WAIT FOR THE PICK; NO-TARGET BURSTS HAVE NOTHING TO WAIT FOR. Either way the effect copy is now
 	# on the stack and must be resolved HERE, because a burst bypasses the priority loop entirely — leaving a no-target
@@ -1689,10 +1691,10 @@ func set_blocker(card):
 		# "When this blocks or is blocked" (Squall 41). Declaring the block is the single moment both events become
 		# true, so both sides' triggers are queued here — the blocker's `when_blocks`, and `when_blocked` for every
 		# Forward that is attacking (a party included: each member was blocked).
-		field.execute_card_effect(card, "when_blocks")
+		field.execute_card_effect(card, EVENTS.Event.BLOCKS)
 		for attacker in field.party_members():
 			if attacker != null and is_instance_valid(attacker):
-				field.execute_card_effect(attacker, "when_blocked")
+				field.execute_card_effect(attacker, EVENTS.Event.BLOCKED)
 
 ## One simultaneous damage step: both cards deal their power to each other. State-based actions are checked after,
 ## because a card that died here must not deal damage in a later step.
@@ -1907,7 +1909,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
 			# "When your Attack Phase starts" is checked here, before priority. A code effect can queue its stack object
 			# in this window; the ordinary priority loop then gives both players a chance to respond.
-			field.trigger_event("attack_phase_start", {"player_id": turn_owner})
+			field.trigger_event(EVENTS.Event.ATTACK_PHASE_START, {"player_id": turn_owner})
 			await priority()
 			# Signal UI to enable attacker selection
 			pass
@@ -2116,7 +2118,7 @@ func _send_card_to_graveyard(card: Card) -> bool:
 	else:
 		opponent_graveyard.add_card(card)
 	if from_field:
-		field.trigger_event("card_left_field", {"card": card})
+		field.trigger_event(EVENTS.Event.CARD_LEFT_FIELD, {"card": card})
 	return false
 
 func _yuna_exiles_break_zone() -> bool:
@@ -2242,12 +2244,12 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 		return
 	# execute_card_effect() is the single gate: it knows both code effects and JSON keywords. Emitting the signal
 	# directly here skipped every code-defined Break Zone trigger.
-	if card.card_effects.has("when_enter_break_from_field") or card.effect_handles_event("when_enter_break_from_field"):
+	if card.card_effects.has("when_enter_break_from_field") or card.effect_handles_event(EVENTS.Event.ENTER_BREAK_FROM_FIELD):
 		print("[BreakZone] ", card.card_name, " -> when_enter_break_from_field")
-		field.execute_card_effect(card, "when_enter_break_from_field")
-	if was_broken and (card.card_effects.has("when_break") or card.effect_handles_event("when_break")):
+		field.execute_card_effect(card, EVENTS.Event.ENTER_BREAK_FROM_FIELD)
+	if was_broken and (card.card_effects.has("when_break") or card.effect_handles_event(EVENTS.Event.BREAK)):
 		print("[BreakZone] ", card.card_name, " -> when_break")
-		field.execute_card_effect(card, "when_break")
+		field.execute_card_effect(card, EVENTS.Event.BREAK)
 	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
 	# damaged card, so it fires here — the same choke point as the printed keywords, and only for cards arriving FROM
 	# THE FIELD (Graveyard.add_card gates that call).
@@ -2328,8 +2330,8 @@ func _resolve_code_effect(card: Card) -> void:
 	if picks.is_empty() and card.effect_target != null:
 		picks = [card.effect_target]
 	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, picks)
-	# The event name is the hook name: when_enter_field(), when_attack(), attack_phase_start(), ...
-	await effect_obj.call(card.effect_event, ctx)
+	# dispatch() maps the typed event id to the card's method in one place.
+	await effect_obj.dispatch(card.effect_event, ctx)
 
 
 func _resolve_event_trigger(card: Card) -> void:
@@ -2374,7 +2376,7 @@ func _resolve_event_trigger(card: Card) -> void:
 func _on_stack_execute_card_effect(card: Card) -> void:
 	# A code-defined triggered ability. The stack copy names the event; the effect object does the work with a fresh
 	# EffectContext. Targeting state is cleared around it for the same reason as the event-trigger path below.
-	if not card.effect_event.is_empty():
+	if card.effect_event != EVENTS.Event.NONE:
 		# Do NOT clear targeting BEFORE resolving: request_target() starts a new session and owns that state. The
 		# old pre-clear could wipe the very session the code handler had just opened.
 		await _resolve_code_effect(card)
@@ -2384,12 +2386,13 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		return
 	# A real Summon whose when_cast is code-owned. Its targets were chosen at cast time and live on this same card,
 	# so resolution is just the handler plus the normal trip to the Break Zone.
-	if card.type == "Summon" and card.effect_source == null and card.abilities_enabled() 			and card.effect_handles_event("when_cast"):
+	if card.type == "Summon" and card.effect_source == null and card.abilities_enabled() \
+			and card.effect_handles_event(EVENTS.Event.CAST):
 		var summon_picks: Array = card.effect_targets.duplicate()
 		if summon_picks.is_empty() and card.effect_target != null:
 			summon_picks = [card.effect_target]
-		var summon_ctx = card.make_effect_context("when_cast", {}, card, summon_picks)
-		await card.effect().call("when_cast", summon_ctx)
+		var summon_ctx = card.make_effect_context(EVENTS.Event.CAST, {}, card, summon_picks)
+		await card.effect().dispatch(EVENTS.Event.CAST, summon_ctx)
 		field.call("finish_targeting_state")
 		if card.controller == "player":
 			player_graveyard.add_card(card)

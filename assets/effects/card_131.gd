@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-131R Cait Sith
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+
+
 func when_enter_field(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").cost_at_most(1)))
 	if targets.is_empty():

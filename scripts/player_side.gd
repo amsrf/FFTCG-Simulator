@@ -1,6 +1,8 @@
 extends Node3D
 class_name PlayerSide
 
+const EVENTS := preload("res://scripts/effects/events.gd")
+
 @export var controller: String = "player" # "player" or "opponent"
 
 ## A player loses once their damage zone holds this many cards (FF TCG: 7).
@@ -44,17 +46,17 @@ func take_damage(amount: int = 1, source: Card = null) -> void:
 ## The wait is for the damage zoom: "after the camera goes back" is when the player is meant to act on it.
 const EX_BURST_DELAY := 2.0
 
-func ex_burst_key(card: Card) -> String:
+func ex_burst_key(card: Card) -> int:
 	if card == null:
-		return ""
+		return EVENTS.Event.NONE
 	return card.ex_burst_event()
 
 func has_ex_burst(card: Card) -> bool:
-	return not ex_burst_key(card).is_empty()
+	return ex_burst_key(card) != EVENTS.Event.NONE
 
 func _run_ex_burst(card: Card, source: Card = null) -> void:
-	var keyword: String = ex_burst_key(card)
-	if keyword.is_empty() or not is_inside_tree():
+	var event_id: int = ex_burst_key(card)
+	if event_id == EVENTS.Event.NONE or not is_inside_tree():
 		return
 	# EXDEATH 122: "Any card put in the Damage Zone due to Exdeath cannot use its EX Burst."
 	# Checked against the SOURCE of the damage, not globally: another attacker's damage still bursts normally.
@@ -65,7 +67,7 @@ func _run_ex_burst(card: Card, source: Card = null) -> void:
 	if game == null or not game.has_method("run_ex_burst"):
 		return
 	await get_tree().create_timer(EX_BURST_DELAY).timeout
-	game.run_ex_burst(self, card, keyword)
+	game.run_ex_burst(self, card, event_id)
 
 func damage_count() -> int:
 	return damage_zone.cards.size()

@@ -3,12 +3,18 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-188R Zangan
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+
+
 func auras() -> Array:
 
 	return [Aura0.new()]
 
-func ex_burst_event() -> String:
-	return "when_enter_field"
+func ex_burst_event() -> int:
+	return EVENTS.Event.ENTER_FIELD
 
 func when_enter_field(ctx) -> void:
 	await ctx.search_deck(CARD_QUERY.new().name_contains("Tifa"))

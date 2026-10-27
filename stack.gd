@@ -1,6 +1,8 @@
 extends Node3D
 class_name Stack
 
+const EVENTS := preload("res://scripts/effects/events.gd")
+
 var cards = []
 var card_width = GlobalVariables.get_card_width() * 2;
 var card_spacing = -0.2
@@ -249,7 +251,7 @@ func cast_card():
 		get_parent().record_action("Casted %s" % casting_card.card_name, [],
 			1 if casting_card.controller == "player" else 2)
 		# Board-wide "when a Summon is cast" triggers (Yuna 214, Lenne 215) fire at the cast, not at resolution.
-		field.trigger_event("summon_cast", {"card": casting_card})
+		field.trigger_event(EVENTS.Event.SUMMON_CAST, {"card": casting_card})
 	else:
 		# Character cards go straight to the field: they are never stack objects,
 		# so nothing is popped and no stack slot is consumed. play_card() needs
@@ -585,9 +587,9 @@ func create_card(id, controller, keyword, source) -> Card:
 ## ordinary priority loop can let either player respond; `event_trigger`/`event_context` make it resolve differently.
 ## A code-defined triggered ability. Its effect object is stateless; the stack copy carries the event name and a small
 ## event payload until Game resolves it through CardEffect.dispatch.
-func enqueue_code_trigger(source: Card, event: String, data: Dictionary = {}) -> Card:
+func enqueue_code_trigger(source: Card, event, data: Dictionary = {}) -> Card:
 	var card: Card = create_card(source.id, source.controller, "__code_event", source)
-	card.effect_event = event
+	card.effect_event = EVENTS.normalize(event)
 	card.effect_event_data = data.duplicate(true)
 	card.effect_kind = "Ability"
 	update_card_positions()

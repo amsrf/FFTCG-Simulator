@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-118R Mustadio
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+
+
 func when_enter_field(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").tapped(true)))
 	if targets.is_empty():
@@ -11,5 +17,5 @@ func when_enter_field(ctx) -> void:
 	ctx.break_cards(targets)
 
 
-func ex_burst_event() -> String:
-	return "when_enter_field"
+func ex_burst_event() -> int:
+	return EVENTS.Event.ENTER_FIELD

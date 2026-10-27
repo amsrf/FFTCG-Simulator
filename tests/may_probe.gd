@@ -1,4 +1,5 @@
 extends Node
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## "YOU MAY" + block triggers + free play from hand — Squall 41, Leon 60, Vaan 63.
 ##
 ## The optional choice belongs to the INSTRUCTION, at resolution:
@@ -248,7 +249,7 @@ func _ready() -> void:
 	_expect(_stack.stack_length() >= 1, "declaring the block queues Squall's when_blocked")
 	if _stack.stack_length() > 0:
 		var top: Card = _stack.cards.back()
-		_expect(top.effect_event == "when_blocked" or top.key_word_effect == "when_blocked",
+		_expect(top.effect_event == EVENTS.Event.BLOCKED or top.key_word_effect == "when_blocked",
 			"and it is the when_blocked trigger")
 	# it opened a target session; close it without resolving the effect
 	_field.call("_on_assistant_target_cancel")

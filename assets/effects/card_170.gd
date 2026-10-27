@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-170C Fairy
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.CAST: Callable(self, "when_cast"),
+	}
+
+
 func cast_target_criteria(_ctx) -> Variant:
 	return TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
@@ -14,5 +20,5 @@ func when_cast(ctx) -> void:
 	ctx.draw(ctx.owner_id, 1)
 
 
-func ex_burst_event() -> String:
-	return "when_cast"
+func ex_burst_event() -> int:
+	return EVENTS.Event.CAST

@@ -6,8 +6,8 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 ## Agent Rules (read first)
 
 ### Code-defined effects
-- `scripts/effects/card_effect.gd` is the interface. A card subclass declares `triggered_events()` and overrides only
-  the hooks it uses; `EffectContext` carries the source, controller, event data and explicit helpers (`cards_in`,
+- `scripts/effects/card_effect.gd` is the interface. A card subclass declares `handlers()` (event id -> Callable) and
+  overrides only the hooks it uses; `EffectContext` carries the source, controller, event data and explicit helpers (`cards_in`,
   `choose`, `choose_targets`, `may`, `search_deck`, `reveal_top`, `mill`, `discard`, `damage`, `remove_from_game`).
   Effects are stateless and cached by `effect_registry.gd`.
 - The registry is convention-based: a card's code effect lives at `assets/effects/card_<id>.gd` and is loaded on
@@ -17,12 +17,13 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   `Card.current_elements()` before the printed element.
 - A code hook wins over the JSON entry for the same event. Other events on the same card can remain JSON until they
   are migrated: this is a hybrid, not a flag day.
-- Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the event name/payload on the copy;
+- Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the typed event id/payload on the copy;
   `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch()` with a fresh context when that copy resolves.
   Do not call an effect hook immediately when the event happens.
-- A code effect declares an event by defining a method with **exactly the event name**: `func when_enter_field(ctx)`.
-  The base class answers `handles_event(event)` with `has_method(event)`, and the engine calls that same method at
-  resolution. There is no event manifest and no name mapping to drift.
+- `scripts/effects/events.gd` is the closed event vocabulary (`Event` + `NAMES`). A card declares triggers in
+  `handlers()` exactly once: `function when_enter_field` is paired with
+  `EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field")`. The engine checks the map keys before enqueueing
+  and dispatch() calls the matching Callable. Do not use `has_method(event)` for trigger detection.
 - **Auto-abilities choose targets when they resolve.** In a `when_enter_field` / `when_attack` hook, call
   `await ctx.choose_targets(criteria, count)` and use the returned array. This matches the rules and lets each event
   have its own targeting logic.
@@ -64,8 +65,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - Code abilities receive activation-time picks in `ctx.targets`; do not call `choose_targets()` again in the resolver.
 - Yuffie-style "divide damage" abilities set `AbilitySpec.divide_total`, which makes the Stack choose the split before
   commit; the resolver applies it with `ctx.apply_damage_division()`.
-- EX BURST is a pointer to an existing hook, not a separate effect. `CardEffect.ex_burst_event()` returns
-  `"when_cast"`, `"when_enter_field"`, or `""`; `Card.ex_burst_event()` reads code first and JSON only as fallback.
+- EX BURST is a pointer to an existing hook, not a separate effect. `CardEffect.ex_burst_event()` returns an
+  `EVENTS.Event` id (`NONE` by default); `Card.ex_burst_event()` reads code first and translates a legacy JSON string
+  only at the boundary.
 - Printed keywords are code-owned through `CardEffect.keywords()`; `Card.has_code_keyword()` is the only reader.
   Add to that list rather than teaching each keyword getter a new source.
 - `return_self` is a commit-time ability cost: the source can be in hand when the ability resolves, so never find Game

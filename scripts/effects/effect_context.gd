@@ -20,11 +20,11 @@ var effect_card: Card = null
 var targets: Array = []
 var controller: String = ""
 var owner_id: int = 1
-var event_name: String = ""
+var event_name = ""
 var event_data: Dictionary = {}
 
 
-func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dictionary = {}, p_effect_card: Card = null, p_targets: Array = []) -> void:
+func _init(p_game: Node, p_source: Card, p_event = "static", p_data: Dictionary = {}, p_effect_card: Card = null, p_targets: Array = []) -> void:
 	game = p_game
 	source = p_source
 	effect_card = p_effect_card

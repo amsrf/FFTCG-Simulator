@@ -4,6 +4,7 @@ class_name Field
 
 const CARD_CHARGE = 1
 const RULES := preload("res://scripts/rules.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
 var rules = null
@@ -466,7 +467,7 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 func _on_tween_finished(card: Card):
 	GlobalVariables.refresh_mode()
 	#var instructions = card.create_instruction_from_json(card.card_effects['when_enter_field']['instructions'])
-	execute_card_effect(card,"when_enter_field")
+	execute_card_effect(card, EVENTS.Event.ENTER_FIELD)
 	#request_target_confirmation.emit()
 	
 func execute_card_attack():
@@ -497,9 +498,9 @@ func execute_card_attack():
 		elif not card.is_brave():
 			card.tap()
 		attacking.append(card)
-		execute_card_effect(card, 'when_attack')
+		execute_card_effect(card, EVENTS.Event.ATTACK)
 		# Board-wide "when a Forward you control attacks" watchers (Cloud 187). The event card is the attacker.
-		trigger_event("forward_attacks", {"card": card})
+		trigger_event(EVENTS.Event.FORWARD_ATTACKS, {"card": card})
 
 	# "When <card> FORMS A PARTY AND ATTACKS..." — a different trigger from when_attack, and it needs a REAL party:
 	# two or more members actually attacked (a party of one is just an ordinary attack, and the card text says
@@ -507,7 +508,7 @@ func execute_card_attack():
 	# party through power_change_party().
 	if attacking.size() >= 2:
 		for card in attacking:
-			execute_card_effect(card, 'when_party_attack')
+			execute_card_effect(card, EVENTS.Event.PARTY_ATTACK)
 		# AND the wider trigger: "when A PARTY YOU CONTROL attacks" — for cards that are watching the party rather
 		# than riding in it (Celestia and Gippal are Backups/Forwards that may not be members at all).
 		trigger_party_attacks(attacker_card.controller)
@@ -520,8 +521,8 @@ func trigger_party_attacks(controller: String) -> void:
 			continue
 		if card.controller != controller:
 			continue
-		if card.is_key_word_in_card_effect("when_party_attacks") or card.effect_handles_event("when_party_attacks"):
-			execute_card_effect(card, "when_party_attacks")
+		if card.is_key_word_in_card_effect("when_party_attacks") or card.effect_handles_event(EVENTS.Event.PARTY_ATTACKS):
+			execute_card_effect(card, EVENTS.Event.PARTY_ATTACKS)
 
 ## Trigger-level conditions are evaluated by Game, because that is where the condition vocabulary lives
 ## (controls:, cast_this_turn:, party_has_named:). Field forwards rather than keeping a second copy of the rules.
@@ -538,8 +539,8 @@ func trigger_party_deals_damage(controller: String) -> void:
 			continue
 		if card.controller != controller:
 			continue
-		if card.is_key_word_in_card_effect("when_party_deals_damage") or card.effect_handles_event("when_party_deals_damage"):
-			execute_card_effect(card, "when_party_deals_damage")
+		if card.is_key_word_in_card_effect("when_party_deals_damage") or card.effect_handles_event(EVENTS.Event.PARTY_DEALS_DAMAGE):
+			execute_card_effect(card, EVENTS.Event.PARTY_DEALS_DAMAGE)
 
 ## Fire a board-wide event. Unlike the printed `when_*` keywords, these triggers live in a card's `triggers` array
 ## and watch something happening to the game rather than to that card:
@@ -552,9 +553,13 @@ func trigger_party_deals_damage(controller: String) -> void:
 ## A TRIGGERED ABILITY GOES ON THE STACK. The event only MATCHES and ENQUEUES here; `may`, target selection and the
 ## instructions all happen at resolution (Game._resolve_event_trigger), so either player can respond first and a
 ## "may" choice is made when the ability resolves, not when it triggers.
-func trigger_event(event_name: String, context: Dictionary) -> void:
+func trigger_event(event_name, context: Dictionary) -> void:
 	var host: Node = get_parent()
 	if host == null:
+		return
+	var event_id: int = EVENTS.normalize(event_name)
+	var event_key: String = EVENTS.name_of(event_id)
+	if event_id == EVENTS.Event.NONE:
 		return
 	var cards: Array = get_all_cards().duplicate()
 	for source in cards:
@@ -567,17 +572,17 @@ func trigger_event(event_name: String, context: Dictionary) -> void:
 			continue
 		# A CODE EFFECT OWNS THIS EVENT FOR THIS CARD. Do not also run its JSON trigger for the same event; a migrated
 		# hook and a leftover JSON entry would fire the ability twice.
-		if source.abilities_enabled() and source.effect_handles_event(event_name):
+		if source.abilities_enabled() and source.effect_handles_event(event_id):
 			var source_effect = source.effect()
 			if source_effect == null or not source_effect.has_method("event_matches") \
-					or source_effect.event_matches(event_name, source, context):
-				stack.enqueue_code_trigger(source, event_name, context)
+					or source_effect.event_matches(event_id, source, context):
+				stack.enqueue_code_trigger(source, event_id, context)
 			continue
 		for index in range(triggers.size()):
 			var trigger = triggers[index]
 			if not (trigger is Dictionary):
 				continue
-			if str(trigger.get("on", "")) != event_name:
+			if str(trigger.get("on", "")) != event_key:
 				continue
 			if not _event_filter_holds(source, trigger.get("filter", {}), context):
 				continue
@@ -899,27 +904,31 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 		GlobalVariables.refresh_mode()
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
 	
-func execute_card_effect(card,keyword):
+func execute_card_effect(card, event):
 	# CODE-DEFINED EFFECTS. A script that declares this event wins over the JSON entry for the same keyword, so a card
-	# can migrate one hook at a time while its remaining effects stay data-driven. The stack copy records the event;
+	# can migrate one hook at a time while its remaining effects stay data-driven. The stack copy records the event id;
 	# Game resolves it by calling CardEffect.dispatch with a fresh EffectContext.
-	if card.abilities_enabled() and card.effect_handles_event(keyword):
+	var event_id: int = EVENTS.normalize(event)
+	var event_key: String = EVENTS.name_of(event_id)
+	if event_id == EVENTS.Event.NONE:
+		return
+	if card.abilities_enabled() and card.effect_handles_event(event_id):
 		var game_node: Node = get_parent()
 		var stack_node = game_node.get("stack") if game_node != null else null
 		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
-			stack_node.enqueue_code_trigger(card, keyword, {})
+			stack_node.enqueue_code_trigger(card, event_id, {})
 		return
-	if( not card.is_key_word_in_card_effect(keyword)):
+	if( not card.is_key_word_in_card_effect(event_key)):
 		return
 	# A TRIGGER-LEVEL CONDITION, checked BEFORE anything is put on the stack. Instruction conditions cannot do this
 	# job: a conditional triggered ability would still choose a target and queue an empty effect. "When <card> forms a
 	# party WITH X and attacks" is the case that needs it.
-	var trigger_condition: String = str(card.card_effects.get(keyword, {}).get("condition", ""))
+	var trigger_condition: String = str(card.card_effects.get(event_key, {}).get("condition", ""))
 	if trigger_condition != "" and not _trigger_condition_holds(trigger_condition):
 		return
-	add_card_effect_to_stack.emit(card.id,keyword,card)
+	add_card_effect_to_stack.emit(card.id, event_key, card)
 	# Most elegant single-line solution
-	var choose_target_criteria = card.card_effects.get(keyword, {}).get('choose_target', null)
+	var choose_target_criteria = card.card_effects.get(event_key, {}).get('choose_target', null)
 	
 	# The effect RESOLVES as a card in the stack — Stack.create_card() makes that copy in
 	# response to the signal above, synchronously, so it is already there. That copy is the
@@ -2074,16 +2083,16 @@ func notify_targets_chosen() -> void:
 			continue
 		if card.controller == chooser:
 			continue
-		if not card.is_key_word_in_card_effect("when_chosen") and not card.effect_handles_event("when_chosen"):
+		if not card.is_key_word_in_card_effect("when_chosen") and not card.effect_handles_event(EVENTS.Event.CHOSEN):
 			continue
 		print("[Chosen] %s was chosen by the opponent's %s" % [card.card_name, kind])
-		execute_card_effect(card, "when_chosen")
+		execute_card_effect(card, EVENTS.Event.CHOSEN)
 
 func _on_stack_execute_card_effect(card: Card) -> void:
 	# CODE EVENTS OPEN THEIR TARGETING SESSION INSIDE THE HANDLER, so this pre-clear would wipe the arc the handler
 	# just spawned. Their post-resolution cleanup is enough. JSON effects and event triggers still need the old
 	# pre-clear because their target session existed before resolution.
-	if card.effect_event.is_empty():
+	if card.effect_event == EVENTS.Event.NONE:
 		_clear_target_arrows()
 		target_card = null
 		source_card = null

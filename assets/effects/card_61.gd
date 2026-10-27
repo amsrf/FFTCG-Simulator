@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-061R Alexander
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.CAST: Callable(self, "when_cast"),
+	}
+
+
 func cast_target_criteria(_ctx) -> Variant:
 	return TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").cost_at_least(5))
 
@@ -15,5 +21,5 @@ func when_cast(ctx) -> void:
 	ctx.break_cards(targets)
 
 
-func ex_burst_event() -> String:
-	return "when_cast"
+func ex_burst_event() -> int:
+	return EVENTS.Event.CAST

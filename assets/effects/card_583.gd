@@ -6,6 +6,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Auto-ability: targets, if any, are chosen when the ability resolves.
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.PARTY_ATTACKS: Callable(self, "when_party_attacks"),
+	}
+
+
 func when_party_attacks(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)))
 	if targets.is_empty():

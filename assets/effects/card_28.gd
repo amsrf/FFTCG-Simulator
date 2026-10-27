@@ -4,12 +4,18 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-028 enter-the-field ability
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+
+
 func when_enter_field(ctx) -> void:
 	await ctx.search_deck(CARD_QUERY.new().named("Lann"))
 
 
-func ex_burst_event() -> String:
-	return "when_enter_field"
+func ex_burst_event() -> int:
+	return EVENTS.Event.ENTER_FIELD
 
 
 func activated_abilities() -> Array:

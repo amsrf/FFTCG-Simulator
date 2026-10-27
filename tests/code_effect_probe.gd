@@ -1,4 +1,5 @@
 extends Node
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## Pilot for the code-defined effect layer: Kimahri 103 and Shantotto 107.
 ##
 ## The point is not only these cards: it checks that a continuous element query and a triggered event both go through
@@ -98,7 +99,7 @@ func _ready() -> void:
 
 	_field.execute_card_effect(shantotto, "when_enter_field")
 	_expect(_game.stack.stack_length() == 1, "the ETB is a stack object, not an immediate action")
-	_expect(_game.stack.cards.back().effect_event == "when_enter_field",
+	_expect(_game.stack.cards.back().effect_event == EVENTS.Event.ENTER_FIELD,
 		"the stack copy names the code event")
 	await _game.stack.resolve_top_effect()
 	_expect(_game.stack.stack_length() == 0, "the ability resolves off the stack")

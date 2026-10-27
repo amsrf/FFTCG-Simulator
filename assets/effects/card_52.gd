@@ -5,6 +5,12 @@ const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
 ## 1-052R Hades
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.CAST: Callable(self, "when_cast"),
+	}
+
+
 func cast_target_criteria(_ctx) -> Variant:
 	return TARGET_SEQUENCE.new([TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").controlled_by(CARD_QUERY.Controller.OPPONENT))])
 

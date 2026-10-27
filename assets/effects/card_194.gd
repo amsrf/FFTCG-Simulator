@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-194S Snow
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.BLOCKS: Callable(self, "when_blocks"),
+	}
+
+
 func when_blocks(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
 	ctx.dull(targets)

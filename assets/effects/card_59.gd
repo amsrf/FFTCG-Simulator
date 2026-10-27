@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-059R Laguna
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
+	}
+
+
 func when_enter_field(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
 	if targets.is_empty():
@@ -13,8 +19,8 @@ func when_enter_field(ctx) -> void:
 		ctx.add_status(targets, "frozen", 1)
 
 
-func ex_burst_event() -> String:
-	return "when_enter_field"
+func ex_burst_event() -> int:
+	return EVENTS.Event.ENTER_FIELD
 
 func conditional_powers() -> Array:
 	return [{"value": 2000, "condition": Callable(self, "_has_squall")}]

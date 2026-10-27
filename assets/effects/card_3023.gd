@@ -4,6 +4,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 7-054L Chelinka
 
 
+func handlers() -> Dictionary:
+	return {
+		EVENTS.Event.PARTY_ATTACK: Callable(self, "when_party_attack"),
+	}
+
+
 func when_party_attack(ctx) -> void:
 	if not ctx.condition("party_has_named:Yuri"):
 		return
