@@ -302,6 +302,18 @@ func choose_element(options: Array, prompt: String = "Choose an Element") -> Str
 	return str(options[0])
 
 
+## Ask which colour a multi-colour source produces. The Field owns the crystal UI; this context call is the seam
+## card code uses. A one-element list is answered without opening anything.
+func choose_crystal_in_circle(elements: Array) -> String:
+	if elements.is_empty():
+		return ""
+	if elements.size() == 1:
+		return str(elements[0])
+	if field == null or source == null:
+		return str(elements[0])
+	return str(await field.call("open_mana_choice", source, elements))
+
+
 ## Damage all cards in `cards` from the effect's source. All damage goes through Field.cause_damage, the single
 ## entry point that applies damage modifiers and source-aware riders.
 func damage(cards: Array, amount: int) -> void:

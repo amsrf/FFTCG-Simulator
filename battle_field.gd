@@ -329,24 +329,46 @@ func add_all_auras_to_card(card:Card):
 		add_aura_to_card(aura,card)		
 
 func begin_mana_choice(card: Card) -> void:
+	# Sync entry point: the actual choice is a coroutine, and calling it directly from a click handler would raise
+	# "Trying to call an async function without await". The deferred call starts it safely.
+	call_deferred("_begin_mana_choice_async", card)
+
+
+func _begin_mana_choice_async(card: Card) -> void:
+	# The card decides which colours it can offer; the context supplies the means to ask. A normal Backup returns
+	# immediately; a multi-colour card awaits the circle.
 	if card == null or not is_instance_valid(card):
 		return
 	if assistant != null and assistant.payment_is_full():
 		return
+	var chosen: String = await card.generate_mana(card.make_effect_context("mana"))
+	if not chosen.is_empty():
+		add_card_to_mana_conversion(card, chosen)
+
+
+## The UI half of the choice. Called by EffectContext.choose_crystal_in_circle(), so card code never knows which
+## scene implements the picker. A one-element list is answered immediately; that is what makes the default Backup
+## path free of a popup.
+func open_mana_choice(card: Card, elements: Array) -> String:
+	if card == null or elements.is_empty():
+		return ""
+	if elements.size() == 1:
+		return str(elements[0])
 	if mana_choice != null and is_instance_valid(mana_choice):
 		mana_choice.queue_free()
-		mana_choice = null
 	mana_choice = MANA_CHOICE.instantiate()
 	get_parent().add_child(mana_choice)
-	mana_choice.chosen.connect(_on_mana_element_chosen.bind(card))
+	var state: Dictionary = {"picked": "", "done": false}
+	mana_choice.chosen.connect(func(element: String) -> void:
+		state["picked"] = element
+		state["done"] = true)
 	mana_choice.cancelled.connect(func() -> void:
-		mana_choice = null)
-	mana_choice.open(card, card.mana_elements())
-
-
-func _on_mana_element_chosen(element: String, card: Card) -> void:
+		state["done"] = true)
+	mana_choice.open(card, elements)
+	while not bool(state["done"]):
+		await get_tree().process_frame
 	mana_choice = null
-	add_card_to_mana_conversion(card, element)
+	return str(state["picked"])
 
 
 func add_card_to_mana_conversion(card:Card, element: String = ""):

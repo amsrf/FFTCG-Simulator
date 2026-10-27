@@ -413,10 +413,14 @@ hit were routed through `Field.cause_damage` for this reason.
 ### Multi-colour mana sources
 - `Card.mana_elements()` is the payment UI's list. A `produces_any_element` source returns all eight CJK
   colours; any other source returns its live `current_elements()`.
-- When that list has more than one entry, `Field.begin_mana_choice(card)` opens `mana_choice.tscn` — small
-  `ManaCrystal` nodes in a camera-plane circle, static, hover-growing, click-to-choose. The chosen colour is
-  stored in `Field.selected_mana_elements` so `remove_card_from_mana_conversion()` refunds exactly that colour.
-  Do not re-derive a refund from `card.mana_element()` after a choice.
+- `Card.generate_mana(ctx)` delegates to `CardEffect.generate_mana(ctx)`. The base implementation calls
+  `ctx.choose_crystal_in_circle(ctx.source.mana_elements())`; a one-element list returns immediately, so ordinary
+  Backups never open a picker and every code card gets the behaviour for free. Card code only overrides this when
+  it wants a different option list.
+- `EffectContext.choose_crystal_in_circle()` delegates the UI to `Field.open_mana_choice()`, which builds
+  `mana_choice.tscn` — small static `ManaCrystal` buttons in a camera-plane circle, hover-growing, click-to-choose.
+  The chosen colour is stored in `Field.selected_mana_elements` so `remove_card_from_mana_conversion()` refunds
+  exactly that colour. Do not re-derive a refund from `card.mana_element()` after a choice.
 - `add_card_to_mana_conversion(card, element)` accepts the chosen element; `element == "any"` remains valid for
   agents/payment paths that deliberately produce wild CP.
 

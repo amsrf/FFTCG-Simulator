@@ -1753,6 +1753,16 @@ func produces_any_element() -> bool:
 func mana_element() -> String:
 	return "any" if produces_any_element() else element
 
+
+## The colour this source produces for payment. Code effects may ask the player (the any-colour and multi-element
+## cards); everything else falls back to the printed/current colour. The context is optional only because plain
+## cards never need it.
+func generate_mana(ctx: EFFECT_CONTEXT = null) -> String:
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj != null and effect_obj.has_method("generate_mana"):
+		return str(await effect_obj.generate_mana(ctx))
+	return mana_element()
+
 const CARD_TARGET := preload("res://scripts/card_target.gd")
 
 ## Is this card within `criteria`? Delegated to the shared TARGET BLOCK evaluator, which also understands the `exclude`

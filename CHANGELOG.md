@@ -173,6 +173,11 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+The choice now belongs to the card effect: `Card.generate_mana(ctx)` delegates to
+`CardEffect.generate_mana(ctx)`, whose default asks `ctx.choose_crystal_in_circle(ctx.source.mana_elements())`.
+A one-element list is returned immediately, so ordinary Backups never open the picker. Card 183 (Cosmos) uses
+the same hook with its full element list. Field only supplies the UI through `open_mana_choice()`.
+
 ### Multi-Colour Mana Picker
 
 A Backup that can produce more than one colour now opens a radial picker instead of generating silently:

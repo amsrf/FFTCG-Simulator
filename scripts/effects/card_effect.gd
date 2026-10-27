@@ -139,3 +139,9 @@ func modify_damage(ctx: DAMAGE_CONTEXT) -> int:
 ## Replace a break: return true to stop it. The default protects nothing.
 func prevents_break(_ctx: BREAK_CONTEXT) -> bool:
 	return false
+
+
+## The colour this source generates when selected for mana. One colour returns immediately; a card that can
+## produce several asks through the context's crystal circle.
+func generate_mana(ctx: EFFECT_CONTEXT) -> String:
+	return str(await ctx.choose_crystal_in_circle(ctx.source.mana_elements()))
