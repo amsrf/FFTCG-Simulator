@@ -148,6 +148,24 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Typed Targeting: CardQuery, TargetRequest, TargetSequence
+
+Added the typed target layer:
+
+- `CardQuery` describes which cards match (type, element, name, controller,
+  tapped state, cost bounds, exclusions, plus an `extra` escape hatch).
+- `TargetRequest` describes where they come from (field/stack/hand/deck/break
+  zone/revealed), how many may be picked, and whether the count is exact.
+- `TargetSequence` describes ordered stages such as Hades' Forward then Backup.
+
+`EffectContext.choose_targets()` / `cast_targets()` and `Field.has_viable_target()`
+accept typed requests directly. The old dictionary blocks remain the internal
+exchange format during migration, and `TargetRequest.to_legacy()` is the single
+adapter.
+
+Card 8's ability is the first converted card; remaining target call sites still
+use the legacy dictionary and can be migrated incrementally.
+
 ### Activated Abilities Are Code Classes
 
 Replaced every `_ability({...})` dictionary with a `CardAbility` subclass. The

@@ -1157,6 +1157,8 @@ func get_cast_target_criteria() -> Variant:
 	var effect_obj = effect() if abilities_enabled() else null
 	if effect_obj != null and effect_obj.has_method("cast_target_criteria"):
 		var code_criteria = effect_obj.cast_target_criteria(make_effect_context("cast"))
+		if code_criteria is Object and code_criteria.has_method("to_legacy"):
+			return code_criteria.to_legacy()
 		if code_criteria is Dictionary:
 			return code_criteria
 		if code_criteria is Array:

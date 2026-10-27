@@ -1,4 +1,6 @@
 extends RefCounted
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
+const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
 ## The explicit world handed to one card-effect invocation.
 ##
 ## It exists so card code never reads ambient instruction state (`_targets`, `_current_source_card`, ...) or reaches into
@@ -106,11 +108,7 @@ func choose_targets(criteria: Variant, count: int = 1, allow_cancel: bool = fals
 		source_kind: String = "Ability") -> Array:
 	if field == null:
 		return []
-	var session: Variant = criteria
-	if criteria is Dictionary:
-		session = criteria.duplicate()
-		if count > 1:
-			session["count"] = count
+	var session: Variant = _legacy_targets(criteria, count)
 	var origin: Card = effect_card if effect_card != null and is_instance_valid(effect_card) else source
 	if not field.has_viable_target(session, origin, source_kind):
 		return []
@@ -132,8 +130,24 @@ func cast_targets(criteria: Variant, count: int = 1) -> Array:
 	return await choose_targets(criteria, count, false, "Summon")
 
 
+## Typed target requests are converted at the boundary; the Field/Agent targeting session still consumes the
+## existing dictionary blocks.
+func _legacy_targets(criteria: Variant, count: int = 1) -> Variant:
+	if criteria is Object and criteria.has_method("to_legacy"):
+		var legacy = criteria.to_legacy()
+		if legacy is Dictionary and count > 1 and not legacy.has("count"):
+			legacy["count"] = count
+		return legacy
+	if criteria is Dictionary:
+		var block: Dictionary = criteria.duplicate()
+		if count > 1:
+			block["count"] = count
+		return block
+	return criteria
+
+
 ## Single-target convenience over choose_targets().
-func choose_target(criteria: Dictionary, prompt: String = "Choose a card") -> Card:
+func choose_target(criteria: Variant, prompt: String = "Choose a card") -> Card:
 	var picks: Array = await choose_targets(criteria, 1)
 	return picks[0] if not picks.is_empty() else null
 

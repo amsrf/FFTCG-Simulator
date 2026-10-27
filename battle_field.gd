@@ -986,6 +986,7 @@ func untap_cards_for(controller_name: String) -> void:
 		card.untap()
 		
 func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
+	targeting_criteria = _legacy_target_criteria(targeting_criteria)
 	# Always start a targeting session fresh. Leftover target_card from a
 	# previous session made set_target_card() ignore clicks (stuck UI).
 	targeting_allow_cancel = allow_cancel
@@ -1028,6 +1029,12 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 ## WHICH BOARD a criteria block looks at.
 func _block_domain(block) -> String:
 	return str(block.get("in", "field")) if block is Dictionary else "field"
+
+## Typed TargetRequest/TargetSequence objects are converted here; the session itself still runs on legacy blocks.
+func _legacy_target_criteria(criteria):
+	if criteria is Object and criteria.has_method("to_legacy"):
+		return criteria.to_legacy()
+	return criteria
 
 ## Start pick stage `index`. One stage is one criteria block; a normal single-target effect has exactly one, and
 ## `count` still means "this many picks inside THIS stage" (Aerith's "up to 3 Backups").
@@ -1240,6 +1247,7 @@ func clear_target_selection() -> void:
 			assistant.hide_buttons()
 	
 func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
+	target_criteria = _legacy_target_criteria(target_criteria)
 	# The blue ring means "the game is asking YOU". When the OPPONENT is the one choosing,
 	# their legal options are not our business. The flag still goes on — their agent selects
 	# by it — but the glow stays off, so the only thing we see is the card they pick, which
@@ -1287,6 +1295,7 @@ func _target_candidates() -> Array:
 	return get_all_cards()
 
 func has_viable_target(target_criteria, source: Card = null, source_kind: String = "", domain: String = "field") -> bool:
+	target_criteria = _legacy_target_criteria(target_criteria)
 	# Used before casting a Summon (no legal target = cannot cast) and before offering an ability that needs a target.
 	# EVERY STAGE MUST BE SATISFIABLE. "Choose 1 Forward and 1 Backup" is mandatory on both, so a board missing one
 	# of them makes the card illegal to play at all (Advanced Rules: mandatory targets at casting time).

@@ -1,4 +1,6 @@
 extends RefCounted
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
+const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
 ## One activated ability: text, costs, target timing and the effect handler in a single object. The activation
 ## pipeline still consumes a dictionary-shaped ability (costs, tap, choose_target, ...); as_skill_dict() is that
 ## bridge, while the object itself is snapshotted onto the stack so resolution can call run().
@@ -73,13 +75,16 @@ func as_skill_dict() -> Dictionary:
 	}
 	if targets != null:
 		# The activation engine reads `count` from inside the criteria block, not from the ability dictionary.
-		if targets is Dictionary:
-			var criteria: Dictionary = targets.duplicate(true)
-			if target_count > 1:
-				criteria["count"] = target_count
-			out["choose_target"] = criteria
+		var criteria = targets
+		if criteria is Object and criteria.has_method("to_legacy"):
+			criteria = criteria.to_legacy()
+		if criteria is Dictionary:
+			var block: Dictionary = criteria.duplicate(true)
+			if target_count > 1 and not block.has("count"):
+				block["count"] = target_count
+			out["choose_target"] = block
 		else:
-			out["choose_target"] = targets
+			out["choose_target"] = criteria
 		out["target_chooser"] = target_chooser
 	out["_ability_spec"] = self
 	return out
