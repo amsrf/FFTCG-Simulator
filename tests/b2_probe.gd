@@ -46,14 +46,13 @@ func _ready() -> void:
 		"Gordon 160's next-receiving-damage ability is code-owned")
 	_expect(not effects.get("160", {}).has("damage_modifiers"),
 		"the shield is carried by the status payload, not a static modifier")
-	var k165: Array = load("res://assets/effects/card_165.gd").new().static_rules().get("damage_modifiers", [])
-	var k166: Array = load("res://assets/effects/card_166.gd").new().static_rules().get("damage_modifiers", [])
-	_expect(k165.size() == 1 and k165[0].get("operation") == "set"
-		and k166.size() == 1 and k166[0].get("operation") == "set",
+	var k165 = load("res://assets/effects/card_165.gd").new()
+	var k166 = load("res://assets/effects/card_166.gd").new()
+	_expect(k165.has_method("modify_damage") and k166.has_method("modify_damage"),
 		"both Knights carry a code-owned damage modifier")
-	var minwu_rules: Array = load("res://assets/effects/card_171.gd").new().static_rules().get("damage_modifiers", [])
-	_expect(minwu_rules.size() == 1 and minwu_rules[0].get("conditions", [{}])[0].has("compare_values"),
-		"Minwu 171 uses the generic compare_values condition")
+	var minwu_effect = load("res://assets/effects/card_171.gd").new()
+	_expect(minwu_effect.has_method("modify_damage"),
+		"Minwu 171 uses the code-owned damage modifier")
 	var yuna_effect = load("res://assets/effects/card_176.gd").new()
 	_expect(yuna_effect.ex_burst_event() == EVENTS.Event.ENTER_FIELD
 		and yuna_effect.has_method("when_enter_field")

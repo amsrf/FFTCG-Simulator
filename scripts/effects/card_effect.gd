@@ -129,5 +129,5 @@ func modify_cost_for(_ctx, _subject: Card, cost: Dictionary) -> Dictionary:
 	return cost
 
 ## Change incoming damage before it lands.
-func modify_damage(_ctx, _target, amount: int) -> int:
-	return amount
+func modify_damage(ctx) -> int:
+	return ctx.amount

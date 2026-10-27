@@ -1,4 +1,5 @@
 extends RefCounted
+const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
 ## RULES — the continuous-effect QUERY layer.
 ##
 ## The board (Field) owns the cards; the rules that READ them live here. A rule can then be asked a question without
@@ -221,16 +222,24 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 ## `targets` is evaluated with `self` as the source, so `is_source` means "target == this card" and
 ## `controller: "player"` means "the same controller as this card". Numeric relations go through
 ## `compare_values`; see _condition_holds() for the named predicates.
-func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "") -> int:
+func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "",
+		source_controller: String = "", damage_kind: int = -1) -> int:
 	if target == null or not is_instance_valid(target) or amount <= 0:
 		return amount
+	if damage_kind < 0:
+		if source_kind == "Summon":
+			damage_kind = DAMAGE_CONTEXT.Kind.SUMMON
+		elif source_kind == "Ability":
+			damage_kind = DAMAGE_CONTEXT.Kind.ABILITY
+		else:
+			damage_kind = DAMAGE_CONTEXT.Kind.EFFECT
 	var current: int = amount
 	var context: Dictionary = {
 		"amount": current,
 		"source": source,
 		"target": target,
 		"source_kind": source_kind,
-		"source_controller": source_controller,
+		"source_controller": source_controller if source_controller != "" or source == null else source.controller,
 	}
 	# PENDING STATUS MODIFIERS FIRST. A status payload with operation/value is a one-shot rule on the receiving card
 	# ("the next damage becomes 0", "the next damage is reduced by 2000"). The status NAME is irrelevant; applying it
@@ -240,10 +249,34 @@ func modify_damage(source: Card, target: Card, amount: int, source_kind: String 
 	context["amount"] = current
 	if current <= 0:
 		return 0
+
+	# ONE DAMAGE CONTEXT, every field card gets a chance to modify it. Code modifiers are pure: they return a number
+	# and never add damage themselves. The source/target cards are ordinary participants, which is what lets a future
+	# receiver-side rule and a field-wide replacement rule use the same hook.
+	var damage_ctx = DAMAGE_CONTEXT.new()
+	damage_ctx.original_amount = amount
+	damage_ctx.source = source
+	damage_ctx.source_controller = str(context["source_controller"])
+	damage_ctx.source_kind = source_kind
+	damage_ctx.target = target
+	damage_ctx.kind = damage_kind
+	damage_ctx.field = field
 	for owner in _cards():
 		if owner == null or not is_instance_valid(owner):
 			continue
-		context["self"] = owner
+		damage_ctx.amount = current
+		damage_ctx.rule_owner = owner
+		var effect_obj = owner.effect() if owner.abilities_enabled() else null
+		if effect_obj != null and effect_obj.has_method("modify_damage") and not owner.card_effects.has("damage_modifiers"):
+			var next: int = int(effect_obj.modify_damage(damage_ctx))
+			if next != current:
+				print("[DamageMod] %s -> %d (%s)" % [owner.card_name, next, target.card_name])
+			current = next
+			context["amount"] = current
+			if current <= 0:
+				return 0
+			continue
+		# Legacy fallback for a card that still carries a static damage_modifiers block.
 		var rules = owner.static_rule("damage_modifiers", [])
 		if rules is Dictionary:
 			rules = [rules]
@@ -252,6 +285,7 @@ func modify_damage(source: Card, target: Card, amount: int, source_kind: String 
 		for rule in rules:
 			if not (rule is Dictionary):
 				continue
+			context["self"] = owner
 			if not _damage_modifier_applies(rule, owner, context):
 				continue
 			var operation: String = str(rule.get("operation", ""))

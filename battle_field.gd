@@ -1872,18 +1872,18 @@ func is_protected_from_being_chosen(card: Card, source: Card, source_kind: Strin
 func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
 	return rules.is_protected_from_break(card, source_controller, source_kind)
 
-func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "") -> int:
-	return rules.modify_damage(source, target, amount, source_kind, source_controller)
+func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "", damage_kind: int = -1) -> int:
+	return rules.modify_damage(source, target, amount, source_kind, source_controller, damage_kind)
 
 ## THE ONE PLACE DAMAGE LANDS. Effect damage, combat, party damage and first-strike steps all come through here, so
 ## "when this card deals damage to a Forward, ..." riders are applied at the same moment on every path rather than
 ## being re-implemented per call site.
-func cause_damage(target: Card, amount: int, source: Card = null, source_kind: String = "", source_controller: String = "") -> int:
+func cause_damage(target: Card, amount: int, source: Card = null, source_kind: String = "", source_controller: String = "", damage_kind: int = -1) -> int:
 	if target == null or not is_instance_valid(target) or amount <= 0:
 		return 0
 	if source != null and not is_instance_valid(source):
 		source = null
-	var dealt: int = modify_damage(source, target, amount, source_kind, source_controller)
+	var dealt: int = modify_damage(source, target, amount, source_kind, source_controller, damage_kind)
 	target.suffer_damage(dealt, source_kind, source_controller, source)
 	if source != null and dealt > 0 and target.is_on_field() and target.type == "Forward":
 		_apply_damage_caused_riders(source, target)

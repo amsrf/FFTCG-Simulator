@@ -1,4 +1,10 @@
 extends "res://scripts/effects/card_effect.gd"
+## Minwu 1-171R: damage below the Forward's power is prevented.
 
-func static_rules() -> Dictionary:
-	return {"damage_modifiers": [{"targets": {"is_type": "Forward", "controller": "player"}, "conditions": [{"compare_values": {"left": {"context": "amount"}, "op": "lt", "right": {"context": "target", "property": "power"}}}], "operation": "set", "value": 0}]}
+
+func modify_damage(ctx) -> int:
+	if ctx.target.is_type("Forward") \
+			and ctx.target.controller == ctx.rule_owner.controller \
+			and ctx.amount < ctx.target.power:
+		return 0
+	return ctx.amount

@@ -173,6 +173,26 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+### Damage Modifiers as Card Queries
+
+Damage modification is now a pure card method:
+
+```gdscript
+func modify_damage(ctx) -> int:
+	if ctx.source_is_owner() and ctx.target.is_type("Forward") and ctx.target.cost >= 4:
+		return ctx.amount * 2
+	return ctx.amount
+```
+
+`Rules.modify_damage()` builds one `DamageContext` (amount, source, target, `DamageKind`, rule
+owner) and asks every field card in turn. The context covers source-side (Warrior of Light),
+receiver-side (Knight) and field-wide (Minwu) rules without another static table. Pending
+status-payload modifiers still run first, and legacy `damage_modifiers` data remains a fallback
+for unmigrated test fixtures.
+
+Combat calls now pass `DamageContext.Kind.COMBAT`; Summon/Ability damage is inferred at the
+damage boundary. Receiver-choice ordering is deliberately deferred until cards need it.
+
 ### Typed Card Events
 
 Card hooks now use a closed event vocabulary in `scripts/effects/events.gd`:

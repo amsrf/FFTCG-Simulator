@@ -31,6 +31,7 @@ const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 ## reason as the two above.
 const CARD_FILTER := preload("res://scripts/card_filter.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
+const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
 
 ## REVEAL staging. Cards are taken off the top of the deck, shown one at a time, then hidden/inert and kept here
 ## until the effect moves them somewhere. This array is the search domain for reveal-style cards.
@@ -1701,8 +1702,8 @@ func set_blocker(card):
 func clash_cards(card1:Card,card2:Card):
 	if card1 != null and card2 != null and card1.is_on_field() and card2.is_on_field():
 		# Each card is the SOURCE of the damage the other takes, so per-dealer modifiers (Warrior of Light) apply.
-		field.cause_damage(card1, card2.power, card2, "", card2.controller)
-		field.cause_damage(card2, card1.power, card1, "", card1.controller)
+		field.cause_damage(card1, card2.power, card2, "", card2.controller, DAMAGE_CONTEXT.Kind.COMBAT)
+		field.cause_damage(card2, card1.power, card1, "", card1.controller, DAMAGE_CONTEXT.Kind.COMBAT)
 		enforce_game_state_rules()
 
 ## FIRST STRIKE.
@@ -1728,7 +1729,7 @@ func clash_attacker_blocker() -> void:
 			print("[Combat] party deals %d to %s" % [party_total, blocker.card_name])
 			# No single source card: the party deals its SUMMED power, so damage doubling must not apply. The
 			# prevention replacements (160/171) still need to see this event, hence the choke point.
-			field.cause_damage(blocker, party_total)
+			field.cause_damage(blocker, party_total, null, "", "", DAMAGE_CONTEXT.Kind.COMBAT)
 		_apply_blocker_split(at_once)
 		enforce_game_state_rules()
 		return
@@ -1767,7 +1768,7 @@ func _apply_party_damage(blocker: Card) -> void:
 		return
 	print("[Combat] party deals %d to %s" % [total, blocker.card_name])
 	var leader: Card = field.attacker_card
-	field.cause_damage(blocker, total, leader, "", leader.controller if leader != null else "")
+	field.cause_damage(blocker, total, leader, "", leader.controller if leader != null else "", DAMAGE_CONTEXT.Kind.COMBAT)
 	enforce_game_state_rules()
 
 ## How the blocker's power is divided across the party, WITHOUT applying it. Split out so the simultaneous step can
@@ -1798,7 +1799,7 @@ func _apply_blocker_split(split: Array) -> void:
 		if amount <= 0:
 			continue
 		var blocker_source: Card = field.blocker_card
-		field.cause_damage(card, amount, blocker_source, "", blocker_source.controller if blocker_source != null else "")
+		field.cause_damage(card, amount, blocker_source, "", blocker_source.controller if blocker_source != null else "", DAMAGE_CONTEXT.Kind.COMBAT)
 
 
 ## A priority pass chain that does NOT advance the phase.

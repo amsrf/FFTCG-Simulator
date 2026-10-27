@@ -1,4 +1,8 @@
 extends "res://scripts/effects/card_effect.gd"
+## Knight 1-165R: a Forward in this card's party takes no damage.
 
-func static_rules() -> Dictionary:
-	return {"damage_modifiers": [{"targets": {"is_type": "Forward", "exclude": {"is_source": true}}, "conditions": [{"in_party_with_self": true}], "operation": "set", "value": 0}]}
+
+func modify_damage(ctx) -> int:
+	if not ctx.target_is_owner() and ctx.target.is_type("Forward") and ctx.target_in_party_with_owner():
+		return 0
+	return ctx.amount
