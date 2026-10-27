@@ -173,6 +173,11 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+Auras are code objects now too. `scripts/effects/aura.gd` owns a typed
+`CardQuery`, `kind`, `value`/`status`, optional condition, and the runtime
+grant/revoke bridge. All nine aura cards (ten aura definitions) are nested
+`Aura` classes; the old `_aura({...})` / `AuraSpec` dictionary path is gone.
+
 ### Activated Abilities Are Code Classes
 
 Replaced every `_ability({...})` dictionary with a `CardAbility` subclass. The

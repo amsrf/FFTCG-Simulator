@@ -113,11 +113,11 @@ func _ready() -> void:
 		"Snow 194's Vendetta is gated on blocking")
 	var wol_effect = load("res://assets/effects/card_155.gd").new()
 	var wol_auras: Array = wol_effect.auras()
-	_expect(wol_auras.size() == 2 and wol_auras[1].method == "grant_status",
+	_expect(wol_auras.size() == 2 and wol_auras[1].as_rule().get("method") == "grant_status",
 		"Warrior of Light 155 grants First Strike as a code aura")
 	var zangan_effect = load("res://assets/effects/card_188.gd").new()
 	var zangan_auras: Array = zangan_effect.auras()
-	_expect(zangan_auras.size() == 1 and zangan_auras[0].status == "haste",
+	_expect(zangan_auras.size() == 1 and zangan_auras[0].as_rule().get("status") == "haste",
 		"Zangan 188 grants Haste")
 	var summoner_effect = load("res://assets/effects/card_139.gd").new()
 	var summoner_specs: Array = summoner_effect.activated_abilities()

@@ -38,8 +38,9 @@ func _ready() -> void:
 		_expect(auras.size() == int(EXPECTED[id]), "%d exposes %d aura(s)" % [id, EXPECTED[id]])
 		for i in range(auras.size()):
 			var spec = auras[i]
-			_expect(spec != null and not spec.targets.is_empty(), "%d aura %d has target criteria" % [id, i])
-			_expect(spec.method == "power_change" or spec.method == "grant_status",
+			var rule: Dictionary = spec.as_rule()
+			_expect(not rule.get("targets", {}).is_empty(), "%d aura %d has target criteria" % [id, i])
+			_expect(rule.get("method") == "power_change" or rule.get("method") == "grant_status",
 				"%d aura %d has a known method" % [id, i])
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})

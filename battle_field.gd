@@ -272,9 +272,11 @@ func add_aura(aura: Dictionary, source: Card) -> AuraValue:
 func add_aura_spec(spec, source: Card) -> AuraValue:
 	if spec is Dictionary:
 		return add_aura(spec, source)
-	var aura_value := AuraValue.new(str(spec.method), spec.targets, int(spec.value), str(spec.status))
+	var data: Dictionary = spec.as_rule() if spec != null and spec.has_method("as_rule") else {}
+	var aura_value := AuraValue.new(str(data.get("method", "")), data.get("targets", {}),
+		int(data.get("value", 0)), str(data.get("status", "")))
 	aura_value.source = source
-	aura_value.condition = spec.condition
+	aura_value.condition = data.get("condition", Callable())
 	aura_value.key = "aura:%d:%d" % [source.get_instance_id(), _next_aura_id]
 	_auras[_next_aura_id] = aura_value
 	_next_aura_id += 1
@@ -1376,6 +1378,8 @@ var _continuous_ledger: Dictionary = {}
 
 
 func _rule_get(rule, key: String, fallback = null):
+	if rule is Object and rule.has_method("as_rule"):
+		rule = rule.as_rule()
 	if rule is Dictionary:
 		return rule.get(key, fallback)
 	if rule == null:

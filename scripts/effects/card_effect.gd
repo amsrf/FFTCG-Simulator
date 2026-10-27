@@ -1,6 +1,5 @@
 extends RefCounted
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
-const AURA_SPEC := preload("res://scripts/effects/aura_spec.gd")
 const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
@@ -90,9 +89,6 @@ func _ability(data: Dictionary) -> RefCounted:
 func auras() -> Array:
 	return []
 
-
-func _aura(data: Dictionary) -> RefCounted:
-	return AURA_SPEC.new(data)
 
 
 # ---------------------------------------------------------------------------------------------------------------
