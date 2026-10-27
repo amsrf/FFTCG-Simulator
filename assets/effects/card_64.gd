@@ -12,7 +12,7 @@ func when_enter_field(ctx) -> void:
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
-	var targets: Array = ctx.cards_in("field", {"is_type": "Forward", "controller": "your"})
+	var targets: Array = ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR))
 	ctx.untap(targets)
 	ctx.add_status(targets, "cannot_be_chosen", 1)
 

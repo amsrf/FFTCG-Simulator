@@ -1,4 +1,5 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## Kimahri 1-103C
 ##
 ## "Kimahri gains Elements of all the Characters opponent controls except Light and Dark."
@@ -9,7 +10,7 @@ func current_elements(ctx, card) -> Array[String]:
 	var out: Array[String] = []
 	if card.element != "":
 		out.append(card.element)
-	for other in ctx.cards_in("field", {"is_character": true, "controller": "opponent"}):
+	for other in ctx.cards_in("field", CARD_QUERY.new().character(true).controlled_by(CARD_QUERY.Controller.OPPONENT)):
 		for element in other.current_elements():
 			if element == "光" or element == "闇":
 				continue

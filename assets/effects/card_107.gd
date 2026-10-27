@@ -1,4 +1,5 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## Shantotto 1-107L
 ##
 ## "If Shantotto is on the field, it gains Elements of Fire, Ice, Wind, Earth, Lightning and Water."
@@ -21,4 +22,4 @@ func current_elements(ctx, card) -> Array[String]:
 
 
 func when_enter_field(ctx) -> void:
-	ctx.remove_from_game(ctx.cards_in("field", {"is_type": "Forward"}))
+	ctx.remove_from_game(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward")))

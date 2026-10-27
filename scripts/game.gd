@@ -2622,7 +2622,7 @@ func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool 
 func _matches_search_filter(card: Card, filter: Dictionary) -> bool:
 	if filter.is_empty():
 		return true
-	var filter_keys: Array = ["name", "type", "category", "job", "element",
+	var filter_keys: Array = ["name", "exact_name", "type", "category", "job", "element",
 		"min_power", "max_power", "min_cost", "max_cost", "any"]
 	for key in filter.keys():
 		if key in filter_keys:

@@ -16,7 +16,7 @@ func activated_abilities() -> Array:
 func _skill_0(ctx) -> void:
 	ctx.reveal_top(1)
 	if ctx.check_revealed(0, {"is_type": "Forward"}):
-		ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent", "is_tapped": false}), 7000)
+		ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)), 7000)
 	ctx.remove_revealed_from_game(0)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":

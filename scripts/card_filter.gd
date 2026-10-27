@@ -42,6 +42,11 @@ static func matches(card: Dictionary, filter: Dictionary) -> bool:
 		if not hit:
 			return false
 
+	# --- exact_name: the Card.matches_criteria("is_named") spelling, used by typed searches ----------
+	var exact: String = str(filter.get("exact_name", "")).strip_edges()
+	if not exact.is_empty() and str(card.get("name_en", "")) != exact:
+		return false
+
 	# --- name: the code OR the English name, because a player may search for either -------------------
 	var needle: String = str(filter.get("name", "")).strip_edges().to_lower()
 	if not needle.is_empty():

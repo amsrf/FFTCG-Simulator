@@ -8,9 +8,7 @@ func when_attack(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR)))
 	if targets.is_empty():
 		return
-	var forwards: int = ctx.cards_in("field", {
-		"is_type": "Forward", "controller": "your",
-	}).size()
+	var forwards: int = ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR)).size()
 	ctx.power_change(targets, forwards * 1000, 1)
 
 

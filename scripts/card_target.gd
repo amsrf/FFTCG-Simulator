@@ -38,6 +38,16 @@ static func matches(card: Card, block: Dictionary, source: Card = null) -> bool:
 			if _matches_exclusion(card, block[key], source):
 				return false
 			continue
+		if name == "any":
+			var hit: bool = false
+			if block[key] is Array:
+				for one in block[key]:
+					if one is Dictionary and matches(card, one, source):
+						hit = true
+						break
+			if not hit:
+				return false
+			continue
 		if name == "is_source":
 			if (card == source) != bool(block[key]):
 				return false

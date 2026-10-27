@@ -1,10 +1,11 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
-	var targets: Array = ctx.cards_in("field", {"is_type": "Forward", "exclude": {"is_named": "Ultimecia"}})
+	var targets: Array = ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").excluding(CARD_QUERY.new().named("Ultimecia")))
 	ctx.add_status(targets, "frozen", 1)
 
 func static_rules() -> Dictionary:

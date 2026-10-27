@@ -63,6 +63,19 @@ func _ready() -> void:
 	_expect(criteria.get("is_type") == "Forward" and int(criteria.get("is_cost_at_most", -1)) == 3,
 		"CardAbility converts its typed target to the legacy activation block")
 
+	var filter_query = CARD_QUERY.new().of_type("Forward").of_category("VII").with_job("SOLDIER").power_at_least(5000)
+	var filter_dict: Dictionary = filter_query.to_filter()
+	_expect(filter_dict.get("type") == "Forward" and filter_dict.get("category") == "VII"
+		and filter_dict.get("job") == "SOLDIER" and int(filter_dict.get("min_power", 0)) == 5000,
+		"CardQuery also produces a deck-search filter")
+	var ctx = source.make_effect_context()
+	_expect(not ctx.cards_in("field", CARD_QUERY.new().of_type("Forward")).is_empty(),
+		"cards_in accepts a typed CardQuery filter")
+	_expect(CARD_QUERY.new().named("Tifa").to_filter().has("exact_name"),
+		"named() keeps the exact-search spelling")
+	_expect(CARD_QUERY.new().name_contains("Tifa").to_filter().get("name") == "Tifa",
+		"name_contains() keeps the substring-search spelling")
+
 	print("[Targets] %d checks | failures: %d" % [_checks, _fails])
 	print("[Targets] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

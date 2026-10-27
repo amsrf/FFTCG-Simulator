@@ -11,7 +11,7 @@ func cast_target_criteria(_ctx) -> Variant:
 func when_cast(ctx) -> void:
 	var targets: Array = await ctx.cast_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
 	ctx.untap(targets)
-	ctx.power_change(ctx.cards_in("field", {"is_type": "Forward", "controller": "player"}), 1000, 1)
+	ctx.power_change(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.PLAYER)), 1000, 1)
 
 
 func ex_burst_event() -> String:

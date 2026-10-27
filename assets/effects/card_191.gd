@@ -12,7 +12,7 @@ func when_enter_field(ctx) -> void:
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
-	ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent"}), 6000)
+	ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), 6000)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

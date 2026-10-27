@@ -5,7 +5,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 
 func when_enter_field(ctx) -> void:
-	await ctx.search_deck({"is_named": "Lann"})
+	await ctx.search_deck(CARD_QUERY.new().named("Lann"))
 
 
 func ex_burst_event() -> String:

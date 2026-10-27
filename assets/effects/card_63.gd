@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func when_enter_field(ctx) -> void:
 	if await ctx.may("Play a Forward"):
-		await ctx.play_from_hand({"is_type": "Forward", "element": "風", "is_cost_lower_than": 4})
+		await ctx.play_from_hand(CARD_QUERY.new().of_type("Forward").of_element("風").where({"is_cost_lower_than": 4}))
 
 func when_attack(ctx) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").controlled_by(CARD_QUERY.Controller.PLAYER)).up_to(2))

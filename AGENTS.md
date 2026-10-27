@@ -34,7 +34,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
 - Targets are typed everywhere in card code: `CardQuery` says which cards, `TargetRequest` says domain/count, and
-  `TargetSequence` says ordered stages. Legacy dictionaries are converted at the engine boundary.
+  `TargetSequence` says ordered stages. The same `CardQuery` is the filter argument for `cards_in`, Break Zone picks,
+  hand plays, `search_deck`, `break_zone_to_hand`, and `untap_all_matching`; `named()` is exact and
+  `name_contains()` is substring. Legacy dictionaries are converted at the engine boundary.
 - Activated abilities are `CardAbility` subclasses in `assets/effects/`. Metadata is inherited from
   `AbilitySpec`; behaviour lives in `on_resolve(ctx)`, and `on_activation(ctx)` is the override point for cards
   that need to declare X or otherwise control activation.

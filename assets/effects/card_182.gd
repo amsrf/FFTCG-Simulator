@@ -10,7 +10,7 @@ func keywords() -> Array[String]:
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self)]
 func _skill_0(ctx) -> void:
-	ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent"}), 4000)
+	ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), 4000)
 
 func _skill_1(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()

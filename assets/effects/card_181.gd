@@ -1,4 +1,5 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-181H Onion Knight
 
 
@@ -16,4 +17,4 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		only_your_turn = true
 
 	func on_resolve(ctx) -> void:
-		await ctx.may_play_from_hand({"is_named": "Onion Knight"}, false, "Play Onion Knight")
+		await ctx.may_play_from_hand(CARD_QUERY.new().named("Onion Knight"),  false,  "Play Onion Knight")

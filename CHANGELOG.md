@@ -167,6 +167,12 @@ All 96 target call sites are converted: ability target metadata, ETB/event
 arguments, stack targeting, and Hades-style staged sequences. No legacy target
 dictionary remains in `assets/effects/`.
 
+The same `CardQuery` now serves non-target filters too: `cards_in`,
+`choose_break_zone_card`, Break Zone plays, free hand plays, `search_deck`,
+`break_zone_to_hand`, and `untap_all_matching`. `CardQuery.to_filter()` handles
+the deck-search vocabulary, and exact vs substring names are distinct
+(`named()` vs `name_contains()`).
+
 ### Activated Abilities Are Code Classes
 
 Replaced every `_ability({...})` dictionary with a `CardAbility` subclass. The

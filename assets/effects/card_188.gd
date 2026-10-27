@@ -1,4 +1,5 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-188R Zangan
 
 
@@ -16,4 +17,4 @@ func ex_burst_event() -> String:
 	return "when_enter_field"
 
 func when_enter_field(ctx) -> void:
-	await ctx.search_deck({"name": "Tifa"})
+	await ctx.search_deck(CARD_QUERY.new().name_contains("Tifa"))

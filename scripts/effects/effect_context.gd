@@ -41,7 +41,8 @@ func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dic
 ## Cards in one region, optionally filtered. `owner` is "self" (the source's controller), "opponent", or "any".
 ##
 ## Regions: field, hand, deck, break_zone, damage_zone, removed, stack, revealed.
-func cards_in(region: String, criteria: Dictionary = {}, owner: String = "any") -> Array:
+func cards_in(region: String, criteria: Variant = {}, owner: String = "any") -> Array:
+	var criteria_block: Dictionary = _criteria_block(criteria)
 	var pools: Array = []
 	match region:
 		"field":
@@ -79,7 +80,7 @@ func cards_in(region: String, criteria: Dictionary = {}, owner: String = "any") 
 		for card in pool:
 			if card == null or not is_instance_valid(card):
 				continue
-			if criteria.is_empty() or card.matches_criteria(criteria, source):
+			if criteria_block.is_empty() or card.matches_criteria(criteria_block, source):
 				out.append(card)
 	return out
 
@@ -147,6 +148,20 @@ func _legacy_targets(criteria: Variant, count: int = 1) -> Variant:
 
 
 ## Single-target convenience over choose_targets().
+## Convert a CardQuery (or a legacy block) for code that asks Card.matches_criteria().
+func _criteria_block(criteria: Variant) -> Dictionary:
+	if criteria is Object and criteria.has_method("to_block"):
+		return criteria.to_block()
+	return criteria if criteria is Dictionary else {}
+
+
+## Convert a CardQuery (or a legacy filter) for the deck-search window.
+func _criteria_filter(criteria: Variant) -> Dictionary:
+	if criteria is Object and criteria.has_method("to_filter"):
+		return criteria.to_filter()
+	return criteria if criteria is Dictionary else {}
+
+
 func choose_target(criteria: Variant, prompt: String = "Choose a card") -> Card:
 	var picks: Array = await choose_targets(criteria, 1)
 	return picks[0] if not picks.is_empty() else null
@@ -174,13 +189,13 @@ func condition(expression: String) -> bool:
 	return bool(game._condition_holds(expression))
 
 
-func untap_all_matching(criteria: Dictionary) -> void:
+func untap_all_matching(criteria: Variant) -> void:
 	untap(cards_in("field", criteria))
 
 
-func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
+func play_from_hand(criteria: Variant = {}, by: String = "self") -> void:
 	_prime_game()
-	await game.play_from_hand(criteria, by)
+	await game.play_from_hand(_criteria_block(criteria), by)
 
 
 ## Pick one card from an explicit list. Used by hand-play effects where the caller controls the shortlist.
@@ -208,7 +223,7 @@ func play_from_hand_card(card: Card, dull: bool = false) -> void:
 
 
 ## The common "you may play a card from hand" shape: shortlist, ask, choose, play.
-func may_play_from_hand(criteria: Dictionary, dull: bool = false,
+func may_play_from_hand(criteria: Variant, dull: bool = false,
 		prompt: String = "Play a card") -> bool:
 	var candidates: Array = cards_in("hand", criteria, "self")
 	if candidates.is_empty():
@@ -222,15 +237,15 @@ func may_play_from_hand(criteria: Dictionary, dull: bool = false,
 	return true
 
 
-func break_zone_to_hand(filter: Dictionary = {}) -> void:
+func break_zone_to_hand(filter: Variant = {}) -> void:
 	_prime_game()
-	await game.break_zone_to_hand(filter)
+	await game.break_zone_to_hand(_criteria_filter(filter))
 
 
-func choose_break_zone_card(criteria: Dictionary, chooser: String = "self",
+func choose_break_zone_card(criteria: Variant, chooser: String = "self",
 		prompt: String = "Choose a card in your Break Zone") -> void:
 	_prime_game()
-	await game.choose_break_zone_card(criteria, chooser, prompt)
+	await game.choose_break_zone_card(_criteria_block(criteria), chooser, prompt)
 
 
 func put_card_into_hand() -> void:
@@ -243,9 +258,9 @@ func put_hand_card_on_bottom() -> void:
 	await game.put_hand_card_on_bottom()
 
 
-func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false) -> void:
+func search_deck(filter: Variant, destination: String = "hand", tapped: bool = false) -> void:
 	if game != null:
-		game.search_deck(filter, destination, tapped, owner_id)
+		game.search_deck(_criteria_filter(filter), destination, tapped, owner_id)
 
 
 func reveal_top(count: int = 1) -> void:
@@ -372,7 +387,7 @@ func apply_damage_division(total: int) -> void:
 
 ## Look at the staging area without moving the card. The count/limit checks live here so a card handler does not
 ## need to know the Game's reveal internals.
-func check_revealed(index: int = 0, criteria: Dictionary = {}) -> bool:
+func check_revealed(index: int = 0, criteria: Variant = {}) -> bool:
 	if game == null:
 		return false
 	var staged = game.get("revealed_cards")
@@ -414,14 +429,14 @@ func _prime_game() -> void:
 	game.set("_current_controller", controller)
 
 
-func play_from_break_zone(criteria: Dictionary = {}) -> void:
+func play_from_break_zone(criteria: Variant = {}) -> void:
 	_prime_game()
-	await game.play_from_break_zone(criteria)
+	await game.play_from_break_zone(_criteria_block(criteria))
 
 
-func cast_summon_for_free(criteria: Dictionary = {}) -> void:
+func cast_summon_for_free(criteria: Variant = {}) -> void:
 	_prime_game()
-	await game.cast_summon_for_free(criteria)
+	await game.cast_summon_for_free(_criteria_block(criteria))
 
 
 func look_top_may_bottom() -> void:
