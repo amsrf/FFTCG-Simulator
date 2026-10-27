@@ -487,3 +487,10 @@ func can_pay_cost() -> bool:
 	# arithmetic written out a second time, which meant the readout and the Confirm button could in
 	# principle disagree about the same selection.
 	return remaining_cost().is_empty()
+
+
+## RULES 11.2.2 / 11.2.2.2: a CP cost is paid EXACTLY, except that discarding one hand card may produce one
+## excess CP per Element needed. Once the cost is fulfilled, any further selection must be ignored. Checking this
+## before the selection is recorded is what stops a player from discarding extra cards after the cost is already met.
+func payment_is_full() -> bool:
+	return GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST and can_pay_cost()

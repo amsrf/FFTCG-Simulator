@@ -148,6 +148,17 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Exact CP Payment
+
+Enforced rules 11.2.2 and 11.2.2.2: the CP cost is paid exactly. Once the
+selection fulfils `mana_cost`, further mana-card selections are ignored. The
+single legal exception remains: one hand card producing 2 CP may overpay a
+1-CP gap by one, and it is accepted only because the guard runs before the
+fulfilling card is recorded.
+
+Both `Field.add_card_to_mana_conversion()` and `Hand.add_card_to_mana_conversion()`
+now ask `Assistant.payment_is_full()` first. Deselecting cards still works.
+
 ### JSON Migration Complete: Card Data Is Code Owned
 
 Migrated the last static hooks: Ranger's activated ability, Gippal's party

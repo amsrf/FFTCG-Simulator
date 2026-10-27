@@ -838,6 +838,13 @@ func send_selected_cards_to_graveyard():
 	
 
 func add_card_to_mana_conversion(card:Card):
+	# RULES: the CP cost is exact. Once fulfilled, ignore further selections. The hand-card exception (2 CP for a
+	# 1-CP gap) is still allowed because the guard is checked BEFORE the card that fulfils the cost is recorded.
+	var game_node = stack.get_parent() if stack != null else null
+	var assistant = game_node.get("assistant") if game_node != null else null
+	if assistant != null and assistant.payment_is_full():
+		print("[Mana] cost already fulfilled; ignoring extra charge")
+		return
 	# A card being cast (e.g. a Summon awaiting payment) cannot be used as
 	# its own mana payment.
 	if card == charging_card:

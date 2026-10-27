@@ -321,6 +321,12 @@ func add_all_auras_to_card(card:Card):
 		add_aura_to_card(aura,card)		
 
 func add_card_to_mana_conversion(card:Card):
+	# RULES: the CP cost is exact. Once it is fulfilled, further selections are ignored; only the one hand-card
+	# overpay exception is allowed, and that already happened when the fulfilling card was selected.
+	var assistant = get_parent().get("assistant") if get_parent() != null else null
+	if assistant != null and assistant.payment_is_full():
+		print("[Mana] cost already fulfilled; ignoring extra charge")
+		return
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
