@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://bbh6vxc3y4jhk"]
 
-[ext_resource type="Script" path="res://scripts/mana_choice.gd" id="1"]
+[ext_resource type="Script" uid="uid://bw3xgsu4yvjc3" path="res://scripts/mana_choice.gd" id="1"]
 
-[node name="ManaChoice" type="Node3D"]
+[node name="ManaChoice" type="Node3D" unique_id=908230503]
 script = ExtResource("1")
+crystal_height_m = 0.12
+ring_radius_m = 0.25

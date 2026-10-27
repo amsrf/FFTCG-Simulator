@@ -7,7 +7,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _sazh(ctx: EFFECT_CONTEXT) -> void:
-	if ctx.game.cast_this_turn("Brynhildr", ctx.owner_id):
+	if ctx.cast_this_turn("Brynhildr", ctx.owner_id):
 		ctx.damage(ctx.targets, 4000)
 	else:
 		ctx.damage(ctx.targets, 2000)

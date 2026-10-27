@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## RETURN TO HAND probe — the zone change and the two-phase animation.
 ##
 ## The card must end up a REAL hand card (child of the Hand, in `cards`, HAND zone, hand scale), not just visually
@@ -38,9 +39,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(card.current_zone == Card.Zone.FIELD, "the card starts on the FIELD")
 
-	_game.set("_targets", [card])
+	var ctx = EFFECT_CONTEXT.new(_game, card, "test")
 	# AWAITED on purpose: this is what stops the effect resolving while the card is between zones.
-	await _game.return_targets_to_hand()
+	await ctx.return_to_hand([card])
 
 	_expect(hand.cards.has(card), "the card joined the hand's card list (%d -> %d)" % [before, hand.cards.size()])
 	_expect(card.get_parent() == hand, "and it is now a child of the Hand")
@@ -57,7 +58,7 @@ func _ready() -> void:
 		"and it is in its slot (%.3f m off)" % card.position.distance_to(slot))
 
 	# --- the data capability is present ---------------------------------------------------------------
-	_expect(_game.has_method("return_targets_to_hand"), "the instruction exists")
+	_expect(ctx.has_method("return_to_hand"), "the context exposes the return action")
 
 	print("[ReturnToHand] %d checks | failures: %d" % [_checks, _fails])
 	print("[ReturnToHand] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

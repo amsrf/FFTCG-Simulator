@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 const GAME_SCENE := preload("res://game.tscn")
 const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
@@ -87,16 +88,17 @@ func _check_reveal_and_move() -> void:
 	_game.check_revealed(0, {"is_type": "Backup"})
 	_expect(not _game._last_action_succeeded, "and rejects the same card as a Backup")
 
-	_game.choose_revealed({"is_type": "Forward"}, "Choose one")
+	var ctx = EFFECT_CONTEXT.new(_game, _game.revealed_cards[0], "test")
+	await ctx.choose_revealed({"is_type": "Forward"}, "Choose one")
 	await get_tree().process_frame
-	_game.put_chosen_into_hand()
+	ctx.put_chosen_into_hand()
 	_expect(_game.hand.cards.any(func(c): return c.id == 41),
 		"put_chosen_into_hand moves the chosen revealed card to the hand")
 	_expect(_game.hand.cards.back().current_zone == Card.Zone.HAND and _game.hand.cards.back().visible,
 		"the moved card is visible again in the hand")
 	_expect(_game.revealed_cards.size() == 1, "the chosen card leaves the revealed array")
 
-	_game.put_revealed_on_bottom()
+	ctx.put_revealed_on_bottom()
 	_expect(_game.revealed_cards.is_empty(), "put_revealed_on_bottom clears the rest")
 	_expect(_game.deck.deck_cards.size() == 2
 		and _game.deck.deck_cards[0].id == 47 and _game.deck.deck_cards[1].id == 43,

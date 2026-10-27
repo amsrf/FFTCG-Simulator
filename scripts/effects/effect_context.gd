@@ -304,6 +304,15 @@ func choose_element(options: Array, prompt: String = "Choose an Element") -> Str
 
 ## Ask which colour a multi-colour source produces. The Field owns the crystal UI; this context call is the seam
 ## card code uses. A one-element list is answered without opening anything.
+## Engine queries card code is allowed to ask, so a card never reaches into ctx.game itself.
+func turn_number() -> int:
+	return int(game.get("turn_number")) if game != null else 0
+
+
+func cast_this_turn(card_name: String, player_id: int = 0) -> bool:
+	return bool(game.cast_this_turn(card_name, player_id)) if game != null else false
+
+
 func choose_crystal_in_circle(elements: Array) -> String:
 	if elements.is_empty():
 		return ""
@@ -409,6 +418,25 @@ func apply_damage_division(total: int) -> void:
 
 ## Look at the staging area without moving the card. The count/limit checks live here so a card handler does not
 ## need to know the Game's reveal internals.
+## Reveal staging stays owned by Game; these are the card-facing names so an effect never calls Game directly.
+func choose_revealed(criteria: Variant = {}, prompt: String = "Choose a revealed card") -> void:
+	if game == null:
+		return
+	await game.choose_revealed(_criteria_block(criteria), prompt)
+
+
+func put_chosen_into_hand() -> void:
+	if game == null:
+		return
+	game.put_chosen_into_hand()
+
+
+func put_revealed_on_bottom() -> void:
+	if game == null:
+		return
+	game.put_revealed_on_bottom()
+
+
 func check_revealed(index: int = 0, criteria: Variant = {}) -> bool:
 	if game == null:
 		return false
@@ -508,14 +536,19 @@ func return_from_break_zone(tapped: bool = true) -> void:
 	await game.return_from_break_zone(tapped)
 
 
-func return_to_hand(cards: Array) -> void:
+func return_to_hand(cards: Array, source_kind: String = "") -> void:
 	if game == null:
 		return
 	# START EVERY RETURN FIRST, then wait. Awaiting each tween inside the loop serialises the cards, which is exactly
 	# what a mass return must not do.
 	var tweens: Array = []
+	var kind: String = source_kind
+	if kind.is_empty():
+		kind = "Summon" if source != null and source.type == "Summon" else "Ability"
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		if not card.can_be_returned_to_hand_by(source, kind):
 			continue
 		var owner_hand = game.hand_for(1 if card.controller == "player" else 2)
 		if owner_hand == null:

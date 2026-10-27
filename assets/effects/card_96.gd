@@ -5,7 +5,7 @@ extends "res://scripts/effects/card_effect.gd"
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _self_pump(ctx: EFFECT_CONTEXT) -> void:
-	ctx.source.power_change(3000, 1)
+	ctx.power_change([ctx.source], 3000, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

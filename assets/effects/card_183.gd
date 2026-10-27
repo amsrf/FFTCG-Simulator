@@ -5,4 +5,3 @@ func static_rules() -> Dictionary:
 
 func generate_mana(ctx: EFFECT_CONTEXT) -> String:
 	return str(await ctx.choose_crystal_in_circle(ctx.source.mana_elements()))
-

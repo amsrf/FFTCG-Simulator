@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## POWER_CHANGE_TARGETS probe.
 ##
 ## Two things can be wrong here and they are separate:
@@ -65,8 +66,8 @@ func _ready() -> void:
 	# --- the instruction: every target, and it wears off ------------------------------------------------
 	var a: Card = _new_card(41, 5000)
 	var b: Card = _new_card(41, 3000)
-	_game.set("_targets", [a, b])
-	_game.power_change_targets(1000, 1)
+	var ctx = EFFECT_CONTEXT.new(_game, a, "test")
+	ctx.power_change([a, b], 1000, 1)
 	_expect(a.power == 6000, "first target +1000 (now %d)" % a.power)
 	_expect(b.power == 4000, "second target +1000 (now %d)" % b.power)
 	a.turn_end()
@@ -74,8 +75,7 @@ func _ready() -> void:
 	_expect(a.power == 5000 and b.power == 3000, "and a one-turn buff wears off at turn_end")
 
 	# --- a debuff goes through the same call ------------------------------------------------------------
-	_game.set("_targets", [a])
-	_game.power_change_targets(-2000, 1)
+	ctx.power_change([a], -2000, 1)
 	_expect(a.power == 3000, "a negative amount debuffs (now %d)" % a.power)
 	_field.remove_card(a)
 	_field.remove_card(b)

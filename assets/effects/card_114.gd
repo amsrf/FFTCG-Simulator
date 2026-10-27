@@ -8,7 +8,7 @@ func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _activate(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 4000)
-	ctx.source.power_change(4000, 1)
+	ctx.power_change([ctx.source], 4000, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

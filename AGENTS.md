@@ -3,6 +3,23 @@
 Godot **4.7.2**, GDScript, GL Compatibility renderer. A 3D Final Fantasy TCG simulator.
 Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `CardDatabase`, `GlobalVariables`, `MatchSetup` (`scripts/match_setup.gd`). A match is configured by `MatchSetup` before the scene change; `game.gd:_ready()` calls `start_match(MatchSetup.resolve_config())`, which falls back to the `debug` preset when `game.tscn` is run directly.
 
+## One Effect Path
+
+Card code and probes both act through `EffectContext`. There are no parallel Game instruction helpers such as
+`damage_targets`, `add_status_to_targets`, `power_change_targets`, or `return_targets_to_hand`; using them from a new
+probe would recreate the duplication the cleanup removed. Construct a context directly:
+
+```gdscript
+var ctx = EFFECT_CONTEXT.new(game, source_card, "test")
+ctx.damage([target], 4000)
+await ctx.return_to_hand([target])
+```
+
+Continuous auras also have one path: `Card.extra_auras` / `CardEffect.auras()` feed the single
+`Field.refresh_continuous_effects()` scan. The old `AuraValue` / `_auras` registry is gone. Test-only observation
+hooks (`Card.set_base_power`, ring accessors, `Field.preview_card`, `Game.clash_cards`) are deliberate, not API to
+use from card code.
+
 ## Agent Rules (read first)
 
 ### Code-defined effects

@@ -15,7 +15,6 @@ extends Node3D
 @onready var player_removed = $Player/Removed
 @onready var opponent_removed = $Opponent/Removed
 @onready var opponent_front_row_card = $Field/OpponentFrontrowCard
-@onready var opponent_damage_zone = $Opponent/DamageZone
 @onready var assistant: Assistant = $Assistant
 @onready var card_scene = preload("res://card.tscn")
 @onready var turn_owner = 1
@@ -96,14 +95,6 @@ func opponent_discards(count: int = 1) -> void:
 
 ## The caster discards — "draw 1 card then discard 1 card from your hand" (Vaan). The mirror of opponent_discards(),
 ## and it goes through the same agent seam, so a human picks from their hand and the AI picks its cheapest.
-func controller_discards(count: int = 1) -> void:
-	var caster: int = 1 if _current_controller == "player" else 2
-	await discard_from(caster, count)
-
-## MILL — "your opponent puts the top card(s) of their deck into the Break Zone".
-##
-## ONE CARD AT A TIME, each animation awaited, because that is how it should read: a mill 3 is three separate mills,
-## not a blur of three cards. The pile owns the flight (Graveyard.draw) so the timing and the arc live in one place.
 func mill_player(player_id: int, count: int = 1) -> void:
 	var d = deck if player_id == 1 else opponent_deck
 	var side: PlayerSide = side_for(player_id)
@@ -235,13 +226,6 @@ func discard_from(player_id: int, count: int = 1) -> int:
 
 ## "Draw 1 card, then discard 1 card from your hand." The discard is an INSTRUCTION, not a skill cost, so it needs its
 ## own entry point; and it must set the success latch because Bahamut Fury branches on whether the discard happened.
-func discard_cards(count: int = 1) -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
-	var discarded: int = await discard_from(owner_id, count)
-	_last_action_succeeded = discarded > 0
-
-## "Choose 1 Character Card in your Break Zone. Add it to your hand." The Break Zone is a pile, so the same search
-## window the deck uses is the picker; the filter is a CardFilter block (type/category/job/name/...).
 func break_zone_to_hand(filter: Dictionary = {}) -> void:
 	_last_action_succeeded = false
 	var owner_id: int = 1 if _current_controller == "player" else 2
@@ -353,17 +337,6 @@ func apply_effect(criteria: Dictionary, exclude_chosen: bool = false) -> void:
 	_last_action_succeeded = not _targets.is_empty()
 
 ## PUT, not BREAK: triggers when_enter_break_from_field, never when_break.
-func put_targets_into_break_zone(_argument = null) -> void:
-	for card in _selected_targets(-1):
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		print("[BreakZone] %s is put into the Break Zone" % card.card_name)
-		put_card_into_graveyard(card)
-	enforce_game_state_rules()
-	_last_action_succeeded = true
-
-## "Look at the top card of your deck. You may place it at the bottom." The card is named in the log; the choice goes
-## through the agent seam so a remote player would get the same prompt.
 func look_top_may_bottom() -> void:
 	var owner_id: int = 1 if _current_controller == "player" else 2
 	var d = deck if owner_id == 1 else opponent_deck
@@ -504,75 +477,12 @@ func untap_targets(index: int = -1) -> void:
 
 ## Wakka 216: the chosen Forward loses all its abilities until the end of the turn. The printed data is untouched;
 ## Card.card_effects becomes an empty view while the status is present.
-func nullify_abilities(duration: int = 1) -> void:
-	for card in _selected_targets(-1):
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		card.add_status_effect("abilities_nullified", duration)
-		print("[Nullify] %s loses its abilities" % card.card_name)
-	# A nullified source stops granting auras/conditionals immediately, not at the next unrelated board change.
-	field.refresh_continuous_effects()
-	enforce_game_state_rules()
-
-
-## Wakka 216: "power becomes 1000". Kept as a temporary delta so normal buffs still expire independently.
-func set_targets_power(value: int = 1000, duration: int = 1) -> void:
-	_each_target("set_power_value", [value, duration])
-
-
-## "+1000 power for each Forward you control" (Wakka's attack trigger). The count is read at resolution.
-func power_change_targets_per_forward(amount: int = 1000, duration: int = 1) -> void:
-	var controller_name: String = _current_controller
-	var count: int = field.get_front_cards_for(controller_name).size()
-	if count <= 0 or amount == 0:
-		return
-	_each_target("power_change", [count * amount, duration])
-
-## CANCEL THE CHOSEN STACK OBJECTS (Summoner 53). The target is a Summon that has not resolved yet, so this is not
-## `_each_target` — it has no `is_on_field()` and the removal belongs to the Stack.
-func cancel_targets(_argument = null) -> void:
-	for card in _targets:
-		if card != null and is_instance_valid(card):
-			stack.call("cancel_stack_card", card)
-
-## DULL. "Dull it", "Dull all Forwards", "Dull it and Freeze it".
-##
-## It deliberately does NOT go through Card.can_tap(): dulling is not a tap COST, it is the effect. A Frozen card,
-## a summoning-sick card and a card that was just activated can all still be dulled by an opponent's effect.
 func dull_targets(index: int = -1) -> void:
 	_each_target("tap", [], index)
 
 ## DAMAGE TO EVERY TARGET. This is what "deal 3000 damage to all the Forwards opponent controls" needed: the target
 ## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
 ## it could only ever hit one card.
-func damage_targets(amount: int = 0, index: int = -1) -> void:
-	if amount <= 0:
-		return
-	# THE CAUSE GOES WITH THE DAMAGE. Protection like Auron's is judged when the break happens — possibly later, in
-	# the state-based sweep — so each card records who dealt this and with what. The SOURCE CARD is passed as well,
-	# which is what lets "Warrior of Light doubles its damage" apply to effect damage too.
-	for card in _selected_targets(index):
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			field.cause_damage(card, amount, _current_source_card, _effect_kind(), _current_controller)
-	enforce_game_state_rules()
-
-## BREAK every target. "Choose 1 Forward. Break it." — 17 cards in the first hundred say this and none could be
-## expressed until now.
-##
-## This does NOT go through _each_target, and the reason is not stylistic: breaking is a GAME operation, not a Card
-## method. break_card() owns the whole path — the unbreakable guard, untapping, leaving the field, the Graveyard,
-## and the "put from the field into the Break Zone" trigger — and none of that could be reached by calling a Card
-## method through the shared loop. So this is its own walk, and it is short because break_card() does the work.
-##
-## is_on_field() is checked per card, so a card already broken earlier in the loop cannot be broken twice.
-func break_targets(index: int = -1) -> void:
-	for card in _selected_targets(index):
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			print("[Break] ", card.card_name)
-			break_card(card, _current_controller, _effect_kind())
-
-## "Summon" when the effect's source card IS a Summon, otherwise "Ability". Used to describe a break/damage's cause so
-## protection rules like "cannot be broken by opponent's Summons or abilities" can tell the difference.
 func _effect_kind() -> String:
 	if _current_source_card != null and is_instance_valid(_current_source_card) and _current_source_card.type == "Summon":
 		return "Summon"
@@ -594,52 +504,6 @@ const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
 ## presentation lags, and the effect does not resolve until every animation has finished.
 ##
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
-func return_targets_to_hand(index: int = -1) -> void:
-	var batch = ANIMATION_BATCH.new()
-	var source: Card = _current_source_card
-	var kind: String = _effect_kind()
-	for card in _selected_targets(index):
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		# Gilgamesh 207: opponent's Summons and abilities cannot return him. The rule is printed on the target, so
-		# it is asked here rather than at the call sites.
-		if not card.can_be_returned_to_hand_by(source, kind):
-			print("[ReturnToHand] %s is protected" % card.card_name)
-			continue
-		var owner_hand: Hand = hand_for(1 if card.controller == "player" else 2)
-		if owner_hand == null:
-			continue
-		print("[ReturnToHand] ", card.card_name)
-		field.remove_card(card)
-		# STARTS it; do not await here.
-		batch.add(owner_hand.begin_return_card(card))
-	batch.close()
-	await batch.wait()
-
-## POWER TO EVERY TARGET. "All the Forwards you control gain +1000 power until end of turn."
-##
-## duration follows Card.power_change: -1 is permanent, N is N turns, so the card data carries it rather than this
-## function having an opinion. A negative amount debuffs, which is the same call with a minus in front.
-##
-## The loop settles state-based actions afterwards like every other verb — which is exactly right here, because a
-## power REDUCTION can put a card at 0 and move it to the Graveyard, and that check must happen before the next
-## instruction sees the board.
-func power_change_targets(amount: int = 0, duration: int = 1, index: int = -1) -> void:
-	if amount == 0:
-		return
-	_each_target("power_change", [amount, duration], index)
-
-## Golem 106: "It gains +2000 power. If it is blocking, it gains +4000 instead." The CHOICE is the same; only the
-## number depends on the target's own state at resolution.
-func power_change_targets_if_blocking(normal: int = 0, blocking: int = 0, duration: int = 1, index: int = -1) -> void:
-	for card in _selected_targets(index):
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		card.power_change(blocking if card.status_effects.has("blocking") else normal, duration)
-	enforce_game_state_rules()
-
-## Tidus 163: "Tidus can attack as many times as your points of damage this turn." The first attack is the normal one,
-## so the extra allowance is damage_count - 1.
 func extra_attacks_from_damage() -> void:
 	var owner_id: int = 1 if _current_controller == "player" else 2
 	var side: PlayerSide = side_for(owner_id)
@@ -651,16 +515,6 @@ func extra_attacks_from_damage() -> void:
 ## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
 ## say "player"/"your" and still mean the caster's side.
-func power_change_matching(criteria: Dictionary, amount: int = 0, duration: int = 1) -> void:
-	if amount == 0:
-		return
-	for card in _cards_matching(criteria):
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			card.power_change(amount, duration)
-	enforce_game_state_rules()
-
-## Draw `count` cards for the effect's controller. The generic "draw" instruction — every draw in the card pool goes
-## through here so the empty-deck rule lives in one place.
 func draw_cards(count: int = 1, player_id: int = 0) -> void:
 	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == "player" else 2)
 	var d = deck if owner_id == 1 else opponent_deck
@@ -816,17 +670,6 @@ func put_chosen_into_hand(_argument = null) -> void:
 
 ## Play the chosen revealed cards. Characters use the normal play path; this is also the hook for Selh'teus-style
 ## reveal-to-play effects.
-func play_revealed(_argument = null) -> void:
-	for card in _chosen_cards.duplicate():
-		if card == null or not is_instance_valid(card) or not revealed_cards.has(card):
-			continue
-		revealed_cards.erase(card)
-		card.set_hidden(false)
-		card.reset_for_field_arrival()
-		field.play_card(card, revealed_owner_id == 2, true)
-		_chosen_cards.erase(card)
-
-## Put every revealed card that was NOT chosen on the bottom of its owner's deck, preserving reveal order.
 func put_revealed_on_bottom(_argument = null) -> void:
 	var d = opponent_deck if revealed_owner_id == 2 else deck
 	if d == null:
@@ -883,17 +726,6 @@ func choose_target(criteria: Dictionary) -> void:
 ##
 ## The duration is in TURNS: 1 means "until the end of this turn", expired by Card.turn_end() alongside attacking and
 ## blocking. A payload (Rygdea) rides with the status and is restored when the card reaches the Break Zone.
-func add_status_to_targets(status: String, duration: int = 1, extra = null) -> void:
-	var payload: Dictionary = extra.duplicate() if extra is Dictionary else {}
-	if not payload.is_empty():
-		# The rider remembers who created it, so a break-zone trigger can still ask "your opponent" correctly
-		# and can point the targeting arrow back at the source card.
-		payload["source"] = _current_source_card
-		payload["controller"] = _current_controller
-	for card in _targets:
-		if card != null and is_instance_valid(card):
-			card.add_status_effect(status, duration, payload)
-			print("[Status] ", card.card_name, " gains ", status, " for ", duration, " turn(s)")
 ## Re-entrancy guard: true while a priority round is running. Prevents
 ## overlapping priority loops when Stack.request_priority fires mid-round.
 var _priority_lock: bool = false

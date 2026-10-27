@@ -5,11 +5,9 @@ const CRYSTAL_SCENE_PATH = "res://crystal.tscn"
 const ELEMENTS := preload("res://scripts/elements.gd")
 @export var id: int = 0  # Make this editable in the Inspector
 var string_id: String = '0'
-var hand_center = GlobalVariables.get_hand_center();
 # Scale factor when hovered
 # Original scale of the card
 var original_scale: Vector3
-var original_position: Vector3
 var code: String
 @export var power: int
 @export var base_power: int
@@ -20,12 +18,10 @@ var code: String
 var crystal_scene
 var crystal_instance
 var current_state
-@export var target_arrow: BallisticArrow 
 var mat: ShaderMaterial
 @export var tapped = false;
 @export var text = '';
 @export var is_valid_target = false;
-@export var is_target = false;
 @export var cost: int
 @export var is_dragging = false
 @export var selected = false
@@ -34,7 +30,6 @@ var mat: ShaderMaterial
 @export var index = 0
 @export var controller = 'player'
 @export var element = ''
-@export var field_actions : Array = []
 @export var status_effects = {}
 @export var power_array = []
 ## CONTINUOUS POWER CONTRIBUTIONS, keyed by source (aura:<source id>:<index>, conditional:<card id>:<rule>, ...).
@@ -128,12 +123,10 @@ var copied_skill: Dictionary = {}
 var copied_skill_from: String = ""
 
 @onready var hand_mesh: MeshInstance3D = $HandMesh
-@onready var field_mesh: MeshInstance3D = $FieldMesh
 
 var offset = Vector3.ZERO
 var camera: Camera3D
 var tween: Tween
-var original_basis: Basis
 # DEBUG VARIABLES
 var debug_step: int = 0
 var debug_log: Array = []
@@ -290,13 +283,6 @@ func _get_mouse_3d_position_on_card_plane() -> Vector3:
 
 
 	
-func scale_card(target_scale: Vector3):
-	# Use a Tween for smooth scaling
-	tween = create_tween()
-	tween.tween_property(self, "transform:basis", Basis().scaled(target_scale), 0.05) 
-
-
-# Called when the node enters the scene tree or is reparented
 func _notification(what):
 	if what == NOTIFICATION_PARENTED:
 		_update_state()  # Re-check parent when moved
@@ -310,12 +296,9 @@ func _updateUI():
 ## report that "cards that were already on the field are not affected by the new born aura": the wiring in Field had it
 ## right, this competing path did not, and both of them ran.
 ##
-## There is one path now. Field.register_card_auras() registers this card's auras, gives them to the whole field, and
-## receives everyone else's — and it is idempotent per card, so being called from here AND from play_card() cannot
-## register the same aura twice. (That matters: each AuraValue carries its own `granted` record, so a second one for the
-## same effect would not be deduplicated and the bonus would land twice.)
-##
-## Kept as a thin call rather than deleted, so whatever parents a card into the field still triggers registration.
+## There is one path now: Field.refresh_continuous_effects() scans the board and collects this card's auras. No aura
+## is registered on the card or the field, so there is nothing to unregister when it leaves.
+
 func _executeAuraEffects():
 	var field_node: Node = get_parent()
 	if field_node != null and field_node.has_method("refresh_continuous_effects"):
@@ -344,16 +327,6 @@ func _update_state():
 		current_state = null
 		pass
 		
-func set_state_based_on_parent():
-	if get_parent() is Hand:
-		current_state = HandCardState.new(self)
-	elif get_parent() is Field:
-		current_state = FieldCardState.new(self)
-	elif get_parent() is Stack:
-		current_state = STACK_CARD_STATE.new(self)
-	else:
-		current_state = null
-			
 func _on_card_area_3d_card_grabbed(_card: Variant):
 	# A CARD IN A PILE IS LOOKED AT, NOT PLAYED. Clicking one opens the same fan window the deck search uses, so the
 	# player can check what is in the zone. It returns WITHOUT touching current_state: pile cards have no drag or tap
@@ -824,14 +797,6 @@ func remove_power_modifier(key: String) -> void:
 		recompute_power()
 
 
-func clear_power_modifiers() -> void:
-	_continuous_power.clear()
-	_manual_power_delta = 0
-	recompute_power()
-
-
-## Legacy API for temporary buffs: duration > 0 is a timed entry, duration <= 0/null is a permanent manual delta.
-## New continuous effects (auras, conditional power, dynamic power) should use add_power_modifier() with a stable key.
 func power_change(amount, duration):
 	if int(amount) == 0:
 		return
@@ -1261,37 +1226,11 @@ var _energized_colour: Color = Color.WHITE
 ##
 ## The ring is also the thing being extracted next, and it cannot move while the tests are holding onto its fields.
 ## The ring's own flags live just below and remain private; these are the observable behaviour.
-func is_ringed() -> bool:
-	return _highlight_on
-
-## Which meaning is currently winning: "" when nothing is lit, otherwise one of
-## "selected" | "targeted" | "available" | "prompt" | "energized" — the same order _refresh_target_ring() resolves them
-## in, so this cannot disagree with the colour actually drawn.
-func ring_meaning() -> String:
-	if _selected_highlight_on:
-		return "selected"
-	if _targeted_highlight_on:
-		return "targeted"
-	if _available_highlight_on:
-		return "available"
-	if _prompt_glow:
-		return "prompt"
-	if _energized_highlight_on:
-		return "energized"
-	return ""
-
-## Narrower queries, for a caller that cares about one meaning rather than about which one wins.
 func ring_selected() -> bool:
 	return _selected_highlight_on
 
 func ring_targeted() -> bool:
 	return _targeted_highlight_on
-
-func ring_available() -> bool:
-	return _available_highlight_on
-
-func ring_prompt() -> bool:
-	return _prompt_glow
 
 func ring_energized() -> bool:
 	return _energized_highlight_on
@@ -1299,13 +1238,6 @@ func ring_energized() -> bool:
 ## The widths actually on the ring's live material, in metres — (border, glow). Read back from the material rather than
 ## from the constants, so a caller can tell "the green ring really is drawn at half width" from "the constants agree".
 ## Returns zero when there is no material yet (nothing has been lit).
-func ring_widths() -> Vector2:
-	if _border_material == null:
-		return Vector2.ZERO
-	var w: Variant = _border_material.get_shader_parameter("border_width")
-	var g: Variant = _border_material.get_shader_parameter("glow_width")
-	return Vector2(float(w) if w != null else 0.0, float(g) if g != null else 0.0)
-
 func set_prompt_glow(enabled: bool) -> void:
 	_prompt_glow = enabled
 	_refresh_target_ring()
@@ -1577,9 +1509,6 @@ func _card_face_size() -> Vector2:
 ## speaks the canonical is_* criteria plus a direct controller comparison — so the second matcher was deleted rather than
 ## left to drift out of step with the first. See scripts/card_target.gd.
 
-func set_target(value):
-	is_target = value
-	
 func is_type(ntype:String) -> bool:
 	return self.type == ntype
 
@@ -1657,10 +1586,6 @@ func effect_handles_event(event) -> bool:
 
 
 ## Human-readable event name for logs, stack snapshots and tests.
-func effect_event_name() -> String:
-	return EVENTS.name_of(effect_event)
-
-
 func effect_auras() -> Array:
 	var effect_obj = effect()
 	var out: Array = []

@@ -12,6 +12,12 @@ signal cancelled
 const CRYSTAL := preload("res://mana_crystal.tscn")
 
 @export var crystal_height_m: float = 0.11
+## Direct ring radius in metres. 0 keeps the automatic face-based radius; set a positive value to tune it.
+@export var ring_radius_m: float = 0.42
+## How far toward the camera the whole ring sits, so it draws above the Backup instead of under it.
+@export var plane_offset_m: float = 0.10
+## Starting orientation of each picker crystal around its own vertical axis.
+@export var spin_angle_degrees: float = 60.0
 @export var radius_padding_m: float = 0.10
 @export var hover_scale: float = 1.24
 @export var hover_seconds: float = 0.10
@@ -40,10 +46,13 @@ func _build() -> void:
 	var right: Vector3 = cam.global_transform.basis.x.normalized()
 	var up: Vector3 = -cam.global_transform.basis.y.normalized()
 	var basis: Basis = cam.global_transform.basis
-	var center: Vector3 = card.get_global_face_centre()
+	var toward_camera: Vector3 = cam.global_transform.basis.z.normalized()
+	var center: Vector3 = card.get_global_face_centre() + toward_camera * plane_offset_m
 	var scale: Vector3 = card.global_transform.basis.get_scale()
 	var face: float = maxf(0.429 * scale.x, 0.6 * scale.z)
-	var radius: float = face * 0.55 + crystal_height_m * 0.5 + radius_padding_m
+	var radius: float = ring_radius_m
+	if radius <= 0.0:
+		radius = face * 0.55 + crystal_height_m * 0.5 + radius_padding_m
 	var count: int = _elements.size()
 	for i in range(count):
 		var angle: float = -PI * 0.5 + TAU * float(i) / float(count)
@@ -57,6 +66,7 @@ func _build() -> void:
 		crystal.set("idle_spin_deg_per_sec", 0.0)
 		crystal.set("glow_pulse", 0.0)
 		crystal.global_transform = Transform3D(basis, pos)
+		crystal.call("set_spin_angle", spin_angle_degrees)
 		_add_button(crystal, str(_elements[i]))
 		crystals.append(crystal)
 

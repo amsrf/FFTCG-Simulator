@@ -6,7 +6,7 @@ extends Node
 ##
 ##   stage 1 asks for a Forward, stage 2 asks for a Backup, and Confirm only appears once both are chosen.
 ##   Both must be legal to CAST: a board with no Backup makes the Summon illegal (mandatory targets).
-##   Each instruction applies to a specific pick: dull_targets(0), return_targets_to_hand(1).
+##   Each instruction applies to a specific pick: ctx.dull(targets[0]), ctx.return_to_hand([targets[1]]).
 
 const GAME_SCENE := preload("res://game.tscn")
 

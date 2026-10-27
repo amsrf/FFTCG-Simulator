@@ -4,7 +4,7 @@ extends Node
 ##   《Ice》: choose 1 dull Forward, 1000 damage
 ##
 ## The point of this probe is that the criteria do the work: `is_tapped` picks the legal set, `count` allows "up to 2",
-## and `damage_targets` applies to all of them at once.
+## and `ctx.damage` applies to all of them at once.
 
 const GAME_SCENE := preload("res://game.tscn")
 

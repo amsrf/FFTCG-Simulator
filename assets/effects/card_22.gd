@@ -15,7 +15,7 @@ func _ping(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 1000)
 
 func _pump(ctx: EFFECT_CONTEXT) -> void:
-	ctx.source.power_change(1000, 1)
+	ctx.power_change([ctx.source], 1000, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

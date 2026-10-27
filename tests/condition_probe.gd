@@ -10,6 +10,7 @@ extends Node
 ## false to the latch, and a RUNNING one writes true — both are checked here.
 
 const GAME_SCENE := preload("res://game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -83,21 +84,22 @@ func _ready() -> void:
 	target.accumulated_damage = 0
 	_game.set("_targets", [target])
 
-	# Brynhildr HAS been cast in this turn (recorded above), so the guarded 4000 must apply, not 2000.
-	var sazh: Array[Instruction] = [
-		Instruction.new("damage_targets", "game", [4000], "cast_this_turn:Brynhildr"),
-		Instruction.new("damage_targets", "game", [2000], "if_last_did_not_succeed"),
-	]
-	await _run(sazh)
+	# Sazh's real code effect, not a legacy instruction handler.
+	var sazh_source: Card = _game.call("create_card", 13, "player")
+	var sazh_code = load("res://assets/effects/card_13.gd").new()
+	var sazh_ctx = EFFECT_CONTEXT.new(_game, sazh_source, "test")
+	sazh_ctx.targets = [target]
+
+	# Brynhildr HAS been cast in this turn (recorded above), so the guarded 4000 must apply.
+	await sazh_code._sazh(sazh_ctx)
 	print("[Condition] Sazh with Brynhildr cast: %d damage" % target.accumulated_damage)
 	_expect(target.accumulated_damage == 4000, "Sazh deals 4000, not 4000+2000")
 
-	# Next turn: the cast is no longer "this turn", so the else branch applies.
+	# Next turn: the cast is no longer "this turn", so the other branch applies.
 	var turn: int = int(_game.get("turn_number"))
 	_game.set("turn_number", turn + 1)
 	target.accumulated_damage = 0
-	_game.set("_targets", [target])
-	await _run(sazh)
+	await sazh_code._sazh(sazh_ctx)
 	print("[Condition] Sazh next turn: %d damage" % target.accumulated_damage)
 	_expect(target.accumulated_damage == 2000, "and 2000 once the cast is no longer this turn")
 

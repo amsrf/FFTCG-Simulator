@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## `cannot_attack` probe — Time Mage 1-049C, "Choose 1 Forward. It cannot attack this turn."
 ##
 ## Two things this has to prove, because they are easy to conflate:
@@ -40,8 +41,8 @@ func _ready() -> void:
 	_expect(card.can_attack(), "a normal untapped Forward can attack")
 
 	# The debuff, applied exactly as the card data applies it.
-	_game.set("_targets", [card])
-	_game.add_status_to_targets("cannot_attack", 1)
+	var ctx = EFFECT_CONTEXT.new(_game, card, "test")
+	ctx.add_status([card], "cannot_attack", 1)
 
 	_expect(not card.can_attack(), "with cannot_attack it can no longer attack")
 	_expect(card.can_tap(), "but it can still be DULLED — the card restricts attacking, not tapping")

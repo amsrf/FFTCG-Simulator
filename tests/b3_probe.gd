@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## B3: targeting priority, conditional protection, two-player choices, Break-Zone search, and return protection.
 
 const GAME_SCENE := preload("res://game.tscn")
@@ -171,9 +172,8 @@ func _ready() -> void:
 	var hand_copy: Card = _off_field(GILGAMESH, "player")
 	_game.player.hand.add_card(hand_copy)
 	var hand_before: int = _game.player.hand.cards.size()
-	_game.set("_current_source_card", foe_summon_3)
-	_game.set("_targets", [gilgamesh])
-	await _game.return_targets_to_hand()
+	var ctx = EFFECT_CONTEXT.new(_game, foe_summon_3, "test")
+	await ctx.return_to_hand([gilgamesh])
 	_expect(gilgamesh.is_on_field(), "an opponent's Summon cannot return Gilgamesh")
 	_expect(_game.player.hand.cards.size() == hand_before, "and no card is added to hand")
 	var gil_rules: Dictionary = load("res://assets/effects/card_207.gd").new().static_rules()

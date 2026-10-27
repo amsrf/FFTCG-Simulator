@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## FRAGILE probe — "if it is put from the field into the Break Zone this turn, remove it from the game instead".
 ##
 ## Fragile is a REPLACEMENT effect: the card must never reach the Break Zone. So the checks are that it ends up in the
@@ -47,11 +48,11 @@ func _ready() -> void:
 	# --- the Bahamut shape: fragile FIRST, then lethal damage -------------------------------------------
 	var a: Card = _new_forward()
 	var b: Card = _new_forward()
-	_game.set("_targets", [a, b])
-	_game.add_status_to_targets("fragile", 1)
+	var ctx = EFFECT_CONTEXT.new(_game, a, "test")
+	ctx.add_status([a, b], "fragile", 1)
 	_expect(a.status_effects.has("fragile") and b.status_effects.has("fragile"),
 		"both targets are fragile before the damage")
-	_game.damage_targets(10000)
+	ctx.damage([a, b], 10000)
 
 	_expect(not a.is_on_field() and not b.is_on_field(), "both died to the damage")
 	_expect(removed.graveyard_cards.has(a) and removed.graveyard_cards.has(b),
@@ -68,8 +69,8 @@ func _ready() -> void:
 
 	# --- a card WITHOUT fragile still goes to the Break Zone as usual -----------------------------------
 	var c: Card = _new_forward()
-	_game.set("_targets", [c])
-	_game.damage_targets(10000)
+	var ctx_c = EFFECT_CONTEXT.new(_game, c, "test")
+	ctx_c.damage([c], 10000)
 	_expect(grave.graveyard_cards.has(c), "an ordinary card still goes to the Break Zone")
 
 	# --- the code shape ----------------------------------------------------------------------------------

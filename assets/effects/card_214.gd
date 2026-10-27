@@ -15,7 +15,7 @@ func event_matches(event: int, source: Card, data: Dictionary) -> bool:
 
 
 func summon_cast(ctx: EFFECT_CONTEXT) -> void:
-	var turn: int = int(ctx.game.get("turn_number")) if ctx.game != null else 0
+	var turn: int = ctx.turn_number()
 	if not ctx.source.claim_event_once("yuna_summon_draw", turn):
 		return
 	if not await ctx.may("Dull Yuna to draw 1"):

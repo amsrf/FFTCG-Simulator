@@ -120,6 +120,17 @@ func _process(delta: float) -> void:
 	_angle = fposmod(_angle + _spin_speed * delta, 360.0)
 	_spin_node.rotation.y = deg_to_rad(_angle)
 
+## Place the crystal at a specific orientation. The picker uses this to start its buttons at 60 degrees; the
+## payment row keeps advancing from wherever it already is.
+func set_spin_angle(degrees: float) -> void:
+	_angle = fposmod(degrees, 360.0)
+	if _spin_node != null:
+		_spin_node.rotation.y = deg_to_rad(_angle)
+
+
+func spin_angle_degrees() -> float:
+	return _angle
+
 ## True when this crystal has no element of its own — a wild "any colour" slot, drawn white.
 func is_wild() -> bool:
 	return element_index(element) < 0

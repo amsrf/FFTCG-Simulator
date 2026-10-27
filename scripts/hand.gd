@@ -59,7 +59,7 @@ signal effect_card_selection_changed(has_selection: bool)
 ## five cards would have to track five pairs. The landing callback is a step INSIDE the chain, which is why the
 ## slide is split at return_land_fraction rather than scheduled by a second tween.
 ##
-## MULTI-TARGET: the caller starts every card's tween before awaiting any of them (see Game.return_targets_to_hand),
+## MULTI-TARGET: the caller starts every card's tween before awaiting any of them (see EffectContext.return_to_hand),
 ## so they fly at the same time instead of one after another.
 func begin_return_card(card: Card) -> Tween:
 	if card == null or not is_instance_valid(card):

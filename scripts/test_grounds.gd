@@ -71,6 +71,7 @@ const WAKKA_TARGET := 182  # Cloud, a Forward with abilities to nullify.
 const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or damage the chosen Forward.
 const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
 const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
+const COSMOS := 183      # Cosmos, an any-colour Backup: opens the radial crystal picker.
 
 
 static func clean() -> Dictionary:
@@ -266,6 +267,18 @@ static func cecil_damage() -> Dictionary:
 	return cfg
 
 
+static func cosmos_mana() -> Dictionary:
+	## MULTI-COLOUR MANA. Cosmos is the only source you need: start paying Ifrit, click Cosmos, and the eight
+	## colour crystals appear around it. The opponent has one legal Ifrit target so the Summon can actually be cast.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_cosmos"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": COSMOS}]
+	cfg["player_hand"] = [IFRIT]
+	cfg["opponent_field"] = [{"id": ICE_A}]
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -319,6 +332,10 @@ const GROUNDS := {
 		"title": "Ground: Wakka 216 (nullify abilities)",
 		"blurb": "Attack with Wakka to pump a Forward per controlled Forward, or use Status Reels (S + water) on Cloud: it loses all abilities and its power becomes 1000 until end of turn.",
 	},
+	"cosmos": {
+		"title": "Ground: Cosmos 183 (any-colour mana)",
+		"blurb": "Play Ifrit from hand and start paying. Click Cosmos: eight small crystals appear around it, evenly spaced. Hover to grow one, click to generate that colour. Then target Squall.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -351,6 +368,8 @@ static func config(name: String) -> Dictionary:
 			return kimahri_copy()
 		"wakka":
 			return wakka_status()
+		"cosmos":
+			return cosmos_mana()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()
@@ -372,6 +391,7 @@ const CATEGORY_OF := {
 	"gilgamesh_backup": "Card Effects",
 	"kimahri": "Card Effects",
 	"wakka": "Card Effects",
+	"cosmos": "Card Effects",
 	"break_zone": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",

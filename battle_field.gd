@@ -5,6 +5,7 @@ class_name Field
 const CARD_CHARGE = 1
 const RULES := preload("res://scripts/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
+const CARD_TARGET := preload("res://scripts/card_target.gd")
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
 var rules = null
@@ -150,6 +151,10 @@ func _ensure_preview() -> void:
 func show_card_preview(card: Card) -> void:
 	if card == null or not is_instance_valid(card):
 		return
+	# The radial mana picker is itself the focus: a large hover preview would cover the crystals and the card
+	# they belong to.
+	if mana_choice != null and is_instance_valid(mana_choice):
+		return
 	_ensure_preview()
 	if _preview == null:
 		return
@@ -233,101 +238,6 @@ func preview_card() -> Card:
 func preview_visible() -> bool:
 	return _preview != null and is_instance_valid(_preview) and _preview.visible
 
-class AuraValue:
-	var method: String
-	var targets: Dictionary  # Changed from Array[String] to Dictionary
-	var value: int
-	## For method == "grant_status": the keyword/status this aura grants ("first_strike", "haste", ...).
-	var status: String
-	## THE CARD THAT GRANTED IT, held so auras can be found by their source instead of by a dictionary key equal to the
-	## source's instance id — which is what limited a card to one aura: a second entry under the same key overwrote the
-	## first before anything had applied it, and the teardown only ever undid the survivor.
-	var source: Card = null
-	## Stable ledger key for a power contribution. Two auras on one card must not share it.
-	var key: String = ""
-	## Optional code-defined predicate, called with the source card.
-	var condition: Callable
-	## The cards this aura has ALREADY been applied to. Without it the same card can be reached twice — a card arriving
-	## runs add_all_auras_to_card(), and an aura arriving runs activate_aura_in_field() over everything — and a
-	## power_change applied twice is permanent, silent, and only visible as a wrong number much later.
-	var granted: Dictionary = {}
-
-	func _init(p_method: String, p_targets: Dictionary, p_value: int = 0, p_status: String = ""):
-		method = p_method
-		targets = p_targets
-		value = p_value
-		status = p_status
-
-
-## Every aura, each under its OWN id. This was a Dictionary keyed by the source card's instance id, so a card that granted
-## two things kept only the last one. No card in the data has two auras today — which is exactly why it was worth fixing
-## before one does, since the failure would be a silently missing bonus rather than an error.
-var _auras: Dictionary[int, AuraValue] = {}
-var _next_aura_id: int = 1
-
-func add_aura(aura: Dictionary, source: Card) -> AuraValue:
-	var aura_value := AuraValue.new(str(aura.get('method', '')), aura.get('targets', {}),
-		int(aura.get('value', 0)), str(aura.get('status', '')))
-	aura_value.source = source
-	aura_value.key = "aura:%d:%d" % [source.get_instance_id(), _next_aura_id]
-	_auras[_next_aura_id] = aura_value
-	_next_aura_id += 1
-	return aura_value
-
-
-func add_aura_spec(spec, source: Card) -> AuraValue:
-	if spec is Dictionary:
-		return add_aura(spec, source)
-	var data: Dictionary = spec.as_rule() if spec != null and spec.has_method("as_rule") else {}
-	var aura_value := AuraValue.new(str(data.get("method", "")), data.get("targets", {}),
-		int(data.get("value", 0)), str(data.get("status", "")))
-	aura_value.source = source
-	aura_value.condition = data.get("condition", Callable())
-	aura_value.key = "aura:%d:%d" % [source.get_instance_id(), _next_aura_id]
-	_auras[_next_aura_id] = aura_value
-	_next_aura_id += 1
-	return aura_value
-	
-func activate_aura_in_field(aura:AuraValue):
-	var all_cards: Array[Card] = get_all_cards()
-	for card:Card in all_cards:
-		add_aura_to_card(aura,card)
-
-## APPLIED AT MOST ONCE PER CARD. `granted` is the guard; it is also the exact record the teardown needs, so taking the
-## bonus back does not have to re-derive which cards it went to from the target test.
-##
-## Routed through the SAME evaluator as choose_target (scripts/card_target.gd), so an aura and an effect mean the same
-## thing by "type: Forward, controller: player" — and an aura can now say `exclude` or `is_named` too, which the old
-## does_card_match_target() could not express at all.
-const CARD_TARGET := preload("res://scripts/card_target.gd")
-
-func add_aura_to_card(aura: AuraValue, card: Card):
-	# `aura.source` is the card GRANTING the aura, so "your Fire Forwards" is read from its controller — not from a
-	# fixed seat. An AI-owned aura would otherwise buff the human's board.
-	if aura.source != null and (not is_instance_valid(aura.source) or not aura.source.abilities_enabled()):
-		return
-	if aura.source != null and not aura.source.is_on_field():
-		return
-	if aura.condition.is_valid() and not bool(aura.condition.call(aura.source)):
-		return
-	if not CARD_TARGET.matches(card, aura.targets, aura.source):
-		return
-	if aura.granted.has(card):
-		return
-	aura.granted[card] = true
-	if aura.method == 'power_change':
-		# Add a CONTINUOUS entry, not a delta to the cached number. Revoking this key later removes exactly this
-		# aura's contribution, even if another aura or temporary buff is present.
-		card.add_power_modifier(aura.key, aura.value)
-	elif aura.method == 'grant_status' and not aura.status.is_empty():
-		# Keywords from a continuous effect ("the Standard Unit Forwards gain First Strike"). Counted, so two
-		# sources can grant the same keyword and one leaving does not revoke the other's.
-		card.grant_status(aura.status)
-				
-func add_all_auras_to_card(card:Card):
-	for aura in _auras.values():
-		add_aura_to_card(aura,card)		
-
 func begin_mana_choice(card: Card) -> void:
 	# Sync entry point: the actual choice is a coroutine, and calling it directly from a click handler would raise
 	# "Trying to call an async function without await". The deferred call starts it safely.
@@ -356,6 +266,7 @@ func open_mana_choice(card: Card, elements: Array) -> String:
 		return str(elements[0])
 	if mana_choice != null and is_instance_valid(mana_choice):
 		mana_choice.queue_free()
+	hide_card_preview()
 	mana_choice = MANA_CHOICE.instantiate()
 	get_parent().add_child(mana_choice)
 	var state: Dictionary = {"picked": "", "done": false}
@@ -1603,19 +1514,6 @@ func _conditional_holds(rule: Dictionary, source: Card) -> bool:
 	return false
 
 
-func recompute_conditional_power() -> void:
-	# Compatibility entry point. All continuous work now happens in one field scan.
-	refresh_continuous_effects()
-
-
-## Compatibility entry point: continuous work now happens in one field scan.
-func recompute_power_per() -> void:
-	refresh_continuous_effects()
-
-
-## Is the condition true FOR THIS SOURCE CARD? The source is the card that owns the conditional ("if you control
-## Aerith" belongs to Zack), because "you" means its controller — without it the criteria would be read literally
-## against a fixed seat, which is the bug that made an AI-owned card check the human's board.
 func _condition_met(condition: Dictionary, source: Card = null) -> bool:
 	if condition.is_empty():
 		return false
@@ -1627,77 +1525,10 @@ func _condition_met(condition: Dictionary, source: Card = null) -> bool:
 ## AURAS — continuous effects a card grants to OTHERS while it is on the field ("your Fire Forwards gain +1000 power",
 ## card 1-030R). Not the same thing as `conditional_power`, which a card applies to ITSELF when a condition holds.
 ##
-## THE SYSTEM WAS ALREADY HERE AND WAS SIMPLY NEVER CALLED. `AuraValue`, `add_aura`, `activate_aura_in_field`,
-## `add_aura_to_card`, `add_all_auras_to_card`, and `Card.does_card_match_target()` — which reads exactly the
-## {type, controller, element} block the JSON uses — were all present and correct. Nothing invoked any of them, so
-## 1-030R's effect was loaded, stored, and changed no number at all. That is the whole bug.
-##
-## So this is the WIRING, not a second implementation. Two entry points, one per direction:
-##
-##   * a card ARRIVES: it receives every aura already on the field, and if it has an aura of its own, that one is
-##     registered and applied to everything already there;
-##   * a card LEAVES: its auras are removed, and whatever they granted is taken back off the cards they matched.
-##
-## The accounting is one-shot per (aura, card) pair — applied when the card arrives or when the aura arrives, never
-## recomputed in a loop — because that is the shape the existing helpers have, and re-applying in a loop is how a total
-## like this ratchets upward every time the field changes.
-func register_card_auras(card: Card) -> void:
-	# ALREADY REGISTERED IS NOT AN ERROR. This runs both when a card is parented into the field (Card._executeAuraEffects)
-	# and when it is played (play_card). Registering twice would create a SECOND AuraValue for the same effect, and since
-	# each one keeps its own `granted` record the guard inside add_aura_to_card() would NOT deduplicate them — the bonus
-	# would be applied twice. One aura per card per effect, and this is what makes that true.
-	for id in _auras:
-		if _auras[id].source == card:
-			return
-	# ADD THE AURA AND ACTIVATE IT, one id per aura. Keyed by the card's instance id, a card granting two things kept only
-	# the second — the first was overwritten in the dictionary before anything applied it.
-	# CODE AURAS WIN over a JSON aura list for the same card, exactly like activated abilities. A card can be migrated
-	# without keeping a duplicate definition in card_effects.json.
-	var code_auras: Array = card.effect_auras()
-	if not code_auras.is_empty():
-		for spec in code_auras:
-			if spec != null:
-				activate_aura_in_field(add_aura_spec(spec, card))
-	else:
-		if "aura" in card.card_effects:
-			for effect in card.card_effects["aura"]:
-				activate_aura_in_field(add_aura(effect, card))
-	add_all_auras_to_card(card)
-	refresh_auras()
+## THE LEGACY AURA REGISTRY IS GONE. Auras are no longer stored on Field and applied/revoked manually: every
+## continuous effect — auras, conditional power, dynamic power, granted statuses — is collected by one board scan in
+## refresh_continuous_effects() and diffed against _continuous_ledger.
 
-## EVERY aura onto EVERY card, on every field change. This looks redundant next to the two calls above and is not: it is
-## what makes the result independent of the ORDER things arrive in. Which aura a card picks up depended on whether the
-## card was already down when the aura arrived (activate_aura_in_field) or arrived afterwards
-## (add_all_auras_to_card), and a card that was on the field before the aura could miss out entirely.
-##
-## It is safe to run repeatedly only because AuraValue.granted makes add_aura_to_card() a no-op for a card it has already
-## been applied to — without that guard this would stack a fresh +1000 on every field change.
-func refresh_auras() -> void:
-	refresh_continuous_effects()
-
-
-## Undo exactly what an aura granted. Used both when its source leaves and while its source is ability-nullified.
-func _revoke_aura(aura: AuraValue) -> void:
-	for other in aura.granted.keys():
-		if not is_instance_valid(other):
-			continue
-		if aura.method == "power_change":
-			other.remove_power_modifier(aura.key)
-		elif aura.method == "grant_status" and not aura.status.is_empty():
-			other.revoke_status(aura.status)
-	aura.granted.clear()
-
-func unregister_card_auras(card: Card) -> void:
-	# EVERY aura this card granted — not the single entry a key-per-card dictionary could hold.
-	var keys: Array = []
-	for id in _auras:
-		if _auras[id].source == card:
-			keys.append(id)
-	for id in keys:
-		var aura: AuraValue = _auras[id]
-		_auras.erase(id)
-		_revoke_aura(aura)
-	
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their
 	# current power. A card at 0 power is handled separately (it is put into

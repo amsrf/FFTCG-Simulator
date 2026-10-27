@@ -44,6 +44,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 	var choice = _field.get("mana_choice")
 	_expect(choice != null and is_instance_valid(choice), "clicking a multi-colour source opens the radial picker")
+	_field.show_card_preview(_card)
+	_expect(not _field.preview_visible(),
+		"and the large card preview stays off while the crystals are being picked")
 	var crystals: Array = choice.get("crystals") if choice != null else []
 	_expect(crystals.size() == 8, "one crystal per available colour")
 
@@ -65,6 +68,16 @@ func _ready() -> void:
 		var next: float = angles[(i + 1) % angles.size()] + (TAU if i == angles.size() - 1 else 0.0)
 		gaps.append(next - angles[i])
 	_expect(_all_close(gaps, TAU / 8.0, 0.02), "and are equally spaced in angle")
+	var toward_camera: Vector3 = cam.global_transform.basis.z.normalized()
+	var depths: Array[float] = []
+	var angles_ok: bool = true
+	for crystal in crystals:
+		depths.append(((crystal as Node3D).global_position - center).dot(toward_camera))
+		if absf(float(crystal.call("spin_angle_degrees")) - 60.0) > 0.01:
+			angles_ok = false
+	_expect(_all_close(depths, depths[0], 0.001) and depths[0] > 0.0,
+		"the whole ring sits in one plane, toward the camera rather than under the card")
+	_expect(angles_ok, "each picker crystal starts 60 degrees around its own vertical axis")
 	var still: bool = true
 	for crystal in crystals:
 		if absf(float(crystal.get("spin_deg_per_sec"))) > 0.001 \

@@ -3,6 +3,17 @@
 All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
+### Effect API Cleanup
+
+- Deleted legacy duplicate Game handlers: `return_targets_to_hand`, `power_change_targets`,
+  `add_status_to_targets`, `damage_targets`.
+- Deleted the old Field aura registry (`AuraValue`, `_auras`, `add_aura*`, `register_card_auras`,
+  `refresh_auras`); auras now exist only in the continuous-effect ledger.
+- Migrated probes to `EffectContext` and `Card.extra_auras`, so tests exercise the production path.
+- Added reveal/return wrappers to `EffectContext`; return protection is enforced there.
+- Removed the matching stale entries from `assets/card_effects.json` definitions.
+- Dead-code audit: zero unreferenced Game/Field/Card functions and zero data-only Game handlers.
+
 
 ### Code-Defined Card Effects (migration started)
 

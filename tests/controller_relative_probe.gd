@@ -1,4 +1,5 @@
 extends Node
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## WHO IS "THE OPPONENT"? probe.
 ##
 ## A card that says "choose 1 Forward opponent controls" means the opponent OF ITS CONTROLLER, not a fixed seat. The
@@ -99,11 +100,12 @@ func _ready() -> void:
 	# --- an AI-owned AURA buffs its own side -------------------------------------------------------------------
 	var mine_before: int = mine.power
 	var theirs_before: int = theirs.power
-	var aura = _field.call("add_aura",
-		{"method": "power_change", "targets": {"is_type": "Forward", "controller": "player"}, "value": 1000},
-		theirs)
-	_field.call("add_aura_to_card", aura, mine)
-	_field.call("add_aura_to_card", aura, theirs)
+	theirs.extra_auras.append({
+		"method": "power_change",
+		"targets": {"is_type": "Forward", "controller": "player"},
+		"value": 1000,
+	})
+	_field.refresh_continuous_effects()
 	_expect(theirs.power == theirs_before + 1000,
 		"an AI-owned aura buffs the AI's Forward (%d -> %d)" % [theirs_before, theirs.power])
 	_expect(mine.power == mine_before,
