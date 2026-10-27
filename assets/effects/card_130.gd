@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-130C Black Mage
 
 
@@ -14,7 +16,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"雷": 2}
 		tap = true
 		sacrifice = {"is_source": true}
-		targets = {"is_type": "Forward", "is_damaged": true}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").damaged(true))
 
 	func on_resolve(ctx) -> void:
 		await _owner._break_target(ctx)

@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-028 enter-the-field ability
 
 
@@ -22,7 +24,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《Fire》《1》《Dull》: Choose 1 Lann. It gains +1000 power until the end of the turn."
 		cost = {"火": 1, "neutral": 1}
 		tap = true
-		targets = {"is_named": "Lann"}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().named("Lann"))
 		target_count = 1
 
 	func on_resolve(ctx) -> void:

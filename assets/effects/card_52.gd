@@ -1,19 +1,19 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
+const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
 ## 1-052R Hades
 
 
 func cast_target_criteria(_ctx) -> Variant:
-	return [
-		{"is_type": "Forward", "controller": "opponent"},
-		{"is_type": "Backup", "controller": "opponent"},
-	]
+	return TARGET_SEQUENCE.new([TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").controlled_by(CARD_QUERY.Controller.OPPONENT))])
 
 
 func when_cast(ctx) -> void:
-	var targets: Array = await ctx.cast_targets([
-		{"is_type": "Forward", "controller": "opponent"},
-		{"is_type": "Backup", "controller": "opponent"},
-	])
+	var targets: Array = await ctx.cast_targets(TARGET_SEQUENCE.new([
+		TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)),
+		TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").controlled_by(CARD_QUERY.Controller.OPPONENT)),
+	]))
 	if targets.size() < 2:
 		return
 	ctx.dull([targets[0]])

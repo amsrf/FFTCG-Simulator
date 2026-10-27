@@ -1,13 +1,15 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-106C Golem
 
 
 func cast_target_criteria(_ctx) -> Variant:
-	return {"is_type": "Forward"}
+	return TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
 
 func when_cast(ctx) -> void:
-	var targets: Array = await ctx.cast_targets({"is_type": "Forward"})
+	var targets: Array = await ctx.cast_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
 	if targets.is_empty():
 		return
 	var blocking: bool = targets[0].status_effects.has("blocking")

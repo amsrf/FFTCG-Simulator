@@ -85,7 +85,7 @@ func _ready() -> void:
 	if abilities.size() == 1:
 		var spec = abilities[0]
 		_expect(spec.tap, "activating it dulls the Backup")
-		_expect(spec.targets is Dictionary, "and it chooses a Forward")
+		_expect(spec.targets != null and spec.targets.to_legacy().get("is_type") == "Forward", "and it chooses a Forward")
 		_expect(spec.run.is_valid(), "with a callable effect handler")
 		_expect(spec.cost.has("氷"), "and its mana cost is part of the descriptor")
 

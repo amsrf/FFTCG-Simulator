@@ -1,9 +1,11 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-112R Delita
 
 
 func when_enter_field(ctx) -> void:
-	var targets: Array = await ctx.choose_targets({"is_character": true, "controller": "player"})
+	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().character(true).controlled_by(CARD_QUERY.Controller.PLAYER)))
 	if targets.is_empty():
 		return
 	ctx.break_cards(targets)
@@ -22,7 +24,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "Northswain's Strike 《S》《Earth》: Choose 1 Forward blocking Delita. Break it."
 		cost = {"土": 1}
 		s_cost = true
-		targets = {"is_type": "Forward", "is_blocking": true}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").blocking(true))
 		target_count = 1
 
 	func on_resolve(ctx) -> void:

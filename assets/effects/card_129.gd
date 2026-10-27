@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 
 func keywords() -> Array[String]:
@@ -23,7 +25,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {}
 		tap = true
 		s_cost = true
-		targets = {"is_type": "Forward"}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 		target_count = 1
 
 	func on_resolve(ctx) -> void:

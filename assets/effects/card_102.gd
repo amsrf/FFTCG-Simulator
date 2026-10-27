@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-102H Kimahri
 
 
@@ -14,7 +16,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "Ronso Rage 《S》《土》《土》: Choose 1 opponent Forward with a Special Ability. Kimahri gains it, usable once for free."
 		s_cost = true
 		cost = {"土": 2}
-		targets = {"is_type": "Forward", "controller": "opponent", "has_special_ability": true}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).with_special_ability(true))
 
 	func on_resolve(ctx) -> void:
 		await _owner._copy_special(ctx)

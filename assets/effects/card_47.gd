@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-047R Terra
 ## 《Ice》: Choose 1 dull Forward. Deal it 1000 damage.
 
@@ -9,9 +11,7 @@ func _ice_shot(ctx) -> void:
 	ctx.damage(ctx.targets, 1000)
 
 func when_enter_field(ctx) -> void:
-	var targets: Array = await ctx.choose_targets({
-		"is_type": "Forward", "controller": "opponent", "is_tapped": true,
-	}, 2)
+	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(true)).up_to(2))
 	ctx.damage(targets, 4000)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -20,7 +20,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《氷》: Choose 1 dull Forward. Deal it 1000 damage."
 		cost = {"氷": 1}
 		tap = false
-		targets = {"is_type": "Forward", "is_tapped": true}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").tapped(true))
 
 	func on_resolve(ctx) -> void:
 		await _owner._ice_shot(ctx)

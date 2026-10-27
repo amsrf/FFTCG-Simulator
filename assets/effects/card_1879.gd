@@ -1,9 +1,11 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 21-021C Red Mage
 
 
 func when_party_attack(ctx) -> void:
-	var targets: Array = await ctx.choose_targets({"is_character": true})
+	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().character(true)))
 	if targets.is_empty():
 		return
 	ctx.dull(targets)

@@ -84,7 +84,7 @@ func _ready() -> void:
 	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(load("res://assets/effects/card_23.gd").new().ex_burst_event() == "when_cast",
 		"Brynhildr (23) is EX BURST -> when_cast")
-	_expect(load("res://assets/effects/card_39.gd").new().cast_target_criteria(null).get("is_tapped") == true,
+	_expect(load("res://assets/effects/card_39.gd").new().cast_target_criteria(null).to_legacy().get("is_tapped") == true,
 		"Shiva (39) targets a DULL Forward")
 	_expect("first_strike" in load("res://assets/effects/card_44.gd").new().keywords(), "Sephiroth (44) has First Strike")
 	var chick_specs: Array = load("res://assets/effects/card_19.gd").new().activated_abilities()

@@ -160,11 +160,12 @@ Added the typed target layer:
 
 `EffectContext.choose_targets()` / `cast_targets()` and `Field.has_viable_target()`
 accept typed requests directly. The old dictionary blocks remain the internal
-exchange format during migration, and `TargetRequest.to_legacy()` is the single
-adapter.
+exchange format, and `TargetRequest.to_legacy()` is the single adapter.
 
-Card 8's ability is the first converted card; remaining target call sites still
-use the legacy dictionary and can be migrated incrementally.
+All 96 target call sites are converted: ability target metadata, ETB/event
+`choose_targets()`, Summon `cast_targets()`, `cast_target_criteria()`, count
+arguments, stack targeting, and Hades-style staged sequences. No legacy target
+dictionary remains in `assets/effects/`.
 
 ### Activated Abilities Are Code Classes
 

@@ -39,7 +39,7 @@ func _ready() -> void:
 	var g128 = load("res://assets/effects/card_128.gd").new().activated_abilities()[0]
 	_expect(g128.s_cost and bool(g128.only_your_turn), "Gilgamesh 128 keeps its S cost and turn restriction")
 	var b102 = load("res://assets/effects/card_102.gd").new().activated_abilities()[0]
-	_expect(b102.s_cost and b102.targets.get("has_special_ability", false),
+	_expect(b102.s_cost and b102.targets.to_legacy().get("has_special_ability", false),
 		"Kimahri 102 still targets only Special Ability Forwards")
 	var b200 = load("res://assets/effects/card_200.gd").new().activated_abilities()[0]
 	_expect(b200.as_skill_dict().get("choose_target", {}).get("count", 1) == 2,

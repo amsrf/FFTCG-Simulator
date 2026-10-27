@@ -1,9 +1,11 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-058L Laguna
 
 
 func when_cause_damage_to_player(ctx) -> void:
-	var targets: Array = await ctx.choose_targets({"is_type": "Forward", "is_tapped": true})
+	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").tapped(true)))
 	if targets.is_empty():
 		return
 	if await ctx.may("Deal 7000"):
@@ -22,7 +24,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage."
 		cost = {"氷": 2}
 		s_cost = true
-		targets = {"is_type": "Forward", "is_tapped": true}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").tapped(true))
 		target_count = 1
 
 	func on_resolve(ctx) -> void:

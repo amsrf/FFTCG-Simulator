@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-049C Time Mage
 ## 《Ice》《1》《Dull》: Choose 1 Forward. It cannot attack this turn.
 
@@ -14,7 +16,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《氷》《1》《Dull》: Choose 1 Forward. It cannot attack this turn."
 		cost = {"氷": 1, "neutral": 1}
 		tap = true
-		targets = {"is_type": "Forward"}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
 	func on_resolve(ctx) -> void:
 		await _owner._stop_forward(ctx)

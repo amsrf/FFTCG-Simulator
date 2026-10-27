@@ -96,7 +96,7 @@ func _ready() -> void:
 	if spec != null:
 		_expect(int(spec.cost.get("氷", 0)) == 1, "it costs one ice")
 		_expect(not spec.tap, "and does not dull her")
-		_expect(spec.targets is Dictionary and bool(spec.targets.get("is_tapped", false)),
+		_expect(spec.targets != null and bool(spec.targets.to_legacy().get("is_tapped", false)),
 			"it targets a dull Forward")
 		_expect(spec.run.is_valid(), "with a callable damage handler")
 

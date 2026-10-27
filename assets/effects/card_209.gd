@@ -1,4 +1,6 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-209C Red Mage
 
 
@@ -13,7 +15,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《雷》《Dull》: Choose 1 attacking Lightning Forward. It gains First Strike."
 		cost = {"雷": 1}
 		tap = true
-		targets = {"is_type": "Forward", "is_attacking": true, "is_element": "雷"}
+		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").attacking(true).of_element("雷"))
 
 	func on_resolve(ctx) -> void:
 		await _owner._first_strike_target(ctx)
