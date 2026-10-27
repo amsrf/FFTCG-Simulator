@@ -3,15 +3,16 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《氷》《氷》《Dull》: Deal 1000 damage to all opponent Forwards.",
-			"cost": {"氷": 2},
-			"tap": true,
-			"run": Callable(self, "_activate"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _activate(ctx) -> void:
 	ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent"}), 1000)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《氷》《氷》《Dull》: Deal 1000 damage to all opponent Forwards."
+		cost = {"氷": 2}
+		tap = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._activate(ctx)

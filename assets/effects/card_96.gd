@@ -3,15 +3,16 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Put 1 Backup into the Break Zone: Mystic gains +3000 power until the end of the turn.",
-			"cost": {},
-			"sacrifice": {"is_type": "Backup", "controller": "player"},
-			"run": Callable(self, "_self_pump"),
-		}),
-	]
-
+	return [Ability0.new(self)]
 func _self_pump(ctx) -> void:
 	ctx.source.power_change(3000, 1)
 
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Put 1 Backup into the Break Zone: Mystic gains +3000 power until the end of the turn."
+		cost = {}
+		sacrifice = {"is_type": "Backup", "controller": "player"}
+
+	func on_resolve(ctx) -> void:
+		await _owner._self_pump(ctx)

@@ -6,26 +6,7 @@ func keywords() -> Array[String]:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all Forwards opponent controls.",
-			"cost": {"neutral": 1},
-			"tap": true,
-			"s_cost": true,
-			"run": Callable(self, "_skill_0"),
-		}),
-		_ability({
-			"text": "Omnislash 《S》《3》《Dull》: Choose 1 Forward. Break it.",
-			"cost": {"neutral": 3},
-			"tap": true,
-			"s_cost": true,
-			"targets": {"is_type": "Forward"},
-			"target_count": 1,
-			"run": Callable(self, "_skill_1"),
-		}),
-	]
-
-
+	return [Ability0.new(self), Ability1.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent"}), 4000)
 
@@ -33,3 +14,27 @@ func _skill_1(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	if not targets.is_empty():
 		ctx.break_cards(targets)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all Forwards opponent controls."
+		cost = {"neutral": 1}
+		tap = true
+		s_cost = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)
+
+class Ability1 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Omnislash 《S》《3》《Dull》: Choose 1 Forward. Break it."
+		cost = {"neutral": 3}
+		tap = true
+		s_cost = true
+		targets = {"is_type": "Forward"}
+		target_count = 1
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_1(ctx)

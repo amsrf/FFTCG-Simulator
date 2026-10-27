@@ -2,16 +2,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Shout 《S》《Lightning》: Until the end of the turn, Ramza gains +2000 power, Haste and First Strike.",
-			"cost": {"雷": 1},
-			"s_cost": true,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.power_change([ctx.source], 2000, 1)
 	ctx.add_status([ctx.source], "haste", 1)
@@ -19,3 +10,13 @@ func _skill_0(ctx) -> void:
 
 func power_per_rules() -> Array:
 	return [{"count": {"is_type": "Backup", "controller": "player"}, "value": 1000}]
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Shout 《S》《Lightning》: Until the end of the turn, Ramza gains +2000 power, Haste and First Strike."
+		cost = {"雷": 1}
+		s_cost = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

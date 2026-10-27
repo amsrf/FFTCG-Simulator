@@ -3,16 +3,17 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《Lightning》, put Ricard into the Break Zone: Choose 1 Forward. It cannot be broken this turn.",
-			"cost": {"雷": 1},
-			"sacrifice": {"is_source": true},
-			"targets": {"is_type": "Forward"},
-			"run": Callable(self, "_unbreakable_target"),
-		}),
-	]
-
+	return [Ability0.new(self)]
 func _unbreakable_target(ctx) -> void:
 	ctx.add_status(ctx.targets, "unbreakable", 1)
 
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《Lightning》, put Ricard into the Break Zone: Choose 1 Forward. It cannot be broken this turn."
+		cost = {"雷": 1}
+		sacrifice = {"is_source": true}
+		targets = {"is_type": "Forward"}
+
+	func on_resolve(ctx) -> void:
+		await _owner._unbreakable_target(ctx)

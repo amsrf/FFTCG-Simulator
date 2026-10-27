@@ -9,16 +9,17 @@ func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《Dull》: Draw 1 card, then discard 1 card from your hand.",
-			"cost": {},
-			"tap": true,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.draw(ctx.owner_id, 1)
 	await ctx.discard(ctx.owner_id, 1)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《Dull》: Draw 1 card, then discard 1 card from your hand."
+		cost = {}
+		tap = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

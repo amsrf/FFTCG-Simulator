@@ -19,15 +19,16 @@ func _may_deal_6000(ctx) -> void:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn.",
-			"cost": {"氷": 1},
-			"s_cost": true,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.add_status([ctx.source], "first_strike", 1)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Renzokuken 《S》《Ice》: Squall gains First Strike until the end of the turn."
+		cost = {"氷": 1}
+		s_cost = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

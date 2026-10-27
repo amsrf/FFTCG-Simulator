@@ -7,14 +7,15 @@ func when_attack(ctx) -> void:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《Lightning》《Lightning》: Orlandeau gains Haste until the end of the turn.",
-			"cost": {"雷": 2},
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.add_status([ctx.source], "haste", 1)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《Lightning》《Lightning》: Orlandeau gains Haste until the end of the turn."
+		cost = {"雷": 2}
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

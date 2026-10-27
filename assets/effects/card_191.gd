@@ -8,16 +8,17 @@ func when_enter_field(ctx) -> void:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Cosmo Memory 《S》《Fire》《Fire》《Fire》《Fire》《Dull》: Deal 6000 damage to all Forwards opponent controls.",
-			"cost": {"火": 4},
-			"tap": true,
-			"s_cost": true,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.damage(ctx.cards_in("field", {"is_type": "Forward", "controller": "opponent"}), 6000)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Cosmo Memory 《S》《Fire》《Fire》《Fire》《Fire》《Dull》: Deal 6000 damage to all Forwards opponent controls."
+		cost = {"火": 4}
+		tap = true
+		s_cost = true
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

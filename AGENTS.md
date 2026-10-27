@@ -33,6 +33,9 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
+- Activated abilities are `CardAbility` subclasses in `assets/effects/`. Metadata is inherited from
+  `AbilitySpec`; behaviour lives in `on_resolve(ctx)`, and `on_activation(ctx)` is the override point for cards
+  that need to declare X or otherwise control activation.
 - CP payment is EXACT (rules 11.2.2/11.2.2.2). Once `Assistant.payment_is_full()` is true, mana-card selection is
   ignored. The only overpay is one hand card producing 2 CP against a 1-CP gap.
 - `assets/card_effects.json` no longer carries card entries. It is a

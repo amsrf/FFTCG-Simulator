@@ -2406,7 +2406,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 			if ability_picks.is_empty() and card.effect_target != null:
 				ability_picks = [card.effect_target]
 			var ability_ctx = ability_source.make_effect_context("activated_ability", {}, card, ability_picks)
-			await card.ability_spec.run.call(ability_ctx)
+			await card.ability_spec.resolve(ability_ctx)
 		field.call("finish_targeting_state")
 		card.queue_free()
 		stack._mark_resolution_complete()

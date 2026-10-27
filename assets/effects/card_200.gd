@@ -3,18 +3,19 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《Dull》, put Baralai into the Break Zone: Choose up to 2 Forwards. Activate them.",
-			"cost": {},
-			"tap": true,
-			"sacrifice": {"is_source": true},
-			"targets": {"is_type": "Forward"},
-			"target_count": 2,
-			"run": Callable(self, "_untap_targets"),
-		}),
-	]
-
+	return [Ability0.new(self)]
 func _untap_targets(ctx) -> void:
 	ctx.untap(ctx.targets)
 
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《Dull》, put Baralai into the Break Zone: Choose up to 2 Forwards. Activate them."
+		cost = {}
+		tap = true
+		sacrifice = {"is_source": true}
+		targets = {"is_type": "Forward"}
+		target_count = 2
+
+	func on_resolve(ctx) -> void:
+		await _owner._untap_targets(ctx)

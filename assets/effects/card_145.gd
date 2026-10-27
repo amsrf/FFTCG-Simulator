@@ -4,16 +4,17 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《Dull》: Choose 1 Backup. Activate it.",
-			"cost": {},
-			"tap": true,
-			"targets": {"is_type": "Backup"},
-			"run": Callable(self, "_activate_backup"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _activate_backup(ctx) -> void:
 	ctx.untap(ctx.targets)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《Dull》: Choose 1 Backup. Activate it."
+		cost = {}
+		tap = true
+		targets = {"is_type": "Backup"}
+
+	func on_resolve(ctx) -> void:
+		await _owner._activate_backup(ctx)

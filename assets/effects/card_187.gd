@@ -9,19 +9,7 @@ func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Climhazzard 《S》《Fire》《1》《Dull》: Choose 1 Forward. Deal it 8000 damage.",
-			"cost": {"火": 1, "neutral": 1},
-			"tap": true,
-			"s_cost": true,
-			"targets": {"is_type": "Forward"},
-			"target_count": 1,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.damage(targets, 8000)
@@ -38,3 +26,16 @@ func forward_attacks(ctx) -> void:
 	var event_card: Card = ctx.event_data.get("card")
 	if event_card != null and is_instance_valid(event_card):
 		ctx.power_change([event_card], 1000, 1)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Climhazzard 《S》《Fire》《1》《Dull》: Choose 1 Forward. Deal it 8000 damage."
+		cost = {"火": 1, "neutral": 1}
+		tap = true
+		s_cost = true
+		targets = {"is_type": "Forward"}
+		target_count = 1
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

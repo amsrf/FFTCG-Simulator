@@ -2,20 +2,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like.",
-			"cost": {},
-			"tap": true,
-			"s_cost": true,
-			"targets": {"is_type": "Forward"},
-			"target_count": 3,
-			"divide_total": 6000,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	if targets.is_empty():
@@ -24,3 +11,17 @@ func _skill_0(ctx) -> void:
 
 func static_rules() -> Dictionary:
 	return {"cannot_be_blocked_by": {"min_cost": 4}}
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like."
+		cost = {}
+		tap = true
+		s_cost = true
+		targets = {"is_type": "Forward"}
+		target_count = 3
+		divide_total = 6000
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

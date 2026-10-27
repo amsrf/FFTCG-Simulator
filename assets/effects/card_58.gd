@@ -11,18 +11,19 @@ func when_cause_damage_to_player(ctx) -> void:
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage.",
-			"cost": {"氷": 2},
-			"s_cost": true,
-			"targets": {"is_type": "Forward", "is_tapped": true},
-			"target_count": 1,
-			"run": Callable(self, "_skill_0"),
-		}),
-	]
-
-
+	return [Ability0.new(self)]
 func _skill_0(ctx) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.damage(targets, 9000)
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Desperado 《S》《Ice》《Ice》: Choose 1 dull Forward. Deal it 9000 damage."
+		cost = {"氷": 2}
+		s_cost = true
+		targets = {"is_type": "Forward", "is_tapped": true}
+		target_count = 1
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)

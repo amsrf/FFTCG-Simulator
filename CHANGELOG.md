@@ -148,6 +148,18 @@ Two lifetime bugs surfaced with self-sacrificing code abilities and were fixed:
 
 The ability probe is now 12 checks and the self-sacrifice probe is 14 checks.
 
+### Activated Abilities Are Code Classes
+
+Replaced every `_ability({...})` dictionary with a `CardAbility` subclass. The
+class keeps only the metadata the engine must know before activation (text,
+cost, tap, targets, restrictions); behaviour is now `on_resolve(ctx)`, with an
+`on_activation(ctx) -> bool` hook reserved for cards that need their own
+activation step.
+
+All 65 ability card scripts were converted. The activation/payment pipeline is
+unchanged; stack resolution now calls `CardAbility.resolve()`, which dispatches
+`on_resolve()`.
+
 ### Exact CP Payment
 
 Enforced rules 11.2.2 and 11.2.2.2: the CP cost is paid exactly. Once the

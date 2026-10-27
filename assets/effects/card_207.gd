@@ -2,24 +2,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func activated_abilities() -> Array:
-	return [
-		_ability({
-			"text": "《雷》《雷》: Gilgamesh gains +1000 power until the end of the turn.",
-			"cost": {"雷": 2},
-			"run": Callable(self, "_skill_0"),
-		}),
-		_ability({
-			"text": "Divider 《S》《雷》《雷》: Choose 1 Forward. Break it. Use only if you have received 4+ damage.",
-			"cost": {"雷": 2},
-			"s_cost": true,
-			"only_if_damage_received": 4,
-			"targets": {"is_type": "Forward"},
-			"target_count": 1,
-			"run": Callable(self, "_skill_1"),
-		}),
-	]
-
-
+	return [Ability0.new(self), Ability1.new(self)]
 func _skill_0(ctx) -> void:
 	ctx.power_change([ctx.source], 1000, 1)
 
@@ -30,3 +13,25 @@ func _skill_1(ctx) -> void:
 
 func static_rules() -> Dictionary:
 	return {"cannot_be_returned_to_hand": {"sources": ["Summon", "Ability"], "controller": "opponent"}}
+
+class Ability0 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "《雷》《雷》: Gilgamesh gains +1000 power until the end of the turn."
+		cost = {"雷": 2}
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_0(ctx)
+
+class Ability1 extends "res://scripts/effects/card_ability.gd":
+	func _init(owner = null) -> void:
+		super(owner)
+		text = "Divider 《S》《雷》《雷》: Choose 1 Forward. Break it. Use only if you have received 4+ damage."
+		cost = {"雷": 2}
+		s_cost = true
+		only_if_damage_received = 4
+		targets = {"is_type": "Forward"}
+		target_count = 1
+
+	func on_resolve(ctx) -> void:
+		await _owner._skill_1(ctx)
