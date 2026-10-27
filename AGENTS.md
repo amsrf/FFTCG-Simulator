@@ -42,6 +42,11 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   once per source per continuous scan, stored as `self_power:<id>`, and folded into the cached power by
   `Card.recompute_power()`. Dynamic properties use `CardEffect.properties(ctx)` and the same scan.
 - `power_modifier()` and `properties()` must be read-only and must not read their own cached `power`.
+- `CardEffect.modify_damage(ctx)` is a pure query returning the new amount; the default is identity.
+  `Rules.modify_damage()` builds a `DamageContext` and scans every field card, so source-side,
+  receiver-side and field-wide rules share one hook. Never add damage or mutate state inside it.
+- `DamageContext.Kind` distinguishes combat, ability, Summon, EX BURST and generic effect damage;
+  combat call sites pass COMBAT explicitly. Receiver-choice ordering is future work.
 - Auras are `Aura` subclasses in `assets/effects/`, with a typed `CardQuery` and `KIND_POWER`/`KIND_STATUS`.
   The runtime bridge is `Aura.as_rule()`; the old `_aura({...})` descriptor is removed.
 - Activated abilities are `CardAbility` subclasses in `assets/effects/`. Metadata is inherited from
