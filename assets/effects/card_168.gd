@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_break_from_field(ctx) -> void:
+func when_enter_break_from_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)

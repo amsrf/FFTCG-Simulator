@@ -5,16 +5,16 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self), Ability2.new(self), Ability3.new(self)]
-func _first_strike(ctx) -> void:
+func _first_strike(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "first_strike", 1)
 
-func _brave(ctx) -> void:
+func _brave(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "brave", 1)
 
-func _ping(ctx) -> void:
+func _ping(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 1000)
 
-func _pump(ctx) -> void:
+func _pump(ctx: EFFECT_CONTEXT) -> void:
 	ctx.source.power_change(1000, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -23,7 +23,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《1》: Firion gains First Strike until the end of the turn."
 		cost = {"neutral": 1}
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._first_strike(ctx)
 
 class Ability1 extends "res://scripts/effects/card_ability.gd":
@@ -32,7 +32,7 @@ class Ability1 extends "res://scripts/effects/card_ability.gd":
 		text = "《1》: Firion gains Brave until the end of the turn."
 		cost = {"neutral": 1}
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._brave(ctx)
 
 class Ability2 extends "res://scripts/effects/card_ability.gd":
@@ -42,7 +42,7 @@ class Ability2 extends "res://scripts/effects/card_ability.gd":
 		cost = {"neutral": 2}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._ping(ctx)
 
 class Ability3 extends "res://scripts/effects/card_ability.gd":
@@ -51,5 +51,5 @@ class Ability3 extends "res://scripts/effects/card_ability.gd":
 		text = "《2》: Firion gains +1000 power until the end of the turn."
 		cost = {"neutral": 2}
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._pump(ctx)

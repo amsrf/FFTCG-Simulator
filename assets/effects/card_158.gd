@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	var keep: Array = []
 	var mine: Card = await ctx.choose(
 		ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR)),

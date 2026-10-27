@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _copy_special(ctx) -> void:
+func _copy_special(ctx: EFFECT_CONTEXT) -> void:
 	if not ctx.targets.is_empty():
 		await ctx.copy_skill(ctx.targets[0])
 
@@ -18,5 +18,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"土": 2}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).with_special_ability(true))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._copy_special(ctx)

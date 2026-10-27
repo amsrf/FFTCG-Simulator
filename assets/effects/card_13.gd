@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _sazh(ctx) -> void:
+func _sazh(ctx: EFFECT_CONTEXT) -> void:
 	if ctx.game.cast_this_turn("Brynhildr", ctx.owner_id):
 		ctx.damage(ctx.targets, 4000)
 	else:
@@ -20,5 +20,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._sazh(ctx)

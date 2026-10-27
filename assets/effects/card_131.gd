@@ -10,7 +10,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").cost_at_most(1)))
 	if targets.is_empty():
 		return
@@ -19,7 +19,7 @@ func when_enter_field(ctx) -> void:
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _skill_0(ctx) -> void:
+func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 	ctx.reveal_top(1)
 	if ctx.check_revealed(0, {"is_type": "Forward"}):
 		ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)), 7000)
@@ -33,5 +33,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		s_cost = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._skill_0(ctx)

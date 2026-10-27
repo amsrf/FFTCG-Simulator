@@ -10,7 +10,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").cost_at_most(3)))
 	if targets.is_empty():
 		return

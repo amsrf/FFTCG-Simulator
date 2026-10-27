@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_cause_damage_to_player(ctx) -> void:
+func when_cause_damage_to_player(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.may_play_from_hand(CARD_QUERY.new().of_type("Backup").of_element("火"),  true,  "Play a Fire Backup")

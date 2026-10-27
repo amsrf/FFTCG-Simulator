@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.search_deck(CARD_QUERY.new().any_of([CARD_QUERY.new().name_contains("Lightning"), CARD_QUERY.new().name_contains("Snow")]))
 
 

@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_party_attack(ctx) -> void:
+func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.power_change_party(3000, 1)

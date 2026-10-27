@@ -9,6 +9,6 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	if await ctx.may_for(3 - ctx.owner_id, "Play a Character"):
 		await ctx.play_from_hand(CARD_QUERY.new().character(true),  "opponent")

@@ -4,10 +4,10 @@ extends "res://scripts/effects/card_effect.gd"
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self)]
-func _mill_one(ctx) -> void:
+func _mill_one(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.opponent_mills(1)
 
-func _mill_two_draw(ctx) -> void:
+func _mill_two_draw(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.opponent_mills(2)
 	ctx.draw(ctx.owner_id, 1)
 
@@ -18,7 +18,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"風": 1}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._mill_one(ctx)
 
 class Ability1 extends "res://scripts/effects/card_ability.gd":
@@ -29,5 +29,5 @@ class Ability1 extends "res://scripts/effects/card_ability.gd":
 		cost = {"風": 1}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._mill_two_draw(ctx)

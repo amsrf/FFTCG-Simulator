@@ -16,7 +16,7 @@ func auras() -> Array:
 func ex_burst_event() -> int:
 	return EVENTS.Event.ENTER_FIELD
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.search_deck(CARD_QUERY.new().name_contains("Tifa"))
 
 class Aura0 extends "res://scripts/effects/aura.gd":

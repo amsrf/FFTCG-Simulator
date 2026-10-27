@@ -8,7 +8,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
+func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
 	var count: int = ctx.cards_in_field(
 		{"is_category": "X", "is_type": "Forward", "controller": "your"}, true).size()
 	return ctx.adjust(cost, -count)
@@ -21,7 +21,7 @@ func event_matches(event: int, source: Card, data: Dictionary) -> bool:
 		and event_card.card_name == "Yuna" and event_card.controller == source.controller
 
 
-func card_left_field(ctx) -> void:
+func card_left_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 2)
 
 

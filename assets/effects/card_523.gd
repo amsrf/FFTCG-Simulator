@@ -10,5 +10,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_party_attack(ctx) -> void:
+func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.opponent_discards(1)

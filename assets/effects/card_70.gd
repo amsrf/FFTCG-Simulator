@@ -10,5 +10,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.mill(3 - ctx.owner_id, 1)

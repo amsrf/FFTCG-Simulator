@@ -4,7 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _morphing_time(ctx) -> void:
+func _morphing_time(ctx: EFFECT_CONTEXT) -> void:
 	ctx.source.double_power(1)
 	ctx.add_status([ctx.source], "first_strike", 1)
 	ctx.add_status([ctx.source], "brave", 1)
@@ -18,5 +18,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"雷": 2}
 		only_your_turn = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._morphing_time(ctx)

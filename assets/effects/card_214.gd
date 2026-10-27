@@ -14,7 +14,7 @@ func event_matches(event: int, source: Card, data: Dictionary) -> bool:
 		and event_card.controller == source.controller
 
 
-func summon_cast(ctx) -> void:
+func summon_cast(ctx: EFFECT_CONTEXT) -> void:
 	var turn: int = int(ctx.game.get("turn_number")) if ctx.game != null else 0
 	if not ctx.source.claim_event_once("yuna_summon_draw", turn):
 		return

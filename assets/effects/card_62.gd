@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_cast(ctx) -> void:
+func when_cast(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.return_to_hand(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward")))

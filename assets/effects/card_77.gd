@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.play_from_break_zone(CARD_QUERY.new().of_type("Forward").where({"is_cost_lower_than": 3}))

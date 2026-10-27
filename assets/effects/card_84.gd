@@ -5,10 +5,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self)]
-func _wind(ctx) -> void:
+func _wind(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 1000)
 
-func _dull(ctx) -> void:
+func _dull(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 2000)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -18,7 +18,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"風": 1}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._wind(ctx)
 
 class Ability1 extends "res://scripts/effects/card_ability.gd":
@@ -29,5 +29,5 @@ class Ability1 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._dull(ctx)

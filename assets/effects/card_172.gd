@@ -8,7 +8,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_cast(ctx) -> void:
+func when_cast(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 2)
 	await ctx.discard(ctx.owner_id, 1)
 

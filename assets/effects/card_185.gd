@@ -9,6 +9,6 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_break_from_field(ctx) -> void:
+func when_enter_break_from_field(ctx: EFFECT_CONTEXT) -> void:
 	if await ctx.may("Play The Emperor"):
 		await ctx.search_deck(CARD_QUERY.new().named("The Emperor"),  "field_dull",  true)

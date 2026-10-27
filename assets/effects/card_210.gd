@@ -10,7 +10,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
+func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
 	var count: int = ctx.cards_in_field(
 		{"is_category": "XIII", "is_type": "Forward", "controller": "your"}, true).size()
 	return ctx.adjust(cost, -count)
@@ -19,6 +19,6 @@ func modify_cost(ctx, _card: Card, cost: Dictionary) -> Dictionary:
 func keywords() -> Array[String]:
 	return ["haste"]
 
-func when_cause_damage_to_player(ctx) -> void:
+func when_cause_damage_to_player(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
 	ctx.dull(targets)

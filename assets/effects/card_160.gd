@@ -4,7 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _next_damage_zero(ctx) -> void:
+func _next_damage_zero(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "next_receiving_damage", 1, {"operation": "set", "value": 0})
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -14,5 +14,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._next_damage_zero(ctx)

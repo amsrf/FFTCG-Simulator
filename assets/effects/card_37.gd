@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_chosen(ctx) -> void:
+func when_chosen(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.opponent_discards(1)

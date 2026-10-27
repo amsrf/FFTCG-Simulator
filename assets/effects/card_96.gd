@@ -4,7 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _self_pump(ctx) -> void:
+func _self_pump(ctx: EFFECT_CONTEXT) -> void:
 	ctx.source.power_change(3000, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -14,5 +14,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {}
 		sacrifice = {"is_type": "Backup", "controller": "player"}
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._self_pump(ctx)

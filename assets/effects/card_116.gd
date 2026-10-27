@@ -8,16 +8,16 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_blocks(ctx) -> void:
+func when_blocks(ctx: EFFECT_CONTEXT) -> void:
 	ctx.power_change([ctx.source], 4000, 1)
 
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self)]
-func _skill_0(ctx) -> void:
+func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "brave", 1)
 
-func _skill_1(ctx) -> void:
+func _skill_1(ctx: EFFECT_CONTEXT) -> void:
 	ctx.power_change([ctx.source], ctx.source.power, 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -26,7 +26,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		text = "《Earth》: Prishe gains Brave until the end of the turn."
 		cost = {"土": 1}
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._skill_0(ctx)
 
 class Ability1 extends "res://scripts/effects/card_ability.gd":
@@ -36,5 +36,5 @@ class Ability1 extends "res://scripts/effects/card_ability.gd":
 		cost = {"土": 1}
 		s_cost = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._skill_1(ctx)

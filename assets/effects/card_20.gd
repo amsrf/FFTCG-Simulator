@@ -8,12 +8,12 @@ func handlers() -> Dictionary:
 	}
 
 
-func modify_cost_for(ctx, subject: Card, cost: Dictionary) -> Dictionary:
+func modify_cost_for(ctx: COST_CONTEXT, subject: Card, cost: Dictionary) -> Dictionary:
 	if ctx.source == null or subject.controller != ctx.source.controller:
 		return cost
 	if subject.type != "Summon" or subject.card_name != "Bahamut":
 		return cost
 	return ctx.adjust(cost, -2)
 
-func when_attack(ctx) -> void:
+func when_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "first_strike", 1)

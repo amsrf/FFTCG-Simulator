@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.choose_break_zone_card(CARD_QUERY.new().of_type("Forward"),  "self",  "Choose a Forward in your Break Zone")
 	await ctx.choose_break_zone_card(CARD_QUERY.new().of_type("Forward"),  "opponent",  "Choose a Forward in your Break Zone")
 	await ctx.put_card_into_hand()

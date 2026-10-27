@@ -13,10 +13,10 @@ func handlers() -> Dictionary:
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _ice_shot(ctx) -> void:
+func _ice_shot(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 1000)
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(true)).up_to(2))
 	ctx.damage(targets, 4000)
 
@@ -28,5 +28,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		tap = false
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").tapped(true))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._ice_shot(ctx)

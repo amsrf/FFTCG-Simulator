@@ -10,7 +10,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
 	if targets.is_empty():
 		return
@@ -23,7 +23,7 @@ func ex_burst_event() -> int:
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _skill_0(ctx) -> void:
+func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.break_cards(targets)
 	ctx.add_status([ctx.source], "skip_next_active", 1)
@@ -38,5 +38,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 		target_count = 1
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._skill_0(ctx)

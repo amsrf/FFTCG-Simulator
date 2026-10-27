@@ -6,7 +6,7 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ##
 ## A CONTINUOUS QUERY, not an event: it is evaluated every time someone asks what Elements Kimahri currently has.
 
-func current_elements(ctx, card) -> Array[String]:
+func current_elements(ctx: EFFECT_CONTEXT, card) -> Array[String]:
 	var out: Array[String] = []
 	if card.element != "":
 		out.append(card.element)

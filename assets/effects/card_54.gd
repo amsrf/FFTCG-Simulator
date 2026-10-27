@@ -5,7 +5,7 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _activate(ctx) -> void:
+func _activate(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)), 1000)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -15,5 +15,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"氷": 2}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._activate(ctx)

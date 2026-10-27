@@ -16,5 +16,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		return_self = true
 		only_your_turn = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await ctx.may_play_from_hand(CARD_QUERY.new().named("Onion Knight"),  false,  "Play Onion Knight")

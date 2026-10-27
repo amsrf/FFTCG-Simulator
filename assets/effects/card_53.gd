@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _cancel_summon(ctx) -> void:
+func _cancel_summon(ctx: EFFECT_CONTEXT) -> void:
 	if not ctx.targets.is_empty():
 		ctx.cancel_stack_card(ctx.targets[0])
 
@@ -18,5 +18,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		sacrifice = {"is_source": true}
 		targets = TARGET_REQUEST.stack(CARD_QUERY.new().of_type("Summon"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._cancel_summon(ctx)

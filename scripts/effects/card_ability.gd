@@ -1,4 +1,5 @@
 extends "res://scripts/effects/ability_spec.gd"
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## A code-owned activated ability.
 ##
 ## The metadata fields inherited from AbilitySpec still let the engine answer "can this be activated?" and show the
@@ -18,14 +19,14 @@ func _init(owner = null) -> void:
 	run = Callable(self, "on_resolve")
 
 
-func on_activation(_ctx) -> bool:
+func on_activation(_ctx: EFFECT_CONTEXT) -> bool:
 	return true
 
 
-func on_resolve(_ctx) -> void:
+func on_resolve(_ctx: EFFECT_CONTEXT) -> void:
 	pass
 
 
 ## The single entry point the stack uses.
-func resolve(ctx) -> void:
+func resolve(ctx: EFFECT_CONTEXT) -> void:
 	await on_resolve(ctx)

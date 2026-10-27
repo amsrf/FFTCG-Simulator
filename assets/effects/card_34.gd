@@ -5,7 +5,7 @@ const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _dull_all_opponent_forwards(ctx) -> void:
+func _dull_all_opponent_forwards(ctx: EFFECT_CONTEXT) -> void:
 	ctx.dull(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -15,5 +15,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {"氷": 3}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._dull_all_opponent_forwards(ctx)

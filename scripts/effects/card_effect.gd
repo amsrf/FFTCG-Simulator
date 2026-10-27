@@ -1,4 +1,5 @@
 extends RefCounted
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
 const BREAK_CONTEXT := preload("res://scripts/effects/break_context.gd")
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
@@ -33,7 +34,7 @@ func handles_event(event: int) -> bool:
 
 
 ## One place maps the event id to the card's method. No has_method() lookup and no string method name at the call site.
-func dispatch(event: int, ctx) -> void:
+func dispatch(event: int, ctx: EFFECT_CONTEXT) -> void:
 	var handler: Callable = handlers().get(event, Callable())
 	if handler.is_valid():
 		await handler.call(ctx)
@@ -48,7 +49,7 @@ func event_matches(_event: int, _source: Card, _data: Dictionary) -> bool:
 ## What this Summon asks the player to choose WHEN CAST, before it enters the stack. Return a Dictionary for one
 ## target, an Array for staged targets, or {} for no target. The picks are stored on the card and passed to
 ## when_cast() as ctx.targets at resolution.
-func cast_target_criteria(_ctx) -> Variant:
+func cast_target_criteria(_ctx: EFFECT_CONTEXT) -> Variant:
 	return {}
 
 
@@ -74,12 +75,12 @@ func static_rules() -> Dictionary:
 
 
 ## This card's own dynamic power contribution. Called from the continuous scan with a read-only context.
-func power_modifier(_ctx) -> int:
+func power_modifier(_ctx: EFFECT_CONTEXT) -> int:
 	return 0
 
 
 ## Dynamic properties this card currently has, in addition to printed keywords and granted statuses.
-func properties(_ctx) -> Array[String]:
+func properties(_ctx: EFFECT_CONTEXT) -> Array[String]:
 	return []
 
 
@@ -118,16 +119,16 @@ func auras() -> Array:
 
 ## Elements the card currently has. The base implementation returns only its printed element; a subclass adds or
 ## replaces it. The engine calls this through Card.current_elements().
-func current_elements(_ctx, card) -> Array[String]:
+func current_elements(_ctx: EFFECT_CONTEXT, card: Card) -> Array[String]:
 	return [card.element]
 
 ## Change the cost of THIS card (self-modifiers such as "if you control Ovelia, this costs 1 less").
-func modify_cost(_ctx, _card, cost: Dictionary) -> Dictionary:
+func modify_cost(_ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
 	return cost
 
 
 ## Change what ANOTHER card costs while this source is on the field ("your Water Summons cost 1 less").
-func modify_cost_for(_ctx, _subject: Card, cost: Dictionary) -> Dictionary:
+func modify_cost_for(_ctx: COST_CONTEXT, _subject: Card, cost: Dictionary) -> Dictionary:
 	return cost
 
 ## Change incoming damage before it lands.

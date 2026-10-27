@@ -10,5 +10,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_attack(ctx) -> void:
+func when_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status([ctx.source], "first_strike", 1)

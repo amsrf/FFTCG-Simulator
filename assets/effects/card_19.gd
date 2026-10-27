@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _untap_target(ctx) -> void:
+func _untap_target(ctx: EFFECT_CONTEXT) -> void:
 	ctx.untap(ctx.targets)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -17,5 +17,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").of_element("Fire").controlled_by(CARD_QUERY.Controller.PLAYER))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._untap_target(ctx)

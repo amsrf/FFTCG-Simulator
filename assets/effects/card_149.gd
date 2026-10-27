@@ -6,10 +6,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self), Ability1.new(self)]
-func _damage_5000(ctx) -> void:
+func _damage_5000(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 5000)
 
-func _damage_10000(ctx) -> void:
+func _damage_10000(ctx: EFFECT_CONTEXT) -> void:
 	ctx.damage(ctx.targets, 10000)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -21,7 +21,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		sacrifice = {"is_type": "Backup", "controller": "player"}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._damage_5000(ctx)
 
 class Ability1 extends "res://scripts/effects/card_ability.gd":
@@ -33,5 +33,5 @@ class Ability1 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._damage_10000(ctx)

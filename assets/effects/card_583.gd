@@ -12,7 +12,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_party_attacks(ctx) -> void:
+func when_party_attacks(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)))
 	if targets.is_empty():
 		return

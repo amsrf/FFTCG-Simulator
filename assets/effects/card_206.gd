@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func card_left_field(ctx) -> void:
+func card_left_field(ctx: EFFECT_CONTEXT) -> void:
 	var left: Card = ctx.event_data.get("card")
 	if left == null or not is_instance_valid(left):
 		return

@@ -17,7 +17,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func attack_phase_start(ctx) -> void:
+func attack_phase_start(ctx: EFFECT_CONTEXT) -> void:
 	# The event fires for both players' Attack Phases; only Mime's controller gets to name an Element.
 	if int(ctx.event_data.get("player_id", 0)) != ctx.owner_id:
 		return
@@ -25,5 +25,5 @@ func attack_phase_start(ctx) -> void:
 	if chosen != "":
 		ctx.set_element_until_end_of_turn(ctx.source, chosen)
 
-func when_party_attack(ctx) -> void:
+func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)

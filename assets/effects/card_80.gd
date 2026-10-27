@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.untap_all_matching(CARD_QUERY.new().character(true).controlled_by(CARD_QUERY.Controller.YOUR).of_element("風"))
 
 

@@ -396,6 +396,10 @@ mutate state inside `modify_damage()`.
 Both `modify_damage(ctx: DAMAGE_CONTEXT)` and `prevents_break(ctx: BREAK_CONTEXT)` are typed through script
 constants on `CardEffect`. Card subclasses inherit those constants and must not redeclare them (GDScript rejects a
 child member with the same name).
+Every card hook now types its context parameter too: `ctx: EFFECT_CONTEXT` for event hooks, ability hooks, power
+and element queries; `ctx: COST_CONTEXT` for `modify_cost` / `modify_cost_for`; plus the damage and break contexts.
+Card subclasses inherit these constants from `CardEffect` / `CardAbility`, so the type name is available without a
+global `class_name` and without redeclaring the constant.
 
 PENDING ONE-SHOT DAMAGE RULES are status payloads, not named flags. `add_status_effect(status, duration, payload)`
 stores the payload; any status whose payload has `operation` and `value` is applied to damage dealt to that card. The

@@ -9,9 +9,9 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)
 
-func when_party_attack(ctx) -> void:
+func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)
 	await ctx.discard(ctx.owner_id, 1)

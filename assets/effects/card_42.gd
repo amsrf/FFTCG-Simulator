@@ -8,7 +8,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.each_player_discards(1)
 	if ctx.condition("controls:Laguna"):
 		await ctx.opponent_discards(1)

@@ -7,7 +7,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _stop_forward(ctx) -> void:
+func _stop_forward(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status(ctx.targets, "cannot_attack", 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -18,5 +18,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._stop_forward(ctx)

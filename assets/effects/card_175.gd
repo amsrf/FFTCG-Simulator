@@ -8,6 +8,6 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)
 	await ctx.put_hand_card_on_bottom()

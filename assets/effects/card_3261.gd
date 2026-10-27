@@ -10,7 +10,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_party_attack(ctx) -> void:
+func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	if not ctx.condition("party_has_named:King of Eblan"):
 		return
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))

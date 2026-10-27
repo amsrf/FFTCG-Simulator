@@ -17,7 +17,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func current_elements(ctx, card) -> Array[String]:
+func current_elements(ctx: EFFECT_CONTEXT, card) -> Array[String]:
 	var out: Array[String] = []
 	if card.element != "":
 		out.append(card.element)
@@ -27,5 +27,5 @@ func current_elements(ctx, card) -> Array[String]:
 	return out
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.remove_from_game(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward")))

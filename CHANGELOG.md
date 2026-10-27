@@ -181,6 +181,9 @@ Auron 2 moved off `static_rules()["protects"]` and now owns the check in code. B
 by `break_card()`; `put_card_into_graveyard()` remains ordinary removal and bypasses it.
 The damage and break contexts are typed through preloaded script constants, so a card signature is
 `func modify_damage(ctx: DAMAGE_CONTEXT) -> int` / `func prevents_break(ctx: BREAK_CONTEXT) -> bool`.
+All card hooks now type their context: `EFFECT_CONTEXT` for event/ability queries, `COST_CONTEXT` for cost
+hooks, and the dedicated damage/break contexts. The constants are inherited from the base classes; no global
+`class_name` is required.
 
 ### Damage Modifiers as Card Queries
 

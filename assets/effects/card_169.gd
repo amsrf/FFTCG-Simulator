@@ -4,7 +4,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _look_top(ctx) -> void:
+func _look_top(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.look_top_may_bottom()
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -14,5 +14,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		cost = {}
 		tap = true
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._look_top(ctx)

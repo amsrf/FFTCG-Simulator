@@ -10,5 +10,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_party_deals_damage(ctx) -> void:
+func when_party_deals_damage(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)

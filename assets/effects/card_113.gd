@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_blocks(ctx) -> void:
+func when_blocks(ctx: EFFECT_CONTEXT) -> void:
 	ctx.power_change([ctx.source], 2000, 1)

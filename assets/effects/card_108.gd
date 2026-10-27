@@ -12,7 +12,7 @@ func event_matches(event: int, source: Card, data: Dictionary) -> bool:
 	return event == EVENTS.Event.DAMAGE_RECEIVED and int(data.get("player_id", 0)) == (1 if source.controller == "player" else 2)
 
 
-func damage_received(ctx) -> void:
+func damage_received(ctx: EFFECT_CONTEXT) -> void:
 	if not await ctx.may("Deal 5000 damage"):
 		return
 	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))

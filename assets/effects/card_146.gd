@@ -6,7 +6,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
-func _unbreakable_target(ctx) -> void:
+func _unbreakable_target(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status(ctx.targets, "unbreakable", 1)
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
@@ -17,5 +17,5 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 		sacrifice = {"is_source": true}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
 
-	func on_resolve(ctx) -> void:
+	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._unbreakable_target(ctx)

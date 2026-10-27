@@ -9,7 +9,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_cast(ctx) -> void:
+func when_cast(ctx: EFFECT_CONTEXT) -> void:
 	var forwards: Array = ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT))
 	ctx.damage(forwards, 3000)
 	if ctx.condition("controls:Yuna"):

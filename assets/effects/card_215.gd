@@ -14,5 +14,5 @@ func event_matches(event: int, source: Card, data: Dictionary) -> bool:
 		and event_card.controller != source.controller
 
 
-func summon_cast(ctx) -> void:
+func summon_cast(ctx: EFFECT_CONTEXT) -> void:
 	ctx.untap([ctx.source])

@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_cause_damage_to_player(ctx) -> void:
+func when_cause_damage_to_player(ctx: EFFECT_CONTEXT) -> void:
 	ctx.draw(ctx.owner_id, 1)

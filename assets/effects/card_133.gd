@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.break_zone_to_hand(CARD_QUERY.new().any_of([CARD_QUERY.new().of_type("Forward"), CARD_QUERY.new().of_type("Backup")]))

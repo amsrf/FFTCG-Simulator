@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_field(ctx) -> void:
+func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.search_deck(CARD_QUERY.new().of_category("X").of_type("Forward"))

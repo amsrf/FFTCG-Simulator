@@ -8,5 +8,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_enter_break_from_field(ctx) -> void:
+func when_enter_break_from_field(ctx: EFFECT_CONTEXT) -> void:
 	await ctx.take_damage_to_controller(1)

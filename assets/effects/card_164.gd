@@ -9,5 +9,5 @@ func handlers() -> Dictionary:
 	}
 
 
-func when_attack(ctx) -> void:
+func when_attack(ctx: EFFECT_CONTEXT) -> void:
 	ctx.power_change(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR).of_element("水")), 1000, 1)
