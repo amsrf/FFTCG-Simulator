@@ -121,8 +121,8 @@ func _ready() -> void:
 						bad_mods.append("%s: condition is not an object" % str(key))
 						continue
 					var known: bool = false
-					for name in allowed_conditions:
-						if condition.has(name):
+					for condition_name in allowed_conditions:
+						if condition.has(condition_name):
 							known = true
 					if not known:
 						bad_mods.append("%s: unknown condition %s" % [str(key), str(condition.keys())])

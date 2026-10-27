@@ -39,7 +39,6 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var field = _game.get("field")
 	var grave = _game.get("opponent_graveyard")
 	var removed = _game.get("opponent_removed")
 	var grave_before: int = grave.graveyard_cards.size()

@@ -427,9 +427,9 @@ func _place_cards(instant: bool = false) -> void:
 
 	for i in range(count):
 		var card: Control = _fan.get_child(i)
-		var offset: float = float(i) - middle
+		var lateral: float = float(i) - middle
 		# Normalised to -1..1 across the fan, so the bow and the tilt are the same shape whatever the count is.
-		var t: float = 0.0 if middle <= 0.0 else offset / middle
+		var t: float = 0.0 if middle <= 0.0 else lateral / middle
 		# The bow is added at the ENDS, so the middle sits highest — a fanned deck curves up at the centre.
 		var bow: float = t * t * FAN_BOW
 		# The hovered card LIFTS TOWARD THE VIEWER rather than the row making room for it. Growing it about its
@@ -507,7 +507,7 @@ func _select(id: int, node: Control) -> void:
 		_confirm.disabled = false
 	_status.text = "Chosen: %s" % str(CARD_FILTER.card_by_id(id).get("name_en", "?"))
 
-func _hover(id: int, node: Control) -> void:
+func _hover(_id: int, node: Control) -> void:
 	if node == null:
 		return
 	if node != _selected_node:

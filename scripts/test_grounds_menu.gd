@@ -78,12 +78,12 @@ func _ready() -> void:
 		column.add_child(heading)
 		column.add_child(HSeparator.new())
 
-		for name in GROUNDS.names_in(category):
+		for ground_name in GROUNDS.names_in(category):
 			var button := Button.new()
-			button.text = GROUNDS.title(name)
+			button.text = GROUNDS.title(ground_name)
 			button.custom_minimum_size = Vector2(COLUMN_WIDTH, 40)
-			button.tooltip_text = GROUNDS.blurb(name)
-			button.pressed.connect(func(): MatchSetup.start_match(name))
+			button.tooltip_text = GROUNDS.blurb(ground_name)
+			button.pressed.connect(func(): MatchSetup.start_match(ground_name))
 			column.add_child(button)
 			_ground_buttons.append(button)
 

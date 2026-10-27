@@ -7,7 +7,6 @@ class_name Assistant
 # only its own slot offset. So moving all three is one transform on the rack, and Confirm and PassPhase
 # share a slot by construction rather than by two numbers happening to agree. These paths go through
 # ButtonRack for that reason — the buttons are no longer direct children of Assistant.
-@onready var buttonRack: Node3D = $ButtonRack
 @onready var confirmButton: BigButton = $ButtonRack/ConfirmButton
 @onready var cancelButton: BigButton = $ButtonRack/CancelButton
 @onready var passPhaseButton: BigButton = $ButtonRack/PassPhaseButton
@@ -409,11 +408,11 @@ func _on_field_request_target_confirmation(_target_card: Card, allow_cancel: boo
 func payment_breakdown() -> Array:
 	var slots: Array = []
 	for element in mana_cost:
-		var name: String = ELEMENTS.key_to_element(element)
-		if name == "neutral" or name.is_empty():
+		var element_name: String = ELEMENTS.key_to_element(element)
+		if element_name == "neutral" or element_name.is_empty():
 			continue
 		for _i in range(int(mana_cost[element])):
-			slots.append({"element": name, "paid_by": ""})
+			slots.append({"element": element_name, "paid_by": ""})
 	for _i in range(int(mana_cost.get("neutral", 0))):
 		slots.append({"element": "", "paid_by": ""})
 
@@ -421,17 +420,17 @@ func payment_breakdown() -> Array:
 	# no matching source, or a wild point, but only one point per selected source.
 	var pool: Dictionary = {}
 	for element in mana_acc:
-		var name: String = ELEMENTS.key_to_element(element)
-		pool[name] = int(pool.get(name, 0)) + int(mana_acc[element])
+		var element_name: String = ELEMENTS.key_to_element(element)
+		pool[element_name] = int(pool.get(element_name, 0)) + int(mana_acc[element])
 	var any_pool: int = int(pool.get("any", 0))
 	pool.erase("any")
 	for slot in slots:
-		var name: String = str(slot["element"])
-		if name.is_empty():
+		var element_name: String = str(slot["element"])
+		if element_name.is_empty():
 			continue
-		if int(pool.get(name, 0)) > 0:
-			pool[name] = int(pool[name]) - 1
-			slot["paid_by"] = name
+		if int(pool.get(element_name, 0)) > 0:
+			pool[element_name] = int(pool[element_name]) - 1
+			slot["paid_by"] = element_name
 
 	# Pass 1b: ANY-ELEMENT MANA fills what the coloured sources could not. It is spent here, before the wild
 	# points, because an elemental requirement cannot be paid by surplus later.
@@ -448,11 +447,11 @@ func payment_breakdown() -> Array:
 	var spare: Array = []
 	var names: Array = pool.keys()
 	names.sort()
-	for name in names:
-		if str(name) == "neutral":
+	for element_name in names:
+		if str(element_name) == "neutral":
 			continue
-		for _i in range(int(pool[name])):
-			spare.append(str(name))
+		for _i in range(int(pool[element_name])):
+			spare.append(str(element_name))
 	for _i in range(any_pool):
 		spare.append("any")
 	var next: int = 0
@@ -475,11 +474,11 @@ func remaining_cost() -> Dictionary:
 	for slot in payment_breakdown():
 		if not str(slot["paid_by"]).is_empty():
 			continue
-		var name: String = str(slot["element"])
-		if name.is_empty():
+		var element_name: String = str(slot["element"])
+		if element_name.is_empty():
 			left["neutral"] = int(left.get("neutral", 0)) + 1
 		else:
-			left[name] = int(left.get(name, 0)) + 1
+			left[element_name] = int(left.get(element_name, 0)) + 1
 	return left
 
 func can_pay_cost() -> bool:

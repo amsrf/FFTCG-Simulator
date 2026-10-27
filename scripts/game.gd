@@ -258,7 +258,7 @@ func break_zone_to_hand(filter: Dictionary = {}) -> void:
 
 ## Choose one card from a player's Break Zone. `chooser` is "self" or "opponent"; the pick is remembered in
 ## `_chosen_cards`. The picker is the same search window used for deck searching, because the Break Zone is a pile.
-func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", prompt: String = "Choose a card in your Break Zone") -> void:
+func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", _prompt: String = "Choose a card in your Break Zone") -> void:
 	var caster_id: int = 1 if _current_controller == "player" else 2
 	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
 	var side: PlayerSide = side_for(chooser_id)
@@ -786,7 +786,6 @@ func start_match(config: Dictionary) -> void:
 	# match starts looking through a snapshot camera aimed at a damage zone. That is not hypothetical: it happened,
 	# it showed an upside-down board, and it broke every test that measures screen positions. The board view is the
 	# camera that is NOT one of the damage cameras, and it is made current here so scene order stops mattering.
-	var damage_names: Array = DAMAGE_CAMERAS.values()
 	for node in find_children("*", "Camera3D", true, false):
 		# A DAMAGE CAMERA IS IDENTIFIED BY WHERE IT IS, NOT BY ITS NAME. It lives inside a DamageZone, so any
 		# camera there is one. Names were tried first and failed twice — the node was built as
@@ -1042,6 +1041,12 @@ var turn_history: Dictionary = {}
 ## once_per_turn event triggers, keyed by card instance + trigger index + turn_number. The turn number is part of the
 ## key, so a new turn starts with a clean slate without any reset pass.
 var _event_triggers_fired: Dictionary = {}
+
+func event_trigger_already_fired(key: String) -> bool:
+	return _event_triggers_fired.has(key)
+
+func mark_event_trigger_fired(key: String) -> void:
+	_event_triggers_fired[key] = true
 
 func record_action(activity: String, targets: Array = [], actor: int = 0) -> void:
 	# actor 0 = "whoever's turn it is", which is right for anything the turn player initiates. Effects that fire on
@@ -1390,7 +1395,7 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 		if _board_camera == null:
 			_board_camera = get_viewport().get_camera_3d()
 		print("[DamageZoom] board view captured as '%s'" % (
-			_board_camera.name if _board_camera != null else "<none>"))
+			str(_board_camera.name) if _board_camera != null else "<none>"))
 	if _board_camera == null or _board_camera == cam:
 		return
 
@@ -2124,8 +2129,8 @@ func _on_targets_confirmed() -> void:
 	if field != null:
 		field.notify_targets_chosen()
 
-static func phase_to_string(phase):
-	match phase:
+static func phase_to_string(phase_value):
+	match phase_value:
 		GlobalVariables.Phase.ACTIVE_PHASE:
 			return "ACTIVE_PHASE"
 		GlobalVariables.Phase.DRAW_PHASE:
@@ -2307,7 +2312,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 
 	stack._mark_resolution_complete()
 
-func _resolve_may_play_for_free(effect_card: Card, instruction: Instruction) -> Card:
+func _resolve_may_play_for_free(effect_card: Card, _instruction: Instruction) -> Card:
 	# Opens the choose-card-in-hand modal (Play card / Don't play card).
 	# Returns the chosen card, or null when declined / no legal card exists.
 	var criteria: Dictionary = _get_trigger_choose_card_criteria(effect_card)

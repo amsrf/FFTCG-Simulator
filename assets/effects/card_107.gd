@@ -17,7 +17,7 @@ func handlers() -> Dictionary:
 	}
 
 
-func current_elements(ctx: EFFECT_CONTEXT, card) -> Array[String]:
+func current_elements(_ctx: EFFECT_CONTEXT, card) -> Array[String]:
 	var out: Array[String] = []
 	if card.element != "":
 		out.append(card.element)

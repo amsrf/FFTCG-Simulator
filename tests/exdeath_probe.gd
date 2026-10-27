@@ -62,7 +62,7 @@ func _ready() -> void:
 	_opponent = _game.get("opponent")
 
 	var exdeath: Card = _card(EXDEATH)
-	var squall: Card = _card(SQUALL)
+	var _squall: Card = _card(SQUALL)
 	var other_source: Card = _game.call("create_card", SQUALL, "player")
 	_expect(exdeath != null and exdeath.static_rule("ex_burst_disabler", false) == true,
 		"Exdeath carries the ex_burst_disabler property")

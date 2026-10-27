@@ -140,7 +140,7 @@ use from card code.
 - Still forbidden: the editor; booting the full game just to "verify" something; and `--check-only` / `--script`, which do not load autoloads and therefore report `Identifier not found: CardDatabase / GlobalVariables` — actively misleading.
 - **Discipline: two attempts on any invocation, then stop and report.** Do not iterate on command lines; that is what made the earlier attempt unproductive. Iterating on *code* and re-running is the point, and is not capped.
 - Run it with the editor closed — a second instance can fight over the `.godot` import cache.
-- Pre-existing harmless noise in every run: ~14x `Condition "!is_inside_tree()" is true. Returning: Transform3D()` (a node's global transform is read before it is parented). Anything else in the log is worth reading.
+- There is no longer a `!is_inside_tree()` noise baseline: `Hand.add_card_to_tree()` now only preserves a global transform when the card already has a parent. A clean boot should have zero `ERROR:` lines; anything in the log is worth reading.
 
 ### Running Blender (allowed — it builds assets)
 - Blender 4.4 is installed at `"C:/Program Files/Blender Foundation/Blender 4.4/blender.exe"` (not on PATH; the repo's `.blend` files are v404). It runs headless, so a mesh can be generated and rendered with no viewport in the loop:

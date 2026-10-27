@@ -518,10 +518,10 @@ func _add_vertex(st: SurfaceTool, pos: Vector3, side: Vector3, t: float, edge: f
 
 ## Read a float uniform back out of a material, with a fallback for a failed lookup
 ## (get_shader_parameter() returns null for an unknown name, and float(null) is 0.0).
-func _float_param(mat: ShaderMaterial, name: String, fallback: float) -> float:
+func _float_param(mat: ShaderMaterial, uniform_name: String, fallback: float) -> float:
 	if mat == null:
 		return fallback
-	var value: Variant = mat.get_shader_parameter(name)
+	var value: Variant = mat.get_shader_parameter(uniform_name)
 	if value is float or value is int:
 		return float(value)
 	return fallback

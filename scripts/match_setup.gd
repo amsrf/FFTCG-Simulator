@@ -128,9 +128,9 @@ func go_to_test_grounds() -> void:
 ## Opens the editor on `name`. An EMPTY name means a brand new deck, and the editor starts blank — that is
 ## the difference between "edit this deck" and "create one", and it is carried by the name rather than a
 ## separate flag, so there is only one thing to get out of sync.
-func go_to_deck_editor(name: String = "") -> void:
+func go_to_deck_editor(deck_key: String = "") -> void:
 	config = {}
-	editing_deck_name = name
+	editing_deck_name = deck_key
 	get_tree().change_scene_to_file(DECK_EDITOR_SCENE)
 
 ## Config a match should use: the pending one, else the debug preset.
@@ -141,15 +141,15 @@ func resolve_config() -> Dictionary:
 
 # --- custom decks ----------------------------------------------------------
 
-func deck_path(name: String = CUSTOM_DECK_NAME) -> String:
-	return "%s/%s.json" % [DECK_DIR, name]
+func deck_path(deck_key: String = CUSTOM_DECK_NAME) -> String:
+	return "%s/%s.json" % [DECK_DIR, deck_key]
 
 ## Deletes a deck file, reporting why when there is nothing to delete — so a caller never reports success for
 ## a file that was already gone.
 ##
 ## The CALLER confirms first. This is the only destructive operation on a deck and it does not ask.
-func delete_deck(name: String) -> bool:
-	var path: String = deck_path(name)
+func delete_deck(deck_key: String) -> bool:
+	var path: String = deck_path(deck_key)
 	if not FileAccess.file_exists(path):
 		print("[MatchSetup] no deck to delete at %s" % path)
 		return false
@@ -166,8 +166,8 @@ func delete_deck(name: String) -> bool:
 ## An empty `name` means "the deck we are currently pointed at" (`custom_deck_name`), NOT the constant
 ## default: a caller that has just set custom_deck_name must be able to ask for it without repeating
 ## itself, or the two can disagree.
-func load_deck_ids(name: String = "") -> Array:
-	var which: String = custom_deck_name if name.is_empty() else name
+func load_deck_ids(deck_key: String = "") -> Array:
+	var which: String = custom_deck_name if deck_key.is_empty() else deck_key
 	var path: String = deck_path(which)
 	if not FileAccess.file_exists(path):
 		print("[MatchSetup] no deck at %s" % path)

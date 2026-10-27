@@ -16,7 +16,6 @@ var _hand_center = Vector3(0, 2, -2.9)
 var _card_width = 0.429
 var _card_spacing = -0.15
 var _hand_rotation = Vector3(36, -180, 0)
-var focus_card_id = null
 
 ## What the human may do. FREE / INSTANT_SPEED_TIME / ATTACKING / BLOCKING /
 ## NO_PRIORITY describe a declaration; PAYING_COST / TARGET /

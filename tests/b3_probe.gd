@@ -61,7 +61,6 @@ func _off_field(id: int, side: String) -> Card:
 
 
 func _ready() -> void:
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 
 	# --- 162 / 174: must be chosen if possible ---------------------------------------------------------
 	await _boot()
@@ -86,13 +85,13 @@ func _ready() -> void:
 	# --- 201: Rikku's conditional power and protection -------------------------------------------------
 	await _boot()
 	var rikku: Card = _make(RIKKU, "player")
-	var yuna: Card = _make(176, "player")
+	var _yuna: Card = _make(176, "player")
 	_expect(rikku.power == 8000, "Rikku gains +2000 while you control Yuna")
 	var foe_summon_2: Card = _off_field(4, "opponent")
 	var ability_source: Card = _off_field(41, "opponent")
 	_expect(not rikku.can_be_chosen_by(foe_summon_2, "Summon"), "Yuna makes Rikku untargetable by Summons")
 	_expect(rikku.can_be_chosen_by(ability_source, "Ability"), "but not by abilities yet")
-	var paine: Card = _make(199, "player")
+	var _paine: Card = _make(199, "player")
 	_expect(rikku.power == 10000, "Paine adds another +2000")
 	_expect(not rikku.can_be_chosen_by(ability_source, "Ability"), "Paine makes Rikku untargetable by abilities")
 	_expect(not rikku.can_be_chosen_by(foe_summon_2, "Summon"), "and the Summon protection remains")
@@ -127,9 +126,9 @@ func _ready() -> void:
 	# --- 158: each player keeps one Forward, every other Forward is put into the Break Zone ------------
 	await _boot()
 	var cloud: Card = _make(CLOUD, "player")
-	var p_keep: Card = _make(41, "player")
+	var _p_keep: Card = _make(41, "player")
 	var p_other: Card = _make(29, "player")
-	var o_keep: Card = _make(43, "opponent")
+	var _o_keep: Card = _make(43, "opponent")
 	var o_other: Card = _make(47, "opponent")
 	_field.execute_card_effect(cloud, "when_enter_field")
 	await get_tree().process_frame

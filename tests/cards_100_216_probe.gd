@@ -97,7 +97,6 @@ func _pick_many(cards: Array) -> void:
 
 func _ready() -> void:
 	# --- data shapes that cannot be inferred from a card being present --------------------------------
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	var lulu_specs: Array = load("res://assets/effects/card_149.gd").new().activated_abilities()
 	_expect(lulu_specs.size() == 2, "Lulu 149 has two code abilities")
 	_expect(not lulu_specs.is_empty() and not lulu_specs[0].sacrifice.is_empty(),
@@ -198,15 +197,15 @@ func _ready() -> void:
 	_expect(ice_ctrl.power == ic, "and leaves a non-Water Forward alone")
 
 	# --- 208 Noel: conditional +2000 with Serah -------------------------------------------------------
-	var serah: Card = _make(SERAH, "player")
+	var _serah: Card = _make(SERAH, "player")
 	var noel_base: int = 0
 	var noel: Card = _make(NOEL, "player")
 	noel_base = 5000
 	_expect(noel.power == noel_base + 2000, "Noel 208 gains +2000 while you control Serah")
 
 	# --- 144 Ramza: +1000 per Backup ------------------------------------------------------------------
-	var b1: Card = _make(CHEMIST, "player")
-	var b2: Card = _make(CHEMIST, "player")
+	var _b1: Card = _make(CHEMIST, "player")
+	var _b2: Card = _make(CHEMIST, "player")
 	var ramza: Card = _make(144, "player")
 	var back_count: int = _field.get_back_cards_for("player").size()
 	print("[Range] Ramza: power %d with %d Backups on field" % [ramza.power, back_count])
@@ -215,7 +214,7 @@ func _ready() -> void:
 
 	# --- 150 Lulu: Lightning Forwards +1000 aura ------------------------------------------------------
 	var dragoon: Card = _make(DRAGOON, "player")
-	var lulu: Card = _make(LULU_AURA, "player")
+	var _lulu: Card = _make(LULU_AURA, "player")
 	await _drain()
 	_expect(dragoon.power == 6000 + 1000, "Lulu 150's aura buffs a Lightning Forward")
 

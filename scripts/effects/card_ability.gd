@@ -29,4 +29,6 @@ func on_resolve(_ctx: EFFECT_CONTEXT) -> void:
 
 ## The single entry point the stack uses.
 func resolve(ctx: EFFECT_CONTEXT) -> void:
+	# Base on_resolve() is synchronous, but overrides are often coroutines. The warning is a false positive here.
+	@warning_ignore("redundant_await")
 	await on_resolve(ctx)

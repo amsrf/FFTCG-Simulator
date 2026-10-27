@@ -7,6 +7,12 @@ const CARD_CHARGE = 2
 ## so nothing can overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
 ## and _hover_offset(). This is the timeline for all of it.
 const HOVER_SECONDS := 0.16
+## How dark the artificial overlap shadow gets, and how far it fades across the covered card. These
+## are art knobs, exported so they can be dialled in the Inspector without touching the shader.
+@export_range(0.0, 1.0, 0.01) var overlap_shadow_strength: float = 0.62
+@export_range(0.001, 0.20, 0.001) var overlap_shadow_width: float = 0.055
+## The card mesh's rounded-corner radius in card-local metres (card.tres uses 0.03).
+@export_range(0.0, 0.10, 0.001) var card_corner_radius_m: float = 0.03
 ## How far a hovered card is lifted toward the camera is NOT a constant: it has to clear the whole stacking ramp, which
 ## depends on how many cards are in the hand. See _hover_lift() below.
 ## How much clean board a hovered card keeps BELOW it, in screen pixels. The fit used to target the viewport's bottom
@@ -31,6 +37,11 @@ var start_x;
 var grabbed_card_index = 0
 ## The card the pointer is over, or null. Read by calculate_card_position() to make room for it.
 var hovered_card: Card = null;
+## While cards are tweening (hover growth, re-fan, draw landing), the shadow is recomputed
+## from their CURRENT transforms each frame. Without this it was computed from the TARGET
+## layout once, so it snapped to its final edge at the start of a 0.15 s hover animation.
+var _shadow_track_seconds: float = 0.0
+const SHADOW_TRACK_SECONDS := 0.35
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal effect_card_selection_changed(has_selection: bool)
@@ -245,15 +256,14 @@ func add_card_to_tree(card):
 		area.connect("card_released", Callable(self, "_on_card_released"))
 	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
-	# Store the card's global transform before reparenting
-	
-	# Reparent the card to the Hand
-	var trans = card.global_transform
-	if card.get_parent():
-		card.reparent(self,false)
+	# Store the card's global transform before reparenting. A fresh card has no parent and therefore no meaningful
+	# global transform — reading it there is the source of the old "!is_inside_tree()" spam during match setup.
+	if card.get_parent() != null:
+		var trans: Transform3D = card.global_transform
+		card.reparent(self, false)
+		card.global_transform = trans
 	else:
 		add_child(card)
-	card.global_transform = trans
 	# A hand card is plain and flat; the fan tilt is added by the layout, so it
 	# departs from this baseline (and a card arriving from the stack or from a
 	# cancelled charge drops whatever it was wearing).
@@ -298,7 +308,142 @@ func update_card_positions(ignore = -1):
 		animate_card(card, calculate_card_position(i), tilt) # Position and tilt, relative to the Hand
 	# Idempotent and cheap: keeps the selectable glow correct after draws and
 	# every other layout change, not just on mode changes.
+	_update_edge_shadows()
+	_shadow_track_seconds = maxf(_shadow_track_seconds, SHADOW_TRACK_SECONDS)
 	refresh_highlights()
+
+## Recompute shadows while the hand is animating. This is a short, bounded window, not
+## permanent polling: only hover growth, re-fans and draw landings need it.
+func _process(delta: float) -> void:
+	if _shadow_track_seconds <= 0.0:
+		return
+	_shadow_track_seconds -= delta
+	_update_edge_shadows()
+	if _shadow_track_seconds <= 0.0:
+		_shadow_track_seconds = 0.0
+
+
+## ARTIFICIAL OVERLAP SHADOWS. The card underneath is darkened along the edge where the card above
+## ends. Nothing is lit or cast into the world: this is a composited depth cue, so it stays exactly
+## the same whatever the board light does and cannot leak onto the table.
+##
+## It is computed from the cards' CURRENT transforms and from each card's projected screen span,
+## then recomputed for the short duration of a layout/hover tween. That makes it work for the
+## player's 180-degree-rotated hand, the opponent's hand, and the grown hovered card without three
+## separate left/right rules — and, crucially, the shadow travels with the card instead of snapping
+## to its destination on the first frame.
+func _update_edge_shadows() -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var geometry: Dictionary = {}
+	if cam != null:
+		for i in range(cards.size()):
+			var card: Card = cards[i]
+			if card == null or not is_instance_valid(card) or card.get_parent() != self or card.is_dragging:
+				continue
+			# CURRENT transform, not calculate_card_position(): that returns the destination of
+			# a tween which may still be running. The shadow has to sit on the card as drawn.
+			var placement: Transform3D = card.global_transform
+			var face: Vector2 = card._card_face_size()
+			var left_x: float = cam.unproject_position(placement * Vector3(-face.x * 0.5, 0.0, 0.0)).x
+			var right_x: float = cam.unproject_position(placement * Vector3(face.x * 0.5, 0.0, 0.0)).x
+			geometry[i] = {
+				"placement": placement,
+				"face": face,
+				"span": Vector2(minf(left_x, right_x), maxf(left_x, right_x)),
+			}
+
+	# Clear first: a card that stops being covered must stop being shadowed.
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			card.clear_edge_shadow()
+
+	if geometry.size() < 2:
+		return
+
+	var best: Dictionary = {}
+	var indices: Array = geometry.keys()
+	for a in range(indices.size()):
+		for b in range(a + 1, indices.size()):
+			var ia: int = int(indices[a])
+			var ib: int = int(indices[b])
+			var geo_a: Dictionary = geometry[ia]
+			var geo_b: Dictionary = geometry[ib]
+			var span_a: Vector2 = geo_a["span"]
+			var span_b: Vector2 = geo_b["span"]
+			var overlap: float = minf(span_a.y, span_b.y) - maxf(span_a.x, span_b.x)
+			if overlap <= 0.0:
+				continue
+
+			# Which card is visually above? A hovered card is lifted toward the camera and is
+			# therefore above both neighbours; otherwise the one further to screen-right wins,
+			# matching the hand's monotonic depth ramp.
+			var upper_index: int
+			var lower_index: int
+			if is_hovered(ia) != is_hovered(ib):
+				upper_index = ia if is_hovered(ia) else ib
+				lower_index = ib if upper_index == ia else ia
+			else:
+				var center_a: float = (span_a.x + span_a.y) * 0.5
+				var center_b: float = (span_b.x + span_b.y) * 0.5
+				upper_index = ia if center_a > center_b else ib
+				lower_index = ib if upper_index == ia else ia
+
+			var upper_span: Vector2 = geo_a["span"] if upper_index == ia else geo_b["span"]
+			var lower_span: Vector2 = geo_a["span"] if lower_index == ia else geo_b["span"]
+			var lower_width: float = maxf(lower_span.y - lower_span.x, 0.001)
+			var lower_center: float = (lower_span.x + lower_span.y) * 0.5
+			var upper_center: float = (upper_span.x + upper_span.y) * 0.5
+			var side: float = 1.0 if upper_center > lower_center else -1.0
+
+			# The upper card edge is a straight 3D line, but it is rotated independently of the
+			# lower card. Project its two endpoints into the LOWER card's UV space and pass the
+			# resulting line (edge at v=0.5 plus du/dv), so the shadow tracks the upper edge
+			# exactly instead of staying parallel to the lower card's own edge.
+			var upper_placement: Transform3D = geo_a["placement"] if upper_index == ia else geo_b["placement"]
+			var upper_face: Vector2 = geo_a["face"] if upper_index == ia else geo_b["face"]
+			var lower_placement: Transform3D = geo_a["placement"] if lower_index == ia else geo_b["placement"]
+			var lower_face: Vector2 = geo_a["face"] if lower_index == ia else geo_b["face"]
+			var edge_local_x: float = (-upper_face.x * 0.5) if side > 0.0 else (upper_face.x * 0.5)
+			var p0_world: Vector3 = upper_placement * Vector3(edge_local_x, 0.0, -upper_face.y * 0.5)
+			var p1_world: Vector3 = upper_placement * Vector3(edge_local_x, 0.0, upper_face.y * 0.5)
+			var lower_inv: Transform3D = lower_placement.affine_inverse()
+			var p0: Vector3 = lower_inv * p0_world
+			var p1: Vector3 = lower_inv * p1_world
+			var u0: float = 0.5 + p0.x / maxf(lower_face.x, 0.0001)
+			var v0: float = 0.5 + p0.z / maxf(lower_face.y, 0.0001)
+			var u1: float = 0.5 + p1.x / maxf(lower_face.x, 0.0001)
+			var v1: float = 0.5 + p1.z / maxf(lower_face.y, 0.0001)
+			var dv: float = v1 - v0
+			var slope: float = (u1 - u0) / dv if absf(dv) > 0.0001 else 0.0
+			var edge: float = u0 + slope * (0.5 - v0)
+
+			var visible_fraction: float = overlap / lower_width
+			var strength: float = overlap_shadow_strength * clampf(visible_fraction / 0.12, 0.45, 1.0)
+			# The card mesh has a real rounded corner radius of 0.03 m. Convert it through the
+			# upper card's scale and back into the LOWER card's UV, because that is the space
+			# the shader draws in.
+			var upper_scale: float = (geo_a["placement"] if upper_index == ia else geo_b["placement"]).basis.get_scale().x
+			var lower_scale: float = (geo_a["placement"] if lower_index == ia else geo_b["placement"]).basis.get_scale().x
+			var radius_local: float = card_corner_radius_m * upper_scale / maxf(lower_scale, 0.0001)
+			var corner_u: float = radius_local / maxf(lower_face.x, 0.0001)
+			var corner_v: float = radius_local / maxf(lower_face.y, 0.0001)
+			var previous: Dictionary = best.get(lower_index, {})
+			if previous.is_empty() or overlap > float(previous.get("overlap", 0.0)):
+				best[lower_index] = {
+					"side": side,
+					"edge": edge,
+					"slope": slope,
+					"strength": strength,
+					"corner_u": corner_u,
+					"corner_v": corner_v,
+					"overlap": overlap,
+				}
+
+	for index in best:
+		var card: Card = cards[int(index)]
+		var entry: Dictionary = best[index]
+		card.set_edge_shadow(entry["side"], entry["edge"], entry["slope"], entry["strength"],
+			overlap_shadow_width, entry["corner_u"], entry["corner_v"])
 		
 		
 func last_card_position():

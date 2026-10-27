@@ -66,7 +66,7 @@ func _ready() -> void:
 	_expect(_field.effective_cost(ifrit) == base, "with no Terra, the effective cost is the same")
 
 	# --- Terra on the CASTER's side must not surcharge ------------------------------------------------------
-	var own_terra: Card = _make(TERRA, "player")
+	var _own_terra: Card = _make(TERRA, "player")
 	_expect(_field.effective_cost(ifrit) == base,
 		"your OWN Terra does not raise your Summons")
 
@@ -91,12 +91,12 @@ func _ready() -> void:
 	ai.bind(_game)
 	_expect(not ai.call("_can_afford", ifrit, 1),
 		"one fire Backup cannot pay 1 fire + 1 neutral")
-	var second: Card = _make(FIRE_MANA, "player")
+	var _second: Card = _make(FIRE_MANA, "player")
 	_expect(ai.call("_can_afford", ifrit, 1),
 		"two fire Backups can pay 1 fire + 1 neutral — the AI is paying the surcharge too")
 
 	# --- two Terras stack ----------------------------------------------------------------------------------
-	var second_terra: Card = _make(TERRA, "opponent")
+	var _second_terra: Card = _make(TERRA, "opponent")
 	var stacked: Dictionary = _field.effective_cost(ifrit)
 	print("[CostAura] with TWO opponent Terras: %s" % str(stacked))
 	_expect(int(stacked.get("neutral", 0)) == int(base.get("neutral", 0)) + 2,

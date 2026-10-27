@@ -83,7 +83,7 @@ func _ready() -> void:
 	_expect(not bool(_field.call("_condition_met", condition, theirs)),
 		"for the AI-owned source, it does NOT see the human's Aerith")
 
-	var ai_aerith: Card = _on_field(64, "opponent")
+	var _ai_aerith: Card = _on_field(64, "opponent")
 	_expect(bool(_field.call("_condition_met", condition, theirs)),
 		"once the AI controls its own Aerith, the AI-owned condition is true")
 

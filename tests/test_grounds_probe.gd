@@ -33,19 +33,19 @@ func _ready() -> void:
 	_expect(names.size() >= 4, "at least four grounds are registered (%d)" % names.size())
 	var categories: Array = GROUNDS.categories()
 	_expect(categories.size() >= 3, "grounds are grouped into categories (%s)" % str(categories))
-	for name in names:
-		_expect(categories.has(GROUNDS.category(name)),
-			"'%s' belongs to a listed category (%s)" % [name, GROUNDS.category(name)])
+	for ground_name in names:
+		_expect(categories.has(GROUNDS.category(ground_name)),
+			"'%s' belongs to a listed category (%s)" % [ground_name, GROUNDS.category(ground_name)])
 
 	# The MAIN MENU keeps its everyday presets; the grounds live on their own screen behind "Test Mode".
 	var presets: Array = MatchSetup.get_presets()
 	_expect(presets == ["custom", "ai", "standard", "debug"],
 		"the main menu presets are unchanged (%s)" % str(presets))
 	var grounds_listed: Array = MatchSetup.get_test_grounds()
-	for name in names:
-		_expect(grounds_listed.has(name), "'%s' is listed on the Test Mode screen" % name)
-		_expect(not presets.has(name), "and '%s' does NOT clutter the main menu" % name)
-		_expect(not MatchSetup.describe_preset(name).is_empty(), "and it describes itself")
+	for ground_name in names:
+		_expect(grounds_listed.has(ground_name), "'%s' is listed on the Test Mode screen" % ground_name)
+		_expect(not presets.has(ground_name), "and '%s' does NOT clutter the main menu" % ground_name)
+		_expect(not MatchSetup.describe_preset(ground_name).is_empty(), "and it describes itself")
 
 	# The Test Mode screen itself: one button per ground, built from the registry.
 	var menu_scene: PackedScene = load("res://test_grounds_menu.tscn")
@@ -63,11 +63,11 @@ func _ready() -> void:
 		menu.queue_free()
 		await get_tree().process_frame
 
-	for name in names:
-		var cfg: Dictionary = MatchSetup.build_config(name)
-		var deck_ok: bool = _valid_ids(cfg.get("player_deck", []), "%s player_deck" % name) \
-			and _valid_ids(cfg.get("opponent_deck", []), "%s opponent_deck" % name)
-		var hand_ok: bool = _valid_ids(cfg.get("player_hand", []), "%s player_hand" % name) \
+	for ground_name in names:
+		var cfg: Dictionary = MatchSetup.build_config(ground_name)
+		var deck_ok: bool = _valid_ids(cfg.get("player_deck", []), "%s player_deck" % ground_name) \
+			and _valid_ids(cfg.get("opponent_deck", []), "%s opponent_deck" % ground_name)
+		var hand_ok: bool = _valid_ids(cfg.get("player_hand", []), "%s player_hand" % ground_name) \
 			and _valid_ids(cfg.get("opponent_hand", []), "%s opponent_hand" % name)
 		var field_ok: bool = true
 		for entry in cfg.get("player_field", []) + cfg.get("opponent_field", []):

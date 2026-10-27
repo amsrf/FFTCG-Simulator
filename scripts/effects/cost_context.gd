@@ -46,8 +46,8 @@ func controls(criteria: Dictionary) -> bool:
 
 ## Shift the NEUTRAL part of a cost. This preserves the existing payment model: elemental points are untouched, and a
 ## reduction/increase is paid by the any-colour part. The floor is recorded but not applied here.
-func adjust(cost: Dictionary, delta: int, floor: int = 0) -> Dictionary:
-	min_total = maxi(min_total, int(floor))
+func adjust(cost: Dictionary, delta: int, minimum: int = 0) -> Dictionary:
+	min_total = maxi(min_total, int(minimum))
 	if delta == 0:
 		return cost.duplicate()
 	var out: Dictionary = cost.duplicate()

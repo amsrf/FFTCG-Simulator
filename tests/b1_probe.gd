@@ -105,7 +105,6 @@ func _pick(card: Card) -> void:
 
 
 func _ready() -> void:
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	_expect(load("res://assets/effects/card_106.gd").new().has_method("when_cast"),
 		"Golem 106's blocking-conditional cast effect is code-owned")
 	var snow_specs: Array = load("res://assets/effects/card_194.gd").new().activated_abilities()
@@ -142,7 +141,7 @@ func _ready() -> void:
 	_game.set("player_agent", picker)
 
 	# --- 125 Onion Knight: only a DAMAGED Forward is a legal target ------------------------------------
-	var healthy: Card = _make(SQUALL, "opponent")
+	var _healthy: Card = _make(SQUALL, "opponent")
 	var hurt: Card = _make(152, "opponent")
 	hurt.suffer_damage(1000)
 	var onion: Card = _make(125, "player")
@@ -217,7 +216,7 @@ func _ready() -> void:
 	var base_total: int = 0
 	for n in alma.get_cost().values():
 		base_total += int(n)
-	var ovelia: Card = _make(OVELIA, "player")
+	var _ovelia: Card = _make(OVELIA, "player")
 	var reduced: Dictionary = _field.effective_cost(alma)
 	var reduced_total: int = 0
 	for n in reduced.values():
@@ -249,7 +248,7 @@ func _ready() -> void:
 	pile.add_card(buried)
 	var hand_before: int = hand.cards.size()
 	# The picker waits for a choice; drive it the way the window's own button would.
-	var pending = _game.call("break_zone_to_hand", {})
+	var _pending = _game.call("break_zone_to_hand", {})
 	await get_tree().process_frame
 	var window = null
 	for child in _game.get_children():

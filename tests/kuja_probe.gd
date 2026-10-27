@@ -100,7 +100,6 @@ func _ready() -> void:
 	_expect(_hand.cards.size() == hand_before - 1, "and nothing else is discarded")
 
 	# --- the opponent picks something else: no trigger ---------------------------------------------------
-	var before_other: int = _hand.cards.size()
 	await _choose(ifrit, squall, "Ability")
 	_expect(_stack.stack_length() == 0, "choosing a different Forward does not trigger Kuja")
 

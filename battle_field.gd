@@ -285,7 +285,6 @@ func open_mana_choice(card: Card, elements: Array) -> String:
 func add_card_to_mana_conversion(card:Card, element: String = ""):
 	# RULES: the CP cost is exact. Once it is fulfilled, further selections are ignored; only the one hand-card
 	# overpay exception is allowed, and that already happened when the fulfilling card was selected.
-	var assistant = get_parent().get("assistant") if get_parent() != null else null
 	if assistant != null and assistant.payment_is_full():
 		print("[Mana] cost already fulfilled; ignoring extra charge")
 		return
@@ -323,12 +322,12 @@ func _apply_entry_rules(entering: Card) -> void:
 			continue
 		if not source.abilities_enabled():
 			continue
-		var rules = source.static_rule("on_character_enter", [])
-		if rules is Dictionary:
-			rules = [rules]
-		if not (rules is Array):
+		var entry_rules = source.static_rule("on_character_enter", [])
+		if entry_rules is Dictionary:
+			entry_rules = [entry_rules]
+		if not (entry_rules is Array):
 			continue
-		for rule in rules:
+		for rule in entry_rules:
 			if not (rule is Dictionary):
 				continue
 			if not CARD_TARGET.matches(entering, rule.get("targets", {}), source):
@@ -558,11 +557,11 @@ func trigger_event(event_name, context: Dictionary) -> void:
 			var once: bool = bool(trigger.get("once_per_turn", false))
 			var turn: int = int(host.get("turn_number"))
 			var fire_key: String = "%d:%d:%d" % [source.get_instance_id(), index, turn]
-			var fired: Dictionary = host.get("_event_triggers_fired")
-			if once and fired != null and fired.has(fire_key):
+			if once and host.has_method("event_trigger_already_fired") \
+					and bool(host.call("event_trigger_already_fired", fire_key)):
 				continue
-			if once and fired != null:
-				fired[fire_key] = true
+			if once and host.has_method("mark_event_trigger_fired"):
+				host.call("mark_event_trigger_fired", fire_key)
 			stack.enqueue_event_trigger(source, trigger, context)
 
 ## A trigger's filter is criteria on the event card, except for events with no card (damage_received), where only the
@@ -765,11 +764,11 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 				if can_pay and int(def.get("discard", 0)) > 0:
 					can_pay = hand != null and hand.cards.size() >= int(def.get("discard", 0))
 				usable.append(can_pay)
-			var owner_id: int = 1 if card.controller == "player" else 2
-			var agent: Agent = get_parent().agent_for(owner_id)
+			var chooser_id: int = 1 if card.controller == "player" else 2
+			var agent: Agent = get_parent().agent_for(chooser_id)
 			if agent == null:
 				return
-			skill_index = await agent.choose_skill(owner_id, card, skills, usable)
+			skill_index = await agent.choose_skill(chooser_id, card, skills, usable)
 			# The picker is awaited, so anything could have happened behind it. Re-check before spending anything.
 			if not can_activate_now(card):
 				return
@@ -1395,11 +1394,11 @@ func _collect_continuous(source: Card, desired: Dictionary) -> void:
 			var props = source_effect.properties(own_ctx)
 			if props is Array:
 				for property in props:
-					var name: String = str(property)
-					if name.is_empty():
+					var property_name: String = str(property)
+					if property_name.is_empty():
 						continue
-					var prop_key: String = "self_property:%d:%s" % [id, name]
-					desired[prop_key] = {"card": source, "kind": "status", "status": name}
+					var prop_key: String = "self_property:%d:%s" % [id, property_name]
+					desired[prop_key] = {"card": source, "kind": "status", "status": property_name}
 
 	# 3. Auras this card grants to other cards.
 	var auras = source.effect_auras()
@@ -1499,10 +1498,10 @@ func _conditional_rules(card: Card) -> Array:
 		var code_rules = effect_obj.conditional_powers()
 		if code_rules is Array and not code_rules.is_empty():
 			return code_rules
-	var rules = card.card_effects.get("conditional_power", [])
-	if rules is Dictionary:
-		rules = [rules]
-	return rules if rules is Array else []
+	var json_rules = card.card_effects.get("conditional_power", [])
+	if json_rules is Dictionary:
+		json_rules = [json_rules]
+	return json_rules if json_rules is Array else []
 
 
 func _conditional_holds(rule: Dictionary, source: Card) -> bool:
@@ -1785,17 +1784,17 @@ func cause_damage(target: Card, amount: int, source: Card = null, source_kind: S
 ## Forward leaves the field. That is what makes it survive Cid leaving play, and carrying the CONTROLLER with it is
 ## what sends the mill to the right player. `Card.turn_end()` expires it like any other status.
 func _apply_damage_caused_riders(source: Card, target: Card) -> void:
-	var rules = []
+	var rider_rules = []
 	var rider_effect = source.effect() if source.abilities_enabled() else null
 	if rider_effect != null and rider_effect.has_method("damage_caused_riders"):
-		rules = rider_effect.damage_caused_riders()
-	if rules.is_empty():
-		rules = source.card_effects.get("on_causing_damage_to_forward", [])
-	if rules is Dictionary:
-		rules = [rules]
-	if not (rules is Array):
+		rider_rules = rider_effect.damage_caused_riders()
+	if rider_rules.is_empty():
+		rider_rules = source.card_effects.get("on_causing_damage_to_forward", [])
+	if rider_rules is Dictionary:
+		rider_rules = [rider_rules]
+	if not (rider_rules is Array):
 		return
-	for rule in rules:
+	for rule in rider_rules:
 		if not (rule is Dictionary):
 			continue
 		var status: String = str(rule.get("status", ""))

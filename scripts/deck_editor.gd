@@ -416,10 +416,10 @@ func _hide_preview() -> void:
 ## would be mutated by whichever caller touched it last, and card art needs a longer radius than a
 ## thumbnail does anyway.
 func _round_material(radius: float) -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = ROUND_SHADER
-	material.set_shader_parameter("radius", radius)
-	return material
+	var mat := ShaderMaterial.new()
+	mat.shader = ROUND_SHADER
+	mat.set_shader_parameter("radius", radius)
+	return mat
 
 ## Everything a hover does, in one call: light the card's own border blue and show or hide its zoom card.
 ## They are one interaction, so keeping them together stops a caller doing only half of it.
@@ -433,9 +433,9 @@ func _round_material(radius: float) -> ShaderMaterial:
 func _hover_card(node: Control, id: int, on: bool, aura: Control = null) -> void:
 	var aura_node: Control = aura if aura != null else node
 	if aura_node != null and aura_node.material is ShaderMaterial:
-		var material: ShaderMaterial = aura_node.material
+		var card_material: ShaderMaterial = aura_node.material
 		var from: float = 0.0
-		var current: Variant = material.get_shader_parameter("hover")
+		var current: Variant = card_material.get_shader_parameter("hover")
 		# A missing parameter reads back as null, and float(null) is a hard error rather than a 0.
 		if current is float:
 			from = current
@@ -663,13 +663,13 @@ func _set_deck_cards_visible(on: bool) -> void:
 # --- persistence -----------------------------------------------------------
 
 ## Decks are JSON so they stay readable and diffable, and so a deck can be written by hand.
-func deck_path(name: String = "") -> String:
-	var which: String = deck_name if name.is_empty() else name
+func deck_path(deck_key: String = "") -> String:
+	var which: String = deck_name if deck_key.is_empty() else deck_key
 	return "%s/%s.json" % [DECK_DIR, which]
 
-func save_deck(name: String = "") -> bool:
+func save_deck(deck_key: String = "") -> bool:
 	DirAccess.make_dir_recursive_absolute(DECK_DIR)
-	var target: String = deck_name if name.is_empty() else name
+	var target: String = deck_name if deck_key.is_empty() else deck_key
 	var path: String = deck_path(target)
 
 	# RENAMING MOVES THE FILE. Without this, changing the name wrote a SECOND file and left the first one
@@ -703,8 +703,8 @@ func save_deck(name: String = "") -> bool:
 	_set_status("Saved %d cards to %s" % [deck.size(), path])
 	return true
 
-func load_deck(name: String = "") -> bool:
-	var path: String = deck_path(name)
+func load_deck(deck_key: String = "") -> bool:
+	var path: String = deck_path(deck_key)
 	if not FileAccess.file_exists(path):
 		_set_status("No deck at %s" % path)
 		return false

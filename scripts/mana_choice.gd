@@ -45,11 +45,11 @@ func _build() -> void:
 		return
 	var right: Vector3 = cam.global_transform.basis.x.normalized()
 	var up: Vector3 = -cam.global_transform.basis.y.normalized()
-	var basis: Basis = cam.global_transform.basis
+	var cam_basis: Basis = cam.global_transform.basis
 	var toward_camera: Vector3 = cam.global_transform.basis.z.normalized()
 	var center: Vector3 = card.get_global_face_centre() + toward_camera * plane_offset_m
-	var scale: Vector3 = card.global_transform.basis.get_scale()
-	var face: float = maxf(0.429 * scale.x, 0.6 * scale.z)
+	var card_scale: Vector3 = card.global_transform.basis.get_scale()
+	var face: float = maxf(0.429 * card_scale.x, 0.6 * card_scale.z)
 	var radius: float = ring_radius_m
 	if radius <= 0.0:
 		radius = face * 0.55 + crystal_height_m * 0.5 + radius_padding_m
@@ -65,7 +65,7 @@ func _build() -> void:
 		crystal.set("spin_deg_per_sec", 0.0)
 		crystal.set("idle_spin_deg_per_sec", 0.0)
 		crystal.set("glow_pulse", 0.0)
-		crystal.global_transform = Transform3D(basis, pos)
+		crystal.global_transform = Transform3D(cam_basis, pos)
 		crystal.call("set_spin_angle", spin_angle_degrees)
 		_add_button(crystal, str(_elements[i]))
 		crystals.append(crystal)
@@ -102,7 +102,7 @@ func _set_hover(crystal: Node3D, on: bool) -> void:
 
 
 func _on_crystal_input(_camera, event: InputEvent, _pos: Vector3, _normal: Vector3,
-		_shape_idx: int, crystal: Node3D, element: String) -> void:
+		_shape_idx: int, _crystal: Node3D, element: String) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mouse := event as InputEventMouseButton

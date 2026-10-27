@@ -51,7 +51,7 @@ func _ready() -> void:
 
 	var dajh: Card = _card(DAJH)
 	var sazh: Card = _card(SAZH)
-	var serah: Card = _card(SERAH)
+	var _serah: Card = _card(SERAH)
 	var snow: Card = _card(SNOW)
 	var chemist: Card = _card(CHEMIST)
 	var enemy: Card = _card(ENEMY)

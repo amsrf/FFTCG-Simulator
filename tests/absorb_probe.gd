@@ -49,7 +49,6 @@ func _ready() -> void:
 	_expect(flash != null and ring != null, "the flash and the shockwave are both parented to the card")
 	_expect(card.get("_absorb") != null, "the card builds its CardAbsorb on first use")
 	if ring != null:
-		var local_impact: Vector3 = card.to_local(impact)
 		# Checked against what it was CONSTRUCTED with. Re-projecting here would use a transform the card has since
 		# drifted a hair from, and would be measuring my own arithmetic rather than the code.
 		print("[Absorb] ring at %s (impact was placed at local (0.050, 0, 0))" % (ring as Node3D).position)

@@ -203,9 +203,29 @@ func set_revealed(is_revealed: bool) -> void:
 	if revealed == is_revealed:
 		return
 	revealed = is_revealed
-	var surface_material: Material = mat if is_revealed else _get_card_back_material()
+	var surface_material: Material = (mat as Material) if is_revealed else (_get_card_back_material() as Material)
 	$HandMesh.set_surface_override_material(0, surface_material)
 	$FieldMesh.set_surface_override_material(0, surface_material)
+
+## Artificial contact shadow for a card that is partially covered by a neighbour. `side` is +1 when
+## the covering card is to this card's right, -1 when it is to the left. `edge` is the covering
+## card's edge in this card's UV.x, and `strength` fades the whole band.
+func set_edge_shadow(side: float, edge: float, slope: float, strength: float, width: float = 0.055,
+		corner_u: float = 0.0, corner_v: float = 0.0) -> void:
+	if mat == null:
+		return
+	mat.set_shader_parameter("shadow_side", 1.0 if side >= 0.0 else -1.0)
+	mat.set_shader_parameter("shadow_edge", edge)
+	mat.set_shader_parameter("shadow_slope", slope)
+	mat.set_shader_parameter("shadow_corner_u", maxf(corner_u, 0.0))
+	mat.set_shader_parameter("shadow_corner_v", maxf(corner_v, 0.0))
+	mat.set_shader_parameter("shadow_strength", clampf(strength, 0.0, 1.0))
+	mat.set_shader_parameter("shadow_width", clampf(width, 0.001, 0.30))
+
+func clear_edge_shadow() -> void:
+	if mat == null:
+		return
+	mat.set_shader_parameter("shadow_strength", 0.0)
 
 ## Hidden/inert staging for a REVEALED card: the card is out of the deck and in Game.revealed_cards, but it must not
 ## render or accept input until an effect moves it somewhere. The reverse is applied by enter_zone().
@@ -239,6 +259,13 @@ func assign_card_texture():
 	mat.shader = shader
 	mat.set_shader_parameter("texture_albedo", full_texture)
 	mat.set_shader_parameter("effect_enabled", false)
+	mat.set_shader_parameter("shadow_strength", 0.0)
+	mat.set_shader_parameter("shadow_side", 1.0)
+	mat.set_shader_parameter("shadow_edge", 1.0)
+	mat.set_shader_parameter("shadow_slope", 0.0)
+	mat.set_shader_parameter("shadow_corner_u", 0.0)
+	mat.set_shader_parameter("shadow_corner_v", 0.0)
+	mat.set_shader_parameter("shadow_width", 0.055)
 	
 	
 	$HandMesh.set_surface_override_material(0, mat)
@@ -537,6 +564,7 @@ func enter_zone(zone: Zone) -> void:
 	_available_highlight_on = false
 	_energized_highlight_on = false
 	_refresh_target_ring()
+	clear_edge_shadow()
 	reset()  # drops the mana-crystal marker
 	if bool(presentation["power_ui"]):
 		showPower()
@@ -833,17 +861,17 @@ func activation_skills() -> Array:
 
 
 ## One skill by index in activation_skills(). Used by the existing index-based activation pipeline.
-func activation_skill(index: int) -> Dictionary:
+func activation_skill(skill_index: int) -> Dictionary:
 	var skills: Array = activation_skills()
-	if index < 0 or index >= skills.size() or not (skills[index] is Dictionary):
+	if skill_index < 0 or skill_index >= skills.size() or not (skills[skill_index] is Dictionary):
 		return {}
-	return skills[index]
+	return skills[skill_index]
 
 
 ## The code-defined AbilitySpec behind one activation slot, if it has one. JSON abilities return null and keep using
 ## their instruction list.
-func activation_ability_spec(index: int) -> RefCounted:
-	var definition: Dictionary = activation_skill(index)
+func activation_ability_spec(skill_index: int) -> RefCounted:
+	var definition: Dictionary = activation_skill(skill_index)
 	if definition.has("_ability_spec"):
 		return definition["_ability_spec"]
 	return null
@@ -1492,7 +1520,7 @@ func _build_target_border() -> void:
 	# moves and scales HandMesh without touching the Card, so a sibling border
 	# would be left behind. As a child it follows the lift and scales with the
 	# card, which is what keeps the ring hugging the edge.
-	var border_parent: Node3D = hand_mesh if hand_mesh != null else self
+	var border_parent: Node3D = (hand_mesh as Node3D) if hand_mesh != null else (self as Node3D)
 	border_parent.add_child(target_border)
 
 ## Card face size in metres. The mesh is a flat quad in XZ (0.429 x 0.6), so the
@@ -1581,7 +1609,7 @@ func effect_handles_event(event) -> bool:
 	var effect_obj = effect()
 	if effect_obj == null:
 		return false
-    # Accept a legacy string at the boundary while call sites migrate to EVENTS.Event.
+	# Accept a legacy string at the boundary while call sites migrate to EVENTS.Event.
 	return effect_obj.handles_event(EVENTS.normalize(event))
 
 
@@ -1801,8 +1829,8 @@ func is_attacking(want: bool = true) -> bool:
 func is_blocking(want: bool = true) -> bool:
 	return status_effects.has("blocking") == want
 
-func set_attacker_status(is_attacking: bool):
-	if(is_attacking):
+func set_attacker_status(active: bool) -> void:
+	if active:
 		status_effects['attacking'] = 1
 		position.z += 0.05
 	else:
@@ -1812,8 +1840,8 @@ func set_attacker_status(is_attacking: bool):
 ## Transient "selected as this combat's blocker" marker. Mirrors
 ## set_attacker_status() but keeps its own status key, so being a blocker never
 ## masquerades as being an attacker.
-func set_blocker_status(is_blocking: bool) -> void:
-	if(is_blocking):
+func set_blocker_status(active: bool) -> void:
+	if active:
 		status_effects['blocking'] = 1
 		position.z += 0.05
 	else:

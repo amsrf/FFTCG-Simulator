@@ -120,7 +120,6 @@ func _ready() -> void:
 		"untap_all_matching untaps every match (%d tapped -> %d)" % [tapped_before, still_tapped])
 
 	# --- the data ---------------------------------------------------------------------------------------
-	var d: Dictionary = CardDatabase.card_effects
 	var squall_cp: Array = load("res://assets/effects/card_42.gd").new().conditional_powers()
 	_expect(squall_cp.size() == 1 and int(squall_cp[0].get("value", 0)) == 3000,
 		"card 42's conditional is code-owned")

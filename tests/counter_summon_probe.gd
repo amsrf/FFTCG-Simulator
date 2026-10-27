@@ -56,7 +56,7 @@ func _ready() -> void:
 
 	var summoner: Card = _card(SUMMONER)
 	var squall: Card = _card(SQUALL)
-	var ice: Card = _card(ICE_MANA)
+	var _ice: Card = _card(ICE_MANA)
 
 	# Put a real Ifrit on the stack, as if the opponent had just cast it.
 	var ifrit: Card = _game.call("create_card", IFRIT, "opponent")

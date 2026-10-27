@@ -83,7 +83,6 @@ func _ready() -> void:
 	_expect(_total(_field.effective_cost(tidus)) == 4,
 		"Tidus costs 4 with two Category X Forwards")
 
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
 	var yuna_effect = load("res://assets/effects/card_177.gd").new()
 	var cloud_effect = load("res://assets/effects/card_187.gd").new()
 	_expect(yuna_effect.has_method("modify_cost_for"), "Yuna's Water filter is code-owned")

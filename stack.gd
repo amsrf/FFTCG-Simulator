@@ -119,7 +119,6 @@ func refresh_target_display() -> void:
 		return
 	var card: Card = displayed_card()
 	var target: Card = card.effect_target if card != null else null
-	var field = get_parent().get("field")
 	if field == null:
 		return
 	if target == null or not is_instance_valid(target):
@@ -139,7 +138,6 @@ func refresh_target_display() -> void:
 	# that decides which card is marked and why — not to add a third writer of the same flags.
 
 func _clear_target_display() -> void:
-	var field = get_parent().get("field")
 	if field != null:
 		field.hide_review_link()
 

@@ -171,7 +171,7 @@ func _criteria_filter(criteria: Variant) -> Dictionary:
 	return criteria if criteria is Dictionary else {}
 
 
-func choose_target(criteria: Variant, prompt: String = "Choose a card") -> Card:
+func choose_target(criteria: Variant, _prompt: String = "Choose a card") -> Card:
 	var picks: Array = await choose_targets(criteria, 1)
 	return picks[0] if not picks.is_empty() else null
 
@@ -217,8 +217,8 @@ func choose_hand_card(cards: Array, prompt: String = "Choose a card") -> Card:
 	return await agent.choose_field_card(owner_id, cards, prompt)
 
 
-## Play one already-chosen card from hand for free;  is the "onto the field dull" rider.
-func play_from_hand_card(card: Card, dull: bool = false) -> void:
+## Play one already-chosen card from hand for free; `enter_dull` is the "onto the field dull" rider.
+func play_from_hand_card(card: Card, enter_dull: bool = false) -> void:
 	if card == null or not is_instance_valid(card) or game == null:
 		return
 	var owner_hand: Hand = game.hand_for(1 if card.controller == "player" else 2)
@@ -227,12 +227,12 @@ func play_from_hand_card(card: Card, dull: bool = false) -> void:
 	owner_hand.remove_for_play(card)
 	card.reset_for_field_arrival()
 	game.field.play_card(card, card.controller == "opponent", true)
-	if dull:
+	if enter_dull:
 		card.tap()
 
 
 ## The common "you may play a card from hand" shape: shortlist, ask, choose, play.
-func may_play_from_hand(criteria: Variant, dull: bool = false,
+func may_play_from_hand(criteria: Variant, enter_dull: bool = false,
 		prompt: String = "Play a card") -> bool:
 	var candidates: Array = cards_in("hand", criteria, "self")
 	if candidates.is_empty():
@@ -242,7 +242,7 @@ func may_play_from_hand(criteria: Variant, dull: bool = false,
 	var picked: Card = await choose_hand_card(candidates, prompt)
 	if picked == null:
 		return false
-	await play_from_hand_card(picked, dull)
+	play_from_hand_card(picked, enter_dull)
 	return true
 
 
@@ -400,7 +400,7 @@ func divide_damage(cards: Array, total: int) -> void:
 
 
 ## Apply the split chosen during ability activation (before commit) to ctx.targets. Used by Yuffie 85.
-func apply_damage_division(total: int) -> void:
+func apply_damage_division(_total: int) -> void:
 	if game == null or targets.is_empty():
 		return
 	var amounts = game.get("_damage_division")

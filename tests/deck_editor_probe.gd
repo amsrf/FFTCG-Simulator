@@ -378,8 +378,8 @@ func _ready() -> void:
 	_expect(not (PROBE_DECK in offered), "and the picker's list no longer offers it")
 
 	# --- clean up ---------------------------------------------------------------------------
-	for name in [PROBE_DECK, PROBE_RENAMED, "probe_junk_deck", "probe_bogus_deck"]:
-		var path: String = MatchSetup.deck_path(name)
+	for deck_key in [PROBE_DECK, PROBE_RENAMED, "probe_junk_deck", "probe_bogus_deck"]:
+		var path: String = MatchSetup.deck_path(deck_key)
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
 	_expect(not FileAccess.file_exists(MatchSetup.deck_path(PROBE_DECK)), "the probe cleans up after itself")

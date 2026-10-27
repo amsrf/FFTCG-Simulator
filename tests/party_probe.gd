@@ -208,8 +208,8 @@ func _ready() -> void:
 
 	# --- "when a party you control ATTACKS" (Celestia 2808, Gippal 554) --------------------------------------
 	_field.set("blocker_card", null)
-	var celestia: Card = _make_forward(2808, "player")   # Backup: +1000 to the party
-	var gippal: Card = _make_forward(554, "player")      # Forward: +5000 to the party, and party members get Brave
+	var _celestia: Card = _make_forward(2808, "player")   # Backup: +1000 to the party
+	var _gippal: Card = _make_forward(554, "player")      # Forward: +5000 to the party, and party members get Brave
 	var buff_pair: Array = _form_pair()
 	var b1: Card = buff_pair[0]
 	var b2: Card = buff_pair[1]
