@@ -37,6 +37,10 @@ Scenes: `main_menu.tscn` (main scene) → `game.tscn` (the match). Autoloads: `C
   `TargetSequence` says ordered stages. The same `CardQuery` is the filter argument for `cards_in`, Break Zone picks,
   hand plays, `search_deck`, `break_zone_to_hand`, and `untap_all_matching`; `named()` is exact and
   `name_contains()` is substring. Legacy dictionaries are converted at the engine boundary.
+- A card's continuous power is `CardEffect.power_modifier(ctx)`, not a `power_per_rules` descriptor. It is called
+  once per source per continuous scan, stored as `self_power:<id>`, and folded into the cached power by
+  `Card.recompute_power()`. Dynamic properties use `CardEffect.properties(ctx)` and the same scan.
+- `power_modifier()` and `properties()` must be read-only and must not read their own cached `power`.
 - Auras are `Aura` subclasses in `assets/effects/`, with a typed `CardQuery` and `KIND_POWER`/`KIND_STATUS`.
   The runtime bridge is `Aura.as_rule()`; the old `_aura({...})` descriptor is removed.
 - Activated abilities are `CardAbility` subclasses in `assets/effects/`. Metadata is inherited from

@@ -1,4 +1,8 @@
 extends "res://scripts/effects/card_effect.gd"
 
-func power_per_rules() -> Array:
-	return [{"count": "damage_received", "value": 1000, "brave_at": 6}]
+func power_modifier(ctx) -> int:
+	return ctx.damage_received() * 1000
+
+
+func properties(ctx) -> Array[String]:
+	return ["brave"] if ctx.damage_received() >= 6 else []

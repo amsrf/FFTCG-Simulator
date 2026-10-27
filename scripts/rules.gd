@@ -6,7 +6,7 @@ extends RefCounted
 ## modifier appears.
 ##
 ## Registration stays on Field: it is the only thing that knows when a card enters or leaves, and the stateful ledgers
-## (auras, power_per) still live there. This object only evaluates.
+## (auras, dynamic power) still live there. This object only evaluates.
 ##
 ## Field keeps thin forwarders (`effective_cost`, `modify_damage`, `is_protected_from_being_chosen`,
 ## `is_protected_from_break`) so existing call sites and probes do not care where the implementation lives.

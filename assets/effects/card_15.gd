@@ -10,8 +10,8 @@ func _skill_0(ctx) -> void:
 	if not targets.is_empty():
 		ctx.break_cards(targets)
 
-func power_per_rules() -> Array:
-	return [{"count": {"is_type": "Forward", "controller": "opponent"}, "value": 1000}]
+func power_modifier(ctx) -> int:
+	return ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)).size() * 1000
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

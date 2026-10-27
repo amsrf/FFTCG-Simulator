@@ -41,6 +41,15 @@ func _init(p_game: Node, p_source: Card, p_event: String = "static", p_data: Dic
 ## Cards in one region, optionally filtered. `owner` is "self" (the source's controller), "opponent", or "any".
 ##
 ## Regions: field, hand, deck, break_zone, damage_zone, removed, stack, revealed.
+## Damage the effect's controller has received. Used by dynamic power/property queries.
+func damage_received(player_id: int = 0) -> int:
+	if game == null:
+		return 0
+	var pid: int = player_id if player_id in [1, 2] else owner_id
+	var side = game.side_for(pid)
+	return side.damage_count() if side != null else 0
+
+
 func cards_in(region: String, criteria: Variant = {}, owner: String = "any") -> Array:
 	var criteria_block: Dictionary = _criteria_block(criteria)
 	var pools: Array = []

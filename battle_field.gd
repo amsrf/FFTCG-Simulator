@@ -1404,29 +1404,24 @@ func _collect_continuous(source: Card, desired: Dictionary) -> void:
 			var key: String = "conditional:%d:%d" % [id, i]
 			desired[key] = {"card": source, "kind": "power", "value": value, "conditional": true}
 
-	# 2. Count-based self-power.
-	var per_rules = []
+	# 2. This card's own dynamic power and dynamic properties.
 	var source_effect = source.effect()
-	if source_effect != null and source_effect.has_method("power_per_rules"):
-		per_rules = source_effect.power_per_rules()
-	if per_rules.is_empty():
-		per_rules = source.card_effects.get("power_per", [])
-	if per_rules is Dictionary:
-		per_rules = [per_rules]
-	if per_rules is Array:
-		for i in range(per_rules.size()):
-			var rule = per_rules[i]
-			if not (rule is Dictionary):
-				continue
-			var n: int = _power_per_count(rule.get("count", ""), source)
-			var value: int = n * int(rule.get("value", 0))
-			if value != 0:
-				var key: String = "power_per:%d:%d" % [id, i]
-				desired[key] = {"card": source, "kind": "power", "value": value}
-			var threshold: int = int(rule.get("brave_at", -1))
-			if threshold > 0 and n >= threshold:
-				var brave_key: String = "power_per_brave:%d:%d" % [id, i]
-				desired[brave_key] = {"card": source, "kind": "status", "status": "brave"}
+	if source_effect != null:
+		var own_ctx = source.make_effect_context("static")
+		if source_effect.has_method("power_modifier"):
+			var modifier: int = int(source_effect.power_modifier(own_ctx))
+			if modifier != 0:
+				var power_key: String = "self_power:%d" % id
+				desired[power_key] = {"card": source, "kind": "power", "value": modifier}
+		if source_effect.has_method("properties"):
+			var props = source_effect.properties(own_ctx)
+			if props is Array:
+				for property in props:
+					var name: String = str(property)
+					if name.is_empty():
+						continue
+					var prop_key: String = "self_property:%d:%s" % [id, name]
+					desired[prop_key] = {"card": source, "kind": "status", "status": name}
 
 	# 3. Auras this card grants to other cards.
 	var auras = source.effect_auras()
@@ -1546,71 +1541,10 @@ func recompute_conditional_power() -> void:
 	refresh_continuous_effects()
 
 
-## CONTINUOUS, COUNT-BASED POWER. "For each point of damage you have received, +1000" (Dark Knight 92, Gabranth 98)
-## and "for each Forward your opponent controls, +1000" (Jecht 15).
-##
-## Same ledger idea as conditional_power: remember what each rule currently GRANTS and apply only the difference, so
-## temporary buffs and auras living in `power` are never recomputed away. The count itself is read live from the board
-## — there is no counter to keep in sync — so the only duty is to recompute when a count can change: a card entering
-## or leaving the field, and a player taking damage.
-##
-##   "power_per": {"count": {"is_type": "Forward", "controller": "opponent"}, "value": 1000}
-##   "power_per": {"count": "damage_received", "value": 1000, "brave_at": 6}
-##
-## `brave_at` is optional: once the count reaches it, the card gains Brave (status, one turn, refreshed by the same
-## recompute), and loses it if the count drops back below.
-var _power_per_effects: Array = []
-
-func register_power_per(card: Card) -> void:
-	if not ("power_per" in card.card_effects):
-		return
-	var rules = card.card_effects["power_per"]
-	if rules is Dictionary:
-		rules = [rules]
-	if not (rules is Array):
-		return
-	for rule in rules:
-		if not (rule is Dictionary):
-			continue
-		_power_per_effects.append({
-			"source": card,
-			"count": rule.get("count", ""),
-			"value": int(rule.get("value", 0)),
-			"brave_at": int(rule.get("brave_at", -1)),
-			"granted": 0,
-			"brave_granted": false,
-			"key": "power_per:%d:%d" % [card.get_instance_id(), _power_per_effects.size()],
-		})
-	recompute_power_per()
-
-func unregister_power_per(card: Card) -> void:
-	for rule in _power_per_effects:
-		if rule["source"] == card and is_instance_valid(card):
-			card.remove_power_modifier(str(rule.get("key", "")))
-	_power_per_effects = _power_per_effects.filter(func(r): return r["source"] != card)
-
+## Compatibility entry point: continuous work now happens in one field scan.
 func recompute_power_per() -> void:
 	refresh_continuous_effects()
 
-
-## How many things a power_per rule counts. "damage_received" is the cards in its controller's damage zone; anything
-## else is a criteria block counted against the board.
-func _power_per_count(counter, source: Card) -> int:
-	if counter is String and counter == "damage_received":
-		# Untyped on purpose, so the call can be NAMED: a Node-typed variable cannot call side_for(), and
-		# call("side_for", ...) would hide the dependency from both grep and Find Usages.
-		var game = get_parent()
-		if game == null or not game.has_method("side_for"):
-			return 0
-		var side = game.side_for(1 if source.controller == "player" else 2)
-		return side.damage_count() if side != null else 0
-	if counter is Dictionary:
-		var total: int = 0
-		for card in get_all_cards():
-			if card.matches_criteria(counter, source):
-				total += 1
-		return total
-	return 0
 
 ## Is the condition true FOR THIS SOURCE CARD? The source is the card that owns the conditional ("if you control
 ## Aerith" belongs to Zack), because "you" means its controller — without it the criteria would be read literally

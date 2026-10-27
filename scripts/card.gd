@@ -829,7 +829,7 @@ func clear_power_modifiers() -> void:
 
 
 ## Legacy API for temporary buffs: duration > 0 is a timed entry, duration <= 0/null is a permanent manual delta.
-## New continuous effects (auras, conditional power, power_per) should use add_power_modifier() with a stable key.
+## New continuous effects (auras, conditional power, dynamic power) should use add_power_modifier() with a stable key.
 func power_change(amount, duration):
 	if int(amount) == 0:
 		return

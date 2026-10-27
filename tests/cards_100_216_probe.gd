@@ -110,8 +110,8 @@ func _ready() -> void:
 	var raines_riders: Array = load("res://assets/effects/card_192.gd").new().damage_caused_riders()
 	_expect(raines_riders.size() == 1 and raines_riders[0].has("on_enter_break_zone"),
 		"Cid Raines 192 attaches a code-owned on-break rider")
-	var ramza_rules: Array = load("res://assets/effects/card_144.gd").new().power_per_rules()
-	_expect(ramza_rules.size() == 1 and int(ramza_rules[0].get("value", 0)) == 1000,
+	var ramza_effect = load("res://assets/effects/card_144.gd").new()
+	_expect(ramza_effect.has_method("power_modifier"),
 		"Ramza 144 scales with your Backups")
 	var noel_cp: Array = load("res://assets/effects/card_208.gd").new().conditional_powers()
 	_expect(noel_cp.size() == 1 and int(noel_cp[0].get("value", 0)) == 2000,

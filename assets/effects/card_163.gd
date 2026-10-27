@@ -1,4 +1,5 @@
 extends "res://scripts/effects/card_effect.gd"
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 
 
 func activated_abilities() -> Array:
@@ -7,8 +8,8 @@ func _skill_0(ctx) -> void:
 	ctx.add_status([ctx.source], "brave", 1)
 	ctx.extra_attacks_from_damage()
 
-func power_per_rules() -> Array:
-	return [{"count": {"is_type": "Forward", "controller": "player", "exclude": {"is_source": true}}, "value": 1000}]
+func power_modifier(ctx) -> int:
+	return ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR).excluding_source()).size() * 1000
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

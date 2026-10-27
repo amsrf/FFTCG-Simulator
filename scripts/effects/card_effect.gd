@@ -55,9 +55,13 @@ func static_rules() -> Dictionary:
 	return {}
 
 
-## Count-based continuous power rules. Each rule:
-## { "count": Dictionary-or-"damage_received", "value": int, "brave_at": int (optional) }.
-func power_per_rules() -> Array:
+## This card's own dynamic power contribution. Called from the continuous scan with a read-only context.
+func power_modifier(_ctx) -> int:
+	return 0
+
+
+## Dynamic properties this card currently has, in addition to printed keywords and granted statuses.
+func properties(_ctx) -> Array[String]:
 	return []
 
 

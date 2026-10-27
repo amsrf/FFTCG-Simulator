@@ -173,6 +173,31 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+### Dynamic Power and Properties
+
+`power_per_rules` is gone. A card now supplies its own contribution:
+
+```gdscript
+func power_modifier(ctx) -> int:
+	return ctx.damage_received() * 1000
+```
+
+The continuous scan asks each card for its value and stores it under
+`self_power:<id>`; `Card.recompute_power()` remains the single owner of the
+combined value (`base + self modifier + aura grants + temporary buffs + manual
+deltas`). A new `ctx.damage_received()` keeps the query read-only.
+
+Dynamic properties use the same scan:
+
+```gdscript
+func properties(ctx) -> Array[String]:
+	return ["brave"] if ctx.damage_received() >= 6 else []
+```
+
+The five `power_per` cards (15, 92, 98, 144, 163) are migrated, Gabranth's
+`brave_at: 6` is now a dynamic property, and the old registry/count helpers
+are deleted.
+
 Auras are code objects now too. `scripts/effects/aura.gd` owns a typed
 `CardQuery`, `kind`, `value`/`status`, optional condition, and the runtime
 grant/revoke bridge. All nine aura cards (ten aura definitions) are nested
