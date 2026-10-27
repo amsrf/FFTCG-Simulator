@@ -22,7 +22,7 @@ var source_kind: String = ""
 var target: Card = null
 var kind: int = Kind.EFFECT
 var rule_owner: Card = null
-var field = null
+var field: Node = null
 
 
 func source_is_owner() -> bool:

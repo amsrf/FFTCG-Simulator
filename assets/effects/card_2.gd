@@ -3,7 +3,7 @@ const BREAK_CAUSE := preload("res://scripts/effects/break_cause.gd")
 ## Auron 1-002H: your Backups cannot be broken by opponent Summons or abilities.
 
 
-func prevents_break(ctx) -> bool:
+func prevents_break(ctx: BREAK_CONTEXT) -> bool:
 	if not ctx.card.is_type("Backup"):
 		return false
 	if ctx.card.controller != ctx.rule_owner.controller:

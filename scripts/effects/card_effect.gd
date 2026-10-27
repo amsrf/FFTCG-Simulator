@@ -1,4 +1,6 @@
 extends RefCounted
+const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
+const BREAK_CONTEXT := preload("res://scripts/effects/break_context.gd")
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
 const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
@@ -129,10 +131,10 @@ func modify_cost_for(_ctx, _subject: Card, cost: Dictionary) -> Dictionary:
 	return cost
 
 ## Change incoming damage before it lands.
-func modify_damage(ctx) -> int:
+func modify_damage(ctx: DAMAGE_CONTEXT) -> int:
 	return ctx.amount
 
 
 ## Replace a break: return true to stop it. The default protects nothing.
-func prevents_break(_ctx) -> bool:
+func prevents_break(_ctx: BREAK_CONTEXT) -> bool:
 	return false

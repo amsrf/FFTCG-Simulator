@@ -393,6 +393,9 @@ field card's `CardEffect.modify_damage(ctx)` in turn; the default returns the am
 `amount`, `original_amount`, `source`, `source_controller`, `source_kind`, `target`, `kind`, `rule_owner`, `field`.
 `DamageContext.Kind` distinguishes combat, ability, Summon, EX BURST and generic effect damage. Do not add damage or
 mutate state inside `modify_damage()`.
+Both `modify_damage(ctx: DAMAGE_CONTEXT)` and `prevents_break(ctx: BREAK_CONTEXT)` are typed through script
+constants on `CardEffect`. Card subclasses inherit those constants and must not redeclare them (GDScript rejects a
+child member with the same name).
 
 PENDING ONE-SHOT DAMAGE RULES are status payloads, not named flags. `add_status_effect(status, duration, payload)`
 stores the payload; any status whose payload has `operation` and `value` is applied to damage dealt to that card. The

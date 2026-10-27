@@ -179,6 +179,8 @@ the deck-search vocabulary, and exact vs substring names are distinct
 field card's `CardEffect.prevents_break(ctx)`. The default returns false; a true result stops the break.
 Auron 2 moved off `static_rules()["protects"]` and now owns the check in code. Break protection is asked only
 by `break_card()`; `put_card_into_graveyard()` remains ordinary removal and bypasses it.
+The damage and break contexts are typed through preloaded script constants, so a card signature is
+`func modify_damage(ctx: DAMAGE_CONTEXT) -> int` / `func prevents_break(ctx: BREAK_CONTEXT) -> bool`.
 
 ### Damage Modifiers as Card Queries
 
