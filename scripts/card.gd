@@ -2,6 +2,7 @@ extends Node3D
 
 class_name Card
 const CRYSTAL_SCENE_PATH = "res://crystal.tscn"
+const ELEMENTS := preload("res://scripts/elements.gd")
 @export var id: int = 0  # Make this editable in the Inspector
 var string_id: String = '0'
 var hand_center = GlobalVariables.get_hand_center();
@@ -1727,6 +1728,10 @@ func is_element(value: String) -> bool:
 ## Elements this card can produce for CP. Kept separate from `current_elements` because payment may eventually ask
 ## the player to choose one when a card has several; for now it is the same query.
 func mana_elements() -> Array[String]:
+	# A Backup that produces "any Element" offers every colour; a card with several printed/current elements offers
+	# exactly those. The payment UI asks the player to choose when this has more than one entry.
+	if produces_any_element():
+		return ELEMENTS.CJK.duplicate()
 	return current_elements()
 
 func is_light_or_dark() -> bool:

@@ -18,6 +18,9 @@ func handle_grabbed():
 				# The Field owns the "selected for mana" marker (Card.show_mana_crystal).
 				if field.selected_cards_for_mana_conversion.has(card):
 					field.remove_card_from_mana_conversion(card)
+				elif card.mana_elements().size() > 1:
+					# A multi-colour source asks which colour before it generates anything.
+					field.begin_mana_choice(card)
 				else:
 					field.add_card_to_mana_conversion(card)
 		GlobalVariables.Player_Mode.ATTACKING:

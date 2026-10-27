@@ -173,6 +173,14 @@ The same `CardQuery` now serves non-target filters too: `cards_in`,
 the deck-search vocabulary, and exact vs substring names are distinct
 (`named()` vs `name_contains()`).
 
+### Multi-Colour Mana Picker
+
+A Backup that can produce more than one colour now opens a radial picker instead of generating silently:
+`Card.mana_elements()` lists every available colour (`produces_any_element` expands to all eight), and
+`Field.begin_mana_choice()` places one small static crystal around the card in the camera plane. The crystals
+are equally spaced, grow on hover, and clicking one records that exact colour in `Field.selected_mana_elements`
+before emitting the normal mana-change signal. Deselecting refunds the recorded colour, not a re-derived one.
+
 ### Break Replacement as a Card Query
 
 `Game.break_card()` now builds a `BreakContext` (`card`, `rule_owner`, typed `BreakCause`) and asks every

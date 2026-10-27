@@ -410,6 +410,16 @@ not reintroduce a `next_damage_zero`-style boolean — use a payload such as
 Do NOT add a direct `card.suffer_damage()` call anywhere: it bypasses modifiers. `divide_damage` and the party-to-blocker
 hit were routed through `Field.cause_damage` for this reason.
 
+### Multi-colour mana sources
+- `Card.mana_elements()` is the payment UI's list. A `produces_any_element` source returns all eight CJK
+  colours; any other source returns its live `current_elements()`.
+- When that list has more than one entry, `Field.begin_mana_choice(card)` opens `mana_choice.tscn` — small
+  `ManaCrystal` nodes in a camera-plane circle, static, hover-growing, click-to-choose. The chosen colour is
+  stored in `Field.selected_mana_elements` so `remove_card_from_mana_conversion()` refunds exactly that colour.
+  Do not re-derive a refund from `card.mana_element()` after a choice.
+- `add_card_to_mana_conversion(card, element)` accepts the chosen element; `element == "any"` remains valid for
+  agents/payment paths that deliberately produce wild CP.
+
 ### Break replacement: one context, one boolean
 
 `Game.break_card()` asks `Rules.is_protected_from_break()`, which builds a `BreakContext` (`card` about to break,

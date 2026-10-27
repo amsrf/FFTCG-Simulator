@@ -65,6 +65,11 @@ var phase: GlobalVariables.Phase:
 	get:
 		return get_parent().phase
 @export var selected_cards_for_mana_conversion: Array[Card] = []
+## The colour each selected source actually generated. A source can offer several colours, so a refund
+## must return the chosen one rather than re-deriving it from the card.
+var selected_mana_elements: Dictionary = {}
+const MANA_CHOICE := preload("res://mana_choice.tscn")
+var mana_choice = null
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
 @onready var assistant: Assistant = get_parent().get_node("Assistant")
 @onready var stack: Stack = get_parent().get_node("Stack") as Stack
@@ -323,24 +328,55 @@ func add_all_auras_to_card(card:Card):
 	for aura in _auras.values():
 		add_aura_to_card(aura,card)		
 
-func add_card_to_mana_conversion(card:Card):
+func begin_mana_choice(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	if assistant != null and assistant.payment_is_full():
+		return
+	if mana_choice != null and is_instance_valid(mana_choice):
+		mana_choice.queue_free()
+		mana_choice = null
+	mana_choice = MANA_CHOICE.instantiate()
+	get_parent().add_child(mana_choice)
+	mana_choice.chosen.connect(_on_mana_element_chosen.bind(card))
+	mana_choice.cancelled.connect(func() -> void:
+		mana_choice = null)
+	mana_choice.open(card, card.mana_elements())
+
+
+func _on_mana_element_chosen(element: String, card: Card) -> void:
+	mana_choice = null
+	add_card_to_mana_conversion(card, element)
+
+
+func add_card_to_mana_conversion(card:Card, element: String = ""):
 	# RULES: the CP cost is exact. Once it is fulfilled, further selections are ignored; only the one hand-card
 	# overpay exception is allowed, and that already happened when the fulfilling card was selected.
 	var assistant = get_parent().get("assistant") if get_parent() != null else null
 	if assistant != null and assistant.payment_is_full():
 		print("[Mana] cost already fulfilled; ignoring extra charge")
 		return
-	if  not selected_cards_for_mana_conversion.has(card):
-		selected_cards_for_mana_conversion.push_back(card)
+	if selected_cards_for_mana_conversion.has(card):
+		return
+	var chosen: String = element
+	if chosen.is_empty():
+		chosen = card.mana_element()
+	var options: Array = card.mana_elements()
+	if chosen != "any" and not options.has(chosen):
+		chosen = card.mana_element()
+	selected_cards_for_mana_conversion.push_back(card)
+	selected_mana_elements[card] = chosen
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
 	card.show_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(1,card.mana_element())
-	
+	selected_cards_for_mana_has_changed.emit(1, chosen)
+
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
+	var chosen: String = str(selected_mana_elements.get(card, card.mana_element()))
+	selected_mana_elements.erase(card)
 	card.clear_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(-1,card.mana_element())
+	selected_cards_for_mana_has_changed.emit(-1, chosen)
 
 
 ## Apply every static `on_character_enter` rule currently on the board to a card that just entered. This is a BOARD
@@ -2031,6 +2067,7 @@ func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
 
 
 func _on_assistant_charge_complete() -> void:
@@ -2040,12 +2077,14 @@ func _on_assistant_charge_complete() -> void:
 		c.reset()
 	_tap_selected_cards()
 	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
 
 func apply_deferred_skill_mana_payment() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	_tap_selected_cards()
 	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
 
 
 func _on_assistant_target_cancel() -> void:
@@ -2053,6 +2092,7 @@ func _on_assistant_target_cancel() -> void:
 		for c in selected_cards_for_mana_conversion:
 			c.reset()
 		selected_cards_for_mana_conversion.clear()
+		selected_mana_elements.clear()
 	targeting_allow_cancel = false
 	target_card = null
 	source_card = null
