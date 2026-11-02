@@ -5,6 +5,7 @@ class_name Field
 const CARD_CHARGE = 1
 const RULES := preload("res://scripts/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
+const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const CARD_TARGET := preload("res://scripts/card_target.gd")
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
@@ -322,22 +323,9 @@ func _apply_entry_rules(entering: Card) -> void:
 			continue
 		if not source.abilities_enabled():
 			continue
-		var entry_rules = source.static_rule("on_character_enter", [])
-		if entry_rules is Dictionary:
-			entry_rules = [entry_rules]
-		if not (entry_rules is Array):
-			continue
-		for rule in entry_rules:
-			if not (rule is Dictionary):
-				continue
-			if not CARD_TARGET.matches(entering, rule.get("targets", {}), source):
-				continue
-			var action: String = str(rule.get("action", ""))
-			match action:
-				"dull", "tap":
-					entering.tap()
-				_:
-					push_warning("[EntryRule] %s: unknown action '%s'" % [source.card_name, action])
+		var effect_obj = source.effect()
+		if effect_obj != null and effect_obj.has_method("on_character_enter"):
+			effect_obj.on_character_enter(entering, source.make_effect_context("static"))
 
 
 func play_card(card, is_opponent: bool = false, animate = true, record: bool = true) -> void:
@@ -521,7 +509,7 @@ func trigger_party_deals_damage(controller: String) -> void:
 ## A TRIGGERED ABILITY GOES ON THE STACK. The event only MATCHES and ENQUEUES here; `may`, target selection and the
 ## instructions all happen at resolution (Game._resolve_event_trigger), so either player can respond first and a
 ## "may" choice is made when the ability resolves, not when it triggers.
-func trigger_event(event_name, context: Dictionary) -> void:
+func trigger_event(event_name, context = null) -> void:
 	var host: Node = get_parent()
 	if host == null:
 		return
@@ -529,6 +517,8 @@ func trigger_event(event_name, context: Dictionary) -> void:
 	var event_key: String = EVENTS.name_of(event_id)
 	if event_id == EVENTS.Event.NONE:
 		return
+	var event_ctx: EVENT_CONTEXT = _as_event_context(event_id, context)
+	var event_data: Dictionary = event_ctx.to_data()
 	var cards: Array = get_all_cards().duplicate()
 	for source in cards:
 		if source == null or not is_instance_valid(source):
@@ -542,9 +532,16 @@ func trigger_event(event_name, context: Dictionary) -> void:
 		# hook and a leftover JSON entry would fire the ability twice.
 		if source.abilities_enabled() and source.effect_handles_event(event_id):
 			var source_effect = source.effect()
-			if source_effect == null or not source_effect.has_method("event_matches") \
-					or source_effect.event_matches(event_id, source, context):
-				stack.enqueue_code_trigger(source, event_id, context)
+			if source_effect != null and source_effect.has_method("trigger_specs"):
+				var specs: Array = source_effect.trigger_specs()
+				if not specs.is_empty():
+					for spec in specs:
+						if spec != null and spec.accepts(source, event_ctx):
+							stack.enqueue_code_trigger(source, event_id, event_data)
+							break
+					continue
+			if source_effect != null and source_effect.handlers().has(event_id):
+				stack.enqueue_code_trigger(source, event_id, event_data)
 			continue
 		for index in range(triggers.size()):
 			var trigger = triggers[index]
@@ -552,7 +549,7 @@ func trigger_event(event_name, context: Dictionary) -> void:
 				continue
 			if str(trigger.get("on", "")) != event_key:
 				continue
-			if not _event_filter_holds(source, trigger.get("filter", {}), context):
+			if not _event_filter_holds(source, trigger.get("filter", {}), event_data):
 				continue
 			var once: bool = bool(trigger.get("once_per_turn", false))
 			var turn: int = int(host.get("turn_number"))
@@ -562,7 +559,26 @@ func trigger_event(event_name, context: Dictionary) -> void:
 				continue
 			if once and host.has_method("mark_event_trigger_fired"):
 				host.call("mark_event_trigger_fired", fire_key)
-			stack.enqueue_event_trigger(source, trigger, context)
+			stack.enqueue_event_trigger(source, trigger, event_data)
+
+func _as_event_context(event_id: int, context) -> EVENT_CONTEXT:
+	if context is EVENT_CONTEXT:
+		var given: EVENT_CONTEXT = context
+		given.event = event_id
+		return given
+	var ctx: EVENT_CONTEXT = EVENT_CONTEXT.new()
+	ctx.event = event_id
+	if context is Dictionary:
+		ctx.data = context.duplicate(true)
+		ctx.card = context.get("card", null)
+		ctx.from_zone = int(context.get("from_zone", Card.Zone.NONE))
+		ctx.to_zone = int(context.get("to_zone", Card.Zone.NONE))
+		ctx.cause = str(context.get("cause", ""))
+		ctx.player_id = int(context.get("player_id", 0))
+	if ctx.player_id == 0 and ctx.card != null and is_instance_valid(ctx.card):
+		ctx.player_id = 1 if ctx.card.controller == "player" else 2
+	return ctx
+
 
 ## A trigger's filter is criteria on the event card, except for events with no card (damage_received), where only the
 ## controller comparison makes sense. "your"/"opponent" are relative to the trigger owner.
@@ -598,7 +614,7 @@ func party_grants_brave(card: Card) -> bool:
 	if card == null or attacking_party.size() < 2 or not attacking_party.has(card):
 		return false
 	for c in get_all_cards():
-		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.static_rule("party_brave", false) == true:
+		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.grants_party_brave():
 			return true
 	return false
 	

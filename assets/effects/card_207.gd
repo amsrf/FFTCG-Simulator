@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 
@@ -13,8 +12,8 @@ func _skill_1(ctx: EFFECT_CONTEXT) -> void:
 	if not targets.is_empty():
 		ctx.break_cards(targets)
 
-func static_rules() -> Dictionary:
-	return {"cannot_be_returned_to_hand": {"sources": ["Summon", "Ability"], "controller": "opponent"}}
+func prevents_return_to_hand(ctx: TARGET_CONTEXT) -> bool:
+	return ctx.from_opponent() and ctx.kind_in(["Summon", "Ability"])
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

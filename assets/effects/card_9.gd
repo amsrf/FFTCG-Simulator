@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-009C Cloud
 
@@ -21,4 +20,4 @@ func conditional_powers() -> Array:
 
 
 func _has_category_vii(source: Card) -> bool:
-	return controls(source, {"is_type": "Forward", "is_category": "VII", "exclude": {"is_named": "Cloud"}})
+	return controls(source, CARD_QUERY.new().of_type("Forward").of_category("VII").excluding(CARD_QUERY.new().named("Cloud")))

@@ -18,4 +18,4 @@ func conditional_powers() -> Array:
 
 
 func _has_laguna(source: Card) -> bool:
-	return controls(source, {"is_named": "Laguna"})
+	return controls(source, CARD_QUERY.new().named("Laguna"))

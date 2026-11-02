@@ -29,7 +29,10 @@ const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 ## Search filters use the CardFilter vocabulary (name/type/category/job/element/any). Preloaded by path for the same
 ## reason as the two above.
 const CARD_FILTER := preload("res://scripts/card_filter.gd")
+## Runtime shatter VFX for a real BREAK (not a power-0 removal).
+const CARD_SHARDS := preload("res://card_shards.tscn")
 const EVENTS := preload("res://scripts/effects/events.gd")
+const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
 
 ## REVEAL staging. Cards are taken off the top of the deck, shown one at a time, then hidden/inert and kept here
@@ -950,6 +953,10 @@ func _input(event):
 		# Worth knowing: it counts toward the defeat total like any other damage. Seven presses of Y and you lose,
 		# which is correct rather than a bug — the debug key uses the real rules on purpose.
 		player.take_damage(1)
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == Key.KEY_B:
+		# DEBUG: only in Test Mode. B breaks the first player Forward; Shift+B breaks the opponent's.
+		if str(MatchSetup.config.get("preset", "")).begins_with("ground_"):
+			_debug_break_first_forward(event.shift_pressed)
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_V:
 		_show_zone_view(player.damage_zone, "Damage Zone")
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_G:
@@ -964,6 +971,20 @@ func _input(event):
 ##
 ## V = your damage zone, G = your graveyard. Left/right click on the zones themselves comes next; the keys make
 ## this usable and testable now.
+func _debug_break_first_forward(opponent_side: bool = false) -> void:
+	var side_name: String = "opponent" if opponent_side else "player"
+	var victim: Card = null
+	for candidate in field.get_front_cards_for(side_name):
+		if candidate != null and is_instance_valid(candidate) and candidate.is_on_field():
+			victim = candidate
+			break
+	if victim == null:
+		print("[Debug] no %s Forward to break" % side_name)
+		return
+	print("[Debug] breaking %s's %s" % [side_name, victim.card_name])
+	break_card(victim)
+
+
 func _show_zone_view(zone: Node, title: String) -> void:
 	if zone == null:
 		return
@@ -1274,7 +1295,8 @@ func cause_damage():
 	# member suppresses EX Burst, the damage it puts in the zone is covered.
 	var source: Card = field.attacker_card
 	for member in field.party_members():
-		if member != null and is_instance_valid(member) 				and (member.static_rule("ex_burst_disabler", false) == true or member.status_effects.has("ex_burst_disabler")):
+		if member != null and is_instance_valid(member) \
+				and (member.disables_ex_burst() or member.status_effects.has("ex_burst_disabler")):
 			source = member
 			break
 	# The DEFENDING player (whoever isn't taking the turn) takes the damage, so
@@ -1933,35 +1955,74 @@ func enforce_game_state_rules() -> void:
 ## FRAGILE ("if they are put from the field into the Break Zone this turn, remove them from the game instead") has to
 ## intercept the transition itself — the card never reaches the Break Zone, so nothing that watches for a card
 ## arriving there can see it. Implementing it as a trigger that reacts afterwards would be a different (wrong) rule.
-func _send_card_to_graveyard(card: Card) -> bool:
-	# CAPTURED BEFORE THE MOVE. Graveyard.add_card() sets current_zone to GRAVEYARD, and this flag decides whether the
-	# board-wide card_left_field event fires; a card that never was on the field must not trigger it.
-	var from_field: bool = card.current_zone == Card.Zone.FIELD
+## Place a card in the Break Zone. Returns the zone it ACTUALLY reached: Fragile / Yuna 176 can redirect it to the
+## Removed zone. This helper deliberately does not publish CARD_LEFT_FIELD; the field-exit choke point does that so
+## the event has a real destination.
+func _send_card_to_graveyard(card: Card) -> int:
 	if card.status_effects.has("fragile"):
 		print("[Fragile] %s is removed from the game instead" % card.card_name)
 		card.status_effects.erase("fragile")
 		_send_card_to_removed(card)
-		return true
+		return Card.Zone.REMOVED
 	# 176 Yuna: "If a Character is put from the field into the Break Zone, you may remove it from the game instead."
-	# SIMPLIFICATION: the "may" is auto-accepted. This transition has to stay synchronous for the break/removal call
-	# sites; a real optional prompt belongs at a higher-level pre-break step. `current_zone` still says FIELD here,
-	# because the caller removes the card from the field before sending it; that is what keeps the rule off cards
-	# that never entered (a unique-name duplicate from hand/stack).
+	# SIMPLIFICATION: the "may" is auto-accepted. `current_zone` still says FIELD here because the caller detaches
+	# from the field before sending it; that is what keeps the rule off cards that never entered (a hand/stack
+	# duplicate).
 	if card.current_zone == Card.Zone.FIELD and card.is_character() and _yuna_exiles_break_zone():
 		print("[Yuna] %s is removed from the game instead of the Break Zone" % card.card_name)
 		_send_card_to_removed(card)
-		return true
+		return Card.Zone.REMOVED
 	if card.controller == "player":
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
-	if from_field:
-		field.trigger_event(EVENTS.Event.CARD_LEFT_FIELD, {"card": card})
-	return false
+	return Card.Zone.GRAVEYARD
+
+
+## THE FIELD-EXIT CHOKE POINT. It owns rules state and the typed CARD_LEFT_FIELD event; it does not own animation.
+## `place` lets an animated caller do its presentation instead of the default immediate placement (used by the
+## return-to-hand tween). The event carries the ACTUAL destination after replacement effects.
+func move_card_from_field(card: Card, to_zone: int, cause: String = "",
+		place: Callable = Callable()) -> Variant:
+	if card == null or not is_instance_valid(card) or not card.is_on_field():
+		return null
+	field.remove_card(card)
+	var actual_zone: int = to_zone
+	var placed: Variant = null
+	match to_zone:
+		Card.Zone.GRAVEYARD:
+			actual_zone = _send_card_to_graveyard(card)
+		Card.Zone.REMOVED:
+			_send_card_to_removed(card)
+		Card.Zone.HAND:
+			if place.is_valid():
+				placed = place.call(card)
+			else:
+				var owner_hand: Hand = hand_for(1 if card.controller == "player" else 2)
+				if owner_hand != null:
+					owner_hand.add_card(card)
+		_:
+			push_warning("[Move] unsupported field destination %d" % to_zone)
+			return null
+	publish_card_left_field(card, actual_zone, cause)
+	return placed
+
+
+func publish_card_left_field(card: Card, to_zone: int, cause: String = "") -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	var event_ctx: EVENT_CONTEXT = EVENT_CONTEXT.new()
+	event_ctx.event = EVENTS.Event.CARD_LEFT_FIELD
+	event_ctx.card = card
+	event_ctx.from_zone = Card.Zone.FIELD
+	event_ctx.to_zone = to_zone
+	event_ctx.cause = cause
+	event_ctx.player_id = 1 if card.controller == "player" else 2
+	field.trigger_event(event_ctx.event, event_ctx)
 
 func _yuna_exiles_break_zone() -> bool:
 	for other in field.get_all_cards():
-		if other != null and other.static_rule("break_zone_exile", false) == true:
+		if other != null and other.exiles_break_zone():
 			return true
 	return false
 
@@ -1979,8 +2040,9 @@ func remove_card_from_game(card: Card) -> void:
 		return
 	print("[RemoveFromGame] ", card.card_name)
 	if card.is_on_field():
-		field.remove_card(card)
-	_send_card_to_removed(card)
+		move_card_from_field(card, Card.Zone.REMOVED, "REMOVE")
+	else:
+		_send_card_to_removed(card)
 
 
 func remove_targets_from_game(_argument = null) -> void:
@@ -1989,8 +2051,9 @@ func remove_targets_from_game(_argument = null) -> void:
 			continue
 		print("[RemoveFromGame] ", card.card_name)
 		if card.is_on_field():
-			field.remove_card(card)
-		_send_card_to_removed(card)
+			move_card_from_field(card, Card.Zone.REMOVED, "REMOVE")
+		else:
+			_send_card_to_removed(card)
 
 ## True when `card`'s controller already controls a Character with the same name. Used BEFORE a card is parented onto
 ## the field, so the duplicate never enters and no enter-the-field trigger runs for it.
@@ -2033,11 +2096,11 @@ func would_break_light_dark_limit(card: Card) -> bool:
 			same_kind = true
 		else:
 			other_kind = true
-		if str(other.static_rule("light_dark_exempt", "")) == kind:
+		if other.light_dark_exemption() == kind:
 			enabled_by_field = true
 	# The exceptional card itself may enter beside cards of its OWN kind, never beside the opposite kind. While it
 	# is on the field it lifts the limit for that kind (the "you can play 2 or more Light Characters" clause).
-	if str(card.static_rule("light_dark_exempt", "")) == kind:
+	if card.light_dark_exemption() == kind:
 		return other_kind
 	if enabled_by_field:
 		return false
@@ -2051,8 +2114,7 @@ func put_card_into_graveyard(card: Card) -> void:
 		return
 	card.broken = false
 	card.untap()
-	field.remove_card(card)
-	_send_card_to_graveyard(card)
+	move_card_from_field(card, Card.Zone.GRAVEYARD, "REMOVAL")
 
 ## Break `card`. `source_kind`/`source_controller` describe the CAUSE ("Summon"/"Ability" and who controlled it), so
 ## continuous protection rules can be asked before anything moves; the state-based sweep passes the card's recorded
@@ -2069,8 +2131,27 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 	# because this is the only function that knows the damage reached the power.
 	card.broken = true
 	card.untap()
-	field.remove_card(card)
-	_send_card_to_graveyard(card)
+	# Spawn the shards BEFORE the card leaves the field so we can use its exact
+	# world transform and its card-art material. The original is removed in the
+	# same frame; the shard burst lives independently in Game space.
+	_play_break_shatter(card)
+	move_card_from_field(card, Card.Zone.GRAVEYARD, "BREAK")
+
+func _play_break_shatter(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	var fx: Node = CARD_SHARDS.instantiate()
+	add_child(fx)
+	fx.set("global_transform", card.global_transform)
+	fx.set("free_when_done", true)
+	# LAND ON THE PLAYMAT, NOT THE BARE BOARD. The Field node carries the purple
+	# playing surface at y = 0; the blue Board plane is underneath it at y = -0.2.
+	# Landing on the lower plane would put the shards BEHIND the opaque field
+	# surface, which is exactly why they seemed to disappear mid-fall.
+	if field is Node3D:
+		fx.set("floor_world_y", (field as Node3D).global_position.y)
+	fx.call("burst_from_card", card)
+
 
 ## Fired BY THE BREAK ZONE once a card has arrived in it and been laid out — never from here, and never while the
 ## card is still on the field. Both keywords go on the stack, in this order, so `when_break` resolves second.

@@ -9,5 +9,5 @@ func modify_cost_for(ctx: COST_CONTEXT, subject: Card, cost: Dictionary) -> Dict
 		return cost
 	return ctx.adjust(cost, 1)
 
-func static_rules() -> Dictionary:
-	return {"cannot_be_chosen": {"sources": ["Summon"], "controller": "opponent"}}
+func prevents_being_chosen(ctx: TARGET_CONTEXT) -> bool:
+	return ctx.from_opponent() and ctx.is_kind("Summon")

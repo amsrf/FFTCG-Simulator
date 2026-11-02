@@ -1,6 +1,7 @@
 extends RefCounted
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
 const BREAK_CONTEXT := preload("res://scripts/effects/break_context.gd")
+const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
 const BREAK_CAUSE := preload("res://scripts/effects/break_cause.gd")
 ## RULES — the continuous-effect QUERY layer.
 ##
@@ -142,26 +143,13 @@ func is_protected_from_being_chosen(card: Card, source: Card, source_kind: Strin
 	for protector in _cards():
 		if protector == null or not is_instance_valid(protector):
 			continue
-		var rules = protector.static_rule("shields", [])
-		if rules is Dictionary:
-			rules = [rules]
-		if not (rules is Array):
+		if not protector.abilities_enabled():
 			continue
-		for rule in rules:
-			if not (rule is Dictionary):
-				continue
-			var targets: Dictionary = rule.get("targets", {})
-			if not card.matches_criteria(targets, protector):
-				continue
-			var scope: String = str(rule.get("from", ""))
-			if scope == "opponent" and source.controller == protector.controller:
-				continue
-			if (scope == "own" or scope == "controller") and source.controller != protector.controller:
-				continue
-			var kinds: Array = rule.get("by", [])
-			# An empty kind is combat; a Summon/Ability list never contains it, so it is refused below.
-			if not kinds.is_empty() and not (source_kind in kinds):
-				continue
+		var effect_obj = protector.effect()
+		if effect_obj == null or not effect_obj.has_method("shields_from_choice"):
+			continue
+		var ctx = TARGET_CONTEXT.new(card, source, source_kind, protector)
+		if effect_obj.shields_from_choice(ctx):
 			return true
 	return false
 
@@ -194,32 +182,10 @@ func is_protected_from_break(card: Card, source_controller: String, source_kind:
 			continue
 		ctx.rule_owner = protector
 		var effect_obj = protector.effect() if protector.abilities_enabled() else null
-		if effect_obj != null and effect_obj.has_method("prevents_break") 				and not protector.card_effects.has("protects"):
+		if effect_obj != null and effect_obj.has_method("prevents_break"):
 			if bool(effect_obj.prevents_break(ctx)):
 				print("[Protect] %s is protected by %s" % [card.card_name, protector.card_name])
 				return true
-			continue
-		# Legacy fallback for a card that still carries a static protects block.
-		var rules = protector.static_rule("protects", [])
-		if rules is Dictionary:
-			rules = [rules]
-		if not (rules is Array):
-			continue
-		for rule in rules:
-			if not (rule is Dictionary):
-				continue
-			var targets: Dictionary = rule.get("targets", {})
-			if not card.matches_criteria(targets, protector):
-				continue
-			var scope: String = str(rule.get("from", ""))
-			if scope == "opponent" and source_controller == protector.controller:
-				continue
-			if (scope == "own" or scope == "controller") and source_controller != protector.controller:
-				continue
-			var kinds: Array = rule.get("by", [])
-			if not kinds.is_empty() and not (source_kind in kinds):
-				continue
-			return true
 	return false
 
 
@@ -291,47 +257,17 @@ func modify_damage(source: Card, target: Card, amount: int, source_kind: String 
 		damage_ctx.amount = current
 		damage_ctx.rule_owner = owner
 		var effect_obj = owner.effect() if owner.abilities_enabled() else null
-		if effect_obj != null and effect_obj.has_method("modify_damage") and not owner.card_effects.has("damage_modifiers"):
-			var next: int = int(effect_obj.modify_damage(damage_ctx))
-			if next != current:
-				print("[DamageMod] %s -> %d (%s)" % [owner.card_name, next, target.card_name])
-			current = next
-			context["amount"] = current
-			if current <= 0:
-				return 0
+		if effect_obj == null or not effect_obj.has_method("modify_damage"):
 			continue
-		# Legacy fallback for a card that still carries a static damage_modifiers block.
-		var rules = owner.static_rule("damage_modifiers", [])
-		if rules is Dictionary:
-			rules = [rules]
-		if not (rules is Array):
-			continue
-		for rule in rules:
-			if not (rule is Dictionary):
-				continue
-			context["self"] = owner
-			if not _damage_modifier_applies(rule, owner, context):
-				continue
-			var operation: String = str(rule.get("operation", ""))
-			var value: Variant = _resolve_value(rule.get("value", 0), context)
-			var next: int = _apply_damage_operation(current, operation, value)
-			if next != current:
-				print("[DamageMod] %s %s -> %d (%s)" % [owner.card_name, operation, next, target.card_name])
-			current = next
-			context["amount"] = current
-			if rule.has("consume_status"):
-				target.status_effects.erase(str(rule["consume_status"]))
-			if current <= 0:
-				return 0
+		var next: int = int(effect_obj.modify_damage(damage_ctx))
+		if next != current:
+			print("[DamageMod] %s -> %d (%s)" % [owner.card_name, next, target.card_name])
+		current = next
+		context["amount"] = current
+		if current <= 0:
+			return 0
 	return current
 
-func _damage_modifier_applies(rule: Dictionary, owner: Card, context: Dictionary) -> bool:
-	var target: Card = context.get("target")
-	if target == null or not is_instance_valid(target):
-		return false
-	if not target.matches_criteria(rule.get("targets", {}), owner):
-		return false
-	return _conditions_hold(rule.get("conditions", []), context)
 
 func _conditions_hold(conditions: Variant, context: Dictionary) -> bool:
 	if conditions is Dictionary:

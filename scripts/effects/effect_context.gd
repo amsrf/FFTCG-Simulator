@@ -1,4 +1,5 @@
 extends RefCounted
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
 ## The explicit world handed to one card-effect invocation.
@@ -22,6 +23,20 @@ var controller: String = ""
 var owner_id: int = 1
 var event_name = ""
 var event_data: Dictionary = {}
+
+
+## Typed access to the event payload. Cards should read these instead of poking at event_data.
+func event_card() -> Card:
+	var value = event_data.get("card", null)
+	return value if value is Card and is_instance_valid(value) else null
+
+
+func event_to_zone() -> int:
+	return int(event_data.get("to_zone", Card.Zone.NONE))
+
+
+func event_player_id() -> int:
+	return int(event_data.get("player_id", 0))
 
 
 func _init(p_game: Node, p_source: Card, p_event = "static", p_data: Dictionary = {}, p_effect_card: Card = null, p_targets: Array = []) -> void:
@@ -50,7 +65,7 @@ func damage_received(player_id: int = 0) -> int:
 	return side.damage_count() if side != null else 0
 
 
-func cards_in(region: String, criteria: Variant = {}, owner: String = "any") -> Array:
+func cards_in(region: String, criteria: CARD_QUERY = null, owner: String = "any") -> Array:
 	var criteria_block: Dictionary = _criteria_block(criteria)
 	var pools: Array = []
 	match region:
@@ -171,7 +186,7 @@ func _criteria_filter(criteria: Variant) -> Dictionary:
 	return criteria if criteria is Dictionary else {}
 
 
-func choose_target(criteria: Variant, _prompt: String = "Choose a card") -> Card:
+func choose_target(criteria: CARD_QUERY, _prompt: String = "Choose a card") -> Card:
 	var picks: Array = await choose_targets(criteria, 1)
 	return picks[0] if not picks.is_empty() else null
 
@@ -198,11 +213,11 @@ func condition(expression: String) -> bool:
 	return bool(game._condition_holds(expression))
 
 
-func untap_all_matching(criteria: Variant) -> void:
+func untap_all_matching(criteria: CARD_QUERY) -> void:
 	untap(cards_in("field", criteria))
 
 
-func play_from_hand(criteria: Variant = {}, by: String = "self") -> void:
+func play_from_hand(criteria: CARD_QUERY = null, by: String = "self") -> void:
 	_prime_game()
 	await game.play_from_hand(_criteria_block(criteria), by)
 
@@ -232,7 +247,7 @@ func play_from_hand_card(card: Card, enter_dull: bool = false) -> void:
 
 
 ## The common "you may play a card from hand" shape: shortlist, ask, choose, play.
-func may_play_from_hand(criteria: Variant, enter_dull: bool = false,
+func may_play_from_hand(criteria: CARD_QUERY, enter_dull: bool = false,
 		prompt: String = "Play a card") -> bool:
 	var candidates: Array = cards_in("hand", criteria, "self")
 	if candidates.is_empty():
@@ -246,12 +261,12 @@ func may_play_from_hand(criteria: Variant, enter_dull: bool = false,
 	return true
 
 
-func break_zone_to_hand(filter: Variant = {}) -> void:
+func break_zone_to_hand(filter: CARD_QUERY = null) -> void:
 	_prime_game()
 	await game.break_zone_to_hand(_criteria_filter(filter))
 
 
-func choose_break_zone_card(criteria: Variant, chooser: String = "self",
+func choose_break_zone_card(criteria: CARD_QUERY, chooser: String = "self",
 		prompt: String = "Choose a card in your Break Zone") -> void:
 	_prime_game()
 	await game.choose_break_zone_card(_criteria_block(criteria), chooser, prompt)
@@ -267,14 +282,17 @@ func put_hand_card_on_bottom() -> void:
 	await game.put_hand_card_on_bottom()
 
 
-func search_deck(filter: Variant, destination: String = "hand", tapped: bool = false) -> void:
+func search_deck(filter: CARD_QUERY, destination: String = "hand", tapped: bool = false) -> void:
 	if game != null:
 		game.search_deck(_criteria_filter(filter), destination, tapped, owner_id)
 
 
 func reveal_top(count: int = 1) -> void:
 	if game != null:
-		game.reveal_top(count, owner_id)
+		# MUST AWAIT: reveal_top animates the card and only appends it to
+		# `revealed_cards` after the flip finishes. Calling it fire-and-forget
+		# makes check_revealed() read an empty array and take the wrong branch.
+		await game.reveal_top(count, owner_id)
 
 
 func mill(player_id: int, count: int = 1) -> void:
@@ -419,7 +437,7 @@ func apply_damage_division(_total: int) -> void:
 ## Look at the staging area without moving the card. The count/limit checks live here so a card handler does not
 ## need to know the Game's reveal internals.
 ## Reveal staging stays owned by Game; these are the card-facing names so an effect never calls Game directly.
-func choose_revealed(criteria: Variant = {}, prompt: String = "Choose a revealed card") -> void:
+func choose_revealed(criteria: CARD_QUERY = null, prompt: String = "Choose a revealed card") -> void:
 	if game == null:
 		return
 	await game.choose_revealed(_criteria_block(criteria), prompt)
@@ -437,15 +455,16 @@ func put_revealed_on_bottom() -> void:
 	game.put_revealed_on_bottom()
 
 
-func check_revealed(index: int = 0, criteria: Variant = {}) -> bool:
+func check_revealed(index: int = 0, criteria: CARD_QUERY = null) -> bool:
 	if game == null:
 		return false
 	var staged = game.get("revealed_cards")
 	if staged == null or index < 0 or index >= staged.size():
 		return false
 	var card: Card = staged[index]
+	var block: Dictionary = _criteria_block(criteria)
 	return card != null and is_instance_valid(card) \
-		and (criteria.is_empty() or card.matches_criteria(criteria, source))
+		and (block.is_empty() or card.matches_criteria(block, source))
 
 
 func remove_revealed_from_game(index: int = 0) -> void:
@@ -479,12 +498,12 @@ func _prime_game() -> void:
 	game.set("_current_controller", controller)
 
 
-func play_from_break_zone(criteria: Variant = {}) -> void:
+func play_from_break_zone(criteria: CARD_QUERY = null) -> void:
 	_prime_game()
 	await game.play_from_break_zone(_criteria_block(criteria))
 
 
-func cast_summon_for_free(criteria: Variant = {}) -> void:
+func cast_summon_for_free(criteria: CARD_QUERY = null) -> void:
 	_prime_game()
 	await game.cast_summon_for_free(_criteria_block(criteria))
 
@@ -553,9 +572,9 @@ func return_to_hand(cards: Array, source_kind: String = "") -> void:
 		var owner_hand = game.hand_for(1 if card.controller == "player" else 2)
 		if owner_hand == null:
 			continue
-		game.field.remove_card(card)
-		var tween = owner_hand.begin_return_card(card)
-		if tween != null:
+		var tween = game.move_card_from_field(card, Card.Zone.HAND, "RETURN",
+			func(c): return owner_hand.begin_return_card(c))
+		if tween is Tween:
 			tweens.append(tween)
 	for tween in tweens:
 		await tween.finished

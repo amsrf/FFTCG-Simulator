@@ -1,4 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
 
-func static_rules() -> Dictionary:
-	return {"shields": {"targets": {"is_named": "Snow"}, "from": "opponent", "by": ["Ability"]}}
+func shields_from_choice(ctx: TARGET_CONTEXT) -> bool:
+	return ctx.candidate.card_name == "Snow" and ctx.from_opponent() and ctx.is_kind("Ability")

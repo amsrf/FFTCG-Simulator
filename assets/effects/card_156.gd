@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-156C
 
 

@@ -19,7 +19,7 @@ func handlers() -> Dictionary:
 
 func attack_phase_start(ctx: EFFECT_CONTEXT) -> void:
 	# The event fires for both players' Attack Phases; only Mime's controller gets to name an Element.
-	if int(ctx.event_data.get("player_id", 0)) != ctx.owner_id:
+	if ctx.event_player_id() != ctx.owner_id:
 		return
 	var chosen: String = await ctx.choose_element(CHOOSABLE, "Name an Element")
 	if chosen != "":

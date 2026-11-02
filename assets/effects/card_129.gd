@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 
@@ -11,8 +10,8 @@ func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = ctx.targets.duplicate()
-	ctx.reveal_top(1)
-	if ctx.check_revealed(0, {"is_type": "Forward"}):
+	await ctx.reveal_top(1)
+	if ctx.check_revealed(0, CARD_QUERY.new().of_type("Forward")):
 		ctx.break_cards(targets)
 	else:
 		ctx.damage(targets, 3000)

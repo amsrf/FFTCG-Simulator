@@ -1,4 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
 
-func static_rules() -> Dictionary:
-	return {"cannot_be_chosen": {"sources": ["Summon", "Ability"], "controller": "opponent"}}
+func prevents_being_chosen(ctx: TARGET_CONTEXT) -> bool:
+	return ctx.from_opponent() and ctx.kind_in(["Summon", "Ability"])

@@ -125,6 +125,28 @@ func _ready() -> void:
 	_expect(_game.player.hand.cards.size() == tidus_hand + 2,
 		"213 a Yuna Forward leaving the field draws 2")
 
+	# The destination is part of the trigger. Returning Yuna to hand must NOT draw 2; only the Break Zone does.
+	var yuna_returned: Card = _make(214, "player")
+	var hand_before_return: int = _game.player.hand.cards.size()
+	_game.move_card_from_field(yuna_returned, Card.Zone.HAND, "RETURN")
+	await get_tree().process_frame
+	while _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
+	await _wait(0.2)
+	_expect(_game.player.hand.cards.size() == hand_before_return + 1,
+		"213 does NOT trigger when Yuna is returned to hand")
+
+	# And removing her from the game has a different destination again.
+	var yuna_removed: Card = _make(214, "player")
+	var hand_before_remove: int = _game.player.hand.cards.size()
+	_game.remove_card_from_game(yuna_removed)
+	await get_tree().process_frame
+	while _game.stack.stack_length() > 0:
+		await _game.stack.resolve_top_effect()
+	await _wait(0.2)
+	_expect(_game.player.hand.cards.size() == hand_before_remove,
+		"213 does NOT trigger when Yuna is removed from the game")
+
 	_expect(load("res://assets/effects/card_108.gd").new().has_method("damage_received"),
 		"108 damage_received is code-owned")
 	_expect(load("res://assets/effects/card_206.gd").new().has_method("card_left_field"),

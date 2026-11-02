@@ -53,10 +53,8 @@ func _count_on_field(side: String, card_name: String) -> int:
 
 
 func _ready() -> void:
-	var rule: Dictionary = load("res://assets/effects/card_152.gd").new().static_rules().get("on_character_enter", [{}])[0]
-	_expect(rule.get("action") == "dull", "Ultimecia 152 has an on_character_enter dull rule")
-	_expect(rule.get("targets", {}).get("exclude", {}).get("is_named") == "Ultimecia",
-		"and excludes every card named Ultimecia")
+	_expect(load("res://assets/effects/card_152.gd").new().has_method("on_character_enter"),
+		"Ultimecia 152 has a code-owned on_character_enter rule")
 	var specs: Array = load("res://assets/effects/card_152.gd").new().activated_abilities()
 	_expect(specs.size() == 1 and specs[0].s_cost and "Time Compression" in specs[0].text,
 		"Time Compression is a code-owned S ability")

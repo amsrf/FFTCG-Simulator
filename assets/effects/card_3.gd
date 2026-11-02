@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-003C Red Mage
 ## 《Fire》《1》《Dull》: Choose 1 Forward. It cannot block this turn.

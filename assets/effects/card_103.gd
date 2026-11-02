@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## Kimahri 1-103C
 ##
 ## "Kimahri gains Elements of all the Characters opponent controls except Light and Dark."

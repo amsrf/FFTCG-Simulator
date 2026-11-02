@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-131R Cait Sith
 
@@ -20,8 +19,8 @@ func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 func activated_abilities() -> Array:
 	return [Ability0.new(self)]
 func _skill_0(ctx: EFFECT_CONTEXT) -> void:
-	ctx.reveal_top(1)
-	if ctx.check_revealed(0, {"is_type": "Forward"}):
+	await ctx.reveal_top(1)
+	if ctx.check_revealed(0, CARD_QUERY.new().of_type("Forward")):
 		ctx.damage(ctx.cards_in("field", CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)), 7000)
 	ctx.remove_revealed_from_game(0)
 

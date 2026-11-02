@@ -5,6 +5,9 @@ const BREAK_CONTEXT := preload("res://scripts/effects/break_context.gd")
 const ABILITY_SPEC := preload("res://scripts/effects/ability_spec.gd")
 const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
+const TRIGGER_SPEC := preload("res://scripts/effects/trigger_spec.gd")
+const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
 ## A card effect is STATELESS: the per-event state lives in the EffectContext passed to the hook. One instance can be
@@ -29,21 +32,38 @@ func handlers() -> Dictionary:
 	return {}
 
 
+## Filtered trigger subscriptions. Use this instead of an event_matches() method: the filter is evaluated by the
+## engine BEFORE the stack object is created, while the card only supplies the event and the handler.
+func trigger_specs() -> Array:
+	return []
+
+
+## Convenience builder used by card scripts:
+##   trigger(EVENTS.Event.CARD_LEFT_FIELD, "on_left").card(...).to_zone(...)
+func trigger(event: int, method: String):
+	return TRIGGER_SPEC.new(event, Callable(self, method))
+
+
 func handles_event(event: int) -> bool:
+	var specs: Array = trigger_specs()
+	if not specs.is_empty():
+		for spec in specs:
+			if spec != null and spec.event == event:
+				return true
+		return false
 	return handlers().has(event)
 
 
 ## One place maps the event id to the card's method. No has_method() lookup and no string method name at the call site.
 func dispatch(event: int, ctx: EFFECT_CONTEXT) -> void:
+	var specs: Array = trigger_specs()
+	for spec in specs:
+		if spec != null and spec.event == event and spec.handler.is_valid():
+			await spec.handler.call(ctx)
+			return
 	var handler: Callable = handlers().get(event, Callable())
 	if handler.is_valid():
 		await handler.call(ctx)
-
-
-## Optional event filter for code-defined triggers. The Field checks this before enqueueing the stack object, so a
-## card can listen to a shared event (card_left_field, summon_cast, ...) without reacting to every instance of it.
-func event_matches(_event: int, _source: Card, _data: Dictionary) -> bool:
-	return true
 
 
 ## What this Summon asks the player to choose WHEN CAST, before it enters the stack. Return a Dictionary for one
@@ -61,17 +81,12 @@ func conditional_powers() -> Array:
 
 ## Does this card's controller control a card matching `criteria`? Relative controller words resolve against
 ## `source`'s controller, which is what "you" means on a card.
-func controls(source: Card, criteria: Dictionary) -> bool:
+func controls(source: Card, criteria: CARD_QUERY) -> bool:
 	var field = source.get_parent()
 	if field == null or not field.has_method("controls_matching"):
 		return false
-	return field.controls_matching(source.controller, criteria, source)
+	return field.controls_matching(source.controller, criteria.to_block(), source)
 
-
-## Static rule blocks owned by code (protections, shields, damage modifiers and similar). The readers ask
-## Card.static_rule() key by key, so a card can move one family out of JSON at a time.
-func static_rules() -> Dictionary:
-	return {}
 
 
 ## This card's own dynamic power contribution. Called from the continuous scan with a read-only context.
@@ -82,6 +97,66 @@ func power_modifier(_ctx: EFFECT_CONTEXT) -> int:
 ## Dynamic properties this card currently has, in addition to printed keywords and granted statuses.
 func properties(_ctx: EFFECT_CONTEXT) -> Array[String]:
 	return []
+
+
+## Static, card-local flags. Each reader asks only the flag it needs; no rule dictionary is involved.
+func has_all_jobs() -> bool:
+	return false
+
+
+func disables_ex_burst() -> bool:
+	return false
+
+
+func exiles_break_zone() -> bool:
+	return false
+
+
+func light_dark_exemption() -> String:
+	return ""
+
+
+func produces_any_element() -> bool:
+	return false
+
+
+func grants_party_brave() -> bool:
+	return false
+
+
+## Combat legality owned by the card itself. `allows_blocker` is asked of the attacker; `can_block_attacker` is asked
+## of the blocker. Both default to legal, so only restricting cards override them.
+func allows_blocker(_owner: Card, _blocker: Card) -> bool:
+	return true
+
+
+func can_block_attacker(_owner: Card, _attacker: Card) -> bool:
+	return true
+
+
+## Choice/targeting protection and priority. `TARGET_CONTEXT` carries the candidate, the effect source and the effect
+## kind, so each card answers the question it actually prints instead of sharing a rule dictionary.
+func prevents_being_chosen(_ctx: TARGET_CONTEXT) -> bool:
+	return false
+
+
+func must_be_chosen(_ctx: TARGET_CONTEXT) -> bool:
+	return false
+
+
+func prevents_return_to_hand(_ctx: TARGET_CONTEXT) -> bool:
+	return false
+
+
+## A shielding card protects ANOTHER card. The context's `rule_owner` is this card and `candidate` is the card being
+## chosen.
+func shields_from_choice(_ctx: TARGET_CONTEXT) -> bool:
+	return false
+
+
+## Replacement/continuous rule applied after another Character enters the field.
+func on_character_enter(_entering: Card, _ctx: EFFECT_CONTEXT) -> void:
+	pass
 
 
 ## Which existing hook runs when this card becomes damage. The default is "no EX BURST"; only cards that have one

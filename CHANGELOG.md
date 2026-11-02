@@ -3,6 +3,34 @@
 All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
+### Static Rule Dictionaries Retired
+
+- Deleted `CardEffect.static_rules()` and `Card.static_rule()`; all readers now call typed effect hooks.
+- `conditional_status` moved to `CardEffect.properties(ctx)` (Tidus 213: Brave while controlling Yuna).
+- Static flags moved to `has_all_jobs`, `disables_ex_burst`, `exiles_break_zone`, `light_dark_exemption`,
+  `produces_any_element`, and `grants_party_brave`.
+- Combat restrictions moved to `allows_blocker(owner, blocker)` and `can_block_attacker(owner, attacker)`.
+- Targeting/protection moved to `TARGET_CONTEXT` with `prevents_being_chosen`, `must_be_chosen`,
+  `prevents_return_to_hand`, and `shields_from_choice`.
+- `on_character_enter` is now a typed hook on the effect object.
+- Removed the legacy `protects` and `damage_modifiers` dictionary fallbacks from `Rules`.
+- Updated probes; boot and full probe suite are green.
+
+
+### Typed Event Context and Destination-Aware Field Exits
+
+- Replaced hand-written `CardEffect.event_matches()` methods with declarative `TriggerSpec` subscriptions. The
+  engine now evaluates the event card, destination, player scope and active state before creating a stack object.
+- Added `EventContext` with typed `card`, `from_zone`, `to_zone`, `cause` and `player_id`; `EffectContext` exposes
+  `event_card()`, `event_to_zone()` and `event_player_id()`.
+- Added `Game.move_card_from_field()` as the single rules-state field-exit choke point. It moves the card, applies
+  replacement effects, and then publishes `card_left_field` with the ACTUAL destination. Animations remain at the
+  call site: break shatter, return-to-hand tween, and removal each call it at the right moment.
+- Migrated 108, 187, 206, 213, 214 and 215 to `trigger_specs()`. Tidus 213 now subscribes specifically to a Yuna
+  going to the Break Zone, so returning her to hand or removing her from the game no longer draws 2.
+- Added destination regression checks to `event_triggers_probe` (break draws; hand and removed do not).
+
+
 ### Effect API Cleanup
 
 - Deleted legacy duplicate Game handlers: `return_targets_to_hand`, `power_change_targets`,

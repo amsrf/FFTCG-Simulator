@@ -1,4 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
 
-func static_rules() -> Dictionary:
-	return {"cannot_be_blocked_by": {"min_cost": 3}}
+func allows_blocker(_owner: Card, blocker: Card) -> bool:
+	return int(blocker.cost) < 3

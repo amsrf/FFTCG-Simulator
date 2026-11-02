@@ -1,5 +1,6 @@
 extends Node
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 
 const GAME_SCENE := preload("res://game.tscn")
 const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
@@ -37,6 +38,7 @@ func _ready() -> void:
 
 	await _check_reveal_and_move()
 	await _check_gilgamesh_branches()
+	await _check_gilgamesh_with_animation()
 	await _check_cait_sith_data()
 	await _check_cait_sith_skill()
 
@@ -89,7 +91,7 @@ func _check_reveal_and_move() -> void:
 	_expect(not _game._last_action_succeeded, "and rejects the same card as a Backup")
 
 	var ctx = EFFECT_CONTEXT.new(_game, _game.revealed_cards[0], "test")
-	await ctx.choose_revealed({"is_type": "Forward"}, "Choose one")
+	await ctx.choose_revealed(CARD_QUERY.new().of_type("Forward"), "Choose one")
 	await get_tree().process_frame
 	ctx.put_chosen_into_hand()
 	_expect(_game.hand.cards.any(func(c): return c.id == 41),
@@ -157,6 +159,25 @@ func _check_cait_sith_skill() -> void:
 	_expect(forwarded == 7000, "Cait Sith deals 7000 to active opponent Forwards when the removed card is a Forward")
 	var not_forwarded: int = await _run_cait_sith(31)
 	_expect(not_forwarded == 0, "and does nothing to them when it is not a Forward")
+
+
+## The first branch tests ran with every reveal animation at 0, where a missing
+## await is invisible. Run the same branch with real durations so the reveal is
+## actually suspended before check_revealed().
+func _check_gilgamesh_with_animation() -> void:
+	_game.reveal_lift_seconds = 0.02
+	_game.reveal_flip_seconds = 0.02
+	_game.reveal_hold_seconds = 0.02
+	_game.reveal_flip_back_seconds = 0.02
+	_game.reveal_back_hold_seconds = 0.02
+	var forward: Dictionary = await _run_gilgamesh(43)
+	_expect(not forward["target_on_field"],
+		"Gilgamesh waits for the reveal animation before checking the card")
+	_game.reveal_lift_seconds = 0.0
+	_game.reveal_flip_seconds = 0.0
+	_game.reveal_hold_seconds = 0.0
+	_game.reveal_flip_back_seconds = 0.0
+	_game.reveal_back_hold_seconds = 0.0
 
 
 func _check_cait_sith_data() -> void:

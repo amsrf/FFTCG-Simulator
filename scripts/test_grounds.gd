@@ -72,6 +72,9 @@ const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or
 const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
 const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
 const COSMOS := 183      # Cosmos, an any-colour Backup: opens the radial crystal picker.
+const BREAK_A := 29      # a plain Forward, fine for the shatter visual
+const BREAK_B := 41      # Squall, ice Forward
+const BREAK_C := 12      # Zack, fire Forward
 
 
 static func clean() -> Dictionary:
@@ -154,6 +157,17 @@ static func break_zone() -> Dictionary:
 ## own the board has no legal Ifrit target: Hand.charge() refuses the cast before payment and the card returns to hand,
 ## which reads as the surcharge being broken. ICE_A (Squall) is both a legal target and a demonstration that Terra
 ## herself is not one.
+static func break_cards() -> Dictionary:
+	## BREAK VISUAL. Three Forwards on your side and two opposite. Press B to break your first Forward, or
+	## Shift+B to break the opponent's first Forward. This uses the real break path, so the shatter, the Break
+	## Zone arrival and the break-zone triggers all happen exactly as they do in a match.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_break"
+	cfg["player_field"] = [{"id": BREAK_A}, {"id": BREAK_B}, {"id": BREAK_C}]
+	cfg["opponent_field"] = [{"id": DARK_KNIGHT}, {"id": ICE_B}]
+	return cfg
+
+
 static func terra_cost() -> Dictionary:
 	var cfg: Dictionary = _base()
 	cfg["preset"] = "ground_terra"
@@ -296,6 +310,10 @@ const GROUNDS := {
 		"title": "Ground: Break Zone & fragile",
 		"blurb": "You hold Bahamut and mana. Cast it: fragile + 10000 exiles the targets instead of breaking them.",
 	},
+	"break": {
+		"title": "Ground: Break a card",
+		"blurb": "Press B to break your first Forward; Shift+B breaks the opponent's first Forward. Uses the real break path and the card shatter animation.",
+	},
 	"clean": {
 		"title": "Ground: Empty board",
 		"blurb": "No cards in play, no hands, seeded decks. A blank slate for setting things up by hand.",
@@ -350,6 +368,8 @@ static func config(name: String) -> Dictionary:
 			return summons_and_targeting()
 		"break_zone":
 			return break_zone()
+		"break":
+			return break_cards()
 		"clean":
 			return clean()
 		"mill":
@@ -393,6 +413,7 @@ const CATEGORY_OF := {
 	"wakka": "Card Effects",
 	"cosmos": "Card Effects",
 	"break_zone": "Zones",
+	"break": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",
 }

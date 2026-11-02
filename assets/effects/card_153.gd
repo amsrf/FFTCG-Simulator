@@ -3,7 +3,7 @@ extends "res://scripts/effects/card_effect.gd"
 
 
 func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
-	if ctx.controls({"is_named": "Ovelia"}):
+	if ctx.controls(CARD_QUERY.new().named("Ovelia")):
 		return ctx.adjust(cost, -1)
 	return cost
 

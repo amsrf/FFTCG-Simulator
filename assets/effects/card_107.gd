@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## Shantotto 1-107L
 ##
 ## "If Shantotto is on the field, it gains Elements of Fire, Ice, Wind, Earth, Lightning and Water."

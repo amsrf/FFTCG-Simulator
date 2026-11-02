@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## 1-164 Tidus: when it attacks, your Water Forwards gain +1000.
 
 

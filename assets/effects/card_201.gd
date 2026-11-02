@@ -8,11 +8,17 @@ func conditional_powers() -> Array:
 
 
 func _has_yuna(source: Card) -> bool:
-	return controls(source, {"is_named": "Yuna"})
+	return controls(source, CARD_QUERY.new().named("Yuna"))
 
 
 func _has_paine(source: Card) -> bool:
-	return controls(source, {"is_named": "Paine"})
+	return controls(source, CARD_QUERY.new().named("Paine"))
 
-func static_rules() -> Dictionary:
-	return {"conditional_cannot_be_chosen": [{"if_controls": {"is_named": "Yuna"}, "sources": ["Summon"]}, {"if_controls": {"is_named": "Paine"}, "sources": ["Ability"]}]}
+func prevents_being_chosen(ctx: TARGET_CONTEXT) -> bool:
+	if not ctx.from_opponent():
+		return false
+	if ctx.is_kind("Summon") and ctx.controls(CARD_QUERY.new().named("Yuna")):
+		return true
+	if ctx.is_kind("Ability") and ctx.controls(CARD_QUERY.new().named("Paine")):
+		return true
+	return false

@@ -1,4 +1,8 @@
 extends "res://scripts/effects/card_effect.gd"
 
-func static_rules() -> Dictionary:
-	return {"produces_any_element": true, "light_dark_exempt": "dark"}
+func produces_any_element() -> bool:
+	return true
+
+
+func light_dark_exemption() -> String:
+	return "dark"

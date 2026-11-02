@@ -1,4 +1,5 @@
 extends RefCounted
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 ## The world handed to one COST calculation. Cost modifications are continuous queries: no stack, no resolution, and
 ## no mutation of the printed cost. A modifier asks this object what the board looks like and returns a new dictionary.
 
@@ -25,7 +26,7 @@ func _init(p_subject: Card, p_purpose: String = "cast", p_field: Node = null) ->
 
 ## Cards on the field matching `criteria`, with "your"/"opponent" interpreted from the subject. `exclude_subject`
 ## covers "another Forward"/"other than this card" counts.
-func cards_in_field(criteria: Dictionary = {}, exclude_subject: bool = false) -> Array:
+func cards_in_field(criteria: CARD_QUERY = null, exclude_subject: bool = false) -> Array:
 	var out: Array = []
 	if field == null:
 		return out
@@ -34,13 +35,13 @@ func cards_in_field(criteria: Dictionary = {}, exclude_subject: bool = false) ->
 			continue
 		if exclude_subject and card == subject:
 			continue
-		if not card.matches_criteria(criteria, subject):
+		if criteria != null and not card.matches_criteria(criteria.to_block(), subject):
 			continue
 		out.append(card)
 	return out
 
 
-func controls(criteria: Dictionary) -> bool:
+func controls(criteria: CARD_QUERY) -> bool:
 	return not cards_in_field(criteria, true).is_empty()
 
 

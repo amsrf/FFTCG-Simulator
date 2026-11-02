@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 
@@ -11,8 +10,8 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 		return
 	ctx.apply_damage_division(6000)
 
-func static_rules() -> Dictionary:
-	return {"cannot_be_blocked_by": {"min_cost": 4}}
+func allows_blocker(_owner: Card, blocker: Card) -> bool:
+	return int(blocker.cost) < 4
 
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:

@@ -50,6 +50,7 @@ var _printed_effects: Dictionary = {}
 ## dictionary, and the original data comes back when the status expires.
 const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
+const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 var _card_effect = null
 var _elements_calculating: bool = false
@@ -1030,16 +1031,6 @@ func has_haste() -> bool:
 	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste") 		or has_code_keyword("haste")
 
 
-## A static rule block: code first, JSON fallback during migration.
-func static_rule(key: String, fallback = null):
-	if abilities_enabled():
-		var effect_obj = effect()
-		if effect_obj != null and effect_obj.has_method("static_rules"):
-			var rules = effect_obj.static_rules()
-			if rules is Dictionary and rules.has(key):
-				return rules[key]
-	return card_effects.get(key, fallback)
-
 
 func has_code_keyword(keyword: String) -> bool:
 	var effect_obj = effect() if abilities_enabled() else null
@@ -1052,27 +1043,8 @@ func has_code_keyword(keyword: String) -> bool:
 func is_brave() -> bool:
 	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave") 			or has_code_keyword("brave"):
 		return true
-	if has_conditional_status("brave"):
-		return true
 	var host: Node = get_parent()
 	return host != null and host.has_method("party_grants_brave") and host.call("party_grants_brave", self)
-
-## A keyword granted while a board condition holds ("If you control Yuna, Tidus gains Brave"). Evaluated live, like
-## conditional_power; no status is written, so the board changing is enough to turn it off.
-func has_conditional_status(status: String) -> bool:
-	var rules = static_rule("conditional_status", [])
-	if rules is Dictionary:
-		rules = [rules]
-	if not (rules is Array):
-		return false
-	for rule in rules:
-		if not (rule is Dictionary):
-			continue
-		if str(rule.get("status", "")) != status:
-			continue
-		if _controls_matching(rule.get("if_controls", {})):
-			return true
-	return false
 
 ## FIRST STRIKE: this card deals its damage before a card without it. Printed "first_strike": true, or granted as
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
@@ -1115,28 +1087,16 @@ func can_attack():
 func allows_blocker(blocker: Card) -> bool:
 	if blocker == null:
 		return false
-	var rule = static_rule("cannot_be_blocked_by", {})
-	if not (rule is Dictionary):
-		return true
-	if rule.has("min_cost") and int(blocker.cost) >= int(rule["min_cost"]):
-		return false
-	if bool(rule.get("greater_power", false)) and blocker.power > power:
-		return false
-	return true
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj == null or effect_obj.allows_blocker(self, blocker)
 
 ## The other side: can THIS card, as the BLOCKER, legally block `attacker`? Lann also cannot block a Forward with
 ## greater power than his own. Data: "cannot_block": {"min_cost": n} or {"greater_power": true}.
 func can_block_attacker(attacker: Card) -> bool:
 	if attacker == null:
 		return true
-	var rule = static_rule("cannot_block", {})
-	if not (rule is Dictionary):
-		return true
-	if rule.has("min_cost") and int(attacker.cost) >= int(rule["min_cost"]):
-		return false
-	if bool(rule.get("greater_power", false)) and attacker.power > power:
-		return false
-	return true
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj == null or effect_obj.can_block_attacker(self, attacker)
 		
 func attack():
 	tap()
@@ -1570,7 +1530,8 @@ func is_cost_at_most(value: int) -> bool:
 ## "Bartz has all the jobs" (81). Every job check succeeds for him, so a future "choose 1 [Job (X)]" finds him.
 ## A normal card matches by SUBSTRING, the same way the deck editor's job filter reads it.
 func is_job(value: String) -> bool:
-	if static_rule("all_jobs", false) == true:
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj != null and effect_obj.has_all_jobs():
 		return true
 	var data: Dictionary = CardDatabase.card_database[id - 1]
 	return str(value).to_lower() in str(data.get("job_en", "")).to_lower()
@@ -1701,7 +1662,32 @@ func light_dark_kind() -> String:
 ## A Backup can print "produces CP of any Element" (Cosmos/Chaos). The card only behaves that way while it is on
 ## the field; `mana_element()` is what the payment UI asks instead of reading `element` directly.
 func produces_any_element() -> bool:
-	return is_on_field() and (static_rule("produces_any_element", false) == true or status_effects.has("produces_any_element"))
+	if not is_on_field():
+		return false
+	var effect_obj = effect() if abilities_enabled() else null
+	return (effect_obj != null and effect_obj.produces_any_element()) \
+		or status_effects.has("produces_any_element")
+
+
+## Static flags read through the effect object, so callers never inspect static rule dictionaries.
+func disables_ex_burst() -> bool:
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj != null and effect_obj.disables_ex_burst()
+
+
+func exiles_break_zone() -> bool:
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj != null and effect_obj.exiles_break_zone()
+
+
+func light_dark_exemption() -> String:
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj.light_dark_exemption() if effect_obj != null else ""
+
+
+func grants_party_brave() -> bool:
+	var effect_obj = effect() if abilities_enabled() else null
+	return effect_obj != null and effect_obj.grants_party_brave()
 
 func mana_element() -> String:
 	return "any" if produces_any_element() else element
@@ -1747,69 +1733,33 @@ func can_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 	# Checked before the `source == null` exit below, because a caller that passes no source must not thereby bypass it.
 	if status_effects.has("cannot_be_chosen"):
 		return false
-	# Protection rules PRINTED on the card (e.g. Zidane: "cannot be chosen by your opponent's Summons or abilities").
-	# Unlike choose_target, these are evaluated against the SOURCE of the targeting effect, not against this card.
 	if source == null:
 		return true
-	var printed_rule = static_rule("cannot_be_chosen", null)
-	if printed_rule is Dictionary and _protection_applies(printed_rule, source, source_kind):
-		return false
-	# CONDITIONAL protection (Rikku 201: while you control Yuna she cannot be chosen by Summons, while you control Paine
-	# she cannot be chosen by abilities). A live board query, so it follows the named cards leaving or arriving.
-	var conditional = static_rule("conditional_cannot_be_chosen", [])
-	if conditional is Dictionary:
-		conditional = [conditional]
-	if conditional is Array:
-		for rule in conditional:
-			if not (rule is Dictionary):
-				continue
-			if not _controls_matching(rule.get("if_controls", {})):
-				continue
-			if _protection_applies(rule, source, source_kind):
-				return false
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj != null:
+		var ctx = TARGET_CONTEXT.new(self, source, source_kind, self)
+		if effect_obj.prevents_being_chosen(ctx):
+			return false
 	return true
-
-## Shared source filter for cannot_be_chosen / conditional_cannot_be_chosen:
-##   controller: "opponent" means the other player's effects; absent applies to every source.
-##   sources: ["Summon", "Ability"] limits the effect kind; absent applies to every kind.
-func _protection_applies(rule: Dictionary, source: Card, source_kind: String) -> bool:
-	var scope: String = str(rule.get("controller", ""))
-	if scope == "opponent" and source.controller == self.controller:
-		return false
-	var kind: String = source_kind if source_kind != "" else source.get_effect_kind()
-	var sources: Array = rule.get("sources", [])
-	if not sources.is_empty() and not (kind in sources):
-		return false
-	return true
-
-## "If you control X" for a conditional printed rule. The criteria are evaluated with THIS card as source, so
-## controller-relative words and is_named behave the same way they do everywhere else.
-func _controls_matching(criteria: Dictionary) -> bool:
-	if criteria.is_empty():
-		return false
-	var host: Node = get_parent()
-	if host == null or not host.has_method("controls_matching"):
-		return false
-	return host.controls_matching(controller, criteria, self)
 
 ## "Summons or abilities of your opponent must choose Cecil if possible." The FIELD uses this to shrink the viable
 ## set to the mandatory cards when there is at least one legal one.
 func must_be_chosen_by(source: Card, source_kind: String = "") -> bool:
 	if source == null:
 		return false
-	var rule = static_rule("must_be_chosen", null)
-	if not (rule is Dictionary):
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj == null:
 		return false
-	return _protection_applies(rule, source, source_kind)
+	return effect_obj.must_be_chosen(TARGET_CONTEXT.new(self, source, source_kind, self))
 
 ## Gilgamesh 207: "cannot be returned to its owner's hand by opponent's Summons or abilities."
 func can_be_returned_to_hand_by(source: Card, source_kind: String = "") -> bool:
 	if source == null:
 		return true
-	var rule = static_rule("cannot_be_returned_to_hand", null)
-	if not (rule is Dictionary):
+	var effect_obj = effect() if abilities_enabled() else null
+	if effect_obj == null:
 		return true
-	return not _protection_applies(rule, source, source_kind)
+	return not effect_obj.prevents_return_to_hand(TARGET_CONTEXT.new(self, source, source_kind, self))
 
 ## Criteria predicates. A criteria key becomes a Card method called with the block's value, so
 ## {"is_tapped": false} and {"is_tapped": true} must both mean what they say — the old version ignored its argument

@@ -73,11 +73,19 @@ use from card code.
   ignored. The only overpay is one hand card producing 2 CP against a 1-CP gap.
 - `assets/card_effects.json` no longer carries card entries. It is a
   `_definitions` reference only; every card effect lives under `assets/effects/card_<id>.gd`.
-- Code-defined event triggers filter through `CardEffect.event_matches(event, source, data)` before a stack object
-  is created; `card_left_field`, `summon_cast`, `damage_received` and similar shared events must not react to every
-  instance. Once-per-turn triggers use `Card.claim_event_once(key, turn)`.
-- Static protection and damage rule blocks are code-owned through `CardEffect.static_rules()`; `Card.static_rule()`
-  is the single reader and falls back to JSON only while migration is incomplete.
+- Code-defined event triggers filter through `CardEffect.trigger_specs()`, not an `event_matches()` method. A
+  `TriggerSpec` declares the event, handler, optional `CardQuery` on the event card, destination, player scope and
+  active requirement; the engine evaluates it before creating a stack object. Once-per-turn triggers use
+  `Card.claim_event_once(key, turn)`.
+- `Game.move_card_from_field(card, to_zone, cause, place)` is the single field-exit rules choke point. It removes
+  the card from the field, applies destination replacement effects, and publishes `card_left_field` with the ACTUAL
+  destination. Animation stays at the call site: break spawns shards first, return-to-hand passes its tween as
+  `place`, removal/mill uses the default placement. The event must not be published separately by a caller.
+- `CardEffect.static_rules()` and `Card.static_rule()` are gone. Static behavior is expressed through typed hooks:
+  flag methods (`has_all_jobs`, `disables_ex_burst`, `exiles_break_zone`, `light_dark_exemption`,
+  `produces_any_element`, `grants_party_brave`), combat methods (`allows_blocker`, `can_block_attacker`), targeting
+  methods on `TARGET_CONTEXT` (`prevents_being_chosen`, `must_be_chosen`, `prevents_return_to_hand`,
+  `shields_from_choice`), and `on_character_enter`. Do not reintroduce rule dictionaries.
 - `power_per` rules are code-owned through `CardEffect.power_per_rules()`; the unified continuous scan reads code
   first and JSON only as fallback.
 - Continuous state is refreshed by ONE `Field.refresh_continuous_effects()` pass over the field. Conditional power,
@@ -109,8 +117,11 @@ use from card code.
   need the pre-clear because their target session was opened before resolution.
 - Every trigger path that can carry a code event must go through `execute_card_effect`; Break Zone triggers and
   `when_chosen` originally checked only JSON and silently skipped code handlers.
-- A code event with a broad trigger (206 `card_left_field`) may enqueue for an event its own filter later declines;
-  test harnesses should drain the whole stack, not just the top object.
+- `TriggerSpec` filters are evaluated BEFORE the stack object exists, so a broad subscription no longer creates a
+  dead stack object. Do not add per-card `event_matches()` back; extend the `TriggerSpec` fields instead.
+- `card_left_field` carries `to_zone`; a trigger that cares about the Break Zone must declare
+  `to_zone(Card.Zone.GRAVEYARD)` rather than filtering the card name alone. Hand/removal destinations must not fire
+  Break Zone-only triggers.
 - Code ETBs are triggered abilities: `execute_card_effect` enqueues a stack object, and the handler resolves later.
   Probes must start stack resolution and wait for the target prompt or a settled no-target effect; do not assume the
   old synchronous JSON timing.
@@ -342,8 +353,9 @@ card in the Break Zone immediately, while the player still sees it travel. Call 
 
 ### Conditional statuses
 
-`conditional_status` is evaluated live from `if_controls`; use it instead of writing a status when the grant should
-disappear as soon as the board changes (Tidus + Yuna).
+Dynamic keywords now come from `CardEffect.properties(ctx)` and flow through the continuous ledger; there is no
+`conditional_status` dictionary. Return `["brave"]` only while the condition holds (Tidus + Yuna), so the grant
+disappears as soon as the board changes.
 
 ### Board-wide events use the `triggers` array
 

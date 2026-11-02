@@ -440,7 +440,7 @@ func _hover_card(node: Control, id: int, on: bool, aura: Control = null) -> void
 		if current is float:
 			from = current
 		var tween := create_tween()
-		tween.tween_method(func(v: float): material.set_shader_parameter("hover", v),
+		tween.tween_method(func(v: float): card_material.set_shader_parameter("hover", v),
 			from, 1.0 if on else 0.0, 0.12)
 	if on:
 		_show_preview(id, Rect2(node.global_position - global_position, node.size))

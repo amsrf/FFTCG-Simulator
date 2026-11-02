@@ -56,7 +56,7 @@ func _ready() -> void:
 	var yuna_effect = load("res://assets/effects/card_176.gd").new()
 	_expect(yuna_effect.ex_burst_event() == EVENTS.Event.ENTER_FIELD
 		and yuna_effect.has_method("when_enter_field")
-		and yuna_effect.static_rules().get("break_zone_exile", false) == true,
+		and yuna_effect.has_method("exiles_break_zone") and yuna_effect.exiles_break_zone(),
 		"Yuna 176 has her return ETB, code EX Burst and exile rule")
 
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})

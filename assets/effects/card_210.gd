@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Lightning 1-210R: costs 1 less for each other Category XIII Forward you control.
 
@@ -12,7 +11,7 @@ func handlers() -> Dictionary:
 
 func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
 	var count: int = ctx.cards_in_field(
-		{"is_category": "XIII", "is_type": "Forward", "controller": "your"}, true).size()
+		CARD_QUERY.new().of_category("XIII").of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR), true).size()
 	return ctx.adjust(cost, -count)
 
 

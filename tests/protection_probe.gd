@@ -57,8 +57,8 @@ func _ready() -> void:
 	var auron_effect = load("res://assets/effects/card_2.gd").new()
 	_expect(auron_effect.has_method("prevents_break"),
 		"Auron's protection is a code-owned break replacement")
-	_expect(auron_effect.static_rules().is_empty(),
-		"and no longer relies on a static protects block")
+	_expect(not auron_effect.has_method("static_rules"),
+		"and no longer relies on a static-rule dictionary")
 
 	# --- the query itself -----------------------------------------------------------------------------------
 	_expect(_field.is_protected_from_break(chemist_a, "opponent", "Ability"),

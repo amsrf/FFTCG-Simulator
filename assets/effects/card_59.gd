@@ -1,5 +1,4 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-059R Laguna
 
@@ -27,4 +26,4 @@ func conditional_powers() -> Array:
 
 
 func _has_squall(source: Card) -> bool:
-	return controls(source, {"is_named": "Squall"})
+	return controls(source, CARD_QUERY.new().named("Squall"))

@@ -1,18 +1,18 @@
 extends "res://scripts/effects/card_effect.gd"
-const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Cloud 1-187R: costs 1 less for each other Category VII Forward you control.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.FORWARD_ATTACKS: Callable(self, "forward_attacks"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.FORWARD_ATTACKS, "forward_attacks").card(
+			CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR)),
+	]
 
 
 func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:
 	var count: int = ctx.cards_in_field(
-		{"is_category": "VII", "is_type": "Forward", "controller": "your"}, true).size()
+		CARD_QUERY.new().of_category("VII").of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR), true).size()
 	return ctx.adjust(cost, -count)
 
 
@@ -22,16 +22,8 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 	var targets: Array = ctx.targets.duplicate()
 	ctx.damage(targets, 8000)
 
-func event_matches(event: int, source: Card, data: Dictionary) -> bool:
-	if event != EVENTS.Event.FORWARD_ATTACKS:
-		return false
-	var event_card: Card = data.get("card")
-	return event_card != null and is_instance_valid(event_card) \
-		and event_card.is_type("Forward") and event_card.controller == source.controller
-
-
 func forward_attacks(ctx: EFFECT_CONTEXT) -> void:
-	var event_card: Card = ctx.event_data.get("card")
+	var event_card: Card = ctx.event_card()
 	if event_card != null and is_instance_valid(event_card):
 		ctx.power_change([event_card], 1000, 1)
 
