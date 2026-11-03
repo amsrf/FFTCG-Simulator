@@ -13,8 +13,14 @@ var tap: bool = false
 var s_cost: bool = false
 var discard: int = 0
 var sacrifice: Dictionary = {}
+## "Put this card into the Break Zone as a cost" normally happens at activation. Set this to pay it at commit instead,
+## after the mana stage, so backing out of payment does not lose the source (Tama 111).
+var defer_sacrifice: bool = false
 var divide_total: int = 0
 var return_self: bool = false
+## 《X》 — the player declares X before paying, and the cost becomes {"neutral": X}.
+var x_cost: bool = false
+var x_min: int = 0
 
 var targets = null              # choose_target criteria; Dictionary or Array
 var target_count: int = 1
@@ -39,7 +45,10 @@ func _init(data: Dictionary = {}) -> void:
 	s_cost = bool(data.get("s_cost", false))
 	discard = int(data.get("discard", 0))
 	sacrifice = data.get("sacrifice", {})
+	defer_sacrifice = bool(data.get("defer_sacrifice", false))
 	divide_total = int(data.get("divide_total", 0))
+	x_cost = bool(data.get("x_cost", false))
+	x_min = maxi(0, int(data.get("x_min", 0)))
 	targets = data.get("targets", null)
 	target_count = maxi(1, int(data.get("target_count", 1)))
 	target_chooser = str(data.get("target_chooser", "self"))
@@ -63,8 +72,11 @@ func as_skill_dict() -> Dictionary:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice,
+		"defer_sacrifice": defer_sacrifice,
 		"divide_total": divide_total,
 		"return_self": return_self,
+		"x_cost": x_cost,
+		"x_min": x_min,
 		"only_your_turn": only_your_turn,
 		"only_if_blocking": only_if_blocking,
 		"only_if_damage_received": only_if_damage_received,
@@ -98,8 +110,11 @@ func duplicate_spec() -> RefCounted:
 		"s_cost": s_cost,
 		"discard": discard,
 		"sacrifice": sacrifice.duplicate(true),
+		"defer_sacrifice": defer_sacrifice,
 		"divide_total": divide_total,
 		"return_self": return_self,
+		"x_cost": x_cost,
+		"x_min": x_min,
 		"targets": targets.duplicate(true) if targets is Dictionary or targets is Array else targets,
 		"target_count": target_count,
 		"target_chooser": target_chooser,

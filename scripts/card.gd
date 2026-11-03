@@ -95,6 +95,9 @@ var skill_def_override: Dictionary = {}
 ## The AbilitySpec snapshot of a code-defined activated ability. The stack proxy carries it so resolution can call the
 ## same handler even if the source card changes afterwards.
 var ability_spec = null
+## The X declared for an 《X》 ability, carried by the stack proxy so resolution uses the value that was actually paid.
+## -1 means "not an X ability".
+@export var ability_x_value: int = -1
 ## True when this stack copy is Kimahri's copied ability, so committing it can consume the permission.
 var copied_skill_activation: bool = false
 var copied_skill_token: int = 0
@@ -128,6 +131,14 @@ var copied_skill_from: String = ""
 var offset = Vector3.ZERO
 var camera: Camera3D
 var tween: Tween
+## The hand's layout tween. It has to be killable: if a card is picked up while
+## the fan is still animating, the old tween would keep writing a hand-local
+## position into the card AFTER it has been reparented to the Stack.
+var hand_tween: Tween
+## The Stack's layout tween, kept per card for the same reason as `hand_tween`:
+## if the card leaves the stack while the fan is still moving, the old tween must
+## be stopped or it keeps writing stack-local positions into the new zone.
+var stack_tween: Tween
 # DEBUG VARIABLES
 var debug_step: int = 0
 var debug_log: Array = []
@@ -539,6 +550,12 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
 func enter_zone(zone: Zone) -> void:
+	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
+	# while the card was parked keeps writing Stack-local positions after the card
+	# has been reparented to the hand or the field, and the new zone's layout
+	# appears to "stick" until the next manual reorder.
+	if current_zone == Zone.STACK and zone != Zone.STACK:
+		stop_stack_layout()
 	# A copied ability is a continuous effect while its source is on the field. Leaving the field drops it.
 	if current_zone == Zone.FIELD and zone != Zone.FIELD:
 		clear_copied_skill()
@@ -604,6 +621,18 @@ func untap():
 	
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y, tap_speed)
+
+## Stop the hand's layout tween before another zone takes ownership of the card.
+func stop_hand_layout() -> void:
+	if hand_tween != null and hand_tween.is_valid():
+		hand_tween.kill()
+	hand_tween = null
+
+## Stop the Stack's layout tween before another zone takes ownership of the card.
+func stop_stack_layout() -> void:
+	if stack_tween != null and stack_tween.is_valid():
+		stack_tween.kill()
+	stack_tween = null
 
 
 '''func _log_state(context: String):
@@ -718,6 +747,23 @@ func revoke_status(status: String) -> void:
 
 func has_granted(status: String) -> bool:
 	return int(granted_statuses.get(status, 0)) > 0
+
+## True when this card is marked "must block" for one of the attackers (the attacker, or every member of a party).
+## The marker stores the source's instance id, because "must block Lightning" is not the same as "must block the
+## current attacker": another Forward attacking must not consume the obligation.
+func must_block_against(attackers: Array) -> bool:
+	if not status_effects.has("must_block"):
+		return false
+	var payload = status_effects["must_block"]
+	if not (payload is Dictionary):
+		return false
+	var source_id: int = int(payload.get("source_id", 0))
+	if source_id == 0:
+		return false
+	for attacker in attackers:
+		if attacker != null and is_instance_valid(attacker) and attacker.get_instance_id() == source_id:
+			return true
+	return false
 
 ## "Double the power of this Forward until the end of the turn." A one-time doubling at resolution: if power later
 ## changes, the doubled value is the base it happened on, which is what the rules mean.

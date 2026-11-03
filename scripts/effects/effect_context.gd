@@ -39,6 +39,15 @@ func event_player_id() -> int:
 	return int(event_data.get("player_id", 0))
 
 
+## The X the player declared for an 《X》 activated ability. -1 if this resolution is not an X ability.
+func ability_x() -> int:
+	if effect_card != null and is_instance_valid(effect_card):
+		if effect_card.ability_x_value >= 0:
+			return effect_card.ability_x_value
+		return int(effect_card.skill_def_override.get("x_value", -1))
+	return -1
+
+
 func _init(p_game: Node, p_source: Card, p_event = "static", p_data: Dictionary = {}, p_effect_card: Card = null, p_targets: Array = []) -> void:
 	game = p_game
 	source = p_source
@@ -163,6 +172,12 @@ func _legacy_targets(criteria: Variant, count: int = 1) -> Variant:
 		if legacy is Dictionary and count > 1 and not legacy.has("count"):
 			legacy["count"] = count
 		return legacy
+	# A CardQuery is a pool, not a TargetRequest; the Field still consumes its to_block() form.
+	if criteria is Object and criteria.has_method("to_block"):
+		var block: Dictionary = criteria.to_block()
+		if count > 1:
+			block["count"] = count
+		return block
 	if criteria is Dictionary:
 		var block: Dictionary = criteria.duplicate()
 		if count > 1:
@@ -284,7 +299,17 @@ func put_hand_card_on_bottom() -> void:
 
 func search_deck(filter: CARD_QUERY, destination: String = "hand", tapped: bool = false) -> void:
 	if game != null:
-		game.search_deck(_criteria_filter(filter), destination, tapped, owner_id)
+		# The search opens a window and awaits the agent; this must be awaited or the effect resolves
+		# while the picker is still open.
+		await game.search_deck(_criteria_filter(filter), destination, tapped, owner_id)
+
+
+## Multi-card search with dynamic selection rules (Golbez 135). `request` is a SelectionRequest; its query
+## supplies the pool filter, and its constraints control what stays selectable as the pick grows.
+func search_deck_multi(request, destination: String = "field", suppress_auto: bool = true,
+		prompt: String = "Choose cards") -> void:
+	if game != null:
+		await game.search_deck_multi(request, {}, destination, suppress_auto, owner_id, prompt)
 
 
 func reveal_top(count: int = 1) -> void:

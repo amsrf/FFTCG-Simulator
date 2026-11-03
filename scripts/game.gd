@@ -31,6 +31,8 @@ const DECK_SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
 const CARD_FILTER := preload("res://scripts/card_filter.gd")
 ## Runtime shatter VFX for a real BREAK (not a power-0 removal).
 const CARD_SHARDS := preload("res://card_shards.tscn")
+## The cinematic clash presentation. Cards are cinematics proxies; game state stays here.
+const CLASH_CINEMATIC := preload("res://clash_cinematic.tscn")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
@@ -953,6 +955,19 @@ func _input(event):
 		# Worth knowing: it counts toward the defeat total like any other damage. Seven presses of Y and you lose,
 		# which is correct rather than a bug — the debug key uses the real rules on purpose.
 		player.take_damage(1)
+	if event is InputEventKey and event.pressed and not event.echo \
+			and str(MatchSetup.config.get("preset", "")) == "ground_clash":
+		match event.keycode:
+			Key.KEY_1:
+				_debug_clash(0)
+			Key.KEY_2:
+				_debug_clash(1)
+			Key.KEY_3:
+				_debug_clash(2)
+			Key.KEY_4:
+				_debug_clash(3)
+			Key.KEY_5:
+				_debug_clash(4)
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == Key.KEY_B:
 		# DEBUG: only in Test Mode. B breaks the first player Forward; Shift+B breaks the opponent's.
 		if str(MatchSetup.config.get("preset", "")).begins_with("ground_"):
@@ -983,6 +998,95 @@ func _debug_break_first_forward(opponent_side: bool = false) -> void:
 		return
 	print("[Debug] breaking %s's %s" % [side_name, victim.card_name])
 	break_card(victim)
+
+
+## DEBUG CLASH. Four deterministic outcomes for visual tuning:
+##   0 attacker survives / defender dies
+##   1 defender survives / attacker dies
+##   2 both survive (both receive 0 damage)
+##   3 both die
+## The board is the clash Test Mode ground: one Forward on each side.
+func _rebuild_clash_pair() -> Array:
+	for side in ["player", "opponent"]:
+		for card in field.get_front_cards_for(side).duplicate():
+			if card != null and is_instance_valid(card):
+				field.remove_card(card)
+				card.queue_free()
+	var attacker: Card = create_card(55, "player")
+	var blocker: Card = create_card(41, "opponent")
+	add_child(attacker)
+	add_child(blocker)
+	field.play_card(attacker, false, false, false)
+	field.play_card(blocker, true, false, false)
+	return [attacker, blocker]
+
+
+func _debug_clash(scenario: int, reset_ground: bool = true) -> void:
+	if str(MatchSetup.config.get("preset", "")) != "ground_clash":
+		return
+	var attacker: Card = null
+	var blocker: Card = null
+	if reset_ground:
+		# Each press starts a clean pair, so 1-4 can be tried in any order.
+		var pair: Array = _rebuild_clash_pair()
+		attacker = pair[0]
+		blocker = pair[1]
+	else:
+		for card in field.get_front_cards_for("player"):
+			if card != null and is_instance_valid(card) and card.is_on_field():
+				attacker = card
+				break
+		for card in field.get_front_cards_for("opponent"):
+			if card != null and is_instance_valid(card) and card.is_on_field():
+				blocker = card
+				break
+	if attacker == null or blocker == null:
+		print("[DebugClash] no attacker/blocker on the ground")
+		return
+
+	field.reset_attacker()
+	field.reset_blocker()
+	attacker.clear_damage()
+	blocker.clear_damage()
+	# Scenario 0 uses the PRINTED powers: Dark Knight 8000 beats Squall 6000, so the debug ground does not
+	# silently turn an 8000 Forward into a 9000 one and make it look like it gained power after the clash.
+	var attacker_base: int = attacker.base_power
+	var blocker_base: int = blocker.base_power
+	match scenario:
+		1:
+			# Force the opposite outcome only for this debug case; restore the printed values after the animation.
+			attacker.set_base_power(3000)
+			blocker.set_base_power(9000)
+		2:
+			# Both survive: the actual printed powers are fine, both hits are reduced to zero.
+			attacker.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
+			blocker.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
+		3:
+			# Both die; restore the printed values after the animation.
+			attacker.set_base_power(3000)
+			blocker.set_base_power(3000)
+		4:
+			# Different columns: both survive so the diagonal approach can be inspected without a card
+			# disappearing at the end of the sequence.
+			attacker.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
+			blocker.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
+			attacker.global_position.x -= 0.90
+			blocker.global_position.x += 0.90
+
+	field.set_attacker(attacker)
+	field.blocker_card = blocker
+	blocker.set_blocker_status(true)
+	print("[DebugClash] scenario %d: %s (%d) vs %s (%d)" % [
+		scenario, attacker.card_name, attacker.power, blocker.card_name, blocker.power])
+	await resolve_blocked_clash()
+	# The debug scenario may have forced a power value to choose the outcome. Put the printed values back so
+	# inspecting the board afterwards cannot look like a stat change caused by the clash.
+	if is_instance_valid(attacker):
+		attacker.set_base_power(attacker_base)
+	if is_instance_valid(blocker):
+		blocker.set_base_power(blocker_base)
+	field.reset_blocker()
+	field.reset_attacker()
 
 
 func _show_zone_view(zone: Node, title: String) -> void:
@@ -1062,6 +1166,14 @@ var turn_history: Dictionary = {}
 ## once_per_turn event triggers, keyed by card instance + trigger index + turn_number. The turn number is part of the
 ## key, so a new turn starts with a clean slate without any reset pass.
 var _event_triggers_fired: Dictionary = {}
+## Break shatter is suppressed for the two cards currently being shown by the clash cinematic. The cinematic
+## launches its own shatter on the defeated proxy AFTER the exchange, so the old instant burst never fires.
+var _clash_suppressed_cards: Dictionary = {}
+## Break-zone triggers wait for the clash presentation. The card has already reached the Break Zone, but its
+## "when it enters the Break Zone / when it breaks" effects must not appear on the stack while the cinematic is
+## still playing. Flushed by resolve_blocked_clash() after the animation.
+var _clash_cinematic_active: bool = false
+var _deferred_break_zone_triggers: Array = []
 
 func event_trigger_already_fired(key: String) -> bool:
 	return _event_triggers_fired.has(key)
@@ -1571,6 +1683,59 @@ func clash_cards(card1:Card,card2:Card):
 ## have it or neither does, it is one simultaneous step. The second step happens only if both cards are still alive
 ## after the first — hence the is_on_field() checks on either side of the priority window, since a player may cast
 ## something during it.
+## Resolve the combat rules first, then replay the result as a cinematic. The two cards are hidden while their
+## proxies perform, so Field layout and Card.enter_zone() cannot move the actors mid-animation.
+##
+## The snapshots are taken BEFORE damage: a defeated card is already in the Break Zone by the time the rules
+## finish, but the cinematic must start from where the player last saw it.
+func resolve_blocked_clash() -> void:
+	var attacker: Card = field.attacker_card
+	var blocker: Card = field.blocker_card
+	if attacker == null or blocker == null:
+		await clash_attacker_blocker()
+		return
+
+	var snap_a: Transform3D = attacker.global_transform
+	var snap_b: Transform3D = blocker.global_transform
+	_suppress_clash_fx([attacker, blocker])
+	# Turned on BEFORE damage: a defeated card reaches the Break Zone inside clash_attacker_blocker(), and its
+	# break-zone trigger must be held until the presentation is over.
+	_clash_cinematic_active = true
+	await clash_attacker_blocker()
+
+	var survives_a: bool = is_instance_valid(attacker) and attacker.is_on_field()
+	var survives_b: bool = is_instance_valid(blocker) and blocker.is_on_field()
+	if is_instance_valid(attacker) and is_instance_valid(blocker):
+		var cinema = CLASH_CINEMATIC.instantiate()
+		add_child(cinema)
+		await cinema.play(attacker, blocker, snap_a, snap_b, survives_a, survives_b)
+		cinema.queue_free()
+	_flush_deferred_break_zone_triggers()
+	_release_clash_fx([attacker, blocker])
+
+
+func _flush_deferred_break_zone_triggers() -> void:
+	_clash_cinematic_active = false
+	var pending: Array = _deferred_break_zone_triggers.duplicate()
+	_deferred_break_zone_triggers.clear()
+	for entry in pending:
+		var card: Card = entry[0] if entry.size() > 0 else null
+		var was_broken: bool = bool(entry[1]) if entry.size() > 1 else false
+		trigger_break_zone_keywords(card, was_broken)
+
+
+func _suppress_clash_fx(cards: Array) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			_clash_suppressed_cards[card.get_instance_id()] = true
+
+
+func _release_clash_fx(cards: Array) -> void:
+	for card in cards:
+		if card != null and is_instance_valid(card):
+			_clash_suppressed_cards.erase(card.get_instance_id())
+
+
 func clash_attacker_blocker() -> void:
 	var blocker: Card = field.blocker_card
 	if blocker == null or field.party_members().is_empty():
@@ -1816,6 +1981,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 				# human to choose one. Clicking turns it orange and draws the arc.
 				field.set_blockable(controller_for(defender_id), true)
 				assistant.set_declare_block_button('No Block')
+				_refresh_block_declaration_button()
 			var blocker: Card = await defender_agent.decide_blocker(defender_id, field.attacker_card)
 			if local_defence:
 				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.BLOCKING)
@@ -1838,7 +2004,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 				# AWAITED: First Strike may open a priority window between its two damage steps, and that window
 				# must finish before this phase continues into its own priority round. Without the await the clash
 				# runs detached and two priority loops fight over _priority_lock.
-				await clash_attacker_blocker()
+				await resolve_blocked_clash()
 			else:
 				# cause_attacking_damage(), not cause_damage(): it also fires "when a party you control deals
 				# damage" (Andoria/Boko). Calling the inner function directly left that trigger dead in real play.
@@ -2140,6 +2306,9 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 func _play_break_shatter(card: Card) -> void:
 	if card == null or not is_instance_valid(card):
 		return
+	if _clash_suppressed_cards.has(card.get_instance_id()):
+		# The clash cinematic owns this card's defeat effect and will burst it after the exchange.
+		return
 	var fx: Node = CARD_SHARDS.instantiate()
 	add_child(fx)
 	fx.set("global_transform", card.global_transform)
@@ -2160,6 +2329,12 @@ func _play_break_shatter(card: Card) -> void:
 ## one that actually broke. An exiled card fires neither, because it never reaches this pile.
 func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 	if card == null or not is_instance_valid(card):
+		return
+	if _clash_cinematic_active:
+		# THE CARD IS ALREADY IN THE BREAK ZONE; ONLY THE TRIGGER WAITS. Keeping the queue here, rather than
+		# creating stack objects earlier, is what stops the effect appearing while the cards are still fighting.
+		_deferred_break_zone_triggers.append([card, was_broken])
+		print("[Clash] deferring Break Zone trigger for ", card.card_name)
 		return
 	# execute_card_effect() is the single gate: it knows both code effects and JSON keywords. Emitting the signal
 	# directly here skipped every code-defined Break Zone trigger.
@@ -2455,7 +2630,21 @@ func _on_field_blocker_changed() -> void:
 	# only touch the button while the local defender's declaration is open.
 	if GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.BLOCKING:
 		return
-	assistant.set_declare_block_button('Block' if field.blocker_card != null else 'No Block')
+	_refresh_block_declaration_button()
+
+
+## A compulsory blocker turns the declaration button into a two-state gate: unless the named Forward is the
+## selected blocker, "No Block" is disabled. Field.forced_blocker_for() also checks legality, so a tapped or
+## otherwise unable card never traps the player in an impossible declaration.
+func _refresh_block_declaration_button() -> void:
+	var forced: Card = field.forced_blocker_for(field.attacker_card)
+	var label: String = 'Block' if field.blocker_card != null else 'No Block'
+	var enabled: bool = true
+	if forced != null:
+		enabled = field.blocker_card == forced
+		if not enabled:
+			label = "Must block with %s" % forced.card_name
+	assistant.set_declare_block_button(label, enabled)
 
 # --- deck search -------------------------------------------------------------
 
@@ -2473,6 +2662,72 @@ func _on_field_blocker_changed() -> void:
 ##
 ## Sets _last_action_succeeded so `condition: "if_last_succeeded"` can act on "and if you do so". A cancelled search
 ## counts as not succeeding, which is the whole point of that guard.
+## Search the deck for SEVERAL cards (Golbez 135). `request` is a SelectionRequest: it owns the pool query,
+## the count range and the dynamic constraints (unique element/job, total cost...). The agent returns ids; this
+## method validates them, removes those exact copies from the deck, sends them to the destination, and shuffles once.
+##
+## `suppress_auto` is passed to Field.play_card for field destinations, so cards played this way enter without
+## firing their own enter-the-field auto-abilities — exactly Golbez's "Their auto-abilities will not trigger."
+func search_deck_multi(request, filter: Dictionary = {}, destination: String = "field",
+		suppress_auto: bool = true, player_id: int = 0, prompt: String = "Choose cards") -> void:
+	_last_action_succeeded = false
+	if request == null:
+		return
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
+	var deck_node = deck if owner_id == 1 else opponent_deck
+	var hand_node: Hand = hand_for(owner_id)
+	if deck_node == null or hand_node == null or deck_node.deck_cards.is_empty():
+		return
+	if filter.is_empty() and request.query != null:
+		filter = request.query.to_filter()
+	var candidates: Array = []
+	for card in deck_node.deck_cards:
+		if _matches_search_filter(card, filter):
+			candidates.append(card)
+	if candidates.is_empty():
+		return
+	var ids: Array = []
+	for card in candidates:
+		ids.append(card.id)
+
+	var agent: Agent = agent_for(owner_id)
+	if agent == null:
+		return
+	var chosen: Array = await agent.choose_deck_cards(owner_id, ids, filter, request, prompt)
+	if chosen.is_empty() or not request.valid(chosen):
+		return
+
+	# Duplicate ids are legal when the constraints allow them, so remove one physical card per selected id.
+	var removed: Array = []
+	var used: Dictionary = {}
+	for chosen_id in chosen:
+		for card in candidates:
+			if card.id != int(chosen_id) or used.has(card):
+				continue
+			used[card] = true
+			removed.append(card)
+			break
+
+	if removed.is_empty():
+		return
+	for card in removed:
+		deck_node.deck_cards.erase(card)
+		match destination:
+			"removed":
+				_send_card_to_removed(card)
+			"graveyard":
+				_send_card_to_graveyard(card)
+			"top":
+				deck_node.deck_cards.push_front(card)
+			"field":
+				card.reset_for_field_arrival()
+				field.play_card(card, owner_id == 2, true, true, suppress_auto)
+			_:
+				hand_node.draw(card)
+	shuffle_deck(deck_node)
+	_last_action_succeeded = true
+
+
 func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false, player_id: int = 0) -> void:
 	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
 	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.

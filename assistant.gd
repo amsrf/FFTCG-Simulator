@@ -138,12 +138,12 @@ func set_declare_attack_button(button_text: String):
 			confirmButton.hide_button(),
 		Callable(), true, false)
 
-func set_declare_block_button(button_text: String):
+func set_declare_block_button(button_text: String, enabled: bool = true):
 	show_modal(button_text, "",
 		func():
 			advance_blocker_declaration_step.emit()
 			confirmButton.hide_button(),
-		Callable(), true, false)
+		Callable(), enabled, false)
 
 func generate_confirm_button(on_confirm: Callable) -> void:
 	show_modal("Confirm", "",

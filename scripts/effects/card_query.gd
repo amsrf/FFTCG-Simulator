@@ -155,6 +155,10 @@ func to_filter() -> Dictionary:
 		out["min_power"] = min_power
 	if max_power >= 0:
 		out["max_power"] = max_power
+	if min_cost >= 0:
+		out["min_cost"] = min_cost
+	if max_cost >= 0:
+		out["max_cost"] = max_cost
 	if not any_queries.is_empty():
 		var any_list: Array = []
 		for query in any_queries:

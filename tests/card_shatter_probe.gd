@@ -45,11 +45,19 @@ func _ready() -> void:
 			break
 	_expect(fx != null, "breaking a card creates a shatter node")
 	if fx != null:
-		_expect(fx.get_child_count() == 1, "the chosen fracture variant is instantiated")
+		var model: Node = fx.get("_model")
+		_expect(model != null, "the chosen fracture variant is instantiated")
 		var meshes: Array[MeshInstance3D] = []
-		_meshes(fx, meshes)
+		if model != null:
+			_meshes(model, meshes)
 		_expect(meshes.size() == 10, "the shatter has ten pieces")
 		_expect(fx.get("_running") == true, "the explosion is running")
+		var flash: Node = fx.get("_flash")
+		_expect(flash != null and flash is MeshInstance3D, "a burst flash is spawned on top of the pieces")
+		if flash != null and flash is MeshInstance3D:
+			var flash_mat = (flash as MeshInstance3D).material_override
+			_expect(flash_mat is ShaderMaterial and flash_mat.get_shader_parameter("ring_radius") != null,
+				"the flash uses the additive shatter flash shader")
 		if not meshes.is_empty():
 			var art = meshes[0].get_surface_override_material(0)
 			var glass = meshes[0].get_surface_override_material(1)

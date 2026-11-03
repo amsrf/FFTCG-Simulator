@@ -192,8 +192,13 @@ func calculate_card_position(i: int) -> Vector3:
 	return Vector3(x_offset, y_offset, z_offset)
 	
 func animate_card(card, target_position):
-	# Create a Tween to animate the card's movement
+	# ONE LAYOUT TWEEN PER CARD. The old one has to die before a new target is
+	# written, and the card has to own the reference so enter_zone() can stop it
+	# when the card leaves the stack.
+	if card.has_method("stop_stack_layout"):
+		card.stop_stack_layout()
 	var tween = create_tween()
+	card.set("stack_tween", tween)
 	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.3)
 	# Card.STACK_CARD_SCALE is a WORLD size and this node is scaled 2.305, so it is divided by that to land the card at
@@ -391,7 +396,7 @@ func _on_choose_card_finished(play: bool) -> void:
 		return
 	field.card_activated_ability.emit(cost)
 
-func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
+func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -1) -> bool:
 	## Physical stack object for UI (pay + target). Costs apply later at de facto stack commit.
 	if skill_activation_proxy != null:
 		return false
@@ -404,6 +409,11 @@ func add_skill_activation_proxy(source: Card, skill_index: int) -> bool:
 	# Snapshot the definition. The source's copied-skill slot may be overwritten or cleared while this object is
 	# still on the stack, and an ability already on the stack must resolve independently of its source.
 	proxy.skill_def_override = definition.duplicate(true)
+	if x_value >= 0:
+		# The declared X belongs to THIS activation, not to the card's reusable ability definition.
+		proxy.ability_x_value = x_value
+		proxy.skill_def_override["x_value"] = x_value
+		proxy.skill_def_override["cost"] = {"neutral": x_value}
 	proxy.ability_spec = source.activation_ability_spec(skill_index)
 	proxy.copied_skill_activation = bool(definition.get("copied", false))
 	proxy.copied_skill_token = source.copied_skill_token if proxy.copied_skill_activation else 0
@@ -452,6 +462,15 @@ func commit_skill_activation_costs_if_pending() -> void:
 				if owner_hand != null:
 					field.remove_card(return_src)
 					owner_hand.add_card(return_src)
+		# DEFERRED SELF-SACRIFICE (Tama 111). Paying it at commit means backing out of the mana modal leaves Tama on
+		# the field instead of losing it before the payment is confirmed.
+		if bool(return_def.get("defer_sacrifice", false)):
+			var sacrifice: Dictionary = return_def.get("sacrifice", {})
+			if bool(sacrifice.get("is_source", false)):
+				var sac_src: Card = skill_activation_proxy.effect_source
+				if sac_src != null and is_instance_valid(sac_src) and sac_src.is_on_field():
+					print("[Sacrifice] %s -> Break Zone (deferred)" % sac_src.card_name)
+					get_parent().put_card_into_graveyard(sac_src)
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
 		hand.discard_card(s_cost_selected_card)
@@ -501,6 +520,7 @@ func _clear_skill_proxy() -> void:
 ## _commit_summon_to_stack().
 func park_card(card: Card) -> void:
 	var trans = card.global_transform
+	card.stop_hand_layout()
 	card.reparent(self, false)
 	card.global_transform = trans
 	# Parked cards are flat and plain: no hand tilt and no field readout.
@@ -508,8 +528,6 @@ func park_card(card: Card) -> void:
 	# Face-down for anyone but the owning player. Every exit from this node must
 	# call reveal_parked().
 	card.set_revealed(card.controller == "player")
-	# update_card_positions() now includes the parked card (layout_cards()), so
-	# it already places it in the row — no separate positioning here.
 	update_card_positions()
 
 ## A parked card is leaving this node (committed to the stack, played to the

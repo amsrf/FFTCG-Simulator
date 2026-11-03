@@ -151,10 +151,31 @@ func choose_deck_card(_owner_id: int, ids: Array, _filter: Dictionary) -> int:
 	await _settle()
 	return int(ids[0]) if not ids.is_empty() else -1
 
+## Choose several cards from the deck (Golbez 135). `request` is a SelectionRequest; its own `allows()` and
+## `valid()` are the rules, so AI and human pickers cannot disagree about what is legal.
+func choose_deck_cards(_owner_id: int, ids: Array, _filter: Dictionary, request, _prompt: String = "Choose cards") -> Array:
+	await _settle()
+	var picked: Array = []
+	if request == null:
+		return picked
+	for id in ids:
+		if picked.size() >= int(request.maximum):
+			break
+		if request.allows(int(id), picked):
+			picked.append(int(id))
+	return picked
+
 ## Choose one Element from `options` (Mime 173). Pull shape: returns the chosen element, or "" to cancel.
 func choose_element(_owner_id: int, options: Array, _prompt: String = "Choose an Element") -> String:
 	await _settle()
 	return str(options[0]) if not options.is_empty() else ""
+
+
+## Declare a number for an 《X》 ability. Pull shape: returns the chosen value, or -1 to cancel.
+## Default is the maximum, which is deterministic and never blocks for AI/remote play.
+func choose_number(_owner_id: int, _minimum: int, maximum: int, _prompt: String = "Choose a number") -> int:
+	await _settle()
+	return maximum
 
 
 ## The colour a multi-colour source produces. Local play takes this to the UI; AI/remote play answers it without

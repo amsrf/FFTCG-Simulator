@@ -26,6 +26,7 @@ class_name DeckSearch
 ##     var chosen: int = await window.finished
 
 signal finished(chosen_id: int)
+signal finished_multi(chosen_ids: Array)
 
 const CHOOSE_NONE := -1
 
@@ -100,6 +101,12 @@ var _sliding: Dictionary = {}
 ## The copy the player actually clicked, which is what wears the orange. `selected_id` says WHICH card was chosen for
 ## the effect; this says which of its copies is lit — different questions when a deck holds duplicates.
 var _selected_node: Control = null
+## Multi-select state. `_selected_ids` is paging-safe and can contain the same id more than once, because a deck
+## may hold duplicate copies and a total-cost rule allows both. `_node_selected` says which visible copy is orange.
+var _multi: bool = false
+var _selection = null
+var _selected_ids: Array = []
+var _node_selected: Dictionary = {}
 
 func _ready() -> void:
 	layer = 10                      # above the board and the match HUD
@@ -166,13 +173,13 @@ func _build() -> void:
 	_confirm = Button.new()
 	_confirm.text = "Confirm"
 	_confirm.disabled = true
-	_confirm.pressed.connect(func(): _finish(selected_id))
+	_confirm.pressed.connect(_confirm_pressed)
 	_band.add_child(_confirm)
 
 	_cancel = Button.new()
 	_cancel.text = "Cancel"
 	_cancel.tooltip_text = "Take no card at all"
-	_cancel.pressed.connect(func(): _finish(CHOOSE_NONE))
+	_cancel.pressed.connect(_cancel_pressed)
 	_band.add_child(_cancel)
 
 	# A CanvasLayer has no `resized` signal; the viewport does.
@@ -185,6 +192,9 @@ func _build() -> void:
 ## Sharing this window rather than writing a second viewer is the point: a card must read the same way wherever it
 ## is inspected, and two viewers would drift apart within a week.
 func open_view(ids: Array, title: String) -> void:
+	_multi = false
+	_selection = null
+	_selected_ids.clear()
 	var shown: Array = []
 	for id in ids:
 		shown.append(int(id))
@@ -208,6 +218,9 @@ func open_view(ids: Array, title: String) -> void:
 ## `subtitle_text` lets the SAME window serve another zone. The Break Zone search (Devout 48/77) is this window; the
 ## only thing it needs to say differently is where the cards are coming from.
 func open(deck_ids: Array, filter: Dictionary, subtitle_text: String = "") -> void:
+	_multi = false
+	_selection = null
+	_selected_ids.clear()
 	var matching: Array = []
 	for id in deck_ids:
 		if CARD_FILTER.matches(CARD_FILTER.card_by_id(int(id)), filter):
@@ -228,6 +241,31 @@ func open(deck_ids: Array, filter: Dictionary, subtitle_text: String = "") -> vo
 	_rebuild_page()
 	_layout()
 
+## Opens the window in MULTI-SELECT mode. `request` is a SelectionRequest: its constraints decide which cards
+## remain selectable as the selection changes (`request.allows`) and whether Confirm is legal (`request.valid`).
+func open_multi(deck_ids: Array, filter: Dictionary, request, subtitle_text: String = "") -> void:
+	_multi = true
+	_selection = request
+	_selected_ids.clear()
+	var matching: Array = []
+	for id in deck_ids:
+		if CARD_FILTER.matches(CARD_FILTER.card_by_id(int(id)), filter):
+			matching.append(int(id))
+	matching.sort_custom(func(a, b): return _sort_key(a) < _sort_key(b))
+	_matching = matching
+	_page = 0
+	_title.text = "Choose cards"
+	_subtitle.text = subtitle_text if subtitle_text != "" else _subtitle_for(filter)
+	_status.text = "Select up to %d." % int(request.maximum)
+	if _confirm != null:
+		_confirm.text = "Confirm"
+		_confirm.visible = true
+	if _cancel != null:
+		_cancel.text = "Cancel"
+	_rebuild_page()
+	_layout()
+
+
 ## Rebuilds the fan for the current page. Called on open and whenever the page changes.
 func _rebuild_page() -> void:
 	for child in _fan.get_children():
@@ -238,16 +276,24 @@ func _rebuild_page() -> void:
 	_cards.clear()
 	# Those tweens belonged to nodes that are being freed.
 	_sliding.clear()
-	selected_id = CHOOSE_NONE
-	_selected_node = null
-	_hovered_index = -1
-	if _confirm != null:
-		_confirm.disabled = true
+	if _multi:
+		# The ids survive a page turn; only the visible copy map is rebuilt.
+		_selected_node = null
+		_node_selected.clear()
+		_hovered_index = -1
+	else:
+		selected_id = CHOOSE_NONE
+		_selected_node = null
+		_hovered_index = -1
+		if _confirm != null:
+			_confirm.disabled = true
 
 	var first: int = _page * PAGE_SIZE
 	var last: int = mini(first + PAGE_SIZE, _matching.size())
 	for i in range(first, last):
 		_fan.add_child(_make_card(_matching[i]))
+	if _multi:
+		_sync_multi_visuals()
 
 func _make_card(id: int) -> Control:
 	var button := TextureButton.new()
@@ -487,6 +533,9 @@ func _id_of(node: Control) -> int:
 ## should light up: `selected_id` records the choice for the effect, and `_selected_node` records which copy is
 ## wearing the orange.
 func _select(id: int, node: Control) -> void:
+	if _multi:
+		_toggle_multi(id)
+		return
 	# Clicking the card that is ALREADY selected de-selects it, which is how you change your mind. Confirm goes back
 	# to disabled, so "nothing chosen" stays the honest state — Cancel remains the way to leave with none.
 	if _selected_node == node:
@@ -510,20 +559,32 @@ func _select(id: int, node: Control) -> void:
 func _hover(_id: int, node: Control) -> void:
 	if node == null:
 		return
+	if _multi:
+		if bool(_node_selected.get(node, false)):
+			_hovered_index = node.get_index()
+			_place_cards()
+			return
+		if _selection == null or not _selection.allows(_id, _selected_ids):
+			return
 	if node != _selected_node:
 		CARD_VIEW.set_aura(node, true, CARD_VIEW.HOVER_COLOUR)
 	# Remember which card is under the pointer: it is the one that grows, and nothing else moves.
 	_hovered_index = node.get_index()
 	_place_cards()
 
+
 func _unhover() -> void:
 	for id in _cards:
 		for node in _cards[id]:
-			if node != _selected_node:
+			if _multi:
+				if not bool(_node_selected.get(node, false)):
+					CARD_VIEW.set_aura(node, false, CARD_VIEW.HOVER_COLOUR)
+			elif node != _selected_node:
 				CARD_VIEW.set_aura(node, false, CARD_VIEW.HOVER_COLOUR)
 	# ...and the row settles back, with nothing left enlarged.
 	_hovered_index = -1
 	_place_cards()
+
 
 ## The visible window rect. A CanvasLayer is not a Control and has no `size` of its own, so every layout question
 ## goes through here rather than through `size`.
@@ -533,6 +594,68 @@ func _window_size() -> Vector2:
 		return Vector2.ZERO
 	return viewport.get_visible_rect().size
 
+func _cancel_pressed() -> void:
+	if _multi:
+		finished_multi.emit([])
+		queue_free()
+		return
+	_finish(CHOOSE_NONE)
+
+
+func _confirm_pressed() -> void:
+	if _multi:
+		if _selection == null or not _selection.valid(_selected_ids):
+			return
+		finished_multi.emit(_selected_ids.duplicate())
+		queue_free()
+		return
+	_finish(selected_id)
+
+
 func _finish(chosen_id: int) -> void:
 	finished.emit(chosen_id)
 	queue_free()
+
+
+## Toggle one copy of `id`. The selected list can hold the same id twice: a total-cost constraint may allow two
+## copies of one card, while a unique-element constraint will block the second copy.
+func _toggle_multi(id: int) -> void:
+	if _selected_ids.has(id):
+		_selected_ids.erase(id)
+	else:
+		if _selection == null or not _selection.allows(id, _selected_ids):
+			return
+		_selected_ids.append(id)
+	_rebuild_page()
+	_layout()
+
+
+## Recompute orange/dim states for the visible page. Selected copies are marked in list order; all other cards
+## are checked against the live constraints. This is the single place the dark overlay is applied.
+func _sync_multi_visuals() -> void:
+	if not _multi or _selection == null:
+		return
+	var remaining: Dictionary = {}
+	for id in _selected_ids:
+		remaining[id] = int(remaining.get(id, 0)) + 1
+	for node in _fan.get_children():
+		var id: int = _id_of(node)
+		if id == CHOOSE_NONE:
+			continue
+		var left: int = int(remaining.get(id, 0))
+		if left > 0:
+			remaining[id] = left - 1
+			_node_selected[node] = true
+			CARD_VIEW.set_unavailable(node, false)
+			CARD_VIEW.set_aura(node, true, CARD_VIEW.SELECTED_COLOUR)
+			node.mouse_filter = Control.MOUSE_FILTER_STOP
+		else:
+			_node_selected[node] = false
+			var allowed: bool = _selection.allows(id, _selected_ids)
+			CARD_VIEW.set_aura(node, false, CARD_VIEW.HOVER_COLOUR)
+			CARD_VIEW.set_unavailable(node, not allowed)
+			node.mouse_filter = Control.MOUSE_FILTER_STOP if allowed else Control.MOUSE_FILTER_IGNORE
+	if _confirm != null:
+		_confirm.disabled = not _selection.valid(_selected_ids)
+	_status.text = "Selected %d. Confirm to play." % _selected_ids.size() if not _selected_ids.is_empty() \
+		else "Nothing selected. Cancel to take no cards."

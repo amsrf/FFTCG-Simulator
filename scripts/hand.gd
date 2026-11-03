@@ -825,7 +825,17 @@ func _on_card_dragged(card: Variant) -> void:
 		update_card_positions()
 		card.index = new_index
 	
+func _release_hover(card: Card) -> void:
+	# A card leaving the hand must stop being the hovered card. The pointer is
+	# often still over it when it is dragged out, so mouse_exited never fires;
+	# without this, the returned card is laid out at the hover offset (lifted and
+	# grown) instead of joining the fan.
+	if hovered_card == card:
+		hovered_card = null
+
+
 func remove_card(card):
+	_release_hover(card)
 	cards.remove_at(card.index)
 	
 						
@@ -958,18 +968,21 @@ func toggle_effect_card_selection(card: Card) -> void:
 
 func remove_card_for_free_play(card: Card) -> void:
 	# Used by "may play for free" resolution: the chosen card leaves the hand.
+	_release_hover(card)
 	cards.erase(card)
 	update_card_positions()
 
 ## TAKE A CARD OUT OF HAND TO PLAY IT, without charging for it (Vaan / Leon: "play ... from your hand").
 ## The card itself is reparented by Field.play_card(); this only stops the hand owning it, exactly like discard_card.
 func remove_for_play(card: Card) -> void:
+	_release_hover(card)
 	cards.erase(card)
 	update_card_positions()
 
 func discard_card(card: Card) -> void:
 	# Special ability (S) cost: the chosen card goes from hand to the break zone. The pile adds it immediately and
 	# animates the visual flight; this method must not block on the tween.
+	_release_hover(card)
 	cards.erase(card)
 	graveyard.call("discard", card)
 	update_card_positions()
@@ -1019,7 +1032,13 @@ func animate_card(card, target_position, target_tilt: float = 0.0):
 	#
 	# The TILT is tweened here rather than assigned by the caller so that straightening up on hover, and leaning back
 	# as the pointer leaves, both GLIDE. Assigning it made the straightening snap.
+	# Kill the previous layout tween. If a card is picked up while the fan is
+	# still moving, that tween would otherwise keep writing hand-local positions
+	# after the card has been reparented to the Stack.
+	if card.has_method("stop_hand_layout"):
+		card.stop_hand_layout()
 	var tween = create_tween()
+	card.hand_tween = tween
 	tween.set_parallel(true) 
 	tween.tween_property(card, "position", target_position, 0.15)
 	tween.tween_property(card, "rotation", Vector3(0.0, target_tilt, 0.0), 0.15)

@@ -27,11 +27,7 @@ NEEDS_CODE = {
     # B3 - targeting / selection (implemented)
     # B4a - cost reductions (177 and 210 implemented)
     # B4b - event triggers (108, 187, 206, 214, 215 implemented)
-    181: 'return-self-to-hand cost',
-    141: 'force a blocker',
     # B5 - complex
-    111: 'variable X cost',
-    135: 'multi-card search/play with distinct elements',
 }
 
 

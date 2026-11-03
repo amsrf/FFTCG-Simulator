@@ -45,17 +45,11 @@ func handle_released():
 		card.apply_zone_scale()
 		return
 	var new_index = hand.find_index(card)
-	# Define the rectangle bounds
-	var x_min = -1.5
-	var x_max = 1.5
-	var z_min = -1.25
-	var z_max = 0
-	
-	# Get the card's global position
-	var card_position = card.global_position
-	# Check if the card is inside the rectangle
-	if (card_position.x >= x_min && card_position.x <= x_max &&
-		card_position.z >= z_min && card_position.z <= z_max && card.can_be_played()):
+	# THE BOARD OWNS THE DROP AREA. This used to be a hard-coded 3 x 1.25 m
+	# rectangle in the hand, inside an 8 x 4 m playmat, so most of the visible
+	# board rejected the drop. Ask the Field for its real bounds instead.
+	var over_board: bool = hand.field != null and hand.field.is_in_play_area(card.global_position)
+	if over_board && card.can_be_played():
 		hand.charge(card)
 	else:
 		hand.move_element(hand.cards,card.index,new_index)

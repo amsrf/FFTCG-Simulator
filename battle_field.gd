@@ -7,6 +7,7 @@ const RULES := preload("res://scripts/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const CARD_TARGET := preload("res://scripts/card_target.gd")
+const SLAM_PULSE := preload("res://slam_pulse.tscn")
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
 var rules = null
@@ -98,6 +99,7 @@ var mana_choice = null
 ## Gap between the hovered card and the preview, in screen pixels.
 @export var preview_gap: float = 16.0
 @export var preview_grow_seconds: float = 0.12
+
 ## Card scans are 2:3 — the preview's width follows from its height through this.
 const PREVIEW_ASPECT: float = 0.667
 const CARD_VIEW := preload("res://scripts/card_view.gd")
@@ -328,7 +330,7 @@ func _apply_entry_rules(entering: Card) -> void:
 			effect_obj.on_character_enter(entering, source.make_effect_context("static"))
 
 
-func play_card(card, is_opponent: bool = false, animate = true, record: bool = true) -> void:
+func play_card(card, is_opponent: bool = false, animate = true, record: bool = true, suppress_auto: bool = false) -> void:
 	# UNIQUE NAMES. A player may not control two Characters with the same name. Checked BEFORE the reparent, so the
 	# duplicate never touches the field: it did not enter, so no enter-the-field trigger and no entry animation run.
 	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
@@ -394,6 +396,7 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# the power/damage readout). Without this a card played from hand keeps the
 	# hand's fan tilt, because the reparent above deliberately preserves the whole
 	# global transform so the travel animation starts where the card was.
+	#
 	card.enter_zone(Card.Zone.FIELD)
 
 	# ENTRY RULES (Ultimecia 152: "all Forwards other than Ultimecia enter the field dull"). Read from the board at
@@ -415,17 +418,43 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 		tween.tween_property(card, "position", target_position, 0.4)
 		
 		# Execute ETB after the ENTIRE tween sequence finishes
-		tween.finished.connect(_on_tween_finished.bind(card))
+		tween.finished.connect(_on_tween_finished.bind(card, suppress_auto))
 	else:
 		card.position = target_position
 		GlobalVariables.refresh_mode()
 	
-func _on_tween_finished(card: Card):
+func _on_tween_finished(card: Card, suppress_auto: bool = false):
 	GlobalVariables.refresh_mode()
+	_play_arrival_pulse(card)
+	if suppress_auto:
+		return
 	#var instructions = card.create_instruction_from_json(card.card_effects['when_enter_field']['instructions'])
 	execute_card_effect(card, EVENTS.Event.ENTER_FIELD)
 	#request_target_confirmation.emit()
-	
+
+## Cost bands for the field-arrival pulse: 0-4 has no pulse, 5-7 is mild, and
+## 8+ is the big impact.
+func slam_tier(card: Card) -> int:
+	if card == null:
+		return 0
+	var total: int = 0
+	for value in card.get_cost().values():
+		total += int(value)
+	if total >= 8:
+		return 2
+	if total >= 5:
+		return 1
+	return 0
+
+func _play_arrival_pulse(card: Card) -> void:
+	var tier: int = slam_tier(card)
+	if tier <= 0 or card == null or not is_instance_valid(card):
+		return
+	var pulse = SLAM_PULSE.instantiate()
+	add_child(pulse)
+	pulse.global_position = card.global_position + Vector3.UP * 0.02
+	pulse.call("play", tier)
+
 func execute_card_attack():
 	# DEFENCE IN DEPTH. Every caller already asks can_attack() — the human's click, the AI's choice, the blocker
 	# gate — but this is the one function that turns an attacker into an attack, so summoning sickness must not be
@@ -655,6 +684,32 @@ func has_priority() -> bool:
 		return false
 	return int(game.get("priority_holder")) == 1
 
+## The largest useful X an 《X》 ability can declare. It is bounded by what can actually be paid AND by the most
+## expensive Character in hand, because paying more than the card's cost buys nothing. Returns -1 when there is no
+## Character in hand to play at all, which makes the ability unavailable instead of offering a pointless X=0.
+func ability_x_max(card: Card) -> int:
+	if card == null:
+		return -1
+	var game_node: Node = get_parent()
+	var owner_id: int = 1 if card.controller == "player" else 2
+	var owner_hand: Hand = game_node.hand_for(owner_id) if game_node != null else null
+	var useful: int = -1
+	if owner_hand != null:
+		for c in owner_hand.cards:
+			if c != null and is_instance_valid(c) and c.is_character():
+				useful = maxi(useful, int(c.cost))
+	if useful < 0:
+		return -1
+	var affordable: int = 0
+	for b in get_back_cards_for(card.controller):
+		if b != null and is_instance_valid(b) and b != card and not b.tapped:
+			affordable += 1
+	if owner_hand != null:
+		# A hand card is worth 2 CP when discarded to pay (see Hand.add_card_to_mana_conversion).
+		affordable += owner_hand.cards.size() * 2
+	return clampi(useful, 0, affordable)
+
+
 ## The authoritative "this card's effect can be activated right now" gate: your card, YOUR
 ## WINDOW, untapped, with an activatable skill, in a moment where acting is allowed (FREE or
 ## INSTANT_SPEED_TIME — no targeting, payment or declaration modal open).
@@ -699,6 +754,9 @@ func can_activate_now(card: Card) -> bool:
 		# "You can only use this ability if you have received 4 points of damage or more" (Gilgamesh 207).
 		if def.has("only_if_damage_received") \
 				and _damage_received_by(card) < int(def["only_if_damage_received"]):
+			continue
+		# An 《X》 ability is only useful if there is a Character in hand it could play.
+		if bool(def.get("x_cost", false)) and ability_x_max(card) < 0:
 			continue
 		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
@@ -774,7 +832,8 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 					and (not def.has("only_if_damage_received")
 						or _damage_received_by(card) >= int(def["only_if_damage_received"]))
 				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
-					or hand.has_card_matching_criteria({"is_named": card.card_name}))
+					or hand.has_card_matching_criteria({"is_named": card.card_name})) \
+					and (not bool(def.get("x_cost", false)) or ability_x_max(card) >= 0)
 				if can_pay and def.has("sacrifice"):
 					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
 				if can_pay and int(def.get("discard", 0)) > 0:
@@ -792,10 +851,27 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			return
 	if skill_index >= skills.size():
 		return
-	if not stack.add_skill_activation_proxy(card, skill_index):
+	var def: Dictionary = skills[skill_index].duplicate(true)
+	var x_value: int = -1
+	if bool(def.get("x_cost", false)):
+		# DECLARE X BEFORE PAYING. The ability is not on the stack yet and nothing has been spent, so Cancel here is
+		# free. Once confirmed, the cost becomes {neutral: X} and the normal exact-payment pipeline takes over.
+		var x_max: int = ability_x_max(card)
+		if x_max < 0:
+			return
+		var x_owner: int = 1 if card.controller == "player" else 2
+		var x_agent: Agent = get_parent().agent_for(x_owner)
+		if x_agent == null:
+			return
+		x_value = await x_agent.choose_number(x_owner, int(def.get("x_min", 0)), x_max, "Choose X")
+		if x_value < 0:
+			return
+		def["x_value"] = x_value
+		def["cost"] = {"neutral": x_value}
+	if not stack.add_skill_activation_proxy(card, skill_index, x_value):
 		return
 	assistant.clear_payment_accumulator()
-	var def: Dictionary = skills[skill_index]
+	def = stack.skill_activation_proxy.skill_def_override
 	# TAP THE SOURCE NOW, BEFORE THE MANA STEP. Tapping is part of the ability's cost, so it belongs at the moment
 	# of activation rather than at stack commit.
 	#
@@ -814,7 +890,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
 	var owner_id: int = 1 if card.controller == "player" else 2
 	var sacrifice: Dictionary = def.get("sacrifice", {})
-	if not sacrifice.is_empty():
+	if not sacrifice.is_empty() and not bool(def.get("defer_sacrifice", false)):
 		var picked: Card = null
 		if bool(sacrifice.get("is_source", false)):
 			# "Put THIS card into the Break Zone" — no choice to make, and no reason to ask an agent.
@@ -1822,6 +1898,24 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 		print("[Damage] %s marks %s (%s)" % [source.card_name, target.card_name, status])
 		target.add_status_effect(status, payload)
 
+## The actual playmat bounds in world space. Drop detection belongs to the board,
+## not to a hand-written rectangle in the hand: the old rectangle was 3 x 1.25 m
+## inside an 8 x 4 m mat, so most of the visible board rejected the drop.
+func play_area_bounds() -> AABB:
+	var mat: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mat == null or mat.mesh == null:
+		return AABB(global_position - Vector3(4.0, 0.0, 2.0), Vector3(8.0, 1.0, 4.0))
+	return mat.global_transform * mat.mesh.get_aabb()
+
+## True when a world-space point is over the playmat. `margin` extends the mat
+## slightly outward so a card dropped on the border is not rejected.
+func is_in_play_area(world_point: Vector3, margin: float = 0.02) -> bool:
+	var bounds: AABB = play_area_bounds()
+	return world_point.x >= bounds.position.x - margin \
+		and world_point.x <= bounds.end.x + margin \
+		and world_point.z >= bounds.position.z - margin \
+		and world_point.z <= bounds.end.z + margin
+
 func can_block(card: Card) -> bool:
 	if card == null:
 		return false
@@ -1849,6 +1943,26 @@ func can_block(card: Card) -> bool:
 			continue
 		return true
 	return false
+
+## The card that MUST block this attacker, if any. It only counts when the marker names this attacker (or a
+## member of its party) AND the card can legally block — "if it is possible" in Lightning's text is not a
+## requirement when the card is tapped or otherwise unable to block.
+func forced_blocker_for(attacker: Card) -> Card:
+	if attacker == null or not is_instance_valid(attacker):
+		return null
+	var attackers: Array = party_members()
+	if attackers.is_empty():
+		attackers = [attacker]
+	var defender: String = "opponent" if attacker.controller == "player" else "player"
+	for card in get_front_cards_for(defender):
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		if not card.must_block_against(attackers):
+			continue
+		if can_block(card):
+			return card
+	return null
+
 
 ## The review link: the arc that shows what a card IN THE STACK was pointed at, re-drawn on
 ## demand as the player moves over the stack (see Stack.refresh_target_display).

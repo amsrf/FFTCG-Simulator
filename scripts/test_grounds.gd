@@ -72,6 +72,12 @@ const GILGAMESH := 129   # Gilgamesh: S + Dull, reveal/remove top card, break or
 const GILGAMESH_FORWARD_TOP := 43  # Snow, a Forward: exercises the break branch.
 const GILGAMESH_BACKUP_TOP := 31   # Chemist, a Backup: exercises the 3000-damage branch.
 const COSMOS := 183      # Cosmos, an any-colour Backup: opens the radial crystal picker.
+const TAMA := 111        # Tama: 《X》《Dull》, put Tama into the Break Zone: play a cost-X Character from hand.
+const TAMA_PLAY := 29    # Red XIII, a cost-2 Character for Tama to play.
+const GOLBEZ := 135      # Golbez: on entering the Break Zone, search up to 4 cost-2 Forwards, different Elements.
+const CLASH_A := 55      # Dark Knight, no First Strike
+const CLASH_B := 41      # Squall, no First Strike
+
 const BREAK_A := 29      # a plain Forward, fine for the shatter visual
 const BREAK_B := 41      # Squall, ice Forward
 const BREAK_C := 12      # Zack, fire Forward
@@ -293,6 +299,44 @@ static func cosmos_mana() -> Dictionary:
 	return cfg
 
 
+static func tama_x() -> Dictionary:
+	## 《X》 COST. Two earth sources and a cost-2 Character in hand: declare X=2, pay it exactly,
+	## put Tama into the Break Zone, then play Red XIII from hand.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_tama"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": TAMA}, {"id": EARTH_MANA}, {"id": EARTH_MANA_2}]
+	cfg["player_hand"] = [TAMA_PLAY]
+	cfg["opponent_field"] = [{"id": ICE_A}]
+	return cfg
+
+
+static func golbez_search() -> Dictionary:
+	## B puts Golbez (first in the row) into the Break Zone. The search window then shows these cost-2 Forwards;
+	## the selection constraint dims every Element already chosen.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_golbez"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": GOLBEZ}]
+	cfg["player_deck"] = [5, 33, 69, 92, 160, 7, 9, 16, 25, 29]
+	cfg["player_hand"] = []
+	cfg["opponent_field"] = [{"id": ICE_A}]
+	return cfg
+
+
+static func clash_practice() -> Dictionary:
+	## CLASH CINEMATIC. One attacker and one defender, both passive. Press 1-4 to force the four outcomes;
+	## the debug helper sets their powers (and, for "both survive", a zero-damage shield on both).
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_clash"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": CLASH_A}]
+	cfg["opponent_field"] = [{"id": CLASH_B}]
+	cfg["player_hand"] = []
+	cfg["opponent_hand"] = []
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -309,6 +353,10 @@ const GROUNDS := {
 	"break_zone": {
 		"title": "Ground: Break Zone & fragile",
 		"blurb": "You hold Bahamut and mana. Cast it: fragile + 10000 exiles the targets instead of breaking them.",
+	},
+	"clash": {
+		"title": "Ground: Clash cinematic",
+		"blurb": "Press 1: attacker survives / defender dies. 2: defender survives / attacker dies. 3: both survive (damage shielded). 4: both die. 5: both survive from different columns.",
 	},
 	"break": {
 		"title": "Ground: Break a card",
@@ -354,6 +402,14 @@ const GROUNDS := {
 		"title": "Ground: Cosmos 183 (any-colour mana)",
 		"blurb": "Play Ifrit from hand and start paying. Click Cosmos: eight small crystals appear around it, evenly spaced. Hover to grow one, click to generate that colour. Then target Squall.",
 	},
+	"tama": {
+		"title": "Ground: Tama 111 (declare X)",
+		"blurb": "Activate Tama: declare X with +/-, Confirm, then pay that exact CP. Tama goes to the Break Zone and you pick Red XIII (cost 2) from hand to play. Cancel the payment once to see Tama stay on the field.",
+	},
+	"golbez": {
+		"title": "Ground: Golbez 135 (search, different Elements)",
+		"blurb": "Press B to put Golbez into the Break Zone, then pass priority (the button becomes Process Stack). Confirm the search, then pick cost-2 Forwards with different Elements: same-Element cards dim and cannot be clicked until you deselect. Played cards do not fire their auto-abilities.",
+	},
 }
 
 ## No Callable table here: a Dictionary of function references is not a constant expression in GDScript, so the
@@ -368,6 +424,8 @@ static func config(name: String) -> Dictionary:
 			return summons_and_targeting()
 		"break_zone":
 			return break_zone()
+		"clash":
+			return clash_practice()
 		"break":
 			return break_cards()
 		"clean":
@@ -390,6 +448,10 @@ static func config(name: String) -> Dictionary:
 			return wakka_status()
 		"cosmos":
 			return cosmos_mana()
+		"tama":
+			return tama_x()
+		"golbez":
+			return golbez_search()
 		_:
 			push_warning("[TestGrounds] no such ground '%s'" % name)
 			return clean()
@@ -412,7 +474,10 @@ const CATEGORY_OF := {
 	"kimahri": "Card Effects",
 	"wakka": "Card Effects",
 	"cosmos": "Card Effects",
+	"tama": "Abilities & Targeting",
+	"golbez": "Card Effects",
 	"break_zone": "Zones",
+	"clash": "Combat",
 	"break": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",

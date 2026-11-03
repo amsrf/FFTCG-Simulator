@@ -10,6 +10,8 @@ class_name CardFilter
 ##
 ## A filter may contain any of:
 ##   name       substring, case-insensitive, matched against the card's code OR its English name
+##   min_cost   inclusive lower bound on `cost`
+##   max_cost   inclusive upper bound on `cost`
 ##   min_power  inclusive lower bound on `power`
 ##   max_power  inclusive upper bound on `power`
 ##   category   exact match on `category_1` — the Final Fantasy title (VII, XIV, …)
@@ -76,6 +78,12 @@ static func matches(card: Dictionary, filter: Dictionary) -> bool:
 	if filter.has("min_power") and power < int(filter["min_power"]):
 		return false
 	if filter.has("max_power") and power > int(filter["max_power"]):
+		return false
+
+	var cost: int = int(str(card.get("cost", "0")).strip_edges())
+	if filter.has("min_cost") and cost < int(filter["min_cost"]):
+		return false
+	if filter.has("max_cost") and cost > int(filter["max_cost"]):
 		return false
 
 	return true

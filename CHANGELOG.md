@@ -3,6 +3,149 @@
 All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
+### Clash Cinematic (first playable)
+
+- Added `ClashCinematic` (`clash_cinematic.tscn` / `scripts/clash_cinematic.gd`). It uses two visual-only card
+  proxies, so the live cards and the Field layout never compete for the same transform.
+- The result is resolved first. `Game.resolve_blocked_clash()` snapshots both cards, resolves the combat, then
+  shows the cinematic. Survivors return to their exact captured transform; defeated proxies are knocked back,
+  tumble, and are freed with the cinematic.
+- `Game._clash_suppressed_cards` suppresses the instant break shatter for the two participants. The clash does
+  **not** spawn a replacement shatter: defeated proxies simply finish their knock-down and vanish.
+- Break-zone triggers now wait too. `Game._clash_cinematic_active` makes `trigger_break_zone_keywords()` queue the
+  card instead of putting its effects on the stack. They are flushed only after the cinematic ends, so a defeated
+  card's `when_enter_break_from_field` / `when_break` / status rider cannot appear while the cards are fighting.
+- Added exported choreography values on `ClashCinematic`: lift, wind-up, charge, hit-stop, recovery, defeat,
+  knockback, tumble speed, gravity, impact flash and camera shake.
+- Pullback is now much larger (0.80 m) with a deliberate `windup_hold_seconds` beat before the charge, so the
+  sequence reads as "retreat, pause, violent collision" rather than a quick twitch. Charge is shorter and uses
+  `TRANS_EXPO`/`EASE_IN` for the acceleration. The retreat is computed from the ground midpoint, so the cards
+  stay lifted instead of drifting back down during the wind-up.
+- The impact point and approach axis come from the two live card positions, not from a shared column. Scenario
+  key `5` places the pair in different columns so the diagonal approach can be seen.
+- Added the **Clash cinematic** Test Mode ground (Combat). Press `1` attacker survives / defender dies,
+  `2` defender survives / attacker dies, `3` both survive (damage shielded), `4` both die, `5` both survive
+  from different columns. Each press rebuilds the pair, so the scenarios can be tried in any order.
+- The debug ground no longer changes Dark Knight's printed power for scenario 0 — it uses 8000 vs Squall's 6000,
+  so winning does not leave it looking like it gained 1000. Scenarios that force an outcome restore the printed
+  base power after the animation.
+- Clash orientation is now column-aware. Same-column cards lift and close vertically with no roll or pitch, so
+  they do not lean sideways. Different-column cards first turn in the board plane so their local top edges face
+  each other; the retreat and charge then run along that facing axis, and the impact spacing is one card HEIGHT,
+  so the cards meet top edge to top edge rather than overlapping through their faces.
+- Lift is higher (0.85 m) and the proxies grow smoothly by `lift_scale` (1.18) during the lift tween, then return
+  to their original scale during survivor recovery. No scale is assigned, so nothing snaps.
+- The clash does not spawn `CardShards`; defeated proxies finish their knock-down and are freed with the cinematic.
+- Added `tests/clash_cinematic_probe.tscn` (18 checks): all four outcomes, no permanent power change, the
+  different-column path, proxy cleanup, suppression release, no shatter from the clash, and break-zone triggers
+  staying off the stack during the animation then arriving afterward.
+
+
+### Drag-and-Drop Casting Area
+
+- The drop test lived in `HandCardState.handle_released()` as a hard-coded world rectangle: `x = -1.5..1.5`, `z = -1.25..0`. The visible Field playmat is 8 x 4 m (world bounds about `-4.02..4.02` by `-2.01..2.01`), so only a small patch near the middle accepted a cast. This was not a camera problem.
+- `Field.play_area_bounds()` now reads the actual playmat mesh AABB in world space, and `Field.is_in_play_area()` checks a point against it with a small border margin. `HandCardState` asks the Field instead of carrying its own rectangle.
+- Added `tests/drop_area_probe.tscn` (14 checks): the full 8 x 4 m bounds, centre, front-right, back-left, outside-edge rejection, a hovered release over the front-right starting the cast flow, and cancelling that payment returning the card into its fan slot.
+- Fixed the cancelled-cast "stuck card" bug with two stale-state leaks:
+  - `Stack.animate_card()` now owns a per-card `stack_tween`, and `Card.enter_zone()` stops it when a card leaves the Stack. Previously the Stack's fan tween kept running after the card was reparented back to the Hand, overwriting the hand layout with stack-local coordinates until a manual reorder. The same guard covers a card leaving the Stack for the Field.
+  - `Hand._release_hover()` now runs whenever a card leaves the hand (`remove_card`, `remove_for_play`, `remove_card_for_free_play`, `discard_card`). The pointer is still over a card while it is dragged out, so `mouse_exited` never fires; the stale `hovered_card` made the returned card lay out at the hover offset (lifted/grown) instead of joining the fan.
+
+
+### Character Casting: Centre/Slam Reverted, Arrival Pulse Kept
+
+- The board-centre casting position and the custom rise-and-slam motion were reverted after visual review. A Character awaiting payment is parked in the normal Stack row again, and `Field.play_card()` uses its existing lift/pop arrival.
+- The emitted impact ring was kept. `Field.slam_tier()` still gates it by total cost: 0-4 no pulse, 5-7 mild, 8+ big. `_play_arrival_pulse()` now spawns it when the normal field-arrival tween finishes; it does not shake or move the other field cards.
+- `SlamPulse` (`slam_pulse.tscn` / `scripts/slam_pulse.gd` / `shaders/slam_pulse.gdshader`) remains the additive expanding board ring.
+- The hand-layout race fix was kept: `Hand.animate_card()` records its tween on `Card.hand_tween`, and `Stack.park_card()` stops it before reparenting so a still-running fan tween cannot write into the Stack.
+- The temporary Cast/Slam Test Mode ground and its probe were removed.
+
+
+### Card Shatter: Reference Burst Pass
+
+- Compared the 60 fps reference frames 202+ against `CardShards`. The reference is not just ten chunks: a
+  white-hot core/flash dominates the first ~0.15-0.2 s, then a gold/cyan shock ring opens while the card-art
+  fragments separate. The old shatter started directly at separated pieces, so it read as a jigsaw instead of
+  an impact.
+- Added `shaders/card_shatter_flash.gdshader`: an additive camera-facing quad with a white core and a travelling
+  gold ring. It is drawn because the Compatibility renderer has no bloom.
+- `CardShards` now spawns that flash at the card centre, grows it from 0.85x to 1.7x and fades it over
+  `flash_seconds` (default 0.24 s). The flash sits slightly toward the camera (`flash_offset`) so the card cannot
+  occlude it, and uses an oversized cull margin because the shader expands the mesh.
+- The ten existing card-art/glass shards are unchanged; the flash is the missing first beat, not a replacement
+  for the fracture geometry.
+- Exposed `flash_enabled`, `flash_seconds`, `flash_size`, `flash_core_strength`, `flash_ring_strength` and
+  `flash_offset` for Inspector tuning.
+- Fragments now continue their arc instead of landing and stopping. `land_on_floor` defaults to `false`; the
+  optional floor code remains for the preview, but the game path lets the pieces keep travelling while they
+  shrink. `speed` was raised, `drag` lowered, `toward_camera` raised and `gravity` softened so the burst carries
+  farther before it disappears.
+- Lifetime was shortened from 3.0 s to 2.2 s and shrinking now starts at `shrink_from` (12% of the lifetime)
+  through to the end, so the pieces are shrinking while they are still moving rather than stopping first.
+- `tests/card_shatter_probe.tscn` now also asserts the flash node exists and carries the additive flash shader
+  (9 checks).
+
+
+### Variable X Costs and Tama 111
+
+- Added first-class 《X》 ability costs. `AbilitySpec.x_cost` / `x_min` declare the variable; `Field.begin_skill_activation()`
+  asks the agent for X **before** creating the stack proxy or paying anything, then builds `{"neutral": X}` for the
+  ordinary exact-payment pipeline.
+- `Agent.choose_number()` is the declaration seam: `LocalAgent` opens the new `number_choice` window (+/- with
+  clamping, Confirm/Cancel, `OPTIONAL_CHOICE` modal so the pass button cannot overlap it), while AI/mock agents answer
+  deterministically. `Context.ability_x()` reads the value back on the stack proxy.
+- Added `defer_sacrifice` so a self-sacrifice cost is paid at commit rather than at activation: cancelling the mana
+  modal now leaves Tama on the field and untaps it instead of losing it before payment.
+- Implemented **Tama 1-111C**: declare X, pay exactly, put Tama into the Break Zone, then choose a Character of cost X
+  or less from hand and play it. X is capped by both the affordable CP and the most expensive Character in hand.
+- Added the Tama Test Mode ground (`Abilities & Targeting`) with two earth sources and Red XIII.
+- Added `tests/tama_probe.tscn` (18 checks: X declaration, proxy snapshot, cancellation/refund, sacrifice, hand pick)
+  and `tests/number_choice_probe.tscn` (7 checks: range, clamping, Confirm). Coverage is now **111 implemented / 4
+  vanilla / 2 needs code** — only 135 Golbez and 141 Lightning remain.
+
+
+### Dynamic Multi-Card Selection and Golbez 135
+
+- Added `SelectionRequest` plus composable constraints: `unique("element"/"job"/"name"/"category")` and
+  `total_cost(low, high)`. These are selection-state rules, not pool filters: `allows(id, selected)` decides what
+  stays clickable, while `valid(selected)` decides whether Confirm is legal.
+- `DeckSearch` gained `open_multi()` / `finished_multi()`. Selected cards are orange; cards blocked by a live
+  constraint get the dark `CardView.set_unavailable()` overlay and ignore hover/click; deselecting recomputes the
+  whole page. Selections survive paging, duplicate ids are supported, and Cancel emits an empty list.
+- `SelectionRequest` reuses `CardQuery.to_filter()` for its pool, and the filter vocabulary now supports
+  `min_cost`/`max_cost` (needed for "cost 2").
+- Added the agent seam `choose_deck_cards()`. `LocalAgent` opens the multi-select window; AI/mock agents run the same
+  `allows()`/`valid()` checks greedily, so human and AI cannot disagree about legality.
+- Added `Game.search_deck_multi()` / `EffectContext.search_deck_multi()`. It validates the chosen ids, removes
+  those exact copies (duplicates included), sends them to the destination, and shuffles once. Field destinations
+  pass `suppress_auto` to `Field.play_card()`, so `_on_tween_finished()` does not fire `when_enter_field`.
+- Implemented **Golbez 1-135L**: on entering the Break Zone, may search for up to 4 cost-2 Forwards, each of a
+  different Element, and play them with auto-abilities suppressed.
+- Added the Golbez Test Mode ground (`Card Effects`). Press `B` to put him into the Break Zone.
+- Added `tests/selection_probe.tscn` (29 checks: unique element/job, exact total cost, dimming, deselect, paging,
+  duplicate support, Confirm and Cancel) and `tests/golbez_probe.tscn` (6 checks: trigger, four distinct Elements,
+  ETB suppression, stack cleanup). Coverage was then 112 implemented / 4 vanilla / 1 needs code — only Lightning.
+
+
+### Lightning 141 and Compulsory Blocking
+
+- Added the one-turn `must_block` status. Its payload carries the source's instance id rather than just "the
+  current attacker", because "must block Lightning" does not make the card block any other Forward.
+- `Card.must_block_against(attackers)` matches the marker against a single attacker or every member of a party.
+  `Field.forced_blocker_for(attacker)` returns the forced card only when it can legally block, so "if it is
+  possible" is handled: a tapped, restricted or otherwise unable card never becomes an impossible requirement.
+- The block declaration button is now gated in `Game._refresh_block_declaration_button()`: if a legal forced
+  blocker exists, "No Block" is disabled until that exact Forward is selected. Choosing a different legal blocker
+  is not enough. The check is refreshed both when the declaration opens and whenever `Field.blocker_changed` fires.
+- `Assistant.set_declare_block_button()` accepts an `enabled` flag, so the existing gem-button model and modal
+  animation are preserved while the button is greyed out.
+- Implemented **Lightning 1-141L**: optional Odin search on entry; Army of One (S + 雷) grants Haste, First Strike
+  and the one-turn attack trigger that marks up to one opponent Forward with `must_block`.
+- Added `tests/must_block_probe.tscn` (21 checks: source-specific marker, unmatched attacker, disabled/enabled
+  Confirm states, wrong blocker rejected, tapped blocker allowed as "impossible", end-of-turn expiry, Army of One
+  permissions and attack marker, and a Lightning party forcing the blocker against the whole party). Coverage is now
+  **113 implemented / 4 vanilla / 0 needs code** for 100–216.
+
+
 ### Static Rule Dictionaries Retired
 
 - Deleted `CardEffect.static_rules()` and `Card.static_rule()`; all readers now call typed effect hooks.

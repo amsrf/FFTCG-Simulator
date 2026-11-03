@@ -4,6 +4,7 @@ class_name LocalAgent
 ## existing UI (pass button, card clicks, modal buttons).
 
 const ELEMENT_CHOICE := preload("res://element_choice.tscn")
+const NUMBER_CHOICE := preload("res://number_choice.tscn")
 
 
 func choose_mana_color(_owner_id: int, card: Card, options: Array) -> String:
@@ -24,6 +25,18 @@ func choose_element(_owner_id: int, options: Array, prompt: String = "Choose an 
 	game.add_child(window)
 	window.open(options, prompt)
 	return str(await window.finished)
+
+
+func choose_number(_owner_id: int, minimum: int, maximum: int, prompt: String = "Choose a number") -> int:
+	# The X picker is a modal decision: hide the pass button while it is open, exactly like the optional-choice
+	# prompt. The dim layer blocks mouse input; this keeps the priority button from sitting on top of it.
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.OPTIONAL_CHOICE)
+	var window = NUMBER_CHOICE.instantiate()
+	game.add_child(window)
+	window.open(minimum, maximum, prompt)
+	var result: int = int(await window.finished)
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.OPTIONAL_CHOICE)
+	return result
 
 
 func take_priority(_player_id: int) -> bool:
@@ -165,6 +178,14 @@ func choose_deck_card(_owner_id: int, ids: Array, filter: Dictionary) -> int:
 	game.add_child(window)
 	window.open(ids, filter, "Choose a card in your deck.")
 	return await window.finished
+
+func choose_deck_cards(_owner_id: int, ids: Array, filter: Dictionary, request, prompt: String = "Choose cards") -> Array:
+	if ids.is_empty():
+		return []
+	var window = DECK_SEARCH.instantiate()
+	game.add_child(window)
+	window.open_multi(ids, filter, request, prompt)
+	return await window.finished_multi
 
 func choose_discard(player_id: int, _cards: Array) -> Card:
 	var hand: Hand = game.hand_for(player_id)
