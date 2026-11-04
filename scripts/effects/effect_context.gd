@@ -2,6 +2,9 @@ extends RefCounted
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
+## Multi-target effect damage hits the cards in order. The card reaction is a
+## local visual, so the delay is passed down to Card.suffer_damage().
+const DAMAGE_REACTION_STAGGER_SECONDS := 0.20
 ## The explicit world handed to one card-effect invocation.
 ##
 ## It exists so card code never reads ambient instruction state (`_targets`, `_current_source_card`, ...) or reaches into
@@ -397,7 +400,8 @@ func _apply_damage_to_cards(cards: Array, amount: int) -> Array:
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
-		field.cause_damage(card, amount, origin, "Ability", controller)
+		var reaction_delay: float = float(hits.size()) * DAMAGE_REACTION_STAGGER_SECONDS
+		field.cause_damage(card, amount, origin, "Ability", controller, -1, reaction_delay)
 		hits.append(card)
 	game.enforce_game_state_rules()
 	return hits
@@ -462,7 +466,8 @@ func divide_damage(cards: Array, total: int) -> void:
 			continue
 		var amount: int = int(split[i]) if i < split.size() else 0
 		if amount > 0:
-			game.field.cause_damage(card, amount, source, "Ability", controller)
+			game.field.cause_damage(card, amount, source, "Ability", controller, -1,
+				float(i) * DAMAGE_REACTION_STAGGER_SECONDS)
 
 
 ## Apply the split chosen during ability activation (before commit) to ctx.targets. Used by Yuffie 85.
@@ -478,7 +483,8 @@ func apply_damage_division(_total: int) -> void:
 			continue
 		var amount: int = int(amounts[i]) if i < amounts.size() else 0
 		if amount > 0:
-			game.field.cause_damage(card, amount, source, "Ability", controller)
+			game.field.cause_damage(card, amount, source, "Ability", controller, -1,
+				float(i) * DAMAGE_REACTION_STAGGER_SECONDS)
 	game.set("_damage_division", [])
 
 

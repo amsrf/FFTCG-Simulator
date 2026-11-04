@@ -119,6 +119,21 @@ Persistent status visuals are owned by the card. The existing frozen overlay is
 the first example: `Card.refresh_frozen_overlay()` owns the quad and its
 spread/recede tweens, while the director receives the semantic status events.
 
+## Card damage reaction
+
+`Card.play_damage_reaction()` is card-owned presentation, not a `VfxCue`. It is
+called from `Card.suffer_damage()` only for a non-empty `source_kind` (effect /
+Summon damage), so combat keeps the clash presentation. It animates `HandMesh`
+rather than the Card root, because the root belongs to the Field layout. The
+0.62 s motion is two curves: a fast lift/scale bounce and a signed yaw/roll/side
+wiggle that damps to rest.
+
+`EffectContext._apply_damage_to_cards()` passes `i * 0.20 s` as `reaction_delay`
+through `Field.cause_damage()` so a multi-target effect reacts as a sequence.
+`Card.enter_zone()` and `reset_for_field_arrival()` normalise the mesh so a hit
+pose cannot leak into the next zone. The viewing harness is
+`tools/damage_reaction_demo.tscn`.
+
 ## Authored effects
 
 ### Lightning damage (雷)

@@ -61,14 +61,18 @@ func target_count() -> int:
 	return targets.size()
 
 
-func damage_tier() -> int:
-	if amount <= 3000:
+static func damage_tier_for(value: int) -> int:
+	if value <= 3000:
 		return 0
-	if amount <= 6000:
+	if value <= 6000:
 		return 1
-	if amount < 9000:
+	if value < 9000:
 		return 2
 	return 3
+
+
+func damage_tier() -> int:
+	return damage_tier_for(amount)
 
 
 ## A neutral multiplier for cues that do not have their own per-tier tuning.

@@ -3,6 +3,15 @@
 All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
+### Card Damage Reaction (clip4 reference)
+
+- Added `Card.play_damage_reaction()`. Effect and Summon damage now makes the visible `HandMesh` pop off the table, scale up, tilt, and settle through a damped `Curve`-driven shake over 0.62 s. The Card root is untouched because its transform belongs to the Field layout.
+- Reaction strength follows the shared damage tiers: lift, scale, yaw, roll and sideways offset all increase from weak to maximum.
+- Multi-target effect damage is staggered by 0.20 s in `EffectContext._apply_damage_to_cards()`, so a row of cards reacts as a readable sequence rather than moving at once. `Field.cause_damage()` and `Card.suffer_damage()` carry the optional delay.
+- Combat damage deliberately has no reaction here: it keeps the existing clash presentation. `Card.enter_zone()` and `reset_for_field_arrival()` normalise the mesh so a hit pose cannot leak into the hand, Graveyard, or a later field arrival.
+- Added `tests/damage_reaction_probe.tscn` (12 checks): effect damage starts the lift/scale/tilt, the card returns exactly to rest, combat is excluded, multi-target reactions stagger, and a zone change normalises the pose.
+- Added `tools/damage_reaction_demo.tscn` for viewing it: `1/2/3` select, `SPACE`/`R` hits, `M` hits all three staggered, `T` cycles 3000/5000/8000/12000 damage, and `--tier 0..3` sets the starting tier.
+
 ### Lightning Element Damage (Thundergod's Wrath reference)
 
 - Authored the first one-shot element effect. `assets/vfx/elements/lightning.tres` now points its `impact_scene` and `board_impact_scene` at `assets/effects/lightning/lightning_strike_cue.tscn`.

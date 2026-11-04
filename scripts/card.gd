@@ -594,6 +594,10 @@ func enter_zone(zone: Zone) -> void:
 	# fully opaque. The teleport path sets progress back to 1 immediately after
 	# entering the field, while the card is still invisible.
 	reset_teleport_visual()
+	# A hit reaction must not survive a zone change. It is a mesh-local tween,
+	# so without this the card could arrive in the hand/Graveyard still lifted
+	# and tilted.
+	normalize_damage_reaction()
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
 	# while the card was parked keeps writing Stack-local positions after the card
 	# has been reparented to the hand or the field, and the new zone's layout
@@ -829,6 +833,25 @@ func _kill_teleport_tween() -> void:
 	print("  position: ", position)
 # Call this before/after animations	'''
 	
+## Effect damage makes the card physically react: a quick pop off the table,
+## a scale-up and a tilt, then a damped settle. It is deliberately on the
+## HandMesh rather than the Card, because the Card's transform belongs to the
+## field layout. The curves are built once per card.
+const DAMAGE_REACTION_SECONDS := 0.62
+const DAMAGE_REACTION_LIFT := [0.055, 0.085, 0.115, 0.148]
+const DAMAGE_REACTION_SCALE := [0.035, 0.060, 0.085, 0.110]
+const DAMAGE_REACTION_YAW_DEG := [2.4, 3.6, 5.0, 6.4]
+const DAMAGE_REACTION_ROLL_DEG := [1.0, 1.4, 2.0, 2.8]
+const DAMAGE_REACTION_SIDE := [0.006, 0.012, 0.018, 0.025]
+var _damage_reaction_tween: Tween = null
+var _damage_bounce_curve: Curve = null
+var _damage_wiggle_curve: Curve = null
+var _damage_peak_lift: float = 0.0
+var _damage_peak_scale: float = 0.0
+var _damage_peak_yaw: float = 0.0
+var _damage_peak_roll: float = 0.0
+var _damage_peak_side: float = 0.0
+
 ## WHO/WHAT dealt the most recent damage. The state-based break happens later, in a sweep that cannot see the source,
 ## so the damage records it here and the sweep asks the same protection question an explicit break does.
 ## An empty kind means COMBAT damage — nobody's Summon or ability — which is also what clears a stale record.
@@ -839,7 +862,8 @@ var last_damage_kind: String = ""
 var last_damage_controller: String = ""
 var last_damage_source: Card = null
 
-func suffer_damage(damage: int, source_kind: String = "", source_controller: String = "", source_card: Card = null):
+func suffer_damage(damage: int, source_kind: String = "", source_controller: String = "",
+		source_card: Card = null, reaction_delay: float = 0.0):
 	# Damage accumulates; the card breaks once the total reaches its current
 	# power (enforced by Game.enforce_game_state_rules()).
 	last_damage_kind = source_kind
@@ -848,10 +872,119 @@ func suffer_damage(damage: int, source_kind: String = "", source_controller: Str
 	accumulated_damage += damage
 	if power_label:
 		power_label.changeAccumulatedDamage(accumulated_damage)
+	# COMBAT damage is the empty kind. Effect/Summon damage gets the reaction;
+	# combat has its own clash presentation.
+	if damage > 0 and is_on_field() and not source_kind.is_empty():
+		play_damage_reaction(damage, reaction_delay)
 
-func take_damage(damage: int, source_kind: String = "", source_controller: String = "", source_card: Card = null):
+func take_damage(damage: int, source_kind: String = "", source_controller: String = "",
+		source_card: Card = null, reaction_delay: float = 0.0):
 	# Alias kept for effect data that uses the "take_damage" instruction.
-	suffer_damage(damage, source_kind, source_controller, source_card)
+	suffer_damage(damage, source_kind, source_controller, source_card, reaction_delay)
+
+
+## Quick physical recoil on the visible mesh. The Card root is left alone: that
+## transform is the Field's layout, so animating it would fight the board.
+func play_damage_reaction(damage: int, delay: float = 0.0) -> void:
+	if damage <= 0 or hand_mesh == null or not is_on_field():
+		return
+	_ensure_damage_curves()
+	var tier: int = VfxEvent.damage_tier_for(damage)
+	_damage_peak_lift = float(DAMAGE_REACTION_LIFT[tier])
+	_damage_peak_scale = float(DAMAGE_REACTION_SCALE[tier])
+	_damage_peak_yaw = float(DAMAGE_REACTION_YAW_DEG[tier])
+	_damage_peak_roll = float(DAMAGE_REACTION_ROLL_DEG[tier])
+	_damage_peak_side = float(DAMAGE_REACTION_SIDE[tier])
+
+	if _damage_reaction_tween != null and _damage_reaction_tween.is_valid():
+		_damage_reaction_tween.kill()
+	_damage_reaction_tween = null
+	_reset_damage_pose()
+
+	var tween := create_tween()
+	if delay > 0.0:
+		tween.tween_interval(delay)
+	tween.tween_method(_set_damage_reaction_pose, 0.0, 1.0, DAMAGE_REACTION_SECONDS)
+	tween.tween_callback(_finish_damage_reaction)
+	_damage_reaction_tween = tween
+
+
+func normalize_damage_reaction() -> void:
+	if _damage_reaction_tween != null and _damage_reaction_tween.is_valid():
+		_damage_reaction_tween.kill()
+	_damage_reaction_tween = null
+	_reset_damage_pose()
+
+
+func is_damage_reacting() -> bool:
+	return _damage_reaction_tween != null and _damage_reaction_tween.is_valid() \
+		and _damage_reaction_tween.is_running()
+
+
+func _ensure_damage_curves() -> void:
+	if _damage_bounce_curve != null:
+		return
+	# The non-negative envelope is the actual jump: fast attack, a short hang,
+	# then a small damped bounce back to rest.
+	_damage_bounce_curve = Curve.new()
+	_damage_bounce_curve.min_value = -0.12
+	_damage_bounce_curve.max_value = 1.05
+	_damage_bounce_curve.add_point(Vector2(0.00, 0.00))
+	_damage_bounce_curve.add_point(Vector2(0.07, 1.00))
+	_damage_bounce_curve.add_point(Vector2(0.20, 0.82))
+	_damage_bounce_curve.add_point(Vector2(0.34, 0.90))
+	_damage_bounce_curve.add_point(Vector2(0.49, 0.36))
+	_damage_bounce_curve.add_point(Vector2(0.62, 0.20))
+	_damage_bounce_curve.add_point(Vector2(0.74, -0.05))
+	_damage_bounce_curve.add_point(Vector2(0.86, 0.04))
+	_damage_bounce_curve.add_point(Vector2(0.94, -0.02))
+	_damage_bounce_curve.add_point(Vector2(1.00, 0.00))
+
+	# Signed curve for yaw/roll/side motion: the card rocks one way, then the
+	# other, shrinking to zero. Separate from the lift so the settle can shake
+	# without the card sinking through the board.
+	_damage_wiggle_curve = Curve.new()
+	_damage_wiggle_curve.min_value = -1.0
+	_damage_wiggle_curve.max_value = 1.0
+	_damage_wiggle_curve.add_point(Vector2(0.00, 0.00))
+	_damage_wiggle_curve.add_point(Vector2(0.07, 1.00))
+	_damage_wiggle_curve.add_point(Vector2(0.18, 0.45))
+	_damage_wiggle_curve.add_point(Vector2(0.30, -0.55))
+	_damage_wiggle_curve.add_point(Vector2(0.43, 0.34))
+	_damage_wiggle_curve.add_point(Vector2(0.56, -0.20))
+	_damage_wiggle_curve.add_point(Vector2(0.68, 0.12))
+	_damage_wiggle_curve.add_point(Vector2(0.80, -0.06))
+	_damage_wiggle_curve.add_point(Vector2(0.90, 0.03))
+	_damage_wiggle_curve.add_point(Vector2(1.00, 0.00))
+
+
+func _set_damage_reaction_pose(progress: float) -> void:
+	if hand_mesh == null or not is_instance_valid(hand_mesh):
+		return
+	if not is_on_field():
+		_reset_damage_pose()
+		return
+	var bounce: float = _damage_bounce_curve.sample(progress)
+	var wiggle: float = _damage_wiggle_curve.sample(progress)
+	var yaw: float = deg_to_rad(_damage_peak_yaw * wiggle)
+	var roll: float = deg_to_rad(_damage_peak_roll * wiggle)
+	var pitch: float = deg_to_rad(-_damage_peak_yaw * 0.22 * bounce)
+	hand_mesh.position = Vector3(_damage_peak_side * wiggle, _damage_peak_lift * bounce, 0.0)
+	hand_mesh.rotation = Vector3(pitch, yaw, roll)
+	hand_mesh.scale = Vector3.ONE * (1.0 + _damage_peak_scale * bounce)
+
+
+func _finish_damage_reaction() -> void:
+	_damage_reaction_tween = null
+	_reset_damage_pose()
+
+
+func _reset_damage_pose() -> void:
+	if hand_mesh == null or not is_instance_valid(hand_mesh):
+		return
+	hand_mesh.position = Vector3.ZERO
+	hand_mesh.rotation = Vector3.ZERO
+	hand_mesh.scale = Vector3.ONE
 
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.
@@ -878,6 +1011,7 @@ func clear_damage():
 func reset_for_field_arrival() -> void:
 	# A card returning from a non-field zone is a new object. Drop every modifier, then recompute once; there is no
 	# arithmetic to reverse because `power` is only a cache.
+	normalize_damage_reaction()
 	_continuous_power.clear()
 	power_array.clear()
 	_manual_power_delta = 0
