@@ -273,10 +273,17 @@ func cast_card():
 		# suspension, so capturing it here is the whole fix.
 		var landing: Card = casting_card
 		await _shatter_paid_cost()
-		field.play_card(landing, landing.controller != "player")
-		# Playing a Character is a priority action even though the stack never
-		# changed: priority must move to the opponent.
+		# The CAST is the action, not the end of its presentation. Record it
+		# before the ~1.3 s teleport so priority sees the action immediately.
 		get_parent().note_action_taken()
+		# Source half of the teleport: shine and dissolve IN PLACE in the Stack
+		# row. Only then does Field place the invisible card at its slot and
+		# materialise it. Nothing travels across the board.
+		var dissolve: Tween = landing.teleport_out(
+			field.teleport_shine_seconds, field.teleport_fade_seconds)
+		# A tween is not a signal: awaiting the object itself returns immediately.
+		await dissolve.finished
+		field.play_card(landing, landing.controller != "player", true, true, false, true)
 	
 	
 func _on_assistant_charge_complete() -> void:

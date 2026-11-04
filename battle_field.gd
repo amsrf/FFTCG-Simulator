@@ -8,6 +8,15 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const CARD_TARGET := preload("res://scripts/card_target.gd")
 const SLAM_PULSE := preload("res://slam_pulse.tscn")
+## TELEPORT CAST. A Character is paid for in the Stack row, then dissolves in
+## place and materialises at its field slot instead of travelling there.
+@export var teleport_shine_seconds: float = 0.45
+@export var teleport_fade_seconds: float = 0.20
+@export var teleport_materialize_seconds: float = 0.65
+## After the silhouette is complete: brighten it, then fade the glow while the
+## actual card texture is revealed.
+@export var teleport_glow_seconds: float = 0.18
+@export var teleport_reveal_seconds: float = 0.30
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
 var rules = null
@@ -330,7 +339,8 @@ func _apply_entry_rules(entering: Card) -> void:
 			effect_obj.on_character_enter(entering, source.make_effect_context("static"))
 
 
-func play_card(card, is_opponent: bool = false, animate = true, record: bool = true, suppress_auto: bool = false) -> void:
+func play_card(card, is_opponent: bool = false, animate = true, record: bool = true,
+		suppress_auto: bool = false, teleport: bool = false) -> void:
 	# UNIQUE NAMES. A player may not control two Characters with the same name. Checked BEFORE the reparent, so the
 	# duplicate never touches the field: it did not enter, so no enter-the-field trigger and no entry animation run.
 	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
@@ -405,7 +415,16 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	if animate:
 		_apply_entry_rules(card)
 
-	if animate:
+	if animate and teleport:
+		# NO TRAVEL. The source has already dissolved in place; put the card
+		# directly on its slot while it is fully dithered, then resolve it there.
+		card.position = target_position
+		card.visible = true
+		card.set_teleport_visual(1.0, 0.35, 0.0)
+		var materialize: Tween = card.teleport_in(
+			teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
+		materialize.finished.connect(_on_tween_finished.bind(card, suppress_auto))
+	elif animate:
 		var tween = create_tween().set_ease(Tween.EASE_OUT)
 		tween.set_parallel(true)
 		tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)

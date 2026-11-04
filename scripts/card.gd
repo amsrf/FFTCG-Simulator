@@ -139,6 +139,20 @@ var hand_tween: Tween
 ## if the card leaves the stack while the fan is still moving, the old tween must
 ## be stopped or it keeps writing stack-local positions into the new zone.
 var stack_tween: Tween
+## The current teleport presentation tween (source fade or destination materialise).
+var _teleport_tween: Tween
+## Additive halo around the card during the teleport. It is created lazily and
+## only shown while `teleport_glow` is non-zero.
+const TELEPORT_HALO_SHADER := preload("res://shaders/card_teleport_halo.gdshader")
+const TELEPORT_HALO_SCALE := 1.55
+var _teleport_halo: MeshInstance3D = null
+var _teleport_halo_material: ShaderMaterial = null
+## The card's border surface and power label are not part of the materialising
+## face. Hide them until the texture is fully revealed, then restore the label's
+## previous visibility.
+var _teleport_chrome_hidden: bool = false
+var _teleport_power_was_visible: bool = false
+var _teleport_hidden_material: ShaderMaterial = null
 # DEBUG VARIABLES
 var debug_step: int = 0
 var debug_log: Array = []
@@ -278,6 +292,13 @@ func assign_card_texture():
 	mat.set_shader_parameter("shadow_corner_u", 0.0)
 	mat.set_shader_parameter("shadow_corner_v", 0.0)
 	mat.set_shader_parameter("shadow_width", 0.055)
+	mat.set_shader_parameter("teleport_progress", 0.0)
+	mat.set_shader_parameter("teleport_glow", 0.0)
+	mat.set_shader_parameter("teleport_reveal", 1.0)
+	mat.set_shader_parameter("teleport_block_depth", 7.0)
+	mat.set_shader_parameter("teleport_block_stop_chance", 0.15)
+	mat.set_shader_parameter("teleport_white_block_depth", 6.0)
+	mat.set_shader_parameter("teleport_white_block_stop_chance", 0.22)
 	
 	
 	$HandMesh.set_surface_override_material(0, mat)
@@ -550,6 +571,10 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
 func enter_zone(zone: Zone) -> void:
+	# A zone change is not a teleport in progress: normal cards must always be
+	# fully opaque. The teleport path sets progress back to 1 immediately after
+	# entering the field, while the card is still invisible.
+	reset_teleport_visual()
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
 	# while the card was parked keeps writing Stack-local positions after the card
 	# has been reparented to the hand or the field, and the new zone's layout
@@ -633,6 +658,129 @@ func stop_stack_layout() -> void:
 	if stack_tween != null and stack_tween.is_valid():
 		stack_tween.kill()
 	stack_tween = null
+
+## Source half of a teleport: shine in place, then dissolve away. The card does
+## not move. Returns the tween so the caller can await it.
+func teleport_out(shine_seconds: float = 0.45, fade_seconds: float = 0.20) -> Tween:
+	_kill_teleport_tween()
+	# The source must stay where it is. If the Stack fan was still settling,
+	# stop it here rather than letting the card drift while it shines.
+	stop_stack_layout()
+	visible = true
+	set_teleport_visual(0.0, 0.0)
+	var tween := create_tween()
+	tween.tween_method(
+		func(v: float): set_teleport_visual(0.0, v),
+		0.0, 1.0, maxf(shine_seconds, 0.01))
+	tween.tween_method(
+		func(v: float): set_teleport_visual(v, 1.0 - 0.35 * v),
+		0.0, 1.0, maxf(fade_seconds, 0.01))
+	tween.tween_callback(func():
+		set_teleport_visual(1.0, 0.0)
+		visible = false)
+	_teleport_tween = tween
+	return tween
+
+## Destination half: build the glowing silhouette from the bottom up, brighten
+## it once complete, then fade the glow while revealing the actual artwork.
+func teleport_in(build_seconds: float = 0.65, glow_seconds: float = 0.18,
+		reveal_seconds: float = 0.30) -> Tween:
+	_kill_teleport_tween()
+	visible = true
+	set_teleport_visual(1.0, 0.35, 0.0)
+	var tween := create_tween()
+	# 1. Add the glow squares from bottom to top. Reveal stays 0: the texture
+	#    is never visible while the silhouette is incomplete.
+	tween.tween_method(
+		func(v: float): set_teleport_visual(1.0 - v, 0.35 + 0.45 * v, 0.0),
+		0.0, 1.0, maxf(build_seconds, 0.01))
+	# 2. The completed silhouette brightens.
+	tween.tween_method(
+		func(v: float): set_teleport_visual(0.0, 0.80 + 0.20 * v, 0.0),
+		0.0, 1.0, maxf(glow_seconds, 0.01))
+	# 3. The glow fades away as the card texture is revealed.
+	tween.tween_method(
+		func(v: float): set_teleport_visual(0.0, 1.0 - v, v),
+		0.0, 1.0, maxf(reveal_seconds, 0.01))
+	tween.tween_callback(func(): set_teleport_visual(0.0, 0.0, 1.0))
+	_teleport_tween = tween
+	return tween
+
+func set_teleport_visual(progress: float, glow: float, reveal: float = 1.0) -> void:
+	if mat == null:
+		return
+	mat.set_shader_parameter("teleport_progress", clampf(progress, 0.0, 1.0))
+	mat.set_shader_parameter("teleport_glow", clampf(glow, 0.0, 1.0))
+	mat.set_shader_parameter("teleport_reveal", clampf(reveal, 0.0, 1.0))
+	# The border and power readout are not part of the glow silhouette. They
+	# appear only after the texture is fully revealed.
+	_set_teleport_chrome_hidden(reveal < 0.999)
+	# The halo belongs to a completed silhouette, not to the build: showing it
+	# around a half-built card draws a white card-shaped outline before the card
+	# exists. Source shine keeps progress at 0, so it still gets a halo.
+	var halo_on: bool = glow > 0.001 and progress <= 0.001
+	if halo_on:
+		_ensure_teleport_halo()
+	if _teleport_halo != null:
+		_teleport_halo.visible = halo_on
+		if _teleport_halo_material != null:
+			_teleport_halo_material.set_shader_parameter("intensity", clampf(glow * 1.25, 0.0, 1.5))
+
+func _set_teleport_chrome_hidden(hidden: bool) -> void:
+	if hidden == _teleport_chrome_hidden:
+		return
+	_teleport_chrome_hidden = hidden
+	if _teleport_hidden_material == null:
+		var shader := Shader.new()
+		shader.code = "shader_type spatial;
+render_mode unshaded;
+void fragment() { discard; }
+"
+		_teleport_hidden_material = ShaderMaterial.new()
+		_teleport_hidden_material.shader = shader
+	for mesh in [get_node_or_null("HandMesh"), get_node_or_null("FieldMesh")]:
+		if mesh is MeshInstance3D:
+			# Surface 0 is the face; 1 is the printed border; 2 is the back.
+			# Hide both non-face surfaces or the card still reads as a full
+			# rectangle before the build has produced anything.
+			for surface in [1, 2]:
+				mesh.set_surface_override_material(surface, _teleport_hidden_material if hidden else null)
+	if hidden:
+		_teleport_power_was_visible = power_label != null and power_label.visible
+		if power_label != null:
+			power_label.visible = false
+	elif power_label != null and _teleport_power_was_visible:
+		power_label.visible = true
+	_teleport_power_was_visible = false
+
+
+func _ensure_teleport_halo() -> void:
+	if _teleport_halo != null and is_instance_valid(_teleport_halo):
+		return
+	var face: Vector2 = _card_face_size()
+	var quad := PlaneMesh.new()
+	quad.size = face * TELEPORT_HALO_SCALE
+	_teleport_halo_material = ShaderMaterial.new()
+	_teleport_halo_material.shader = TELEPORT_HALO_SHADER
+	var half: float = 1.0 / TELEPORT_HALO_SCALE
+	_teleport_halo_material.set_shader_parameter("card_half", Vector2(half, half))
+	_teleport_halo = MeshInstance3D.new()
+	_teleport_halo.mesh = quad
+	_teleport_halo.material_override = _teleport_halo_material
+	_teleport_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_teleport_halo.extra_cull_margin = 4.0
+	_teleport_halo.position = Vector3(0.0, 0.004, 0.0)
+	_teleport_halo.visible = false
+	add_child(_teleport_halo)
+
+func reset_teleport_visual() -> void:
+	_kill_teleport_tween()
+	set_teleport_visual(0.0, 0.0, 1.0)
+
+func _kill_teleport_tween() -> void:
+	if _teleport_tween != null and _teleport_tween.is_valid():
+		_teleport_tween.kill()
+	_teleport_tween = null
 
 
 '''func _log_state(context: String):
