@@ -153,6 +153,22 @@ var _teleport_halo_material: ShaderMaterial = null
 var _teleport_chrome_hidden: bool = false
 var _teleport_power_was_visible: bool = false
 var _teleport_hidden_material: ShaderMaterial = null
+## FROSTBITE-STYLE FROZEN OVERLAY. A card-aligned additive quad, built lazily
+## only while a card is actually Frozen on the field. It composites two original
+## alpha masks so the artwork stays readable under the cracked icy rim.
+const FROZEN_OVERLAY_SHADER := preload("res://shaders/frozen_overlay.gdshader")
+const FROZEN_CRACKS_PATH := "res://assets/effects/frost/frost_cracks.png"
+const FROZEN_OUTLINE_PATH := "res://assets/effects/frost/frost_outline.png"
+const FROZEN_OVERLAY_SCALE := 1.01
+## How long the frost takes to grow from the card edge to its full mask, and
+## how long it takes to recede when Freeze is consumed.
+const FROZEN_SPREAD_SECONDS := 1.60
+const FROZEN_RECEDE_SECONDS := FROZEN_SPREAD_SECONDS
+var _frozen_overlay: MeshInstance3D = null
+var _frozen_overlay_material: ShaderMaterial = null
+var _frozen_spread_tween: Tween = null
+var _frozen_spread: float = 0.0
+var _frozen_visual_on: bool = false
 # DEBUG VARIABLES
 var debug_step: int = 0
 var debug_log: Array = []
@@ -614,7 +630,7 @@ func enter_zone(zone: Zone) -> void:
 		showPower()
 	else:
 		hide_power_display()
-	_refresh_silence_icon()
+	refresh_status_visuals()
 		
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -90.0
@@ -864,6 +880,7 @@ func reset_for_field_arrival() -> void:
 	_manual_power_delta = 0
 	status_effects.clear()
 	granted_statuses.clear()
+	refresh_status_visuals()
 	extra_attacks = 0
 	clear_damage()
 	broken = false
@@ -886,7 +903,7 @@ func add_status_effect(status, duration, payload: Dictionary = {}):
 			var entry: Dictionary = payload.duplicate()
 			entry["duration"] = duration
 			status_effects[status] = entry
-	_refresh_silence_icon()
+	refresh_status_visuals()
 
 ## Continuous GRANTS (an aura), as opposed to timed statuses. Counted so two sources can grant the same keyword and
 ## one leaving does not revoke the other's.
@@ -963,7 +980,7 @@ func turn_end():
 			else:
 				dur["duration"] = left
 
-	_refresh_silence_icon()
+	refresh_status_visuals()
 	var remaining_buffs: Array = []
 	for p in power_array:
 		var dur = p[1]
@@ -1214,6 +1231,86 @@ func _silence_icon_belongs_left() -> bool:
 		return false
 	var screen_x: float = cam.unproject_position(global_position).x
 	return screen_x > get_viewport().get_visible_rect().size.x * 0.70
+
+## Every card-space status visual in one place. Callers that mutate
+## `status_effects` directly (or erase a status in place, as the Active Phase
+## does for Freeze) use this to re-sync the visuals.
+func refresh_status_visuals() -> void:
+	_refresh_silence_icon()
+	refresh_frozen_overlay()
+
+## Show the cracked-ice rim only while this card is Frozen on the field. The
+## overlay is built lazily, so ordinary cards pay nothing for it.
+func refresh_frozen_overlay() -> void:
+	var wanted: bool = current_zone == Zone.FIELD and is_frozen()
+	if wanted:
+		_ensure_frozen_overlay()
+		if _frozen_overlay == null:
+			return
+		_frozen_overlay.visible = true
+		if not _frozen_visual_on:
+			_frozen_visual_on = true
+			_tween_frozen_spread(1.0, FROZEN_SPREAD_SECONDS, Tween.EASE_IN)
+		return
+	if _frozen_visual_on:
+		_frozen_visual_on = false
+		_tween_frozen_spread(0.0, FROZEN_RECEDE_SECONDS, Tween.EASE_OUT)
+	elif _frozen_overlay != null and is_instance_valid(_frozen_overlay):
+		# A settled hide, or a status that disappeared before the overlay was
+		# ever shown. Do not cut a recede tween short.
+		if _frozen_spread_tween == null or not _frozen_spread_tween.is_valid():
+			_frozen_overlay.visible = false
+
+func _ensure_frozen_overlay() -> void:
+	if _frozen_overlay != null and is_instance_valid(_frozen_overlay):
+		return
+	var face: Vector2 = _card_face_size()
+	var quad := PlaneMesh.new()
+	quad.size = face * FROZEN_OVERLAY_SCALE
+	_frozen_overlay_material = ShaderMaterial.new()
+	_frozen_overlay_material.shader = FROZEN_OVERLAY_SHADER
+	_frozen_overlay_material.set_shader_parameter("frost_cracks", load(FROZEN_CRACKS_PATH))
+	_frozen_overlay_material.set_shader_parameter("frost_outline", load(FROZEN_OUTLINE_PATH))
+	_frozen_overlay_material.set_shader_parameter("spread", _frozen_spread)
+	_frozen_overlay = MeshInstance3D.new()
+	_frozen_overlay.name = "FrozenOverlay"
+	_frozen_overlay.mesh = quad
+	_frozen_overlay.material_override = _frozen_overlay_material
+	_frozen_overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_frozen_overlay.extra_cull_margin = 2.0
+	# A hair above the face, like the target ring, so it cannot z-fight.
+	_frozen_overlay.position = Vector3(0.0, 0.003, 0.0)
+	_frozen_overlay.visible = false
+	# Same parent as the target ring: the hand's hover moves/scales HandMesh,
+	# and the frost must follow the visible card rather than a sibling.
+	var overlay_parent: Node3D = (hand_mesh as Node3D) if hand_mesh != null else (self as Node3D)
+	overlay_parent.add_child(_frozen_overlay)
+
+## Grow the frost inward from the card edge, or let it recede when Freeze is
+## consumed. `spread` is consumed by shaders/frozen_overlay.gdshader.
+func _tween_frozen_spread(to: float, seconds: float, ease: Tween.EaseType) -> void:
+	if _frozen_overlay == null or not is_instance_valid(_frozen_overlay):
+		return
+	if _frozen_spread_tween != null and _frozen_spread_tween.is_valid():
+		_frozen_spread_tween.kill()
+	_frozen_overlay.visible = true
+	if not is_inside_tree():
+		_set_frozen_spread(to)
+		_frozen_overlay.visible = to > 0.001
+		return
+	_frozen_spread_tween = create_tween()
+	_frozen_spread_tween.set_trans(Tween.TRANS_CUBIC).set_ease(ease)
+	_frozen_spread_tween.tween_method(_set_frozen_spread, _frozen_spread, to,
+		maxf(seconds, 0.01))
+	_frozen_spread_tween.tween_callback(func() -> void:
+		if to <= 0.001 and not _frozen_visual_on and _frozen_overlay != null:
+			_frozen_overlay.visible = false
+	)
+
+func _set_frozen_spread(value: float) -> void:
+	_frozen_spread = clampf(value, 0.0, 1.0)
+	if _frozen_overlay_material != null:
+		_frozen_overlay_material.set_shader_parameter("spread", _frozen_spread)
 
 ## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says

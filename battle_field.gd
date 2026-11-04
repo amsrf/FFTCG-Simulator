@@ -1071,6 +1071,7 @@ func untap_cards_for(controller_name: String) -> void:
 			continue
 		if card.status_effects.has("frozen"):
 			card.status_effects.erase("frozen")
+			card.refresh_status_visuals()
 			print("[Freeze] %s does not activate" % card.card_name)
 			continue
 		card.untap()
