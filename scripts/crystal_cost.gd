@@ -125,49 +125,25 @@ func _apply_paid() -> void:
 ## wild, wild" paid by a single wild source shatters its two paid crystals 0.1 s apart — not 0.2 s apart with a hole
 ## where the unpaid one sits.
 ##
+## NO PAYMENT ORBS. The crystals still burst, but nothing flies from them to the played card: the old LightOrb volley
+## was removed so the shatter is the whole payment effect. `_target_card` is kept in the signature for existing
+## callers, which still pass the card the mana was spent on.
+##
 ## AWAITED BY THE CALLER, because the row has to stay on screen until the LAST crystal has gone. Hiding it the moment
 ## the play lands would take the later crystals away before they had shattered.
 ##
 ## The shards are parented to THIS ROW'S PARENT, not to the row, so they outlive it: the row is hidden as soon as
 ## this sequence finishes, and shards parented to it would vanish with it.
-##
-## EACH CRYSTAL ALSO SENDS AN ORB to `target_card` — the card the mana was spent on. They launch as the crystal breaks,
-## so they leave in the same left-to-right order they shattered in and arrive in it: a volley, not one wave. Each orb
-## is a whole LightOrb, so it lights the board on the way and disappears behind the card at the end.
-func shatter_paid(target_card: Card = null) -> void:
+func shatter_paid(_target_card: Card = null) -> void:
 	if not is_inside_tree():
 		return
 	var world_parent: Node = get_parent()
-	var last_orb: Node3D = null
 	for crystal in crystals():
 		if not bool(crystal.get("lit")):
 			continue
-		var colour: Color = Color.WHITE
-		var claimed: Variant = crystal.call("colour_now") if crystal.has_method("colour_now") else null
-		if claimed is Color:
-			colour = claimed
-		var from: Vector3 = (crystal as Node3D).global_position
 		crystal.call("shatter", world_parent)
-		last_orb = _launch_orb(world_parent, from, colour, target_card)
 		if shatter_stagger_seconds > 0.0:
 			await get_tree().create_timer(shatter_stagger_seconds).timeout
-	# THE LAST ORB LAUNCHED IS THE LAST TO ARRIVE: every flight lasts the same time, so waiting on the final one waits
-	# for all of them WITHOUT serialising them — they overlap, which is the entire point of the stagger.
-	if last_orb != null and is_instance_valid(last_orb) and last_orb.has_signal("arrived"):
-		await last_orb.arrived
-
-## Sends one payment orb from a shattered crystal to the card that mana was spent on, and RETURNS it so the caller can
-## wait for it: a Character must not land on the field until the mana has visibly reached the card.
-##
-## The script is preloaded rather than named as a class: a brand-new `class_name` is not in Godot's global class cache
-## until the editor rescans, so referring to PaymentOrb by name works in the editor and fails headless.
-func _launch_orb(world_parent: Node, from: Vector3, colour: Color, target_card) -> Node3D:
-	if target_card == null or not is_instance_valid(target_card):
-		return null
-	var orb: Node3D = preload("res://scripts/payment_orb.gd").new()
-	world_parent.add_child(orb)
-	orb.call("launch", from, colour, target_card)
-	return orb
 
 ## Lays the row out along local +x — which, once the row faces the camera, is screen-right — and centres the
 ## whole thing on this node's origin.

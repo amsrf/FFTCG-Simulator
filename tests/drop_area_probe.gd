@@ -25,6 +25,12 @@ func _expect(ok: bool, what: String) -> void:
 		print("[DropArea] FAIL %s" % what)
 
 
+func _param(card: Card, key: String) -> float:
+	if card.mat == null:
+		return -1.0
+	return float(card.mat.get_shader_parameter(key))
+
+
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"player_hand": [HAND_CARD, 29, 12, 31, 32],
@@ -66,21 +72,45 @@ func _ready() -> void:
 	_expect(_hand.charging_card == card,
 		"releasing over the front-right of the playmat starts the cast")
 	_expect(card.get_parent() == _game.get("stack"),
-		"and the card leaves the hand for the casting flow")
+		"and the card is parked in the fake Stack")
+	_expect(not _hand.cards.has(card), "and the hand no longer owns it")
+	_expect(card.ring_cast_pending(), "and it is marked with the thin gold pending aura")
 	_expect(_hand.hovered_card != card,
-		"and leaving the hand clears the stale hover state")
+		"and starting the cast clears the stale hover state")
 
-	# Cancel the payment: the card must rejoin the hand's fan, not stay parked.
-	# This also covers the old bug where a Stack layout tween kept writing
-	# stack-local positions after the card was reparented back to the hand.
+	# Cancel the payment: the parked card must rejoin the hand's fan.
 	_assistant.on_charge_cancelled()
 	await get_tree().create_timer(0.35).timeout
 	var target_position: Vector3 = _hand.calculate_card_position(card.index)
 	_expect(card.get_parent() == _hand, "cancel returns the card to the hand")
+	_expect(not card.ring_cast_pending(), "and clears the thin gold cast-pending aura")
 	_expect(_hand.cards.has(card), "and the hand's card list includes it")
 	_expect(not card.is_dragging, "and it is no longer marked as being dragged")
 	_expect(card.position.distance_to(target_position) < 0.05,
 		"and it settles into its fan slot without a manual reorder")
+
+	# Confirm pays the mana cards FIRST; the marked Character must not start
+	# fading until their discard flight has landed.
+	_expect(_hand.charge(card), "the Character can be charged again")
+	await get_tree().process_frame
+	var mana_card: Card = null
+	for c in _hand.cards:
+		if c != card:
+			mana_card = c
+			break
+	_expect(mana_card != null, "another hand card is available to pay")
+	_hand.add_card_to_mana_conversion(mana_card)
+	_expect(_hand.selected_cards_for_mana_conversion.has(mana_card),
+		"the other card can be selected as mana")
+	_assistant.on_charge_complete()
+	await get_tree().create_timer(0.15).timeout
+	_expect(mana_card.get_parent() == _hand.graveyard,
+		"the payment card is already in the Break Zone")
+	_expect(_param(card, "teleport_glow") <= 0.001,
+		"the Character fade waits for the discard flight")
+	await get_tree().create_timer(0.65).timeout
+	_expect(_param(card, "teleport_glow") > 0.001,
+		"the fade starts only after the discard flight")
 
 	print("[DropArea] %d checks | failures: %d" % [_checks, _fails])
 	if _fails == 0:

@@ -14,8 +14,8 @@ var casting_card: Card
 var skill_activation_proxy: Card = null
 ## While true, mana/hand discard and JSON tap on source are deferred until stack commit (final Confirm).
 var skill_mana_deferred_until_target_confirm: bool = false
-## Summon being cast from hand. The card stays in hand until the cost is paid
-## and targets are chosen; only then does it enter the stack.
+## Summon being cast from hand. It is parked on the Stack while its cost is paid
+## and targets are chosen; only then does it legally enter the stack.
 var summon_casting_card: Card = null
 ## While true, summon mana payment is deferred until the target is confirmed.
 var summon_mana_deferred_until_target_confirm: bool = false
@@ -40,10 +40,9 @@ signal resolution_complete
 func _ready() -> void:
 	assistant.choose_card_finished.connect(_on_choose_card_finished)
 
-## Cards to lay out: the legal stack objects plus the parked card (if any).
-## Positioning MUST go through this — using `cards` alone leaves the parked card
-## out of the row width, which offsets every card. That is why a card awaiting
-## payment used to sit visibly off-centre.
+## Cards to lay out: the legal stack objects plus the parked card (Summon or
+## Character). Positioning MUST go through this — using `cards` alone leaves the
+## parked card out of the row width, which offsets every card.
 func layout_cards() -> Array:
 	var list: Array = cards.duplicate()
 	var parked = summon_casting_card if summon_casting_card != null else casting_card
@@ -260,24 +259,28 @@ func cast_card():
 		# so nothing is popped and no stack slot is consumed. play_card() needs
 		# the side explicitly — it cannot infer it from card.controller.
 		#
-		# THE MANA LANDS FIRST. Payment orbs fly to this card, so it must not move
-		# until they have arrived — otherwise it is already on the field, with every
-		# ring cleared, when they get there. Awaiting the shatter here is what gives
-		# the orbs their flight, and what lets the energized glow actually be seen:
-		# while the card is still in hand there is a ring for it to light.
-		#
-		# CAPTURED BEFORE THE AWAIT. While this function is suspended the caller runs on
-		# and clears `casting_card` (the line right after its own _shatter_paid_cost()),
-		# so reading the member afterwards dereferences null — which is exactly how this
-		# crashed once the await was added. It is the only use of the member after the
-		# suspension, so capturing it here is the whole fix.
+		# THE CARD IS PARKED IN THE FAKE STACK. It stayed there through the
+		# payment with the thin gold aura, so this is the "marked" card the player
+		# can see. Break the crystals concurrently — the payment effect no longer
+		# has an orb flight to wait for — then fade the card out where it sits and
+		# rebuild it on the field.
 		var landing: Card = casting_card
-		await _shatter_paid_cost()
+		if landing == null or not is_instance_valid(landing):
+			return
+		_shatter_paid_cost()
 		# The CAST is the action, not the end of its presentation. Record it
 		# before the ~1.3 s teleport so priority sees the action immediately.
 		get_parent().note_action_taken()
-		# Source half of the teleport: shine and dissolve IN PLACE in the Stack
-		# row. Only then does Field place the invisible card at its slot and
+		var owner_hand: Hand = _owner_hand(landing)
+		# DISCARD FIRST. The mana cards have already joined the Graveyard, but
+		# their flight was started by Hand._on_assistant_charge_complete(); wait
+		# for it to land before the marked card starts to fade.
+		if owner_hand != null:
+			await owner_hand.await_mana_discard()
+		# The gold aura has done its job; let it fade with the card.
+		landing.set_cast_pending_highlight(false)
+		# Source half of the teleport: shine and dissolve IN PLACE in the Stack.
+		# Only then does Field place the invisible card at its slot and
 		# materialise it. Nothing travels across the board.
 		var dissolve: Tween = landing.teleport_out(
 			field.teleport_shine_seconds, field.teleport_fade_seconds)
@@ -291,11 +294,12 @@ func _on_assistant_charge_complete() -> void:
 		_continue_summon_after_mana(summon_casting_card)
 		return
 	if casting_card:
+		# cast_card() reads `casting_card` synchronously before its first await,
+		# then owns the local `landing` reference for the rest of the teleport.
 		cast_card()
-		# A Character going to the field, or a Summon being cast: this IS the play. See _shatter_paid_cost().
-		_shatter_paid_cost()
 		casting_card = null
-		# The parked card left this node (played to the field): re-lay out the row.
+		# The Character is still in hand, not in this row; the hand re-lays out
+		# itself when it is removed after the fade.
 		update_card_positions()
 	elif skill_activation_proxy != null:
 		field.continue_skill_activation_after_mana(skill_activation_proxy)
@@ -519,11 +523,11 @@ func _clear_skill_proxy() -> void:
 	update_card_positions()
 
 
-## A card awaiting its cost is only PARKED on this node — a visual placeholder.
+## A SUMMON awaiting its cost is only PARKED on this node — a visual placeholder.
 ## It is not in `cards`, so it is not legally on the stack, and it is not public
-## knowledge yet: only its owner sees which card it is. A character card
-## (Forward/Backup) never enters `cards` at all: once paid it goes straight to
-## the field. Only a Summon becomes a stack card, and only at
+## knowledge yet: only its owner sees which card it is. A Character never comes
+## here at all: it is paid for in hand, then fades from the hand straight to the
+## field. Only a Summon becomes a stack card, and only at
 ## _commit_summon_to_stack().
 func park_card(card: Card) -> void:
 	var trans = card.global_transform
@@ -548,9 +552,14 @@ func _on_hand_charge_start(card: Card) -> void:
 		# Paid for (and targeted) before it legally enters the stack.
 		summon_casting_card = card
 		summon_mana_deferred_until_target_confirm = true
+		park_card(card)
 	else:
+		# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is
+		# not in `cards`, so it is not legally on the stack; `park_card()` gives
+		# it the Stack presentation, then the thin gold aura marks it as the play.
 		casting_card = card
-	park_card(card)
+		park_card(card)
+		card.set_cast_pending_highlight(true)
 
 
 func _on_assistant_charge_cancelled() -> void:
@@ -577,9 +586,10 @@ func _on_assistant_charge_cancelled() -> void:
 		summon_mana_deferred_until_target_confirm = false
 		return
 	if casting_card != null:
+		# The Character is parked on the Stack: make it public again, remove the
+		# gold aura, and let its own Hand take it back.
 		reveal_parked(casting_card)
-		# Only ever parked, never in `cards`. Its own Hand takes it back
-		# (Assistant.charge_cancelled → Hand._on_assistant_charge_cancelled).
+		casting_card.set_cast_pending_highlight(false)
 		casting_card = null
 		update_card_positions()
 		return
@@ -716,26 +726,12 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 ## visible here. Breaking them while they are up is the whole point: the shards come out of something the player can
 ## see, instead of appearing out of nothing after the crystals have already gone.
 ##
-## Called from the three places a play actually lands: a Character going to the field (cast_card(), which AWAITS this so
-## the orbs can fly before the card moves), a Summon entering the stack, and an ability whose costs are paid and whose
-## target, if any, is chosen.
-##
-## AWAITED, so the payment orbs are not fire-and-forget: the caller is waiting for them, and they finish only when the
-## last one reaches the card. The other two call sites simply do not need to wait, so they let it run.
+## Called from the three places a play actually lands: a Character going to the field, a Summon entering the stack,
+## and an ability whose costs are paid and whose target, if any, is chosen. The shatter is now the whole payment
+## effect — there are no payment orbs to wait for — so callers may let it run alongside the card presentation.
 func _shatter_paid_cost() -> void:
 	if assistant != null:
-		await assistant.commit_cost_readout(_paid_for_card())
-
-## The card this payment is being spent on, which is where the shatter orbs fly: the top of the stack, or the Character
-## being played when there is no stack card at all.
-##
-## A CHARACTER NEVER ENTERS THE STACK, so for one of those "the card being paid for" is the card itself — casting_card,
-## which is set while it is being played. Either way the orbs have something to be swallowed by, which is the point of
-## the effect.
-func _paid_for_card() -> Card:
-	if not cards.is_empty():
-		return cards.back()
-	return casting_card
+		await assistant.commit_cost_readout()
 
 func _on_assistant_target_complete() -> void:
 	# AN EX BURST IS NOT A SKILL ACTIVATION. With no Summon parked and no skill proxy there is nothing to commit:

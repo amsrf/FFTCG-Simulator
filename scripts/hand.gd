@@ -45,6 +45,10 @@ const SHADOW_TRACK_SECONDS := 0.35
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal effect_card_selection_changed(has_selection: bool)
+## Emitted after the mana cards selected for a payment have finished their
+## discard flight. Stack awaits this before fading a Character out of hand.
+signal mana_discard_finished
+var _mana_discard_in_progress: bool = false
 @onready var graveyard: Node = get_parent().get_node("Graveyard")
 # Relative, not get_tree().current_scene — see damage_zone.gd. This also resolves the same
 # way for Opponent/Hand, which shares this script.
@@ -839,8 +843,10 @@ func remove_card(card):
 	cards.remove_at(card.index)
 	
 						
-## Returns false when the card cannot legally be played right now (nothing is
-## charged and it stays in the hand).
+## Begins paying for a card. Returns false when it cannot legally be played now.
+## Both a Summon and a Character leave the hand for the parked Stack slot; the
+## Character gets the thin gold cast-pending aura and is blocked from being
+## selected as a mana source until the payment is confirmed or cancelled.
 func charge(card) -> bool:
 	if card.type == 'Summon':
 		# Summons can be cast with a stack on it — they are the instant-speed
@@ -862,9 +868,13 @@ func charge(card) -> bool:
 	if not can_play_character(card):
 		push_warning("[Rules] %s cannot be played now: turn player only, empty stack required" % card.card_name)
 		return false
+	# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is not
+	# a legal stack object, but it is staged there with the thin gold aura, and
+	# it fades from that spot on confirm. `charging_card` keeps it out of the
+	# mana selection.
 	remove_card(card)
+	charging_card = card
 	charge_start.emit(card)
-	charging_card = card #keep reference
 	return true
 
 ## A Character card is legal only for the turn player and only with an empty
@@ -987,12 +997,23 @@ func discard_card(card: Card) -> void:
 	graveyard.call("discard", card)
 	update_card_positions()
 	
-func send_selected_cards_to_graveyard():
+## Starts every selected mana card's discard flight and WAITS for all of them.
+## The cards join the Graveyard immediately (rules still see the payment at
+## once), but the visual flight is allowed to finish before a Character starts
+## fading out of the hand.
+func send_selected_cards_to_graveyard() -> void:
+	var spent: Array = selected_cards_for_mana_conversion.duplicate()
 	cards = cards.filter(func(item): return not selected_cards_for_mana_conversion.has(item))
-	for c in selected_cards_for_mana_conversion:
-		c.reset()
-		graveyard.call("discard", c)
 	selected_cards_for_mana_conversion = []
+	var flights: Array = []
+	for c in spent:
+		c.reset()
+		var flight = graveyard.call("discard", c)
+		if flight is Tween:
+			flights.append(flight)
+	for flight in flights:
+		if flight is Tween and flight.is_valid():
+			await flight.finished
 	
 
 func add_card_to_mana_conversion(card:Card):
@@ -1047,12 +1068,24 @@ func animate_card(card, target_position, target_tilt: float = 0.0):
 func _on_assistant_charge_complete() -> void:
 	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
 		return
-	send_selected_cards_to_graveyard()
-	selected_cards_for_mana_conversion = []
-	# A summon being cast stays referenced until targeting is resolved.
+	# The payment cards fly to the graveyard FIRST. Stack awaits
+	# `await_mana_discard()` before it fades a Character out of hand.
+	_mana_discard_in_progress = true
+	await send_selected_cards_to_graveyard()
+	# Re-lay the hand BEFORE waking Stack: it may resume the fade immediately
+	# on the signal, and a hand-layout tween started afterwards would move the
+	# card while it is already dissolving.
 	if stack.summon_casting_card == null:
 		charging_card = null
 	update_card_positions()
+	_mana_discard_in_progress = false
+	mana_discard_finished.emit()
+
+## Stack calls this before the Stack fade. If the mana cards are still flying to
+## the Graveyard, the fade waits for them; otherwise it starts immediately.
+func await_mana_discard() -> void:
+	if _mana_discard_in_progress:
+		await mana_discard_finished
 
 func apply_deferred_skill_mana_payment() -> void:
 	send_selected_cards_to_graveyard()
@@ -1068,6 +1101,9 @@ func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	selected_cards_for_mana_conversion = []
+	# Both a Summon and a Character are parked on the Stack while being paid
+	# for; cancelling hands the parked card back to its owner's hand.
 	if charging_card and charging_card.get_parent() == stack:
 		add_card(charging_card)
 	charging_card = null
+	update_card_positions()

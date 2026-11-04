@@ -13,6 +13,7 @@ var _game: Node = null
 var _field = null
 var _hand = null
 var _stack = null
+var _assistant = null
 
 
 func _expect(ok: bool, what: String) -> void:
@@ -43,6 +44,7 @@ func _ready() -> void:
 	_field = _game.get("field")
 	_hand = _game.get("hand")
 	_stack = _game.get("stack")
+	_assistant = _game.get("assistant")
 	_field.teleport_shine_seconds = 0.25
 	_field.teleport_fade_seconds = 0.20
 	_field.teleport_materialize_seconds = 0.60
@@ -53,12 +55,19 @@ func _ready() -> void:
 	_expect(card != null, "the test Character is in hand")
 	_hand.charge(card)
 	await get_tree().process_frame
-	_expect(card.get_parent() == _stack, "the Character starts parked in the Stack")
+	_expect(card.get_parent() == _stack,
+		"the Character starts parked in the fake Stack")
+	_expect(card.ring_cast_pending(),
+		"and is marked with the thin gold cast-pending aura")
+	_hand.add_card_to_mana_conversion(card)
+	_expect(not _hand.selected_cards_for_mana_conversion.has(card),
+		"and cannot also be selected as a mana source")
 	var source_position: Vector3 = card.global_position
 
-	# Start the cast without awaiting it: the source phase is deliberately
-	# observable while it runs.
-	_stack.cast_card()
+	# Confirm the payment through the real signal path. This is what the player
+	# does with the Confirm button: Hand pays the selected mana, Stack starts
+	# the Character fade, and only then does the field teleport begin.
+	_assistant.on_charge_complete()
 	await get_tree().create_timer(0.10).timeout
 	_expect(card.get_parent() == _stack,
 		"during the shine the card is still in the Stack")
@@ -66,9 +75,11 @@ func _ready() -> void:
 		"and it does not move while shining")
 	_expect(_param(card, "teleport_glow") > 0.05,
 		"the source glow is rising")
+	_expect(_param(card, "teleport_reveal") <= 0.001,
+		"the source card itself is turning into the white silhouette")
 	var source_halo = card.get("_teleport_halo")
-	_expect(source_halo != null and source_halo.visible,
-		"the source has an additive halo around the card")
+	_expect(source_halo == null or not source_halo.visible,
+		"the source has no overflow halo")
 	_expect(card.visible, "the source has not disappeared too early")
 
 	await get_tree().create_timer(0.50).timeout
@@ -118,6 +129,7 @@ func _ready() -> void:
 		"the halo is gone once the card is revealed")
 	_expect(card.visible, "the fully materialised card is visible")
 	_expect(_field.front_cards.has(card), "the card is in the Field row")
+	_expect(not card.ring_cast_pending(), "and the thin gold cast-pending aura is gone")
 
 	print("[Teleport] %d checks | failures: %d" % [_checks, _fails])
 	if _fails == 0:

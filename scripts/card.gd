@@ -597,15 +597,16 @@ func enter_zone(zone: Zone) -> void:
 	is_dragging = false
 	is_valid_target = false
 	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked
-	# this", "they picked this", "you may activate this", and "mana was spent on this". Leaving
-	# any of them set would carry the ring into the next zone — a red or a green one into the
-	# graveyard, an energized one onto the field.
+	# this", "they picked this", "you may activate this", "mana was spent on this", and
+	# "this Character is waiting to be played". Leaving any of them set would carry the ring
+	# into the next zone — a red or a green one into the graveyard, white onto the field.
 	_prompt_glow = false
 	_selected_highlight_on = false
 	_s_cost_highlight_on = false
 	_targeted_highlight_on = false
 	_available_highlight_on = false
 	_energized_highlight_on = false
+	_cast_pending_highlight_on = false
 	_refresh_target_ring()
 	clear_edge_shadow()
 	reset()  # drops the mana-crystal marker
@@ -663,17 +664,22 @@ func stop_stack_layout() -> void:
 ## not move. Returns the tween so the caller can await it.
 func teleport_out(shine_seconds: float = 0.45, fade_seconds: float = 0.20) -> Tween:
 	_kill_teleport_tween()
-	# The source must stay where it is. If the Stack fan was still settling,
-	# stop it here rather than letting the card drift while it shines.
+	# The source must stay where it is. Either row could still be settling
+	# (Characters fade from the hand now, Summons from the Stack), so stop both
+	# layout tweens rather than letting the card drift while it shines.
+	stop_hand_layout()
 	stop_stack_layout()
 	visible = true
 	set_teleport_visual(0.0, 0.0)
 	var tween := create_tween()
+	# Reveal stays 0 so the card itself turns into a white silhouette as the
+	# glow rises. allow_halo=false: no additive quad around the source — the
+	# reference glows INSIDE the card and then fades, it does not grow a halo.
 	tween.tween_method(
-		func(v: float): set_teleport_visual(0.0, v),
+		func(v: float): set_teleport_visual(0.0, v, 0.0, false),
 		0.0, 1.0, maxf(shine_seconds, 0.01))
 	tween.tween_method(
-		func(v: float): set_teleport_visual(v, 1.0 - 0.35 * v),
+		func(v: float): set_teleport_visual(v, 1.0 - 0.35 * v, 0.0, false),
 		0.0, 1.0, maxf(fade_seconds, 0.01))
 	tween.tween_callback(func():
 		set_teleport_visual(1.0, 0.0)
@@ -706,7 +712,8 @@ func teleport_in(build_seconds: float = 0.65, glow_seconds: float = 0.18,
 	_teleport_tween = tween
 	return tween
 
-func set_teleport_visual(progress: float, glow: float, reveal: float = 1.0) -> void:
+func set_teleport_visual(progress: float, glow: float, reveal: float = 1.0,
+		allow_halo: bool = true) -> void:
 	if mat == null:
 		return
 	mat.set_shader_parameter("teleport_progress", clampf(progress, 0.0, 1.0))
@@ -715,10 +722,10 @@ func set_teleport_visual(progress: float, glow: float, reveal: float = 1.0) -> v
 	# The border and power readout are not part of the glow silhouette. They
 	# appear only after the texture is fully revealed.
 	_set_teleport_chrome_hidden(reveal < 0.999)
-	# The halo belongs to a completed silhouette, not to the build: showing it
-	# around a half-built card draws a white card-shaped outline before the card
-	# exists. Source shine keeps progress at 0, so it still gets a halo.
-	var halo_on: bool = glow > 0.001 and progress <= 0.001
+	# The halo belongs only to the DESTINATION's completed silhouette. The source
+	# passes allow_halo=false for both its shine and fade, so the card brightens
+	# inside its own rectangle and never grows an overflow outline.
+	var halo_on: bool = allow_halo and glow > 0.001 and progress <= 0.001
 	if halo_on:
 		_ensure_teleport_halo()
 	if _teleport_halo != null:
@@ -1380,11 +1387,16 @@ const TARGETED_GLOW_COLOR := Color(0.85, 0.03, 0.03)
 ## — it goes dark the instant a targeting or payment modal takes the moment away.
 const AVAILABLE_BORDER_COLOR := Color(0.15, 0.95, 0.3)
 const AVAILABLE_GLOW_COLOR := Color(0.04, 0.7, 0.12)
+## A Character committed to be played, waiting for its mana payment. Gold and
+## narrow, the old "this is the play" aura: not a prompt, and not a marker on a
+## mana source.
+const CAST_PENDING_BORDER_COLOR := Color(1.0, 0.82, 0.28)
+const CAST_PENDING_GLOW_COLOR := Color(0.92, 0.61, 0.10)
 ## The material's own colours, captured when it is built so deselecting restores
 ## them. Safe because every card owns its own duplicate of the material.
 var _border_color_base: Color = Color.WHITE
 var _glow_color_base: Color = Color.WHITE
-## ONE ring, FOUR meanings. Colour and visibility are derived from these flags together by
+## ONE ring, SEVERAL meanings. Colour and visibility are derived from these flags together by
 ## _refresh_target_ring() rather than written to the material by each setter in turn: with
 ## several independent writers the last one to run decided the colour, and a setter that only
 ## recoloured left the ring dark (it has to be LIT as well — see set_highlight).
@@ -1392,6 +1404,7 @@ var _prompt_glow: bool = false
 var _selected_highlight_on: bool = false
 var _targeted_highlight_on: bool = false
 var _available_highlight_on: bool = false
+var _cast_pending_highlight_on: bool = false
 
 ## "The game is asking YOU to pick this" (blue) — the same meaning in the hand and on the field.
 ## "Mana has been spent on this card" — a glow in that mana's own colour, held until the card is played.
@@ -1416,6 +1429,9 @@ func ring_targeted() -> bool:
 
 func ring_energized() -> bool:
 	return _energized_highlight_on
+
+func ring_cast_pending() -> bool:
+	return _cast_pending_highlight_on
 
 ## The widths actually on the ring's live material, in metres — (border, glow). Read back from the material rather than
 ## from the constants, so a caller can tell "the green ring really is drawn at half width" from "the constants agree".
@@ -1442,6 +1458,17 @@ func set_available_highlight(enabled: bool) -> void:
 	if enabled == _available_highlight_on:
 		return
 	_available_highlight_on = enabled
+	_refresh_target_ring()
+
+## "This Character is the play and is waiting for mana." A thin gold aura,
+## distinct from every prompt and from the elemental "mana was spent here"
+## marker. The card is parked in the fake Stack while the payment modal is open,
+## so the aura is what says it is already committed and must not also be used as a mana
+## source.
+func set_cast_pending_highlight(enabled: bool) -> void:
+	if enabled == _cast_pending_highlight_on:
+		return
+	_cast_pending_highlight_on = enabled
 	_refresh_target_ring()
 
 ## "You picked this card to pay a special ability's S cost" — pink, so it can never be confused with the orange
@@ -1499,6 +1526,9 @@ const ENERGIZED_WIDTH_SCALE := 0.35
 ## ...and dimmer, because width alone left it reading like a prompt that never went away. Multiplied
 ## into the element colour rather than applied as a separate alpha, so the ring's own look is untouched.
 const ENERGIZED_DIM := 0.65
+## The committed-Character aura is deliberately thin: gold is the signal, not
+## a wide ring competing with the prompt colours.
+const CAST_PENDING_WIDTH_SCALE := 0.30
 
 ## Each element as a colour, for cues that should read as "THIS CARD" rather than "what paid for it".
 ##
@@ -1527,7 +1557,8 @@ func element_colour(fallback: Color) -> Color:
 ## coloured but not lit shows nothing on screen, which is how the red reveal once shipped invisible.
 func _refresh_target_ring() -> void:
 	var lit: bool = (_prompt_glow or _selected_highlight_on or _targeted_highlight_on
-		or _available_highlight_on or _energized_highlight_on or _s_cost_highlight_on)
+		or _available_highlight_on or _energized_highlight_on or _cast_pending_highlight_on
+		or _s_cost_highlight_on)
 	if target_border == null and not lit:
 		# Nothing built and nothing wanted: do not build a ring just to switch it off.
 		_highlight_on = false
@@ -1541,6 +1572,8 @@ func _refresh_target_ring() -> void:
 	var width_scale: float = 1.0
 	if _available_highlight_on:
 		width_scale = AVAILABLE_WIDTH_SCALE
+	elif _cast_pending_highlight_on:
+		width_scale = CAST_PENDING_WIDTH_SCALE
 	elif _energized_highlight_on:
 		width_scale = ENERGIZED_WIDTH_SCALE
 	_border_material.set_shader_parameter("border_width", _border_width_base * width_scale)
@@ -1552,6 +1585,9 @@ func _refresh_target_ring() -> void:
 	if _energized_highlight_on:
 		color = element_colour(_energized_colour)
 		glow = element_colour(_energized_colour)
+	if _cast_pending_highlight_on:
+		color = CAST_PENDING_BORDER_COLOR
+		glow = CAST_PENDING_GLOW_COLOR
 	if _available_highlight_on:
 		color = AVAILABLE_BORDER_COLOR
 		glow = AVAILABLE_GLOW_COLOR
