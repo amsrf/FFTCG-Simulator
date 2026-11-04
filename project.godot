@@ -23,6 +23,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 CardDatabase="*res://scripts/CardDatabase.gd"
 GlobalVariables="*res://scripts/GlobalVariables.gd"
 MatchSetup="*res://scripts/match_setup.gd"
+Vfx="*res://scripts/vfx/vfx_director.gd"
 
 [display]
 

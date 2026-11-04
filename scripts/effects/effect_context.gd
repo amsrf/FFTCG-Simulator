@@ -369,15 +369,38 @@ func choose_crystal_in_circle(elements: Array) -> String:
 
 ## Damage all cards in `cards` from the effect's source. All damage goes through Field.cause_damage, the single
 ## entry point that applies damage modifiers and source-aware riders.
-func damage(cards: Array, amount: int) -> void:
-	if field == null or amount <= 0:
+func damage(cards: Array, amount: int, mode: String = "") -> void:
+	var hits: Array = _apply_damage_to_cards(cards, amount)
+	if hits.is_empty():
+		return
+	var spread: String = mode if not mode.is_empty() else ("single" if hits.size() == 1 else "multi")
+	var origin: Card = source if source != null and is_instance_valid(source) else null
+	Vfx.damage(hits, amount, origin.element if origin != null else "", origin, spread)
+
+
+## Convenience for effects that explicitly hit the whole board. The director
+## can then choose a board wave preset instead of N single-target impacts.
+func board_damage(cards: Array, amount: int, mode: String = "radial") -> void:
+	var hits: Array = _apply_damage_to_cards(cards, amount)
+	if hits.is_empty():
 		return
 	var origin: Card = source if source != null and is_instance_valid(source) else null
+	Vfx.board_damage(hits, amount, origin.element if origin != null else "",
+		origin, "radial" if mode.is_empty() else mode)
+
+
+func _apply_damage_to_cards(cards: Array, amount: int) -> Array:
+	if field == null or amount <= 0:
+		return []
+	var origin: Card = source if source != null and is_instance_valid(source) else null
+	var hits: Array = []
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
 		field.cause_damage(card, amount, origin, "Ability", controller)
+		hits.append(card)
 	game.enforce_game_state_rules()
+	return hits
 
 
 func remove_from_game(cards: Array) -> void:

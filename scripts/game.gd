@@ -760,6 +760,10 @@ var priority_holder: int = 0
 const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
+	# Lightning damage. These are first rendered only when a 雷 card deals
+	# damage, so without a warm-up the first strike would hitch mid-animation.
+	preload("res://shaders/lightning_bolt.gdshader"),
+	preload("res://shaders/lightning_impact.gdshader"),
 ]
 
 func _ready():
@@ -2298,6 +2302,7 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 	# because this is the only function that knows the damage reached the power.
 	card.broken = true
 	card.untap()
+	Vfx.card_broken(card, source_kind)
 	# Spawn the shards BEFORE the card leaves the field so we can use its exact
 	# world transform and its card-art material. The original is removed in the
 	# same frame; the shard burst lives independently in Game space.

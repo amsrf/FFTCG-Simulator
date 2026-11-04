@@ -169,6 +169,9 @@ var _frozen_overlay_material: ShaderMaterial = null
 var _frozen_spread_tween: Tween = null
 var _frozen_spread: float = 0.0
 var _frozen_visual_on: bool = false
+## Last status set reported to Vfx. `refresh_status_visuals()` is the one sync
+## point, so direct dictionary erases still produce a status_removed event.
+var _vfx_status_snapshot: Dictionary = {}
 # DEBUG VARIABLES
 var debug_step: int = 0
 var debug_log: Array = []
@@ -1236,8 +1239,31 @@ func _silence_icon_belongs_left() -> bool:
 ## `status_effects` directly (or erase a status in place, as the Active Phase
 ## does for Freeze) use this to re-sync the visuals.
 func refresh_status_visuals() -> void:
+	_sync_status_vfx()
 	_refresh_silence_icon()
 	refresh_frozen_overlay()
+
+## Report status additions/removals through the presentation director. This is
+## the one place that notices direct dictionary erases too, because every
+## status mutation already calls refresh_status_visuals().
+func _sync_status_vfx() -> void:
+	var current: Dictionary = status_effects.duplicate()
+	for status in current:
+		if not _vfx_status_snapshot.has(status):
+			Vfx.status_applied(self, str(status), _status_duration(status))
+	for status in _vfx_status_snapshot:
+		if not current.has(status):
+			Vfx.status_removed(self, str(status))
+	_vfx_status_snapshot = current
+
+
+func _status_duration(status: String) -> int:
+	var value = status_effects.get(status, 0)
+	if value is Dictionary:
+		return int(value.get("duration", 0))
+	if value is int or value is float:
+		return int(value)
+	return 0
 
 ## Show the cracked-ice rim only while this card is Frozen on the field. The
 ## overlay is built lazily, so ordinary cards pay nothing for it.

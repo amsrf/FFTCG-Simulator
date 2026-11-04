@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="VfxPreset" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/vfx/vfx_preset.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+element = "土"
+tint = Color(0.90, 0.74, 0.26, 1)
+hit_stagger_seconds = 0.06
+board_stagger_seconds = 0.08

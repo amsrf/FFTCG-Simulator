@@ -3,6 +3,19 @@
 All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-09-11
+### Lightning Element Damage (Thundergod's Wrath reference)
+
+- Authored the first one-shot element effect. `assets/vfx/elements/lightning.tres` now points its `impact_scene` and `board_impact_scene` at `assets/effects/lightning/lightning_strike_cue.tscn`.
+- The cue (`scripts/vfx/lightning_strike_cue.gd`) reads the `VfxEvent`: a single-target hit strikes one card, while `multi` / `sequence` / `radial` / `board` events strike every target with a stagger (0.36 s, or 0.45 s for sequence) so each impact reads separately. It also fires one shared additive screen flash at the impact.
+- Damage magnitude is now semantic and shared by every element. `VfxEvent.damage_tier()` maps `<=3000` to weak, `3001–6000` to medium, `6001–8999` to high, and `9000+` to maximum. `damage_scale()` provides a neutral multiplier for future element cues.
+- Lightning scales with that tier: bolt width/glow/branching and intensity grow, the bolt span and height increase, the shockwave quad extends further, the impact intensity rises, and the screen flash strengthens. Weak and maximum multipliers live in `TIER_*` constants in `lightning_strike.gd`.
+- Each target gets `scripts/vfx/lightning_strike.gd`: a camera-facing descending bolt anchored exactly to `Card.get_global_face_centre()`, and a card-plane impact flare and circular shock wave. The bolt uses a screen-space orientation because the board camera is almost top-down, and the effect sits in front of the card on purpose. The bolt quad is not pushed along camera Z; that changed the projected position of off-centre targets.
+- Added procedural shaders `shaders/lightning_bolt.gdshader` and `lightning_impact.gdshader`. The palette follows `references/violet_thunder.jpg`: a white-hot core stays, surrounded by purple inner glow and a deeper royal-violet halo rather than a flat violet bolt. The bolt also has seeded branches and a fade at the top so it does not end in a hard line against the HUD. The impact combines a contact flash, a circular expanding ring, radial forks and crackle; the ring fades radially before the quad edge so it never ends on a square boundary. The target card border is deliberately left unchanged. `QuadMesh` maps UV.y 0 to its top edge, so the bolt shader converts to `y = 1 - UV.y`; without that the channel converged at the top of the quad instead of the card.
+- Timing follows the Artifact reference: bolt reveal 0.09 s, hold 0.10 s, fade 0.28 s; the flare/shockwave outlive the bolt briefly. The source composite, its particle children, the 8-frame `bolt_b` sheet, the 10-frame `electrocute` border sheet and the 22-frame card animation are recorded in `references/ARTIFACT_REFERENCE.md`. No Artifact texture or model is shipped.
+- Added the two shaders to `Game.EFFECT_SHADERS` so the Compatibility renderer compiles them at match start instead of hitching on the first 雷 hit.
+- Added `tests/lightning_vfx_probe.tscn` (19 checks): preset scene wiring, the 雷 `DAMAGE` event, cue instantiation, one strike for a single target, director cleanup after the one-shot, one strike per card for a multi-target event, and the shared damage-tier boundaries.
+- Added `tools/lightning_demo.tscn` for watching the effect in the real game. It boots the empty `clean` Test Ground, places three numbered targets, and auto-plays one strike; `1/2/3` select a target, `SPACE`/`R` replays, `M` strikes all three, `B` uses the board-damage presentation, `T` cycles 3000/5000/8000/12000 damage, and `A` toggles auto replay. `--tier 0..3` sets the starting tier for screenshots.
+
 ### Frozen Card Overlay (Frostbite-inspired)
 
 - Added a card-space frozen status overlay. `Card.refresh_frozen_overlay()` lazily builds a `FrozenOverlay` quad parented to `HandMesh`, just above the card face, and `shaders/frozen_overlay.gdshader` composites two original alpha masks additively in the Frostbite palette: a steel-blue cracked rim plus a soft icy outline.
@@ -12,6 +25,16 @@ All notable changes to the FF TCG Simulator project.
 - Status visuals now share `Card.refresh_status_visuals()`. It is called when a status is added, at `turn_end()`, on `enter_zone()`, after `reset_for_field_arrival()`, and when the Active Phase consumes Freeze in `Field.untap_cards_for()`.
 - Added `tests/frozen_overlay_probe.tscn` (13 checks): the overlay is absent until Frozen, binds both masks, follows `HandMesh`, grows from a partial front to the full mask, recedes and hides when the status is cleared, grows again on re-freeze, and hides when the Active Phase consumes the status.
 - Added `tools/frozen_overlay_demo.tscn` for viewing it in the real game: two Forwards are placed, the left one starts Frozen, and `F` toggles the status while `R` re-applies it.
+- Added `references/ARTIFACT_REFERENCE.md` plus `tools/artifact_vpk_list.py` / `artifact_vpk_extract.py` so the Artifact reference archives, Frostbite/Winter's Curse asset paths, decompiled parameters, and re-extraction workflow are recorded for future effects. Extracted Artifact assets remain reference-only and are not shipped.
+
+### VFX Event Architecture (first pass)
+
+- Added `VfxEvent` (`scripts/vfx/vfx_event.gd`), a data-only contract for `STATUS_APPLIED`, `STATUS_REMOVED`, `DAMAGE`, `BOARD_DAMAGE`, and `CARD_BROKEN`. Events carry targets, source, element, amount, mode (`single`/`multi`/`sequence`/`radial`/`board`), status/duration, cause, and a deterministic seed.
+- Added the `Vfx` autoload director (`scripts/vfx/vfx_director.gd`). It resolves element/status presets, logs every event synchronously for probes, emits queue/start/finish signals, and serialises one-shot presentation. The scene-spawning slots in `_present()` are intentionally ready for the next VFX pass.
+- Added `VfxPreset` (`scripts/vfx/vfx_preset.gd`) and element presets under `assets/vfx/elements/` plus `assets/vfx/status/frozen.tres`. Presets carry tint, impact/board/shard scenes, flash material, shake, stagger, and sound.
+- Hooked existing rules: status changes sync through `Card.refresh_status_visuals()` (including direct dictionary erases), effect damage and `board_damage()` emit through `EffectContext`, and `Game.break_card()` emits the break event.
+- Added `tests/vfx_director_probe.tscn` (7 checks): status apply/remove, effect damage, distinct board damage, and preset tint resolution.
+- Architecture notes: `references/VFX_ARCHITECTURE.md`.
 
 ### Clash Cinematic (first playable)
 

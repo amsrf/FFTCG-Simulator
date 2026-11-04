@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://cf1n74fyvi3ek"]
 
-[ext_resource type="Script" path="res://tools/frozen_overlay_demo.gd" id="1_fz"]
+[ext_resource type="Script" uid="uid://clk0j4v0a7dni" path="res://tools/frozen_overlay_demo.gd" id="1_fz"]
 
-[node name="FrozenOverlayDemo" type="Node"]
+[node name="FrozenOverlayDemo" type="Node" unique_id=194162477]
 script = ExtResource("1_fz")
