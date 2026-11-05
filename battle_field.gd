@@ -3,6 +3,13 @@ class_name Field
 
 
 const CARD_CHARGE = 1
+## Horizontal centre-to-centre distance between neighbouring cards in a field row.
+##
+## A row holds at most five cards, so it does NOT need the old 0.8 m pitch to fill the board.
+## 0.65 halves the visible gap (0.8 - 0.49 card width = 0.31 m, down to 0.16 m) and frees the
+## outer columns, which is what makes room for the deck and graveyard beside the rows under the
+## perspective camera. Cards still do not overlap.
+const ROW_CARD_STEP := 0.65
 const RULES := preload("res://scripts/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
@@ -398,9 +405,9 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# Calculate position
 	var target_position = target_node.position
 	if n % 2 == 0:
-		target_position -= (n/2) * Vector3(0.8, 0, 0)
+		target_position -= (n/2) * Vector3(ROW_CARD_STEP, 0, 0)
 	else:
-		target_position += ((n+1)/2) * Vector3(0.8, 0, 0)
+		target_position += ((n+1)/2) * Vector3(ROW_CARD_STEP, 0, 0)
 	
 	# The card is entering the field: normalise its look first (rotation, scale and
 	# the power/damage readout). Without this a card played from hand keeps the
@@ -785,11 +792,15 @@ func can_activate_now(card: Card) -> bool:
 		# Same for a discard cost with too few cards in hand.
 		if int(def.get("discard", 0)) > 0 and (hand == null or hand.cards.size() < int(def.get("discard", 0))):
 			continue
-		# An ability that targets the STACK is only worth offering while there is something there to target.
+		# An ability that chooses a target is only worth offering when a legal target exists. This
+		# covers FIELD targets (Black Belt needs a Forward with "blocking") as well as STACK targets.
+		# Other domains are left alone: has_viable_target() only searches field/stack.
 		var ct = def.get("choose_target", {})
-		if ct is Dictionary and str(ct.get("in", "")) == "stack" \
-				and not has_viable_target(ct, card, "Ability", "stack"):
-			continue
+		if ct is Dictionary and not ct.is_empty():
+			var target_domain: String = str(ct.get("in", "field"))
+			if (target_domain == "field" or target_domain == "stack") \
+					and not has_viable_target(ct, card, "Ability", target_domain):
+				continue
 		return true
 	return false
 

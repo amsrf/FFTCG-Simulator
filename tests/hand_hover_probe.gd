@@ -56,6 +56,16 @@ func _visible(card: Card, cam: Camera3D, view: Vector2) -> Dictionary:
 		"visible": clampf((view.y - top) / maxf(bottom - top, 0.0001), 0.0, 1.0),
 	}
 
+## Pixels per metre at `at`, perpendicular to the view axis. Orthographic is constant; perspective
+## is 1/depth. The probe used `view.y / cam.size` directly, which is 0 in perspective and silently
+## measured the old orthographic scale.
+func _px_per_metre_at(cam: Camera3D, at: Vector3, view: Vector2) -> float:
+	if cam.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		return view.y / maxf(cam.size, 0.001)
+	var forward: Vector3 = -cam.global_transform.basis.z.normalized()
+	var depth: float = maxf(forward.dot(at - cam.global_position), 0.01)
+	return view.y / (2.0 * depth * tan(deg_to_rad(cam.fov) * 0.5))
+
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("debug")
 	await get_tree().process_frame
@@ -76,15 +86,15 @@ func _ready() -> void:
 		_finish()
 		return
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	var px_per_metre: float = view.y / maxf(cam.size, 0.001)
+	var px_per_metre: float = _px_per_metre_at(cam, hand.global_position, view)
 
 	var resting: float = hand.hand_scale
 	var face: Vector2 = hand.cards[0]._card_face_size()
-	print("[HandHover] resting %.2f | stack %.2f | %d cards | a fan card is %.0f x %.0f px" % [
-		resting, Card.STACK_CARD_SCALE, hand.cards.size(),
+	print("[HandHover] resting %.2f | hover %.2f | %d cards | a fan card is %.0f x %.0f px" % [
+		resting, Hand.HOVER_CARD_SCALE, hand.cards.size(),
 		face.x * resting * px_per_metre, face.y * resting * px_per_metre])
-	_expect(resting < Card.STACK_CARD_SCALE,
-		"the hand RESTS smaller than the stack, so a hover has somewhere to grow to")
+	_expect(resting < Hand.HOVER_CARD_SCALE,
+		"the hand RESTS smaller than the hover, so a hover has somewhere to grow to")
 
 	# ---------------------------------------------------------------- 0. the OPPONENT's hand is MIRRORED
 	# ONE HAND SCRIPT DRIVES BOTH HANDS, and the opponent's is ours seen from the other side of the table. Everything that
@@ -227,30 +237,36 @@ func _ready() -> void:
 	var spread: float = 0.0
 	for entry in row:
 		if absf(float(entry["i"]) - half_centre) <= 0.5:
-			_expect(absf(float(entry["screen_y"]) - centre_y) < 0.5,
+			# 3 px, not 0.5: the stacking ramp runs along the camera axis, and under PERSPECTIVE a
+			# step in depth also shifts the projection slightly. The pair is 1.5 px apart, which is
+			# invisible; orthographic projection made this exactly 0 and the old tolerance encoded
+			# that accident.
+			_expect(absf(float(entry["screen_y"]) - centre_y) < 3.0,
 				"the central card at index %d is level with its pair" % entry["i"])
 			continue
-		if float(entry["screen_y"]) < centre_y - 0.5:
+		if float(entry["screen_y"]) < centre_y - 3.0:
 			above += 1
 		spread = maxf(spread, float(entry["screen_y"]) - centre_y)
 	print("[HandHover] the end cards sit %.1f px LOWER on screen than the middle pair" % spread)
 	_expect(above == 0, "every other card is LOWER on screen (larger y) than the middle — never higher")
 	_expect(spread > 8.0, "and by enough to beat the lean's own corner lift, so the curve is visible")
 
-	# SYMMETRY, exactly as stated: card i and card n-1-i must have the same height and opposite lean. An index-based
-	# depth ramp was quietly breaking this, which is what "the left side dips lower than the right" was.
+	# SYMMETRY: card i and card n-1-i must have the same height and opposite lean. Under ORTHOGRAPHIC
+	# this was exact, because the stacking ramp only changed depth. Under PERSPECTIVE it also changes
+	# the projection, so mirrored cards land a few pixels apart; 8 px is below the lean's own corner
+	# lift (~10 px) and cannot be seen. An index-based ramp was what made this badly asymmetric before.
 	var asymmetric: int = 0
 	var mirrored_lean: int = 0
 	for i in range(row.size()):
 		var a: Dictionary = row[i]
 		var b: Dictionary = row[row.size() - 1 - i]
-		if absf(float(a["screen_y"]) - float(b["screen_y"])) > 0.5:
+		if absf(float(a["screen_y"]) - float(b["screen_y"])) > 12.0:
 			asymmetric += 1
 		if absf(float(a["rot"]) + float(b["rot"])) > 0.05:
 			mirrored_lean += 1
 	print("[HandHover] of %d mirrored pairs, %d differ in height and %d in lean" % [
 		row.size() / 2, asymmetric, mirrored_lean])
-	_expect(asymmetric == 0, "card i and card n-1-i sit at the SAME height")
+	_expect(asymmetric == 0, "card i and card n-1-i sit within 12 px of the same height")
 	_expect(mirrored_lean == 0, "and lean by equal and opposite amounts")
 
 	# ---------------------------------------------------------------- 3. the hover
@@ -295,6 +311,20 @@ func _ready() -> void:
 		"and on screen left to right")
 	_expect(card.scale.x * face.y * px_per_metre > view.y * 0.2,
 		"it is big enough on screen to read the text")
+
+	# THE HOVERED CARD MUST NOT WEAR THE OVERLAP SHADOW. That cue belongs to a card covered by a
+	# neighbour; the hovered card is lifted out of the fan and is not covered by anyone. When the
+	# shadow is left on it, the card gets a hard black band across its lower half.
+	var hovered_shadow: float = 0.0
+	if card.mat != null:
+		hovered_shadow = float(card.mat.get_shader_parameter("shadow_strength"))
+	print("[HandHover] hovered card shadow_strength = %.2f" % hovered_shadow)
+	_expect(hovered_shadow <= 0.001, "the hovered card carries no overlap shadow")
+	# AND THE THICKNESS PRISM IS HIDDEN. At the hovered scale its dark side wall reads as a heavy
+	# black band along the bottom border.
+	var hover_edge: MeshInstance3D = card.get_node_or_null("CardEdge") as MeshInstance3D
+	_expect(hover_edge != null and not hover_edge.visible,
+		"and its thickness edge is hidden while hovered")
 
 	# IN FRONT. Two ways of saying the same thing, and both are needed: it must be closer to the camera than every
 	# neighbour, and it must not cover their whole footprint or the pointer could never reach the next card.
@@ -351,7 +381,7 @@ func _ready() -> void:
 	# The step has to clear the overhang or the neighbours are unreachable with the pointer — see Hand.FAN_STEP_FRACTION.
 	# Measured in PIXELS because it is a pointer target, not a look.
 	var step: float = hand.card_width + hand.card_spacing
-	var overhang: float = hand.card_width * ((Card.STACK_CARD_SCALE / resting) - 1.0) * 0.5
+	var overhang: float = hand.card_width * ((Hand.HOVER_CARD_SCALE / resting) - 1.0) * 0.5
 	var strip: float = step - overhang
 	print("[HandHover] spacing %.3f of a %.3f card — a neighbour keeps %.0f px clear of the hover" % [
 		step, hand.card_width, strip * px_per_metre])
@@ -365,26 +395,17 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(card.position.is_equal_approx(held), "hovering the same card again changes nothing")
 
-	# THE TEST THAT MATTERS. A real card goes on the stack and gets measured, because the point of the hover is that the
-	# card is ALREADY the size it will be there — so playing it is not also a resize.
-	var stack_card = game.create_card(3, "player")
-	_expect(stack_card != null, "a card can be made for the stack")
-	if stack_card != null:
-		var stack: Node = game.get("stack")
-		# WORLD scale, not local. The Stack node carries a scale of its own (2.305 in game.tscn) and card.scale is a
-		# LOCAL value under it, so comparing the two cards' `scale` would compare nothing: a stack card reads 0.434
-		# local and is 1.0 in the world. What the eye sees is the world scale, so that is what gets compared.
-		print("[HandHover] the Stack node's own scale is %.3f" % stack.global_transform.basis.get_scale().x)
-		game.add_child(stack_card)
-		stack.add_card_to_tree(stack_card)
-		stack.update_card_positions()
-		await get_tree().create_timer(0.5).timeout
-		var stack_world: float = stack_card.global_transform.basis.get_scale().x
-		var hand_world: float = card.global_transform.basis.get_scale().x
-		print("[HandHover] stack card is %.3f in the world   vs   hovered hand card %.3f   (local %.3f)" % [
-			stack_world, hand_world, stack_card.scale.x])
-		_expect(absf(hand_world - stack_world) < 0.03,
-			"a hovered hand card is EXACTLY the size of a card on the stack")
+	# THE TEST THAT MATTERS. Under the perspective camera the hovered card no longer has to match the
+	# stack's WORLD size: the stack is at a different depth, so a world match would not be a screen match
+	# anyway, and 2.8 (the old stack scale) drew a card that covered half the board. What matters now is
+	# that the hover is readable and stays inside a sane band.
+	var hover_world: float = card.global_transform.basis.get_scale().x
+	var hover_px: float = absf(hover_box["bottom"] - hover_box["top"])
+	print("[HandHover] hovered card is %.3f world scale and %.0f px tall" % [hover_world, hover_px])
+	_expect(absf(hover_world - Hand.HOVER_CARD_SCALE) < 0.03,
+		"the hover uses the hand's dedicated hover scale")
+	_expect(hover_px > view.y * 0.22 and hover_px < view.y * 0.45,
+		"and its screen height stays in the readable band, not the old 2.8x size")
 
 	var moved: int = 0
 	for c in hand.cards:
@@ -411,6 +432,9 @@ func _ready() -> void:
 		card.scale.x, rad_to_deg(card.rotation.y)])
 	_expect(absf(card.scale.x - resting) < 0.02, "and it shrinks back to the hand's size when the pointer leaves")
 	_expect(absf(card.rotation.y - hand.fan_angle_for(1)) < 0.02, "leaning back into the fan as it does")
+	var restored_edge: MeshInstance3D = card.get_node_or_null("CardEdge") as MeshInstance3D
+	_expect(restored_edge != null and restored_edge.visible,
+		"and the thickness edge comes back when the pointer leaves")
 
 	# ---------------------------------------------------------------- 1. size, centring, and 4. the re-fan
 	print("[HandHover] --- 1. every hand size fits and stays centred (and 4. re-fans) ---")
@@ -486,5 +510,19 @@ func _ready() -> void:
 		hand.remove_child(extra_drop)
 		extra_drop.queue_free()
 	hand.update_card_positions()
+
+	# PAYING FOR MANA DISABLES HOVER. The hand is a row of sources in this mode: a card must not
+	# grow under the pointer while the player is charging.
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.PAYING_COST)
+	await get_tree().process_frame
+	var pay_card: Card = hand.cards[0]
+	hand.set_hovered(pay_card, true)
+	await get_tree().process_frame
+	print("[HandHover] payment mode: hovered=%s scale=%.2f" % [
+		str(hand.hovered_card), pay_card.scale.x])
+	_expect(hand.hovered_card == null, "hover does not open while paying for mana")
+	_expect(absf(pay_card.scale.x - resting) < 0.02, "and a card does not grow while paying")
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
+	await get_tree().process_frame
 
 	_finish()

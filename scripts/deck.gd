@@ -18,6 +18,9 @@ func update_card_positions():
 			0,
 			randf_range(-randomness_range.z, randomness_range.z)
 		)
-		deck_cards[i].position += base_offset + random_offset
+		# ABSOLUTE, not `+=`. The old version accumulated every time the deck was
+		# re-laid out, so the whole pile crept upward and the bottom card stopped
+		# sitting on the deck's anchor. The graveyard already works this way.
+		deck_cards[i].position = base_offset + random_offset
 	
 	#card.get_node("AnimationPlayer").play("draw")

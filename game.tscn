@@ -15,6 +15,7 @@
 [ext_resource type="PackedScene" uid="uid://ja4kal3yojgu" path="res://ballistic_arrow.tscn" id="16_80cx4"]
 [ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://Font/FOT-NewRodin Pro EB.otf" id="17_e8heu"]
 [ext_resource type="Script" uid="uid://de1gjjtkht72i" path="res://scripts/player_side.gd" id="18_playerside"]
+[ext_resource type="Script" uid="uid://bfdcrwd72djyu" path="res://scripts/camera_rig.gd" id="19_camrig"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_j5wjh"]
 sky_top_color = Color(0.92, 0.95, 1, 1)
@@ -50,6 +51,13 @@ script/source = "extends Node3D
 func _ready() -> void:
 	pass # Replace with function body."
 
+[sub_resource type="Curve3D" id="Curve_opponent_flight"]
+_data = {
+"points": PackedVector3Array(0, 0, 0, 0, 0, -0.48, 0, 0.85, 1.43, 0.32, -0.10, 0.44, -0.41, 0.13, -0.57, -0.27, 1.12, 0, 0.48, -0.19, 0, 0, 0, 0, -2.17, 2.36, -1.03),
+"tilts": PackedFloat32Array(0, 0, 0)
+}
+point_count = 3
+
 [node name="Game" type="Node3D" unique_id=880871411]
 script = ExtResource("1_80nbo")
 
@@ -61,6 +69,7 @@ transform = Transform3D(-1, 8.60946e-08, -1.51808e-08, 0, 0.173648, 0.984808, 8.
 projection = 1
 fov = 60.0
 size = 5.766
+script = ExtResource("19_camrig")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=305865392]
 transform = Transform3D(1, 0, 0, 0, 0.000506119, 1, 0, -1, 0.000506119, 0, 0, 0)
@@ -74,19 +83,19 @@ metadata/_edit_lock_ = true
 script = ExtResource("18_playerside")
 
 [node name="Deck" parent="Player" unique_id=1353674462 instance=ExtResource("4_fc0e3")]
-transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, 3.33584, 0.434855, -1.99823)
+transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, 2.65, 0.5, -1.3)
 
 [node name="Hand" parent="Player" unique_id=82001648 instance=ExtResource("5_7jktm")]
-transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 2.83598, -2.95784)
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0.95, -2.15)
 
 [node name="DamageZone" parent="Player" unique_id=747574751 instance=ExtResource("14_215e1")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.33584, 0.1, -0.521555)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.13, 0.5, -0.5)
 
 [node name="Camera" type="Camera3D" parent="Player/DamageZone" unique_id=1402199374]
 transform = Transform3D(0.9989946, 0.043924663, -0.008969118, 0, 0.20006494, 0.97978264, 0.04483103, -0.97879755, 0.19986379, -0.35699987, 1.0298424, -0.39699882)
 
 [node name="Graveyard" parent="Player" unique_id=1914532016 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 4.45, 0.25, -2)
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 3.37, 0.5, -1.3)
 
 [node name="Removed" parent="Player" unique_id=981802536 instance=ExtResource("7_mfdv2")]
 transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, -3.5, 0.25, -1.4)
@@ -97,17 +106,17 @@ script = ExtResource("18_playerside")
 controller = "opponent"
 
 [node name="Deck" parent="Opponent" unique_id=1663819249 instance=ExtResource("4_fc0e3")]
-transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, -3.583, 0.189, 2.021)
+transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, -2.9, 0.5, 1.45)
 
 [node name="Hand" parent="Opponent" unique_id=945820898 instance=ExtResource("5_7jktm")]
-transform = Transform3D(1, 0, 0, 0, 0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 2.211, 0.675683)
+transform = Transform3D(1, 0, 0, 0, 0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 0.95, 1.75)
 mirror_presentation = true
 
 [node name="DamageZone" parent="Opponent" unique_id=1462438399 instance=ExtResource("14_215e1")]
-transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.597, 0.1, 0.579)
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.13, 0.5, 0.5)
 
 [node name="Graveyard" parent="Opponent" unique_id=53191200 instance=ExtResource("7_mfdv2")]
-transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -4.7, 0.25, 2)
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -3.62, 0.5, 1.45)
 
 [node name="Removed" parent="Opponent" unique_id=890441146 instance=ExtResource("7_mfdv2")]
 transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, 3.5, 0.25, 1.4)
@@ -122,7 +131,7 @@ visible = false
 id = 66
 
 [node name="Field" parent="." unique_id=1141506722 instance=ExtResource("6_vef74")]
-transform = Transform3D(1.005, 0, 0, 0, 1.005, 0, 0, 0, 1.005, 0, 0, 0)
+transform = Transform3D(1.005, 0, 0, 0, 1.005, 0, 0, 0, 1.005, 0, 0, 0.3)
 
 [node name="BallisticArrow" parent="Field" unique_id=153787445 instance=ExtResource("16_80cx4")]
 
@@ -131,9 +140,15 @@ transform = Transform3D(-4.5, 0, 6.79481e-07, 0, 4.5, 0, -6.79481e-07, 0, -4.5, 
 visible = false
 script = ExtResource("9_iotsf")
 
-[node name="Stack" type="Node3D" parent="." unique_id=290184940]
-transform = Transform3D(-2.305, 0, -3.48045e-07, 0, 2.305, 0, 3.48045e-07, 0, -2.305, -3.76535, 2.06214, 0)
+[node name="OpponentSummonPath" type="Path3D" parent="."]
+curve = SubResource("Curve_opponent_flight")
+
+[node name="Stack" type="Node3D" parent="." unique_id=290184940 node_paths=PackedStringArray("opponent_flight_path")]
+transform = Transform3D(-2.305, 0, -3.4804535e-07, 0, 2.305, 0, 3.4804535e-07, 0, -2.305, -2.17, 2.36, -1.03)
 script = ExtResource("9_vef74")
+opponent_flight_path = NodePath("../OpponentSummonPath")
+stack_local_yaw_degrees = -3.5
+stack_screen_yaw_degrees = -27.5
 
 [node name="CardStack" parent="Stack" unique_id=401167901 instance=ExtResource("2_e2o6t")]
 transform = Transform3D(-1.4, 3.67082e-08, 2.08183e-07, 0, 1.37873, -0.243107, -2.11394e-07, -0.243107, -1.37873, 0, 0, 0)
@@ -144,7 +159,7 @@ id = 66
 script = ExtResource("10_hve3p")
 
 [node name="ButtonRack" type="Node3D" parent="Assistant" unique_id=1662856920]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.327, -2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.5, -1.55)
 
 [node name="ConfirmButton" parent="Assistant/ButtonRack" unique_id=1145933718 instance=ExtResource("11_mfdv2")]
 visible = false

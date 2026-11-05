@@ -3,10 +3,16 @@ class_name Hand
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
-## Hover: the hovered card GROWS to the size it will be once it is on the stack, STRAIGHTENS UP, LIFTS toward the camera
-## so nothing can overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
+## Hover: the hovered card GROWS to a readable size, STRAIGHTENS UP, LIFTS toward the camera so nothing can
+## overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
 ## and _hover_offset(). This is the timeline for all of it.
 const HOVER_SECONDS := 0.16
+## The size a hovered hand card grows to. This used to be Card.STACK_CARD_SCALE (2.8), which was chosen for
+## the ORTHOGRAPHIC board where a hand card and a stack card were the same size on screen. Under the
+## perspective camera the hand sits much closer to the lens, so 2.8 drew a ~340 x 480 px card that covered
+## half the board. 1.85 keeps the hover around 225 x 315 px: bigger than the resting hand, readable, and
+## still clear of the field. The stack keeps its own 2.8 world size.
+const HOVER_CARD_SCALE := 1.85
 ## How dark the artificial overlap shadow gets, and how far it fades across the covered card. These
 ## are art knobs, exported so they can be dialled in the Inspector without touching the shader.
 @export_range(0.0, 1.0, 0.01) var overlap_shadow_strength: float = 0.62
@@ -337,119 +343,9 @@ func _process(delta: float) -> void:
 ## separate left/right rules — and, crucially, the shadow travels with the card instead of snapping
 ## to its destination on the first frame.
 func _update_edge_shadows() -> void:
-	var cam: Camera3D = get_viewport().get_camera_3d()
-	var geometry: Dictionary = {}
-	if cam != null:
-		for i in range(cards.size()):
-			var card: Card = cards[i]
-			if card == null or not is_instance_valid(card) or card.get_parent() != self or card.is_dragging:
-				continue
-			# CURRENT transform, not calculate_card_position(): that returns the destination of
-			# a tween which may still be running. The shadow has to sit on the card as drawn.
-			var placement: Transform3D = card.global_transform
-			var face: Vector2 = card._card_face_size()
-			var left_x: float = cam.unproject_position(placement * Vector3(-face.x * 0.5, 0.0, 0.0)).x
-			var right_x: float = cam.unproject_position(placement * Vector3(face.x * 0.5, 0.0, 0.0)).x
-			geometry[i] = {
-				"placement": placement,
-				"face": face,
-				"span": Vector2(minf(left_x, right_x), maxf(left_x, right_x)),
-			}
+	preload("res://scripts/card_overlap_shadow.gd").update(self, cards, false, hovered_card,
+		overlap_shadow_strength, overlap_shadow_width, card_corner_radius_m)
 
-	# Clear first: a card that stops being covered must stop being shadowed.
-	for card in cards:
-		if card != null and is_instance_valid(card):
-			card.clear_edge_shadow()
-
-	if geometry.size() < 2:
-		return
-
-	var best: Dictionary = {}
-	var indices: Array = geometry.keys()
-	for a in range(indices.size()):
-		for b in range(a + 1, indices.size()):
-			var ia: int = int(indices[a])
-			var ib: int = int(indices[b])
-			var geo_a: Dictionary = geometry[ia]
-			var geo_b: Dictionary = geometry[ib]
-			var span_a: Vector2 = geo_a["span"]
-			var span_b: Vector2 = geo_b["span"]
-			var overlap: float = minf(span_a.y, span_b.y) - maxf(span_a.x, span_b.x)
-			if overlap <= 0.0:
-				continue
-
-			# Which card is visually above? A hovered card is lifted toward the camera and is
-			# therefore above both neighbours; otherwise the one further to screen-right wins,
-			# matching the hand's monotonic depth ramp.
-			var upper_index: int
-			var lower_index: int
-			if is_hovered(ia) != is_hovered(ib):
-				upper_index = ia if is_hovered(ia) else ib
-				lower_index = ib if upper_index == ia else ia
-			else:
-				var center_a: float = (span_a.x + span_a.y) * 0.5
-				var center_b: float = (span_b.x + span_b.y) * 0.5
-				upper_index = ia if center_a > center_b else ib
-				lower_index = ib if upper_index == ia else ia
-
-			var upper_span: Vector2 = geo_a["span"] if upper_index == ia else geo_b["span"]
-			var lower_span: Vector2 = geo_a["span"] if lower_index == ia else geo_b["span"]
-			var lower_width: float = maxf(lower_span.y - lower_span.x, 0.001)
-			var lower_center: float = (lower_span.x + lower_span.y) * 0.5
-			var upper_center: float = (upper_span.x + upper_span.y) * 0.5
-			var side: float = 1.0 if upper_center > lower_center else -1.0
-
-			# The upper card edge is a straight 3D line, but it is rotated independently of the
-			# lower card. Project its two endpoints into the LOWER card's UV space and pass the
-			# resulting line (edge at v=0.5 plus du/dv), so the shadow tracks the upper edge
-			# exactly instead of staying parallel to the lower card's own edge.
-			var upper_placement: Transform3D = geo_a["placement"] if upper_index == ia else geo_b["placement"]
-			var upper_face: Vector2 = geo_a["face"] if upper_index == ia else geo_b["face"]
-			var lower_placement: Transform3D = geo_a["placement"] if lower_index == ia else geo_b["placement"]
-			var lower_face: Vector2 = geo_a["face"] if lower_index == ia else geo_b["face"]
-			var edge_local_x: float = (-upper_face.x * 0.5) if side > 0.0 else (upper_face.x * 0.5)
-			var p0_world: Vector3 = upper_placement * Vector3(edge_local_x, 0.0, -upper_face.y * 0.5)
-			var p1_world: Vector3 = upper_placement * Vector3(edge_local_x, 0.0, upper_face.y * 0.5)
-			var lower_inv: Transform3D = lower_placement.affine_inverse()
-			var p0: Vector3 = lower_inv * p0_world
-			var p1: Vector3 = lower_inv * p1_world
-			var u0: float = 0.5 + p0.x / maxf(lower_face.x, 0.0001)
-			var v0: float = 0.5 + p0.z / maxf(lower_face.y, 0.0001)
-			var u1: float = 0.5 + p1.x / maxf(lower_face.x, 0.0001)
-			var v1: float = 0.5 + p1.z / maxf(lower_face.y, 0.0001)
-			var dv: float = v1 - v0
-			var slope: float = (u1 - u0) / dv if absf(dv) > 0.0001 else 0.0
-			var edge: float = u0 + slope * (0.5 - v0)
-
-			var visible_fraction: float = overlap / lower_width
-			var strength: float = overlap_shadow_strength * clampf(visible_fraction / 0.12, 0.45, 1.0)
-			# The card mesh has a real rounded corner radius of 0.03 m. Convert it through the
-			# upper card's scale and back into the LOWER card's UV, because that is the space
-			# the shader draws in.
-			var upper_scale: float = (geo_a["placement"] if upper_index == ia else geo_b["placement"]).basis.get_scale().x
-			var lower_scale: float = (geo_a["placement"] if lower_index == ia else geo_b["placement"]).basis.get_scale().x
-			var radius_local: float = card_corner_radius_m * upper_scale / maxf(lower_scale, 0.0001)
-			var corner_u: float = radius_local / maxf(lower_face.x, 0.0001)
-			var corner_v: float = radius_local / maxf(lower_face.y, 0.0001)
-			var previous: Dictionary = best.get(lower_index, {})
-			if previous.is_empty() or overlap > float(previous.get("overlap", 0.0)):
-				best[lower_index] = {
-					"side": side,
-					"edge": edge,
-					"slope": slope,
-					"strength": strength,
-					"corner_u": corner_u,
-					"corner_v": corner_v,
-					"overlap": overlap,
-				}
-
-	for index in best:
-		var card: Card = cards[int(index)]
-		var entry: Dictionary = best[index]
-		card.set_edge_shadow(entry["side"], entry["edge"], entry["slope"], entry["strength"],
-			overlap_shadow_width, entry["corner_u"], entry["corner_v"])
-		
-		
 func last_card_position():
 	return start_x + (card_width + card_spacing)*cards.size()
 	
@@ -476,7 +372,7 @@ const FAN_MAX_TILT_DEGREES := 12.0
 ## decides how big the hand LOOKS, and it is measured against the card's own height, so it has to be read together with
 ## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". At 80% of a 225 px
 ## card the band is ~180 px, which keeps the whole cost strip and most of the art above the edge.
-const FAN_VISIBLE_FRACTION := 0.80
+const FAN_VISIBLE_FRACTION := 0.62
 ## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. The drop is this times
 ## `r * r`, where `r` is the card's offset from the middle over half the row — so it is a `t * t` curve, symmetric by
 ## construction, and it can never exceed this fraction however big the hand gets. THE MIDDLE IS HIGHEST.
@@ -538,14 +434,28 @@ func spacing() -> float:
 	var fit: float = maxf(card_width * 0.2, _available_width() - card_width - FAN_SIDE_MARGIN * 2.0) / float(n - 1)
 	return minf(card_width * step_fraction, fit)
 
-## How much of the board the camera can see across, in metres. The hand's `fits` test is in screen terms because that is
-## where "off the side of the screen" means anything.
-func _available_width() -> float:
+## Pixels per metre at `world_pos`, for a displacement PERPENDICULAR to the view axis.
+##
+## Orthographic: constant, so `view_h / cam.size` is the whole story. Perspective: it goes as
+## 1/depth, so every screen-to-world conversion has to be evaluated at the depth it is used at.
+## The hand used to hard-code the orthographic version in three places, which is exactly why a
+## perspective camera made the fan explode: `cam.size` is 0 in perspective.
+func _px_per_metre_at(world_pos: Vector3) -> float:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam == null:
-		return 10.0
+		return 1.0
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	if cam.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		return view_h / maxf(cam.size, 0.001)
+	var forward: Vector3 = -cam.global_transform.basis.z.normalized()
+	var depth: float = maxf(forward.dot(world_pos - cam.global_position), 0.01)
+	return view_h / (2.0 * depth * tan(deg_to_rad(cam.fov) * 0.5))
+
+## How much of the board the camera can see across, in metres, AT THIS HAND'S DEPTH. The hand's
+## `fits` test is in screen terms because that is where "off the side of the screen" means anything.
+func _available_width() -> float:
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	return view.x / (view.y / maxf(cam.size, 0.001))
+	return view.x / maxf(_px_per_metre_at(global_position), 0.001)
 
 ## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and against the arc it sits on it is
 ## NEGATED: a card's up axis is its local -Z, so its arc position and its tilt run opposite ways. Flip only one of the
@@ -592,7 +502,10 @@ func fan_sag_for(i: int) -> float:
 
 func _sink_offset() -> Vector3:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cards.is_empty():
+	# PROJECTION-AGNOSTIC. This used to bail out unless the camera was orthographic, because the
+	# old conversion assumed a constant pixels-per-metre. The conversion below now asks the camera
+	# at the hand's own depth, so perspective works with the same code.
+	if cam == null or cards.is_empty():
 		return Vector3.ZERO
 	var half: Vector2 = cards[0]._card_face_size() * 0.5
 	var xf: Transform3D = global_transform * Transform3D(Basis().scaled(Vector3.ONE * hand_scale), Vector3.ZERO)
@@ -604,7 +517,9 @@ func _sink_offset() -> Vector3:
 		top = minf(top, y)
 		bottom = maxf(bottom, y)
 	var view_h: float = get_viewport().get_visible_rect().size.y
-	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
+	# Evaluated at the CARD's depth. A displacement along the camera's up axis is perpendicular to
+	# the view axis, so it does not change depth — one pass is exact in both projections.
+	var px_per_metre: float = _px_per_metre_at(xf.origin)
 	# WHICH EDGE, AND WHICH EDGE OF THE CARD. Ours hangs off the BOTTOM: its top edge is left FAN_VISIBLE_FRACTION of a
 	# card above the bottom of the screen. A MIRRORED hand hangs off the TOP instead, so its BOTTOM edge is left the same
 	# fraction below the top — which is what puts the opponent's cards up against the top of the screen rather than ours.
@@ -709,6 +624,12 @@ func set_hovered(card: Card, entered: bool) -> void:
 	# hover animation on cards nobody can read.
 	if mirror_presentation:
 		return
+	# WHILE PAYING FOR MANA the hand is a row of sources, not a reading surface: cards are clicked
+	# to charge, and growing one under the pointer moves the row while the player is trying to pick
+	# sources. Ignore ENTER requests; a LEAVE must still be honoured so a card already hovered when
+	# the payment opened can shrink back.
+	if entered and GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
+		return
 	var was: Card = hovered_card
 	if entered:
 		hovered_card = card
@@ -719,11 +640,22 @@ func set_hovered(card: Card, entered: bool) -> void:
 		return
 	if was != null and is_instance_valid(was):
 		_size_card(was, false)
+		_set_hover_edge(was, true)
 	if hovered_card != null:
 		_size_card(hovered_card, true)
+		_set_hover_edge(hovered_card, false)
 	# RE-LAY OUT: the hovered card's POSITION is part of the hover now — lifted toward the camera and fitted to the
 	# bottom of the screen (see _hover_offset). animate_card()'s tween is what animates it out and back.
 	update_card_positions()
+
+
+## THE HOVERED CARD'S THICKNESS EDGE IS HIDDEN. The dark rounded prism that gives a card its thickness
+## reads as a heavy black band along the bottom border once the card is grown and lifted — the hover is
+## seen closer than any other card. Hide it for the duration; the rest of the fan keeps its edge.
+func _set_hover_edge(card: Card, on: bool) -> void:
+	var edge := card.get_node_or_null("CardEdge") as MeshInstance3D
+	if edge != null:
+		edge.visible = on
 
 
 ## Where the HOVERED card has to sit so its whole face can be read: pushed toward the camera so nothing overlaps it,
@@ -739,9 +671,9 @@ func set_hovered(card: Card, entered: bool) -> void:
 ## of them wins the depth test. A flat 0.15 m lift loses that race from eight cards onward, which is exactly what "even
 ## when I hover over a card I can't see it fully" was: the cards to its right were drawn over it.
 ##
-## Clearing the whole ramp is the requirement, so the lift IS the whole ramp plus a margin — and it is free. The lift runs
-## along the camera's own axis and the camera is orthographic, so the card does not move a single pixel; only the order
-## the depth buffer draws them in changes.
+## Clearing the whole ramp is the requirement, so the lift IS the whole ramp plus a margin. Under an
+## orthographic camera the lift is free — it changes depth and nothing else. Under perspective it also
+## makes the card slightly larger, which reads as "coming toward you" and is desirable for a hover.
 func _hover_lift() -> float:
 	return (float(cards.size()) + 2.0) * CARD_STACK_HEIGHT
 
@@ -752,17 +684,20 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var lift: Vector3 = Vector3.UP * _hover_lift()
 	if cam != null:
-		lift = cam.global_transform.basis.z.normalized() * _hover_lift()
-	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL:
-		# Under perspective a fit would have to be solved iteratively, because moving the card would change how big it
-		# is. Better to leave it lifted than to half-do it.
+		# WORLD camera axis -> LOCAL offset. The old version added the world vector straight into
+		# `base`, which is local; on the 180-degree-yawed player hand that tilted the lift away from
+		# the view axis. Under ortho it was close enough to clear the ramp; under perspective only
+		# ~70% of it landed on the depth axis, so the leftmost card stopped clearing its neighbours.
+		lift = global_transform.basis.inverse() \
+			* (cam.global_transform.basis.z.normalized() * _hover_lift())
+	if cam == null:
 		return lift
 	var card: Card = cards[i]
 	var half: Vector2 = card._card_face_size() * 0.5
 	# Measured at the size it is GROWING TO and UPRIGHT, because that is what the fit is for: update_card_positions()
 	# untilts the hovered card, and fitting a tilted one would leave the upright card sitting somewhere else.
 	var placement: Transform3D = global_transform * Transform3D(
-		Basis().scaled(Vector3.ONE * Card.STACK_CARD_SCALE), base + lift)
+		Basis().scaled(Vector3.ONE * HOVER_CARD_SCALE), base + lift)
 	# Unrolled rather than looped: the four corners of a quad, and this way there is no Variant in a Transform3D
 	# multiply.
 	var lowest: float = -INF
@@ -771,7 +706,9 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(-half.x, 0.0, half.y)).y)
 	lowest = maxf(lowest, cam.unproject_position(placement * Vector3(half.x, 0.0, half.y)).y)
 	var view_h: float = get_viewport().get_visible_rect().size.y
-	var px_per_metre: float = view_h / maxf(cam.size, 0.001)
+	# At the CARD's depth, after the lift. Moving along the camera's up axis is perpendicular to the
+	# view axis, so the fit does not change its own scale while it solves.
+	var px_per_metre: float = _px_per_metre_at(placement.origin)
 	# AND IT FITS TO A LINE ABOVE THE EDGE, NOT TO THE EDGE ITSELF. This used to target `view_h` exactly, which put the
 	# hovered card's bottom on the LAST PIXEL ROW of the window: every corner is on screen, so the check passed, but the
 	# card's bottom border and the power box just above it were pressed against the window edge and read as cut off —
@@ -782,7 +719,7 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	return lift + global_transform.basis.inverse() * world_move
 
 
-## Grow or shrink one card between the hand's resting size and the stack's.
+## Grow or shrink one card between the hand's resting size and the readable hover size.
 func _size_card(card: Card, grown: bool) -> void:
 	if card == null or not is_instance_valid(card) or card.current_zone != Card.Zone.HAND:
 		return
@@ -790,14 +727,15 @@ func _size_card(card: Card, grown: bool) -> void:
 	# scale belongs to the draw tween — growing it here would fight that. Same guard update_card_positions() uses.
 	if card.get_parent() != self:
 		return
-	# A card being dragged KEEPS the size it grew to: it is on its way to the stack, which draws cards at exactly
-	# that size, and shrinking it under the pointer would only make it grow again on the way there.
+	# A card being dragged KEEPS the size it grew to: shrinking it under the pointer would only make it
+	# grow again on the way there. The destination zone re-scales it on arrival.
 	if not grown and card.is_dragging:
 		return
-	# THE STACK'S SIZE, exactly. Not a multiple of the resting size: this card is on its way to the stack, and arriving
-	# there at the size it is already drawn at is the whole point of matching the two. Card.STACK_CARD_SCALE is the one
-	# number behind both, and it is chosen to be readable — see the note on it in Card.
-	card.tween_to_scale(Card.STACK_CARD_SCALE if grown else hand_scale, HOVER_SECONDS)
+	# THE HOVER SIZE, deliberately NOT Card.STACK_CARD_SCALE. That value was tuned for the orthographic
+	# board, where the hand and the stack were the same size on screen. Under perspective the hand is much
+	# closer to the camera, so 2.8 produced a card that covered half the board. The stack keeps its own
+	# world size; the hover is optimised for reading.
+	card.tween_to_scale(HOVER_CARD_SCALE if grown else hand_scale, HOVER_SECONDS)
 
 
 ## Is the card at fan index `i` the one the pointer is over?
@@ -838,6 +776,29 @@ func _release_hover(card: Card) -> void:
 		hovered_card = null
 
 
+## STAGE THE OPPONENT'S CAST AT THE MIDDLE OF THE FAN. The opponent's hand cards are all
+## identical face-down backs, so moving the card being cast to the middle is invisible. It
+## means the flight starts from a card the player can ALREADY SEE in the hand, instead of
+## appearing at the middle only when the animation starts.
+func stage_cast_card_at_middle(card: Card) -> void:
+	if card == null or not cards.has(card):
+		return
+	var mid: int = cards.size() / 2
+	cards.erase(card)
+	cards.insert(mid, card)
+	for i in range(cards.size()):
+		cards[i].index = i
+	# Kill the fan tween that may still be carrying it toward its old slot.
+	if card.has_method("stop_hand_layout"):
+		card.stop_hand_layout()
+	# Snap the cast card onto the middle slot; it is the card being picked up.
+	card.position = calculate_card_position(mid)
+	card.rotation = Vector3(0.0, fan_angle_for(mid), 0.0)
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		# A hair toward the camera so it reads as sitting on top of the middle card.
+		card.global_position += cam.global_transform.basis.z.normalized() * 0.02
+
 func remove_card(card):
 	_release_hover(card)
 	cards.remove_at(card.index)
@@ -858,7 +819,14 @@ func charge(card) -> bool:
 		if not criteria.is_empty() and not field.has_viable_target(criteria, card, "Summon"):
 			push_error("No viable target for %s" % card.card_name)
 			return false
+		# Put the opponent's cast at the middle of their face-down fan BEFORE it leaves,
+		# so the animation starts from a card already visible in the hand.
+		if card.controller == "opponent":
+			stage_cast_card_at_middle(card)
+			card.global_position += stack.opponent_launch_offset(self)
 		remove_card(card)
+		if card.controller == "opponent":
+			update_card_positions()
 		charging_card = card
 		charge_start.emit(card)
 		return true
@@ -912,8 +880,12 @@ func _ready() -> void:
 	# now, so recomputing on every mode change cannot leave a stale glow behind.
 	GlobalVariables.player_mode_change.connect(_on_player_mode_change)
 
-func _on_player_mode_change(_pm: GlobalVariables.Player_Mode) -> void:
+func _on_player_mode_change(pm: GlobalVariables.Player_Mode) -> void:
 	refresh_highlights()
+	# PAYMENT TURNS HOVER OFF. A card may already be grown when the payment modal opens; clear it
+	# so the row is stable while the player charges sources.
+	if pm == GlobalVariables.Player_Mode.PAYING_COST and hovered_card != null:
+		set_hovered(hovered_card, false)
 
 ## Recompute the "selectable" glow for every card in hand from the current mode.
 ## One owner, derived state — no flow can leave a ring stuck on.

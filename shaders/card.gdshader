@@ -27,6 +27,7 @@ uniform float shadow_slope = 0.0;
 // The card mesh itself has rounded corners. A straight edge line would run through the
 // corner and leave the shadow detached there, so the edge also curls inward over the last
 // `shadow_corner_v` of the card height, by `shadow_corner_u` of its width.
+uniform vec2 shadow_v_range = vec2(0.0, 1.0);
 uniform float shadow_corner_u = 0.0;
 uniform float shadow_corner_v = 0.0;
 uniform float shadow_width : hint_range(0.001, 0.30) = 0.055;
@@ -189,8 +190,8 @@ void fragment() {
     // Rounded-corner curl. At the card middle the shift is zero; at either end it reaches
     // the corner radius and follows the quarter-ellipse of the upper card's silhouette.
     if (shadow_corner_v > 0.0001) {
-        float q_top = clamp((shadow_corner_v - UV.y) / shadow_corner_v, 0.0, 1.0);
-        float q_bottom = clamp((UV.y - (1.0 - shadow_corner_v)) / shadow_corner_v, 0.0, 1.0);
+        float q_top = clamp((shadow_v_range.x + shadow_corner_v - UV.y) / shadow_corner_v, 0.0, 1.0);
+        float q_bottom = clamp((UV.y - (shadow_v_range.y - shadow_corner_v)) / shadow_corner_v, 0.0, 1.0);
         float q = max(q_top, q_bottom);
         if (q > 0.0) {
             float shift = shadow_corner_u * (1.0 - sqrt(max(0.0, 1.0 - q * q)));
@@ -204,9 +205,9 @@ void fragment() {
     // change per screen pixel, so fading across one pixel hides the seam without making the
     // contact shadow visibly softer.
     float aa = max(fwidth(d), 0.00001);
-    float visible = smoothstep(-aa, aa, d);
-    float soft = exp(-d / max(shadow_width, 0.0001));
-    float contact = exp(-d / max(shadow_width * 0.22, 0.0001));
+    float visible = smoothstep(-aa, aa, d) * step(shadow_v_range.x, UV.y) * step(UV.y, shadow_v_range.y);
+    float soft = exp(-max(d, 0.0) / max(shadow_width, 0.0001));
+    float contact = exp(-max(d, 0.0) / max(shadow_width * 0.22, 0.0001));
     float shade = (contact * 0.42 + soft * 0.58) * visible * shadow_strength;
     shade = clamp(shade, 0.0, 0.82);
 

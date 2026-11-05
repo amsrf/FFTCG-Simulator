@@ -18,6 +18,8 @@ var code: String
 var crystal_scene
 var crystal_instance
 var current_state
+var _stack_face: SubViewport
+var _printed_texture: Texture2D
 var mat: ShaderMaterial
 @export var tapped = false;
 @export var text = '';
@@ -201,6 +203,80 @@ func _ready():
 	camera = get_viewport().get_camera_3d()
 	crystal_scene = load(CRYSTAL_SCENE_PATH)
 	_build_target_border()
+	_install_card_edge()
+
+## CARDS HAVE THICKNESS. The art mesh is a single flat quad (its AABB is ~0 in y), which reads as
+## a decal as soon as the camera is tilted. This builds a rounded-rectangle prism ONCE and shares
+## it across every card, so the silhouette gets a real side wall without paying for a mesh per card.
+##
+## The prism matches the face's corner radius, so its outline cannot poke out past the rounded
+## corners, and its top face is left open because the card art covers it.
+const CARD_EDGE_THICKNESS := 0.02
+const CARD_EDGE_RADIUS := 0.03
+const CARD_EDGE_CORNER_STEPS := 5
+static var _edge_mesh_cache: ArrayMesh = null
+static var _edge_material_cache: StandardMaterial3D = null
+
+func _install_card_edge() -> void:
+	if has_node("CardEdge"):
+		return
+	if _edge_mesh_cache == null:
+		_edge_mesh_cache = _build_card_edge_mesh(
+			_card_face_size(), CARD_EDGE_THICKNESS, CARD_EDGE_RADIUS)
+	if _edge_material_cache == null:
+		_edge_material_cache = StandardMaterial3D.new()
+		_edge_material_cache.albedo_color = Color(0.055, 0.06, 0.075)
+		_edge_material_cache.metallic = 0.15
+		_edge_material_cache.roughness = 0.55
+		_edge_material_cache.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var edge := MeshInstance3D.new()
+	edge.name = "CardEdge"
+	edge.mesh = _edge_mesh_cache
+	edge.material_override = _edge_material_cache
+	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(edge)
+
+static func _build_card_edge_mesh(face: Vector2, thickness: float, radius: float) -> ArrayMesh:
+	var hx: float = face.x * 0.5
+	var hz: float = face.y * 0.5
+	var r: float = minf(radius, minf(hx, hz))
+	# Counter-clockwise in the XZ plane, starting at the top-right corner.
+	var corners: Array = [
+		[Vector2(hx - r, hz - r), 0.0],
+		[Vector2(-(hx - r), hz - r), PI * 0.5],
+		[Vector2(-(hx - r), -(hz - r)), PI],
+		[Vector2(hx - r, -(hz - r)), PI * 1.5],
+	]
+	var outline: Array[Vector2] = []
+	for corner in corners:
+		var centre: Vector2 = corner[0]
+		var start: float = corner[1]
+		for step in range(CARD_EDGE_CORNER_STEPS + 1):
+			var angle: float = start + (PI * 0.5) * (float(step) / CARD_EDGE_CORNER_STEPS)
+			outline.append(centre + Vector2(cos(angle), sin(angle)) * r)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var count: int = outline.size()
+	for i in range(count):
+		var a: Vector2 = outline[i]
+		var b: Vector2 = outline[(i + 1) % count]
+		var side: Vector2 = (b - a).normalized()
+		var normal := Vector3(side.y, 0.0, -side.x)
+		st.set_normal(normal); st.add_vertex(Vector3(a.x, 0.0, a.y))
+		st.set_normal(normal); st.add_vertex(Vector3(b.x, 0.0, b.y))
+		st.set_normal(normal); st.add_vertex(Vector3(b.x, -thickness, b.y))
+		st.set_normal(normal); st.add_vertex(Vector3(a.x, 0.0, a.y))
+		st.set_normal(normal); st.add_vertex(Vector3(b.x, -thickness, b.y))
+		st.set_normal(normal); st.add_vertex(Vector3(a.x, -thickness, a.y))
+	# Bottom cap, so the edge still reads on a card seen from below.
+	var bottom_centre := Vector3(0.0, -thickness, 0.0)
+	for i in range(count):
+		var a: Vector2 = outline[i]
+		var b: Vector2 = outline[(i + 1) % count]
+		st.set_normal(Vector3.DOWN); st.add_vertex(bottom_centre)
+		st.set_normal(Vector3.DOWN); st.add_vertex(Vector3(b.x, -thickness, b.y))
+		st.set_normal(Vector3.DOWN); st.add_vertex(Vector3(a.x, -thickness, a.y))
+	return st.commit()
 	
 func initialize(card_id: int, card_controller: String):
 	id = card_id
@@ -256,11 +332,12 @@ func set_revealed(is_revealed: bool) -> void:
 ## the covering card is to this card's right, -1 when it is to the left. `edge` is the covering
 ## card's edge in this card's UV.x, and `strength` fades the whole band.
 func set_edge_shadow(side: float, edge: float, slope: float, strength: float, width: float = 0.055,
-		corner_u: float = 0.0, corner_v: float = 0.0) -> void:
+		corner_u: float = 0.0, corner_v: float = 0.0, v_range := Vector2(0, 1)) -> void:
 	if mat == null:
 		return
 	mat.set_shader_parameter("shadow_side", 1.0 if side >= 0.0 else -1.0)
 	mat.set_shader_parameter("shadow_edge", edge)
+	mat.set_shader_parameter("shadow_v_range", v_range)
 	mat.set_shader_parameter("shadow_slope", slope)
 	mat.set_shader_parameter("shadow_corner_u", maxf(corner_u, 0.0))
 	mat.set_shader_parameter("shadow_corner_v", maxf(corner_v, 0.0))
@@ -302,6 +379,7 @@ func assign_card_texture():
 	var shader = load("res://shaders/card.gdshader")
 	mat = ShaderMaterial.new()
 	mat.shader = shader
+	_printed_texture = full_texture
 	mat.set_shader_parameter("texture_albedo", full_texture)
 	mat.set_shader_parameter("effect_enabled", false)
 	mat.set_shader_parameter("shadow_strength", 0.0)
@@ -437,6 +515,10 @@ func _on_card_area_3d_card_grabbed(_card: Variant):
 ## Duck-typed on purpose — asking the parent whether it offers the preview keeps this handler from
 ## depending on the Field's class name, and a card parented anywhere else simply does nothing.
 func _on_card_area_3d_mouse_entered():
+	# PAYING FOR MANA disables every card hover: the hand is a row of sources and the field is not
+	# what the player is choosing between. The hand's own gate lives in Hand.set_hovered().
+	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
+		return
 	var stack: Stack = get_parent() as Stack
 	if stack != null:
 		stack.set_hovered(self, true)
@@ -511,11 +593,12 @@ const READABLE_ROTATION := Vector3(0, PI, 0)
 ## a card played straight from the hand then lands on the stack at the size it is already drawn at, instead of
 ## popping. That only stays true while this and the table agree, so the table reads this constant.
 ##
-## 2.8 is a SIZE CHOICE, not a layout one: this is also the size a hovered hand card grows to (Hand._size_card), so it
-## has to be comfortably bigger than a resting fan card — which is 2.0 — and big enough to read a card without a squint:
-## about 315 px tall at 1080p, a third of the screen. The margin over 2.0 is also what keeps a hover feeling like a
-## hover rather than a nudge.
-const STACK_CARD_SCALE := 2.8
+## 1.0 is a SIZE CHOICE for the perspective board. The stack sits closer to the lens than the field,
+## so 1.0 world renders around 1.25x a field card — big enough to read, small enough to sit in the
+## board instead of reading as a UI overlay. The old 2.8 was tuned for orthographic, where the stack
+## and the hand were the same size on screen; under the tilted camera it drew ~345 x 444 px. The hand
+## hover has its own HOVER_CARD_SCALE, and the stack's pose lives in the Stack node's "Stack Rotation" exports.
+const STACK_CARD_SCALE := 1.0
 
 ## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so writing a world size
 ## into it multiplies by this — which is what a stack card used to do, coming out 2.3x bigger than the number said.
@@ -531,25 +614,34 @@ const STACK_CONTAINER_SCALE := 2.305
 ## its per-card tilt — but it starts from here.
 ##
 ## `scale` is the size a card is drawn at in that zone, and this table is the only
-## place either number lives. The two that matter are HAND and STACK: a fan card RESTS
-## at 1.4, and hovering it grows it to STACK_CARD_SCALE, so the hovered card is
-## EXACTLY the size it will be on the stack and playing it is not a resize.
+## place either number lives. The two that matter are HAND and STACK: the hand has its own
+## resting and hover sizes (Hand.HOVER_CARD_SCALE), and the stack is drawn at 1.2 in WORLD,
+## the same as a field card, so a played card does not jump to an enlarged size under the
+## perspective camera.
+## Deck, graveyard and removed piles are parented to nodes scaled 1.4 (see game.tscn), while a
+## field card is 1.2 in WORLD. `scale` in this table is LOCAL, so a pile card has to carry
+## 1.2 / 1.4 or it is drawn 17% larger than the cards on the board — which is exactly how the
+## deck and graveyard ended up looking oversized.
+const PILE_LOCAL_SCALE := 1.2 / 1.4
+
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
-	Zone.DECK:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
-	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. 2.0 makes a card 225 px tall at 1080p,
-	# and with 70% of it above the bottom edge (Hand.FAN_VISIBLE_FRACTION) that is a ~157 px band — enough to read, and
-	# the reason this went up from 1.6: 46% of a 180 px card was an 82 px strip, which is technically "40-50% visible"
-	# and looked like nothing.
-	Zone.HAND:      {"scale": 2.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.DECK:      {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
+	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it.
+	#
+	# 2.0 was tuned for the ORTHOGRAPHIC board, where the hand sat 1.5 m below the camera and
+	# apparent size ignored distance. Under the perspective rig the hand is 6.2 m away and is
+	# magnified by proximity, so 2.0 produced a ~350 px card. 1.2 keeps the resting hand at
+	# roughly the old on-screen band while still reading as larger than a field card.
+	Zone.HAND:      {"scale": 1.35, "rotation": Vector3.ZERO,     "power_ui": false},
 	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
 	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
 	# WORLD. See STACK_CONTAINER_SCALE.
 	Zone.STACK:     {"scale": STACK_CARD_SCALE / STACK_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
-	Zone.GRAVEYARD: {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.GRAVEYARD: {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	# Removed from the game looks exactly like the Break Zone: a plain untilted card with no readout. It gets its own
 	# zone value so the viewer can tell the two piles apart and so nothing can "leave the Break Zone" out of it.
-	Zone.REMOVED:   {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
+	Zone.REMOVED:   {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	# TODO: the damage-zone node is identity like the Field, so by this rule it
 	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
 	# the OPPONENT's damage zone is authored with a +90 deg frame instead.
@@ -589,7 +681,17 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## reparented and BEFORE the destination lays it out: it normalises rotation and
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
-func enter_zone(zone: Zone) -> void:
+func enter_zone(zone: Zone, stack_wording: String = "") -> void:
+	if zone == Zone.STACK and _stack_face == null:
+		_stack_face = preload("res://stack_ability_face.tscn").instantiate()
+		add_child(_stack_face)
+		_stack_face.configure(_printed_texture, element, stack_wording if not stack_wording.is_empty() else text)
+		mat.set_shader_parameter("texture_albedo", _stack_face.get_texture())
+	elif zone != Zone.STACK and _stack_face != null:
+		mat.set_shader_parameter("texture_albedo", _printed_texture)
+		remove_child(_stack_face)
+		_stack_face.queue_free()
+		_stack_face = null
 	# A zone change is not a teleport in progress: normal cards must always be
 	# fully opaque. The teleport path sets progress back to 1 immediately after
 	# entering the field, while the card is still invisible.
@@ -640,7 +742,7 @@ func enter_zone(zone: Zone) -> void:
 	refresh_status_visuals()
 		
 @export var tap_speed: float = 0.3
-@export var tap_angle: float = -90.0
+@export var tap_angle: float = -15.0
 
 ## The y rotation this card holds when it is NOT tapped. Set on entering a zone, because that is the one place a card's
 ## resting orientation is decided — so tap()/untap() always have an absolute angle to aim at.
@@ -654,9 +756,11 @@ func tap():
 	if tween != null and tween.is_valid():
 		tween.kill()
 	
-	# AN ABSOLUTE ANGLE, NOT "90 degrees from wherever it happens to be". Both tweens used to be relative, so killing one
-	# mid-flight — which is exactly what an activation that gets undone immediately does — left the card part-way round,
-	# and every later tap started from a worse angle than the last. Repeated tap/untap cycles walked the card around.
+	# AN ABSOLUTE ANGLE, NOT "the tap angle from wherever it happens to be". Both tweens used to be relative, so killing
+	# one mid-flight — which is exactly what an activation that gets undone immediately does — left the card part-way
+	# round, and every later tap started from a worse angle than the last. Repeated tap/untap cycles walked the card
+	# around. The angle itself is a SMALL tilt (15°), not the old quarter turn: a tapped card only needs to read as
+	# "resting", and a full 90° turned its art and stats sideways on a board that is now seen in perspective.
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y + tap_angle, tap_speed)
 

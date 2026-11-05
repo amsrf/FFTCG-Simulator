@@ -27,7 +27,7 @@
 ; x = width, y = the click depth around the plate, z = the face height. Sized to match the model at
 ; the scale below; tests/button_probe.tscn fails if the two drift apart.
 [sub_resource type="BoxShape3D" id="BoxShape3D_gem"]
-size = Vector3(1.803, 0.25, 0.345)
+size = Vector3(1.381, 0.191, 0.264)
 
 ; The placeholder under Background needs a REAL mesh with at least one surface. With no mesh at all,
 ; BigButton's `get_surface_override_material(0)` fails its index check and prints an error every
@@ -100,7 +100,7 @@ mesh = SubResource("QuadMesh_text")
 ; the value for the old 0.34-thick plate, which sank the button 0.027 m once the plate was thinned.
 ; gem_button.gd exposes face_height() and tests/button_probe.tscn asserts it lands on 0.
 [node name="Background" type="Node3D" parent="."]
-transform = Transform3D(0.392, 0, 0, 0, 0.392, 0, 0, 0, 0.392, 0, -0.0392, 0)
+transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, -0.03, 0)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Background"]
 mesh = SubResource("PlaneMesh_placeholder")

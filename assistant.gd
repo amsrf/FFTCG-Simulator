@@ -271,14 +271,14 @@ func _refresh_cost_readout() -> void:
 # ------------------------------------------------------------------
 func charge(amount: int, type: String):
 	mana_acc[type] += amount
-	if can_pay_cost():
-		confirmButton.set_disabled(false)
+	# ALWAYS RE-DERIVE. Enabling only when full and disabling only when empty left the button
+	# stale after a deselect: selecting a source and clicking it again to cancel kept Confirm green.
+	confirmButton.set_disabled(not can_pay_cost())
 	_refresh_cost_readout()
 
 func discharge(amount: int, type: String):
 	mana_acc[type] -= amount
-	if not can_pay_cost():
-		confirmButton.set_disabled(true)
+	confirmButton.set_disabled(not can_pay_cost())
 	_refresh_cost_readout()
 
 func reset_buttons():
@@ -374,14 +374,15 @@ func _on_field_card_activated_ability(cost: Dictionary) -> void:
 
 func _on_hand_selected_cards_for_mana_has_changed(amount: int, element: String) -> void:
 	mana_acc[element] += amount
-	if can_pay_cost():
-		confirmButton.set_disabled(false)
+	# The signal carries NEGATIVE amounts when a source is deselected, so this must be able to
+	# DISABLE as well as enable. The old `if can_pay_cost()` only ever enabled, which is why
+	# cancelling a charge left the Confirm button green.
+	confirmButton.set_disabled(not can_pay_cost())
 	_refresh_cost_readout()
 
 func _on_field_selected_cards_for_mana_has_changed(amount: int, element: String) -> void:
 	mana_acc[element] += amount
-	if can_pay_cost():
-		confirmButton.set_disabled(false)
+	confirmButton.set_disabled(not can_pay_cost())
 	_refresh_cost_readout()
 
 # ------------------------------------------------------------------

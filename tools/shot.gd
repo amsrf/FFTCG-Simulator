@@ -67,6 +67,52 @@ func _ready() -> void:
 						fronts[idx].get("card_name"), hover_field.call("preview_visible")])
 				else:
 					print("[Shot] --hover-field %d is out of range (the board has %d)" % [idx, fronts.size()])
+		# --hover-hand <index>: drive the hand's REAL hover so the hovered card's size and fit can be
+		# captured without a pointer. Uses the same set_hovered() the mouse does.
+		if _args.has("hover-hand"):
+			await _settle(3)
+			var hand_node: Node = game.get("hand")
+			var hand_idx: int = int(_args["hover-hand"])
+			var hand_cards: Array = hand_node.get("cards") if hand_node != null else []
+			if hand_idx >= 0 and hand_idx < hand_cards.size():
+				hand_node.call("set_hovered", hand_cards[hand_idx], true)
+				await _settle(8)
+				print("[Shot] hand hover on index %d | scale %.2f" % [
+					hand_idx, hand_cards[hand_idx].scale.x])
+			else:
+				print("[Shot] --hover-hand %d is out of range" % hand_idx)
+		# --stack-card <id[,id...]>: put real cards on the Stack so the stack presentation can be
+		# captured without playing a match. Uses the same add_card_to_tree() the game uses.
+		if _args.has("stack-card"):
+			await _settle(3)
+			var stack_node: Node = game.get("stack")
+			var ids: PackedStringArray = str(_args["stack-card"]).split(",", false)
+			var added: int = 0
+			for id_text in ids:
+				var cid: int = int(id_text.strip_edges())
+				var c = game.call("create_card", cid, "player")
+				if stack_node != null and c != null:
+					game.add_child(c)
+					stack_node.call("add_card_to_tree", c)
+					added += 1
+			if stack_node != null:
+				stack_node.call("update_card_positions")
+			await _settle(10)
+			print("[Shot] stack cards added: %d" % added)
+		# --opponent-summon <id>: drive one opponent Summon cast so the hand-to-stack flight can
+		# be captured without waiting for the AI. Calls the same Hand.charge() the AI uses.
+		if _args.has("opponent-summon"):
+			await _settle(3)
+			var opponent_hand: Node = game.get_node("Opponent/Hand")
+			var summon = game.call("create_card", int(_args["opponent-summon"]), "opponent")
+			if opponent_hand != null and summon != null:
+				opponent_hand.call("add_card", summon)
+				opponent_hand.call("stage_cast_card_at_middle", summon)
+				await _settle(4)
+				var started: bool = bool(opponent_hand.call("charge", summon))
+				print("[Shot] opponent summon %d charge=%s" % [
+					int(_args["opponent-summon"]), str(started)])
+			await _settle(2)
 		# --camera <name>: shoot THROUGH a named Camera3D in the scene instead of whichever one happens to be
 		# active. Installing a camera means answering "what will it actually see", and the honest way to answer
 		# that is to look through the candidate rather than to reason about its transform.
@@ -87,6 +133,42 @@ func _ready() -> void:
 					chosen.name,
 					"orthographic" if chosen.projection == Camera3D.PROJECTION_ORTHOGONAL else "perspective",
 					chosen.size, chosen.fov, str(chosen.global_position)])
+		# --proj perspective: replace the board camera's framing with a perspective candidate WITHOUT
+		# touching the scene, so composition can be judged before the hand/layout migration lands.
+		#   --elev <deg>          camera elevation above the board (default 60)
+		#   --fov <deg>           vertical field of view (default 32)
+		#   --frame <metres>      visible width at the board centre (default 7.2)
+		#   --target-y/z <m>      look-at point on the board (default 0.35 / -0.25)
+		#   --hide-hands 1        hide both hand fans, which are still ortho-only and would mislead the shot
+		if _args.has("proj"):
+			await _settle(3)
+			var pv: Camera3D = get_viewport().get_camera_3d()
+			if pv != null:
+				var elev: float = deg_to_rad(float(_args.get("elev", "60")))
+				var pfov: float = float(_args.get("fov", "32"))
+				var frame_w: float = float(_args.get("frame", "7.2"))
+				var focus := Vector3(0.0, float(_args.get("target-y", "0.35")),
+					float(_args.get("target-z", "-0.25")))
+				var vp2: Vector2 = get_viewport().get_visible_rect().size
+				var aspect2: float = vp2.x / maxf(vp2.y, 1.0)
+				var dist: float = frame_w / (2.0 * aspect2 * tan(deg_to_rad(pfov) * 0.5))
+				pv.projection = Camera3D.PROJECTION_PERSPECTIVE
+				pv.keep_aspect = Camera3D.KEEP_HEIGHT
+				pv.fov = pfov
+				pv.global_position = focus + Vector3(0.0, dist * sin(elev), -dist * cos(elev))
+				pv.look_at(focus, Vector3.UP)
+				if str(_args.get("hide-hands", "0")) == "1":
+					for path in ["Player/Hand", "Opponent/Hand"]:
+						var h: Node3D = game.get_node_or_null(path) as Node3D
+						if h != null:
+							h.visible = false
+				for path in ["Player/Hand", "Opponent/Hand"]:
+					var fan: Node = game.get_node_or_null(path)
+					if fan != null and fan.has_method("update_card_positions"):
+						fan.call("update_card_positions")
+				await _settle(2)
+				print("[Shot] perspective candidate | elev=%.1f fov=%.1f frame=%.2f m | pos=%s | d=%.2f m" % [
+					rad_to_deg(elev), pfov, frame_w, str(pv.global_position), dist])
 		# --cam-zoom <f>: multiply the game's camera size (or fov) so a small detail can be inspected at
 		# full resolution. With a payment up, the camera also centres on the readout — zooming about the
 		# screen centre alone would push a readout that sits low on the screen straight out of frame.

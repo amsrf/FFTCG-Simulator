@@ -4,8 +4,11 @@ class_name Stack
 const EVENTS := preload("res://scripts/effects/events.gd")
 
 var cards = []
-var card_width = GlobalVariables.get_card_width() * 2;
-var card_spacing = -0.2
+## Layout pitch in STACK-LOCAL units. It has to follow the card's VISUAL width, not a separate
+## hand-picked number: the container is scaled 2.305, so the local face width is
+## 0.429 * (STACK_CARD_SCALE / STACK_CONTAINER_SCALE). The old 0.822 was more than three times the
+## card's local width once the stack was shrunk, which spread the fan into separate cards.
+var card_width = 0.429 * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
 var player_mode = GlobalVariables.get_player_mode();
 var start_x: float = 0.0
 var casting_card: Card
@@ -19,6 +22,11 @@ var skill_mana_deferred_until_target_confirm: bool = false
 var summon_casting_card: Card = null
 ## While true, summon mana payment is deferred until the target is confirmed.
 var summon_mana_deferred_until_target_confirm: bool = false
+## OPPONENT SUMMON FLIGHT. The one-shot tween that carries the card from the middle of the
+## opponent's hand to the centre of the screen and then into the stack. Held so a cancel or a
+## commit can kill it instead of letting it keep writing transforms.
+var _opponent_summon_flight: Tween = null
+var _opponent_summon_flight_card: Card = null
 ## True while an effect resolution is still running (it may await a modal).
 var resolution_pending: bool = false
 ## Special ability (S) cost state: a card sharing a name with the source,
@@ -52,38 +60,65 @@ func layout_cards() -> Array:
 
 func calculate_total_width():
 	var n: int = layout_cards().size()
-	return (n * card_width) + ((n - 1) * card_spacing)
+	return card_width + (n - 1) * _stack_spacing(n) if n > 0 else 0.0
 	
 func stack_length() -> int:
 	return len(cards)
 
-## The stack hangs to the LEFT, like a hand: the TOP of the stack (the last card put there,
-## `cards.back()`) is the leftmost card and each earlier card steps to the right of it.
-## `_slot_for()` is the only place that knows this, so the arc, the tilt and the stacking height
-## can never disagree about which end is which.
-func _slot_for(i: int) -> int:
-	return layout_cards().size() - 1 - i
+## The stack's 3D pose is EXPORTED so it can be dialled in by eye instead of edited in code.
+## Select the Stack node in game.tscn (or open the Remote tab while the game is running) and use
+## the "Stack Rotation" sliders; every change re-lays the fan immediately.
+@export_group("Stack Rotation")
+## +X pitch tips the card's face normal toward local +Z; the Stack node is yawed 180 degrees, so
+## that is world -Z — the camera side. 19 deg leaves the card a little short of square-on, so the
+## top/bottom edges still show perspective instead of reading as a flat UI card.
+@export_range(-60.0, 90.0, 0.5) var stack_pitch_degrees: float = 19.0:
+	set(value):
+		stack_pitch_degrees = value
+		_refresh_stack_pose()
+## A rotation around the card's own vertical axis, in the card's local frame. This is the
+## art-plane turn; -27.5 is the value dialled in against the reference.
+@export_range(-45.0, 45.0, 0.5) var stack_local_yaw_degrees: float = -27.5:
+	set(value):
+		stack_local_yaw_degrees = value
+		_refresh_stack_pose()
+## The in-plane (screen-plane) roll.
+@export_range(-45.0, 45.0, 0.5) var stack_roll_degrees: float = 6.0:
+	set(value):
+		stack_roll_degrees = value
+		_refresh_stack_pose()
+## THE ONE THAT MOVES THE SIDES IN DEPTH: a rotation around the CAMERA'S UP AXIS. Negative makes
+## the LEFT edge go into the screen and the RIGHT edge come toward the viewer, as in the reference.
+@export_range(-60.0, 60.0, 0.5) var stack_screen_yaw_degrees: float = -3.5:
+	set(value):
+		stack_screen_yaw_degrees = value
+		_refresh_stack_pose()
+
+## Translation timeline: launch at reference frame 118, land at 150 (60 fps).
+@export_group("Opponent Summon Flight")
+@export_range(0.30, 2.0, 0.01) var opponent_flight_seconds: float = 32.0 / 60.0
+@export var opponent_flight_path: Path3D
+const OPPONENT_CENTER_TIME := 14.0 / 32.0
+
+func _refresh_stack_pose() -> void:
+	if is_inside_tree() and is_node_ready():
+		update_card_positions()
 
 ## Shallow arc and per-card tilt, mirroring the hand: a plain row collapsed into one unreadable
 ## overlap as soon as a third card arrived.
-const FAN_RADIUS := 3.0
-## How much of the card pitch each neighbour advances along the arc. Below 1.0 the fan is TIGHTER
-## than the old row was — a stack should read as one group, not as a spread-out row.
-const FAN_TIGHTNESS := 0.5
+const STACK_HOVER_SCALE := 1.4
 ## Height between neighbours, so the card in front is visibly in front.
-const FAN_HEIGHT_STEP := 0.006
-## Extra height for the card the player has selected. It has to clear FAN_HEIGHT_STEP times the
-## number of cards, or a selected card at the back would still sit behind the front of the fan.
-const FAN_RAISE := 0.06
+const FAN_HEIGHT_STEP := 0.016
+## A selected card lifts within its slot so every newer card remains higher.
+const FAN_RAISE := FAN_HEIGHT_STEP * 0.35
+var _shadow_track_seconds := 0.0
 ## The review link's arrow, kept separate from the live targeting arrow and the block arc so the
 ## three can never re-aim or hide each other.
 const LINK_ARROW_SCENE := preload("res://ballistic_arrow.tscn")
 
 ## Tilt/arc angle for a SLOT (0 = leftmost). Same shape as the hand's fan.
-func fan_angle_for(slot: int) -> float:
-	var n: int = layout_cards().size()
-	var t: float = slot - (n - 1) / 2.0
-	return -t * (card_width + card_spacing) * FAN_TIGHTNESS / FAN_RADIUS
+func _stack_spacing(count: int) -> float:
+	return card_width * minf(0.38, 1.15 / maxi(1, count - 1))
 
 ## ----- reviewing the stack's targets ---------------------------------------------------------
 ## Every card in the stack keeps the target it was given (`Card.effect_target`), so the stack can
@@ -100,11 +135,16 @@ func displayed_card() -> Card:
 	return cards.back() if not cards.is_empty() else null
 
 func set_hovered(card: Card, entered: bool) -> void:
+	var previous := hovered_card
 	if entered:
+		if hovered_card == card or not cards.has(card) or card == _opponent_summon_flight_card:
+			return
 		hovered_card = card
 	elif hovered_card == card:
 		hovered_card = null
-	refresh_target_display()
+	else:
+		return
+	update_card_positions(previous, true)
 
 ## Draw — or clear — the link for `displayed_card()`. DISPLAY ONLY: it opens no session and
 ## changes no game state; it exists so the player can look at what is already on the stack.
@@ -144,7 +184,8 @@ func _clear_target_display() -> void:
 ## session is about to draw its own from the same card. Done deterministically at the START of the
 ## session so "there is only ever one arrow on screen" does not depend on who refreshes first.
 func release_target_display() -> void:
-	hovered_card = null
+	if hovered_card != null:
+		set_hovered(hovered_card, false)
 	_clear_target_display()
 
 ## Which card the player is looking at. null means "the top of the stack"; see select_card().
@@ -167,47 +208,120 @@ func select_top() -> void:
 	selected_card = null
 	update_card_positions()
 
-func update_card_positions():
+func update_card_positions(previous_hover: Card = null, hover_changed := false):
 	var list: Array = layout_cards()
 	for i in range(list.size()):
 		var card = list[i]
 		card.index = i
-		animate_card(card, calculate_card_position(i))
+		if card == _opponent_summon_flight_card:
+			continue
+		var slot := calculate_card_position(i)
+		if card == hovered_card:
+			var camera := get_viewport().get_camera_3d()
+			if camera != null:
+				# Follow the viewing ray so lifting the card keeps its centre under the cursor.
+				var world_slot := to_global(slot)
+				var toward_camera := -camera.project_ray_normal(camera.unproject_position(world_slot))
+				var top_offset := to_global(calculate_card_position(list.size() - 1)) - world_slot
+				var lift := 0.55 + maxf(0.0, top_offset.dot(toward_camera))
+				slot = to_local(world_slot + toward_camera * lift)
+		var hover_transition: bool = hover_changed and (card == previous_hover or card == hovered_card)
+		animate_card(card, slot, hover_transition)
+
 	# The stack just changed, so what is on display may have too: the default display is the TOP
 	# of the stack, and after an add or a resolve that is a different card.
 	refresh_target_display()
-		
+	_shadow_track_seconds = 0.35
+	_update_stack_shadows()
+
+func _process(delta: float) -> void:
+	if _shadow_track_seconds > 0.0:
+		_shadow_track_seconds -= delta
+		_update_stack_shadows()
+
+func _update_stack_shadows() -> void:
+	var settled := layout_cards()
+	settled.erase(_opponent_summon_flight_card)
+	if is_instance_valid(hovered_card) and settled.has(hovered_card):
+		settled.erase(hovered_card)
+		settled.append(hovered_card)
+	preload("res://scripts/card_overlap_shadow.gd").update(self, settled, true)
+
 func calculate_card_position(i: int) -> Vector3:
-	var card = layout_cards()[i]
-	var slot: int = _slot_for(i)
-	var angle: float = -fan_angle_for(slot)
-	var x_offset: float = FAN_RADIUS * sin(angle)
-	var z_offset: float = FAN_RADIUS * (1.0 - cos(angle))
-	# `i` counts the other way to `slot`, so the top of the stack ends up in FRONT as well as on
-	# the left: the higher the index, the higher the card.
-	var y_offset: float = i * FAN_HEIGHT_STEP
-	if selected_card != null and card == selected_card:
-		y_offset += FAN_RAISE
-	return Vector3(x_offset, y_offset, z_offset)
-	
-func animate_card(card, target_position):
+	var list := layout_cards()
+	var spacing := _stack_spacing(list.size())
+	var pose := _stack_card_local_basis(list[0])
+	var center := Vector3.ZERO
+	var camera := get_viewport().get_camera_3d()
+	var half_width: Vector3 = pose.x * card_width * 0.5
+	# At the three-card spacing, climb roughly a quarter of a card height per layer.
+	var climb := spacing * 0.85
+	for index in range(1, i + 1):
+		var depth := index * FAN_HEIGHT_STEP
+		if list[index] == selected_card:
+			depth += FAN_RAISE
+		# Keep the bottom card at the stack origin. Each layer has a fixed
+		# normal depth; the in-plane climb gives the pile its diagonal silhouette.
+		var layer := pose.y * depth - pose.z * (climb * index)
+		var sideways := center.dot(pose.x) - spacing
+		if camera != null:
+			var left := camera.unproject_position(to_global(center - half_width))
+			var right := camera.unproject_position(to_global(center + half_width))
+			var edge := right.lerp(left, spacing / card_width)
+			# All points at this screen X lie in a camera-vertical plane.
+			# Intersect it with the new layer's right-edge travel line.
+			var ray := camera.project_ray_normal(edge)
+			var plane_normal := ray.cross(camera.global_basis.y)
+			var along_width := plane_normal.dot(global_basis * pose.x)
+			if absf(along_width) > 0.00001:
+				sideways = plane_normal.dot(camera.project_ray_origin(edge) - to_global(layer + half_width)) / along_width
+		center = layer + pose.x * sideways
+	return center
+
+func animate_card(card, target_position, hover_transition := false):
 	# ONE LAYOUT TWEEN PER CARD. The old one has to die before a new target is
 	# written, and the card has to own the reference so enter_zone() can stop it
 	# when the card leaves the stack.
 	if card.has_method("stop_stack_layout"):
 		card.stop_stack_layout()
+	var pose := _stack_card_local_basis(card)
+	var size := Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE
+	var camera := get_viewport().get_camera_3d()
+	if card == hovered_card and camera != null:
+		var screen := camera.global_basis.orthonormalized()
+		pose = global_basis.orthonormalized().inverse() * Basis(screen.x, screen.z, -screen.y)
+		size *= STACK_HOVER_SCALE
+	if hover_transition and card != hovered_card:
+		card.transform = Transform3D(pose.scaled(Vector3.ONE * size), target_position)
+		return
+	var duration := 0.1 if hover_transition else 0.3
 	var tween = create_tween()
 	card.set("stack_tween", tween)
-	tween.set_parallel(true) 
-	tween.tween_property(card, "position", target_position, 0.3)
-	# Card.STACK_CARD_SCALE is a WORLD size and this node is scaled 2.305, so it is divided by that to land the card at
-	# the size the constant promises — the same size the hand grows a hovered card to. Writing the constant straight
-	# into `scale` made stack cards 2.3x too big, which is what "a hovered hand card and a stack card are different
-	# sizes" turned out to be.
-	tween.tween_property(card, "scale", Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE), 0.3)
-	# The fan tilt is tweened too, so a card added to the stack rotates into place rather than
-	# snapping straight and then leaning.
-	tween.tween_property(card, "rotation", Vector3(0.0, fan_angle_for(_slot_for(card.index)), 0.0), 0.3)
+	tween.set_parallel(true)
+	if hover_transition:
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(card, "position", target_position, duration)
+	tween.tween_property(card, "scale", Vector3.ONE * size, duration)
+	tween.tween_property(card, "rotation", pose.get_euler(), duration)
+
+
+## The local orientation of a stack card, from the tuned Stack Rotation exports. One owner, so
+## the opponent flight can land on EXACTLY the pose the layout uses instead of a lookalike.
+func _stack_card_local_basis(_card, yaw_roll_weight: float = 1.0) -> Basis:
+	# THE CARD IS HELD UP AND ANGLED, NOT SQUARE TO THE CAMERA. Start from the local pitch/roll,
+	# then rotate the whole thing around the CAMERA'S UP AXIS. That last rotation is the one that
+	# moves the card's left edge into the screen and its right edge out (or the reverse); the local
+	# Euler angles alone only spin it inside its own plane, which is why it read as flat.
+	var target_basis := Basis.from_euler(Vector3(
+		deg_to_rad(stack_pitch_degrees),
+		deg_to_rad(stack_local_yaw_degrees) * yaw_roll_weight,
+		deg_to_rad(stack_roll_degrees) * yaw_roll_weight))
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		var parent_basis: Basis = global_transform.basis.orthonormalized()
+		var cam_up_local: Vector3 = (parent_basis.inverse() * cam.global_transform.basis.y).normalized()
+		target_basis = Basis(cam_up_local, deg_to_rad(stack_screen_yaw_degrees) * yaw_roll_weight) * target_basis
+	return target_basis
 	
 
 func add_card_to_tree(card):
@@ -216,6 +330,7 @@ func add_card_to_tree(card):
 	var trans = card.global_transform
 	card.reparent(self,false)
 	card.global_transform = trans
+	card.enter_zone(Card.Zone.STACK)
 	_clear_top_energized()
 
 ## THE ENERGIZED GLOW ENDS WHEN THE CARD IS PLAYED.
@@ -232,14 +347,15 @@ func _clear_top_energized() -> void:
 	if top != null:
 		top.set_energized_highlight(false)
 	
-func add_created_card_to_tree(card:Card):
+func add_created_card_to_tree(card: Card, wording: String):
 	cards.append(card)
 	card.index = cards.size()-1
-	var trans = card.global_transform
+	var trans := card.transform
 	add_child(card)
 	if(card.key_word_effect):
 		print("Adding effect to the stack")
 	card.global_transform = trans
+	card.enter_zone(Card.Zone.STACK, wording)
 	
 func cast_card():
 	# It is being played, so it is public now, whichever branch runs.
@@ -325,14 +441,20 @@ func _owner_hand(card: Card) -> Hand:
 func _commit_summon_to_stack() -> void:
 	if summon_casting_card == null:
 		return
+	# If an opponent flight is still in the air, do NOT snap it now: the rules commit at once,
+	# but the visual is allowed to finish and settle into the stack when the tween completes.
+	var flighting: bool = _opponent_summon_flight != null and _opponent_summon_flight_card == summon_casting_card
 	var card: Card = summon_casting_card
 	var owner_hand: Hand = _owner_hand(card)
 	# Target is confirmed: finalize mana payment now (discard hand mana,
 	# tap backup mana), then put the summon on the stack.
 	field.apply_deferred_skill_mana_payment()
 	owner_hand.apply_deferred_skill_mana_payment()
-	# It is entering the stack from here on, so it becomes public.
-	reveal_parked(card)
+	# It is entering the stack from here on, so it becomes public — but if the opponent flight
+	# is still running, keep the card face-down until it lands; the reference flight is face-down
+	# the whole way. The flight completion reveals it.
+	if not flighting:
+		reveal_parked(card)
 	summon_mana_deferred_until_target_confirm = false
 	summon_casting_card = null
 	card.key_word_effect = "when_cast"
@@ -342,7 +464,8 @@ func _commit_summon_to_stack() -> void:
 	# the stack list and resolves as a normal stack object.
 	cards.append(card)
 	card.index = cards.size() - 1
-	update_card_positions()
+	if not flighting:
+		update_card_positions()
 	# Casting a Summon is a priority action: it is on the stack now, so priority
 	# moves to the opponent. (Emitting in the Agent's case is harmless — no one
 	# is awaiting the signal; the agent reports through take_priority().)
@@ -414,6 +537,13 @@ func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -
 	var definition: Dictionary = source.activation_skill(skill_index)
 	if definition.is_empty():
 		return false
+	var proxy := create_skill_proxy(source, skill_index, definition, x_value)
+	skill_activation_proxy = proxy
+	skill_mana_deferred_until_target_confirm = true
+	get_parent().note_action_taken()
+	return true
+
+func create_skill_proxy(source: Card, skill_index: int, definition: Dictionary, x_value: int = -1) -> Card:
 	var proxy: Card = card_scene.instantiate()
 	proxy.initialize(source.id, source.controller)
 	proxy.skill_activation_index = skill_index
@@ -431,13 +561,9 @@ func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -
 	proxy.key_word_effect = "skill"
 	proxy.effect_source = source
 	proxy.effect_kind = "Ability"
-	skill_activation_proxy = proxy
-	skill_mana_deferred_until_target_confirm = true
-	add_created_card_to_tree(proxy)
+	add_created_card_to_tree(proxy, preload("res://scripts/effects/ability_spec.gd").stack_wording(proxy.skill_def_override))
 	update_card_positions()
-	# Activating an ability is a priority action.
-	get_parent().note_action_taken()
-	return true
+	return proxy
 
 func _apply_skill_source_tap_from_proxy() -> void:
 	## Part of stack commit: JSON "tap" is a cost, not tied to resolution (instructions run in game._on_stack_execute_card_effect).
@@ -552,7 +678,14 @@ func _on_hand_charge_start(card: Card) -> void:
 		# Paid for (and targeted) before it legally enters the stack.
 		summon_casting_card = card
 		summon_mana_deferred_until_target_confirm = true
+		# OPPONENT SUMMONS GET A DEDICATED FLIGHT. Hand.charge() has already staged the cast
+		# card at the middle of the face-down fan, so this transform is already the hand
+		# middle — and the card is visibly leaving the hand rather than appearing there.
+		var opponent_cast: bool = card.controller == "opponent"
+		var start: Transform3D = card.global_transform
 		park_card(card)
+		if opponent_cast:
+			_fly_opponent_summon(card, start)
 	else:
 		# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is
 		# not in `cards`, so it is not legally on the stack; `park_card()` gives
@@ -560,6 +693,76 @@ func _on_hand_charge_start(card: Card) -> void:
 		casting_card = card
 		park_card(card)
 		card.set_cast_pending_highlight(true)
+
+
+
+
+func opponent_launch_offset(owner_hand: Hand) -> Vector3:
+	if opponent_flight_path == null or opponent_flight_path.curve == null or opponent_flight_path.curve.point_count < 3:
+		return Vector3.ZERO
+	return opponent_flight_path.to_global(opponent_flight_path.curve.get_point_position(0)) - owner_hand.global_position
+
+## The first two curve points are the launch and the frame-132 waypoint.
+## The final point follows the actual slot, including any fan layout changes.
+func _fly_opponent_summon(card: Card, start: Transform3D) -> void:
+	if opponent_flight_path == null or opponent_flight_path.curve == null:
+		return
+	var curve := opponent_flight_path.curve
+	if curve.point_count < 3:
+		return
+	_stop_opponent_summon_flight()
+	card.stop_stack_layout()
+	var flight_curve: Curve3D = curve.duplicate()
+	flight_curve.set_point_position(0, opponent_flight_path.to_local(start.origin))
+	var last := flight_curve.point_count - 1
+	var slot := calculate_card_position(card.index)
+	flight_curve.set_point_position(last, opponent_flight_path.to_local(to_global(slot)))
+	# Start half a turn from the landing pose, then unwind around the card's
+	# local +X (screen right). Keeping the angle signed fixes the flip direction.
+	var launch_pose := _stack_card_local_basis(card, 0.0)
+	card.quaternion = (launch_pose * Basis(Vector3.RIGHT, PI)).get_rotation_quaternion()
+	card.scale = Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
+	card.global_position = opponent_flight_path.to_global(flight_curve.get_point_position(0))
+	var flight := create_tween()
+	_opponent_summon_flight = flight
+	_opponent_summon_flight_card = card
+	flight.tween_method(func(p: float) -> void:
+		if not is_instance_valid(card) or card.get_parent() != self:
+			return
+		if not layout_cards().has(card):
+			return
+		var destination := opponent_flight_path.to_local(to_global(calculate_card_position(card.index)))
+		if not destination.is_equal_approx(flight_curve.get_point_position(last)):
+			flight_curve.set_point_position(last, destination)
+		var segment: float
+		var remaining_pitch: float
+		if p <= OPPONENT_CENTER_TIME:
+			var approach := p / OPPONENT_CENTER_TIME
+			segment = approach
+			remaining_pitch = lerpf(PI, PI * 0.5, approach)
+		else:
+			var t := (p - OPPONENT_CENTER_TIME) / (1.0 - OPPONENT_CENTER_TIME)
+			# Match the linear start of this leg, then arrive with zero speed.
+			var settle := t + t * t * (1.0 - t)
+			segment = lerpf(1.0, float(last), settle)
+			remaining_pitch = lerpf(PI * 0.5, 0.0, settle)
+		var stack_pose := _stack_card_local_basis(card, smoothstep(0.0, 1.0, p))
+		card.quaternion = (stack_pose * Basis(Vector3.RIGHT, remaining_pitch)).get_rotation_quaternion()
+		card.global_position = opponent_flight_path.to_global(flight_curve.samplef(segment))
+	, 0.0, 1.0, opponent_flight_seconds)
+	await flight.finished
+	_opponent_summon_flight = null
+	_opponent_summon_flight_card = null
+	if is_instance_valid(card) and card.get_parent() == self and layout_cards().has(card):
+		if cards.has(card):
+			reveal_parked(card)
+		update_card_positions()
+
+func _stop_opponent_summon_flight() -> void:
+	if _opponent_summon_flight != null and _opponent_summon_flight.is_valid():
+		_opponent_summon_flight.kill()
+	_opponent_summon_flight = null
+	_opponent_summon_flight_card = null
 
 
 func _on_assistant_charge_cancelled() -> void:
@@ -581,6 +784,7 @@ func _on_assistant_charge_cancelled() -> void:
 		return
 	if summon_casting_card != null:
 		# It goes back to its owner's hand, so it must be face-up again.
+		_stop_opponent_summon_flight()
 		reveal_parked(summon_casting_card)
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
@@ -605,13 +809,13 @@ func _on_field_add_card_effect_to_stack(card_id: int, keyword: String, source: C
 	create_card(card_id, source.controller, keyword, source)
 	update_card_positions()
 
-func create_card(id, controller, keyword, source) -> Card:
+func create_card(id, controller, keyword, source, wording: String = "") -> Card:
 	var card: Card = card_scene.instantiate()  
 	card.initialize(id,controller)
 	card.key_word_effect = keyword
 	card.effect_source = source
 	card.effect_kind = "Ability"
-	add_created_card_to_tree(card)
+	add_created_card_to_tree(card, wording)
 	update_card_positions()
 	
 	return card
@@ -621,15 +825,17 @@ func create_card(id, controller, keyword, source) -> Card:
 ## A code-defined triggered ability. Its effect object is stateless; the stack copy carries the event name and a small
 ## event payload until Game resolves it through CardEffect.dispatch.
 func enqueue_code_trigger(source: Card, event, data: Dictionary = {}) -> Card:
+	var event_id := EVENTS.normalize(event)
 	var card: Card = create_card(source.id, source.controller, "__code_event", source)
-	card.effect_event = EVENTS.normalize(event)
+	card.effect_event = event_id
 	card.effect_event_data = data.duplicate(true)
 	card.effect_kind = "Ability"
 	update_card_positions()
 	return card
 
 func enqueue_event_trigger(source: Card, trigger: Dictionary, context: Dictionary) -> Card:
-	var card: Card = create_card(source.id, source.controller, "__event_trigger", source)
+	var wording := str(trigger.get("text", ""))
+	var card: Card = create_card(source.id, source.controller, "__event_trigger", source, wording)
 	card.event_trigger = trigger.duplicate(true)
 	card.event_context = context.duplicate()
 	card.effect_kind = "Ability"
@@ -828,6 +1034,7 @@ func _on_assistant_target_cancel() -> void:
 	elif summon_casting_card != null:
 		# Payment was deferred and is now refunded: nothing is discarded or
 		# tapped, and the summon returns to hand without entering the stack.
+		_stop_opponent_summon_flight()
 		var cancelled: Card = summon_casting_card
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false

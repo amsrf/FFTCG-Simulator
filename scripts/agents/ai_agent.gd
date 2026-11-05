@@ -43,6 +43,14 @@ func _is_safe_to_play(card: Card) -> bool:
 	# Hand.charge() enforces it, but the AI should not even begin the attempt.
 	if game.stack.stack_length() > 0:
 		return false
+	# FIVE PER ROW. The board holds at most five Forwards and five Backups. Do not start a play
+	# that would create a sixth: the AI test board is meant to be inspectable, and a row of nine
+	# Backups is not a legal field. The human side still relies on the engine for the cap.
+	var side: String = card.controller
+	if card.type == "Backup" and game.field.get_back_cards_for(side).size() >= 5:
+		return false
+	if card.type == "Forward" and game.field.get_front_cards_for(side).size() >= 5:
+		return false
 	# Skip anything whose enter-the-field effect asks for a target: ETB targeting
 	# runs while the card resolves, and a miss there is not recoverable yet.
 	if card.card_effects.has("when_enter_field"):

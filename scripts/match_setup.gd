@@ -77,18 +77,20 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			# AERITH ON THE PLAYER'S BACKUP LINE, for the S cost. Her ability needs a card with the SAME NAME discarded
 			# from hand, and _debug() already puts one (64) in the opening hand — she is the source here. So the two are
 			# deliberately both present: one on the board to activate, one in hand to spend.
+			#
+			# FIVE-BACKUP LIMIT. _debug() already fields five Backups, so adding Aerith would make six. Drop the
+			# Red Mage Backup to keep the AI test board a legal five.
+			for i in range(cfg["player_field"].size() - 1, -1, -1):
+				if int(cfg["player_field"][i].get("id", -1)) == 3:
+					cfg["player_field"].remove_at(i)
 			cfg["player_field"].append({"id": 64, "tapped": false})
+			# THREE FORWARDS + FIVE BACKUPS, the legal maximum for each row. The five Evokers are all wind,
+			# which is exactly what 62 Valefor costs (5) — the old board had nine Backups, which is not a legal
+			# field and made the perspective layout impossible to inspect.
 			cfg["opponent_field"] = [
 				{"id": 41, "tapped": false},   # Squall (ice Forward 6000)
-				{"id": 43, "tapped": false},   # Snow (ice Forward) — SAME ELEMENT as Squall, so the AI can form a
-											   # two-member ice party and the human's distribution window is reachable
-				{"id": 31, "tapped": false},   # Chemist (ice Backup)
-				{"id": 32, "tapped": false},   # Chemist (ice Backup)
-				{"id": 32, "tapped": false},   # Chemist (ice) — mana for a 2nd play
-				{"id": 3, "tapped": false},    # Red Mage (fire Backup)
+				{"id": 43, "tapped": false},   # Snow (ice Forward)
 				{"id": 71, "tapped": false},   # Zidane (Forward 3000)
-				# FIVE WIND SOURCES. 62 Valefor is a wind Summon costing 5, and the AI can only pay from
-				# untapped Backups — without these it could never cast the card this board exists to show.
 				{"id": 68, "tapped": false},   # Evoker (wind Backup, cost 1)
 				{"id": 68, "tapped": false},
 				{"id": 68, "tapped": false},

@@ -129,3 +129,13 @@ func duplicate_spec() -> RefCounted:
 		"run": run,
 	})
 	return copy
+
+
+static func stack_wording(definition: Dictionary) -> String:
+	var wording := str(definition.get("text", "")).strip_edges()
+	var cost_end := wording.find(":")
+	if cost_end >= 0:
+		var prefix := wording.left(cost_end)
+		if prefix.contains("《") or prefix.to_lower().begins_with("dull") or prefix.to_lower().begins_with("put "):
+			wording = wording.substr(cost_end + 1).strip_edges()
+	return wording

@@ -156,6 +156,12 @@ func _ready() -> void:
 	var ifrit: Card = _find_by_id(opponent_hand.cards, 4)
 	_expect(ifrit != null, "the opponent's hand contains Ifrit")
 	if ifrit != null:
+		# The "ai" preset gives the opponent five WIND Evokers so it can cast Valefor.
+		# Ifrit costs fire, so add one fire source for this targeted-summon section.
+		var fire_source: Card = game.create_card(3, "opponent")
+		if fire_source != null:
+			game.add_child(fire_source)
+			field.play_card(fire_source, true, false, false)
 		await game.play_card_for(2, ifrit)
 		# The AI picks through its agent, which may finish a frame later.
 		await get_tree().process_frame
@@ -234,36 +240,36 @@ func _ready() -> void:
 		_expect(green_theirs == 0, "no green while the OPPONENT holds the window (same input mode)")
 
 		field.refresh_available_effects()
-		var red_mage: Card = null
+		var green_card: Card = null
 		var theirs_green: bool = false
 		for c in field.get_all_cards():
-			if c.controller == "player" and c.id == 3:
-				red_mage = c
+			if c.controller == "player" and c._available_highlight_on:
+				green_card = c
 			elif c.controller != "player" and c._available_highlight_on:
 				theirs_green = true
-		print("[FlowProbe] green with nothing pending: red mage=%s (lit=%s) | any opponent green=%s"
-			% [red_mage != null,
-			red_mage._available_highlight_on if red_mage != null else false,
+		print("[FlowProbe] green with nothing pending: ours=%s (lit=%s) | any opponent green=%s"
+			% [green_card.card_name if green_card != null else "<none>",
+			green_card._available_highlight_on if green_card != null else false,
 			theirs_green])
-		_expect(red_mage != null and red_mage._available_highlight_on,
-			"the local player's activatable Backup goes green once nothing is pending")
+		_expect(green_card != null,
+			"the local player's activatable card goes green once nothing is pending")
 		_expect(not theirs_green, "no opponent card is ever green")
 
 		# The green is a STANDING cue, so it is drawn at half the ring's width — and every
 		# other state has to restore the stock width exactly when it takes over.
-		if red_mage != null:
-			var green_width: float = float(red_mage._border_material.get_shader_parameter("border_width"))
+		if green_card != null:
+			var green_width: float = float(green_card._border_material.get_shader_parameter("border_width"))
 			print("[FlowProbe] ring width: green=%.4f | stock=%.4f (scale %.2f)"
-				% [green_width, red_mage._border_width_base, Card.AVAILABLE_WIDTH_SCALE])
-			_expect(green_width < red_mage._border_width_base,
+				% [green_width, green_card._border_width_base, Card.AVAILABLE_WIDTH_SCALE])
+			_expect(green_width < green_card._border_width_base,
 				"the green ring is drawn thinner than the others")
-			red_mage.set_available_highlight(false)
-			red_mage.set_prompt_glow(true)
-			var other_width: float = float(red_mage._border_material.get_shader_parameter("border_width"))
+			green_card.set_available_highlight(false)
+			green_card.set_prompt_glow(true)
+			var other_width: float = float(green_card._border_material.get_shader_parameter("border_width"))
 			print("[FlowProbe] ring width with the prompt on instead: %.4f" % other_width)
-			_expect(is_equal_approx(other_width, red_mage._border_width_base),
+			_expect(is_equal_approx(other_width, green_card._border_width_base),
 				"any other state restores the stock ring width")
-			red_mage.set_prompt_glow(false)
+			green_card.set_prompt_glow(false)
 
 		# --- the stack as a fan: top of the stack at the LEFT, older cards stepping right ---
 		await get_tree().create_timer(0.4).timeout
@@ -393,8 +399,183 @@ func _ready() -> void:
 			_expect(not chosen._targeted_highlight_on,
 				"a card changing zone drops the red ring, so none is left in the graveyard")
 
+	_check_opponent_translation(game)
+	await _check_demo_stack_fan()
+
 	_report()
 	get_tree().quit()
+
+func _check_demo_stack_fan() -> void:
+	var demo = preload("res://tools/opponent_summon_demo.tscn").instantiate()
+	add_child(demo)
+	for frame in range(6):
+		await get_tree().process_frame
+	var hand: Hand = demo.opponent_hand
+	var stack: Stack = demo.stack
+	var count := hand.cards.size()
+	for i in range(count):
+		demo._cast()
+		var flight := stack._opponent_summon_flight
+		if flight == null:
+			_expect(false, "demo starts flight %d" % (i + 1))
+			break
+		flight.custom_step(stack.opponent_flight_seconds + 0.001)
+		var top: Card = stack.cards.back()
+		_expect(stack.cards.size() == i + 1 and hand.cards.size() == count - i - 1
+			and top.revealed and top.position.distance_to(stack.calculate_card_position(i)) < 0.001,
+			"demo holds %d cards with the latest in its stack slot" % (i + 1))
+	demo.game.get_node("Camera3D").current = true
+	if stack.cards.size() == count:
+		stack.select_card(stack.cards.front())
+		for card in stack.cards:
+			card.stack_tween.custom_step(0.35)
+		var view_camera := get_viewport().get_camera_3d()
+		for index in range(count - 1):
+			var bottom: Card = stack.cards[index]
+			var covering: Card = stack.cards[index + 1]
+			var half_edge := Vector3.RIGHT * bottom._card_face_size().x * 0.5
+			var left := view_camera.unproject_position(bottom.to_global(-half_edge)).x
+			var right := view_camera.unproject_position(bottom.to_global(half_edge)).x
+			var cover_edge := view_camera.unproject_position(covering.to_global(half_edge)).x
+			var exposed := (right - cover_edge) / (right - left)
+			_expect(absf(exposed - stack._stack_spacing(count) / stack.card_width) < 0.002,
+				"covered stack card %d exposes the target fraction of its screen width" % (index + 1))
+		stack._update_stack_shadows()
+		for i in range(1, count):
+			var lower: Card = stack.cards[i - 1]
+			var upper: Card = stack.cards[i]
+			var pose := stack._stack_card_local_basis(lower)
+			var offset := upper.position - lower.position
+			_expect(absf(offset.dot(pose.y) - stack.FAN_HEIGHT_STEP) < 0.0001
+				and view_camera.unproject_position(upper.global_position).y < view_camera.unproject_position(lower.global_position).y - 1.0 and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0,
+				"stack layer %d steps visibly upward while retaining its normal depth" % (i + 1))
+		_expect(stack.cards.front().position.is_zero_approx(), "the bottom card anchors the stack")
+		_expect(float(stack.cards.back().mat.get_shader_parameter("shadow_strength")) == 0.0,
+			"top stack card receives no overlap shadow")
+		var inspected: Card = stack.cards.front()
+		var rest_basis := inspected.global_basis
+		var slot := inspected.global_position
+		var camera := get_viewport().get_camera_3d()
+		stack.set_hovered(inspected, true)
+		inspected.stack_tween.custom_step(0.05)
+		var halfway := inspected.global_position
+		_expect(halfway.distance_to(slot) > 0.001, "hover starts moving within 50 ms")
+		stack.set_hovered(inspected, false)
+		_expect(inspected.global_position.is_equal_approx(slot), "interrupted hover returns to the slot immediately")
+		stack.set_hovered(inspected, true)
+		inspected.stack_tween.custom_step(0.1)
+		stack._update_stack_shadows()
+		_expect(camera.global_position.distance_to(inspected.global_position) < camera.global_position.distance_to(slot) - 0.5
+			and camera.unproject_position(slot).distance_to(camera.unproject_position(inspected.global_position)) < 1.0
+			and float(inspected.mat.get_shader_parameter("shadow_strength")) == 0.0,
+			"hover lifts the buried card toward the camera under the cursor")
+		_expect(inspected.global_basis.x.normalized().dot(camera.global_basis.x) > 0.999
+			and inspected.global_basis.y.normalized().dot(camera.global_basis.z) > 0.999
+			and inspected.global_basis.x.length() > rest_basis.x.length() * 1.35,
+			"stack hover presents an enlarged upright card")
+		stack.set_hovered(inspected, false)
+		_expect(inspected.global_basis.is_equal_approx(rest_basis), "hover exit restores the fan tilt and size")
+		_expect(stack._stack_spacing(2) > stack._stack_spacing(5), "larger stacks tighten the fan spacing")
+		_expect(inspected.global_position.distance_to(slot) < 0.001, "leaving the card restores its stack slot immediately")
+	demo._preview_ability(3)
+	var ability_copy: Card = stack.cards.back()
+	var face := ability_copy.get_node_or_null("StackAbilityFace") as SubViewport
+	_expect(face != null and face.get_node("Ability").text.replace("\n", " ") == "Choose 1 Forward. It cannot block this turn."
+		and ability_copy.mat.get_shader_parameter("texture_albedo") == face.get_texture()
+		and not ability_copy.effect_source.has_node("StackAbilityFace"), "Red Mage proxy displays only the chosen effect on its own face")
+	demo._preview_ability(100)
+	var earth := stack.cards.back() as Card
+	var earth_face := earth.get_node("StackAbilityFace")
+	_expect(earth_face.get_node("Panel").texture != face.get_node("Panel").texture
+		and earth_face.get_node("Ability").text.begins_with("Choose 1 Forward blocking."),
+		"Earth ability has its own palette and cost-free effect text")
+	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
+	await _check_hover_shadow(demo.game.get_node("Player/Hand"))
+	demo.queue_free()
+
+func _check_hover_shadow(hand: Hand) -> void:
+	var cam := get_viewport().get_camera_3d()
+	await get_tree().create_timer(0.4).timeout
+	var fan := hand.cards.duplicate()
+	fan.sort_custom(func(a, b): return cam.unproject_position(a.global_position).x < cam.unproject_position(b.global_position).x)
+	var upper: Card = fan.back()
+	var lower: Card = fan[-2]
+	hand.set_hovered(upper, true)
+	await get_tree().create_timer(0.45).timeout
+	var edge := float(lower.mat.get_shader_parameter("shadow_edge"))
+	var lower_size := lower._card_face_size()
+	var shadow_px := cam.unproject_position(lower.hand_mesh.to_global(Vector3((edge - 0.5) * lower_size.x, 0, 0)))
+	var half := upper._card_face_size() * 0.5
+	var x := half.x
+	if cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, 0))).x > cam.unproject_position(upper.global_position).x:
+		x = -x
+	var a := cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, -half.y)))
+	var b := cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, half.y)))
+	var distance_px := absf((b - a).normalized().cross(shadow_px - a))
+	print("[FlowProbe] hover active=%s shadow=%s error_px=%.3f" % [hand.hovered_card == upper, lower.mat.get_shader_parameter("shadow_strength"), distance_px])
+	_expect(hand.hovered_card == upper and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0 and distance_px < 1.0,
+		"the hovered card's projected edge meets its neighbour's shadow within one pixel")
+
+func _check_opponent_translation(game) -> void:
+	var stack: Stack = game.get_node("Stack")
+	var hand: Hand = game.get_node("Opponent/Hand")
+	var card: Card = game.create_card(62, "opponent")
+	hand.add_card(card)
+	var original = card.mat.get_shader_parameter("texture_albedo")
+	if hand.charge(card):
+		var face = card.get_node_or_null("StackAbilityFace")
+		_expect(face != null and not card.revealed and face.get_node("Ability").text.contains("Forward"),
+			"hidden opponent Summon has spell text before its first flight frame")
+		game.get_node("Assistant").on_charge_cancelled()
+		_expect(card.current_zone == Card.Zone.HAND and not card.has_node("StackAbilityFace")
+			and card.mat.get_shader_parameter("texture_albedo") == original, "mid-flight cancellation restores the printed hand face")
+	var count_before := hand.cards.size()
+	if not hand.charge(card):
+		_expect(false, "opponent translation probe could start the cast")
+		return
+	_expect(hand.cards.size() == count_before - 1 and not hand.cards.has(card) and card.get_parent() == stack,
+		"the opponent hand loses exactly the flying card at launch")
+	for i in range(hand.cards.size()):
+		_expect(hand.cards[i].index == i, "remaining opponent card has its current fan index")
+	var flight := stack._opponent_summon_flight
+	_expect(flight != null and stack._opponent_summon_flight_card == card,
+		"the live hand card owns the translation")
+	if flight == null:
+		return
+	flight.pause()
+	var launch := card.global_transform
+	var path := stack.opponent_flight_path
+	_expect(launch.origin.z < hand.global_position.z, "the launch clears the opponent hand toward the board")
+	flight.custom_step(13.0 / 60.0)
+	var launch_local := stack.global_basis.orthonormalized().inverse() * launch.basis.orthonormalized()
+	var neutral := Basis(Vector3.RIGHT, PI + deg_to_rad(stack.stack_pitch_degrees))
+	_expect(launch_local.is_equal_approx(neutral), "launch has zero stack yaw and roll")
+	var partial_pose := stack._stack_card_local_basis(card, smoothstep(0.0, 1.0, 13.0 / 32.0))
+	var flip_only := partial_pose.inverse() * card.basis.orthonormalized()
+	var expected_flip := Basis(Vector3.RIGHT, PI - deg_to_rad(90.0 * 13.0 / 14.0))
+	_expect(flip_only.is_equal_approx(expected_flip) and not partial_pose.is_equal_approx(stack._stack_card_local_basis(card)),
+		"frame 131 combines partial stack tilt with the negative X pitch")
+	flight.custom_step(1.0 / 60.0)
+	var waypoint := path.to_global(path.curve.get_point_position(1))
+	_expect(card.global_position.distance_to(waypoint) < 0.001 and waypoint.y < stack.global_position.y,
+		"frame 132 reaches the authored waypoint below the stack")
+
+	flight.custom_step(16.0 / 60.0)
+	var before_settle := card.position
+	flight.custom_step(1.0 / 60.0)
+	var penultimate := card.position
+	flight.custom_step(1.0 / 60.0)
+	_expect(card.position.distance_to(penultimate) < penultimate.distance_to(before_settle) * 0.5,
+		"the final frame travels less than half as far as the preceding frame")
+	_expect(card.basis.orthonormalized().is_equal_approx(stack._stack_card_local_basis(card)),
+		"frame 150 reaches the configured stack orientation")
+	_expect(card.position.distance_to(stack.calculate_card_position(card.index)) < 0.001,
+		"translation ends at the real stack slot")
+
+	stack._commit_summon_to_stack()
+	stack.cancel_stack_card(card)
+	_expect(card.current_zone == Card.Zone.GRAVEYARD and card.mat.get_shader_parameter("texture_albedo") == original,
+		"leaving the stack restores the printed Break Zone face")
 
 func _find_by_id(cards: Array, card_id: int) -> Card:
 	for c in cards:
