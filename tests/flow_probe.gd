@@ -63,20 +63,39 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
-	# Drag preview follows horizontal motion, but never follows the cursor up the board.
+	# Character drag has two states: ordinary drag inside the hand band, and the
+	# latched cast stance once the pointer crosses above it.
 	var screen_size := get_viewport().get_visible_rect().size
-	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.7))
+	var in_hand_band := screen_size * Vector2(0.5, 0.9)
+	var above_band := screen_size * Vector2(0.5, 0.1)
+	_expect(not hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
+		"a Character drag inside the hand band stays in the normal drag state")
+	_expect(hand.update_character_drag(chemist, above_band) and hand.character_drag_latched(),
+		"crossing above the hand band latches the cast stance")
 	var preview_pose := chemist.global_transform
-	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.1))
-	_expect(chemist.global_transform.is_equal_approx(preview_pose), "Character drag stays in the bottom band when the pointer moves upward")
-	_expect(chemist.global_basis.y.normalized().dot(Vector3.UP) > 0.99, "Character drag lays the card flat")
+	var cam_basis: Basis = get_viewport().get_camera_3d().global_transform.basis.orthonormalized()
+	var expected_basis := Basis(cam_basis.x, cam_basis.z, -cam_basis.y) * Basis(Vector3.RIGHT, deg_to_rad(hand.character_drag_pitch_degrees))
+	_expect(chemist.global_basis.orthonormalized().is_equal_approx(expected_basis.orthonormalized()),
+		"the latched card is screen-facing with the negative X pitch")
+	hand.update_character_drag(chemist, screen_size * Vector2(0.85, 0.1))
+	_expect(chemist.global_transform.is_equal_approx(preview_pose),
+		"a latched Character stance does not move horizontally")
+	_expect(not hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
+		"returning to the hand band before payment resumes the normal drag")
+	# Re-latch and verify that payment keeps this pose without parking it in the Stack.
+	hand.update_character_drag(chemist, above_band)
+	var stance_pose := chemist.global_transform
 	hand.remove_card(chemist)
 	stack._on_hand_charge_start(chemist)
-	_expect(chemist.global_transform.is_equal_approx(preview_pose) and not stack.layout_cards().has(chemist), "Character payment preserves the drag pose outside the stack layout")
-	_expect(chemist.current_zone != Card.Zone.STACK, "Character payment keeps the printed card presentation")
+	_expect(chemist.global_transform.is_equal_approx(stance_pose) and not stack.layout_cards().has(chemist),
+		"Character payment keeps the cast stance and stays out of the stack fan")
+	_expect(chemist.get_parent() == hand and chemist.current_zone != Card.Zone.STACK,
+		"Character payment does not park the card in the Stack")
 	stack._on_assistant_charge_cancelled()
+	hand.end_character_drag(chemist)
 	hand.add_card(chemist)
-	_expect(hand.cards.has(chemist) and chemist.current_zone == Card.Zone.HAND, "cancelled Character preview returns to hand")
+	_expect(hand.cards.has(chemist) and chemist.current_zone == Card.Zone.HAND,
+		"cancelled Character preview returns to hand")
 
 	# Exactly what Field._on_tween_finished() calls when a played card lands.
 	field.execute_card_effect(chemist, "when_enter_field")

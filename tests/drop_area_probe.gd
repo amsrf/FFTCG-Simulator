@@ -117,6 +117,30 @@ func _ready() -> void:
 	card.queue_free()
 	var character: Card = _hand.cards[0]
 	_expect(character != null, "the Character is in hand")
+
+	# CHARACTER CAST STANCE. Once the pointer leaves the hand band the card
+	# latches in place; releasing it there starts payment without putting it on
+	# the Stack. Cancelling returns it to the fan and clears the latch.
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	character.begin_drag()
+	_hand.begin_character_drag(character)
+	_expect((_hand.update_character_drag(character, viewport_size * Vector2(0.5, 0.2))
+			and _hand.character_drag_latched()), "a Character latches into the cast stance above the hand band")
+	var stance_pose: Transform3D = character.global_transform
+	character.release_drag()
+	await get_tree().process_frame
+	_expect(_hand.charging_card == character,
+		"releasing the latched Character starts mana charging")
+	_expect((character.global_transform.is_equal_approx(stance_pose)
+			and character.get_parent() == _hand
+			and not _game.get("stack").layout_cards().has(character)),
+		"the paying Character keeps its cast stance and stays out of the Stack fan")
+	_assistant.on_charge_cancelled()
+	await get_tree().create_timer(0.35).timeout
+	_expect((character.get_parent() == _hand and _hand.cards.has(character)
+			and not _hand.character_drag_latched()),
+		"cancelling a latched Character returns it to hand and clears the latch")
+
 	# Confirm pays the mana cards FIRST; the marked Character must not start
 	# fading until their discard flight has landed.
 	_expect(_hand.charge(character), "the Character can be charged again")

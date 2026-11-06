@@ -690,12 +690,11 @@ func _on_hand_charge_start(card: Card) -> void:
 		# it the Stack presentation, then the thin gold aura marks it as the play.
 		casting_card = card
 		if card.controller == "player":
-			# Preserve the printed Character and its staging pose through payment.
-			var preview := card.global_transform
+			# THE CHARACTER IS NOT A STACK CARD. It stays parented to the hand,
+			# in the latched cast stance, through payment; the Stack only holds the
+			# reference that cast_card() will fade from. Reparenting it here was
+			# the old fake-stack presentation.
 			card.stop_hand_layout()
-			card.reparent(self)
-			card.enter_zone(Card.Zone.NONE)
-			card.global_transform = preview
 		else:
 			park_card(card)
 		card.set_cast_pending_highlight(true)

@@ -423,8 +423,9 @@ func _process(_delta):
 		release_drag()
 		return
 	if current_zone == Zone.HAND and type != "Summon" and controller == "player":
-		get_parent().update_character_drag(self, get_viewport().get_mouse_position())
-		return
+		var owner_hand := get_parent()
+		if owner_hand is Hand and owner_hand.update_character_drag(self, get_viewport().get_mouse_position()):
+			return
 	# Update object position to mouse position
 	emit_signal("card_dragged", self)
 	global_transform.origin = _get_mouse_3d_position_on_card_plane() + offset
@@ -1862,9 +1863,9 @@ func set_available_highlight(enabled: bool) -> void:
 
 ## "This Character is the play and is waiting for mana." A thin gold aura,
 ## distinct from every prompt and from the elemental "mana was spent here"
-## marker. The card is parked in the fake Stack while the payment modal is open,
-## so the aura is what says it is already committed and must not also be used as a mana
-## source.
+## marker. The card is in its Character cast stance (or parked on the Stack for a
+## Summon) while the payment modal is open, so the aura is what says it is already
+## committed and must not also be used as a mana source.
 func set_cast_pending_highlight(enabled: bool) -> void:
 	if enabled == _cast_pending_highlight_on:
 		return

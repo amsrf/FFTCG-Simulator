@@ -29,8 +29,9 @@ func handle_grabbed():
 		_:
 			card.begin_drag()
 			if card.type != "Summon":
-				hand.update_character_drag(card, card.get_viewport().get_mouse_position())
-				return
+				# Character drags first behave like any other hand drag. Card._process
+				# latches the lower cast stance when the pointer crosses the band.
+				hand.begin_character_drag(card)
 			card.position +=  Vector3(0, 0.1,-0.1)
 			card.rotation = Vector3.ZERO
 			# NO SIZE CHANGE HERE. The card keeps the size it already has, which after a hover is the STACK's size —
@@ -47,6 +48,20 @@ func handle_released():
 		hand.update_card_positions()
 		card.apply_zone_scale()
 		return
+	# A CHARACTER RELEASED FROM THE CAST STANCE IS COMMITTING THE PLAY.
+	# The stance itself is the drop confirmation: the pointer has already left
+	# the hand band, so there is no extra "is the pointer over the mat" check.
+	if card.type != "Summon" and hand.character_drag_latched():
+		if card.can_be_played() and hand.charge(card):
+			hand.begin_character_charge(card)
+			card.is_dragging = false
+			return
+		# Illegal or failed charge: put the card back in the hand.
+		hand.end_character_drag(card)
+		card.is_dragging = false
+		hand.update_card_positions()
+		card.apply_zone_scale()
+		return
 	var new_index = hand.find_index(card)
 	# THE BOARD OWNS THE DROP AREA. This used to be a hard-coded 3 x 1.25 m
 	# rectangle in the hand, inside an 8 x 4 m playmat, so most of the visible
@@ -54,6 +69,7 @@ func handle_released():
 	var over_board: bool = hand.field != null and hand.field.is_in_play_area(card.global_position)
 	if card.type != "Summon":
 		over_board = hand.character_drop_over_board(card.get_viewport().get_mouse_position())
+		hand.end_character_drag(card)
 	var charged := false
 	if over_board && card.can_be_played():
 		charged = hand.charge(card)

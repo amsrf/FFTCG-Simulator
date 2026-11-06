@@ -13,6 +13,15 @@ var _hover_drift: Tween
 var _hover_drift_amount := 0.0
 var _pointer_hover_region := Rect2()
 var _pointer_hover_active := false
+## A Character drag has its own lower-band cast stance. These fields hold the
+## one active drag, the X position where it latched, and whether the card has
+## already been committed to mana charging.
+var _character_drag_card: Card = null
+var _character_drag_latched := false
+var _character_drag_charging := false
+var _character_drag_lock_x := 0.0
+var _character_drag_restore_scale := 1.0
+var _character_drag_stance := Transform3D()
 ## The size a hovered hand card grows to. This used to be Card.STACK_CARD_SCALE (2.8), which was chosen for
 ## the ORTHOGRAPHIC board where a hand card and a stack card were the same size on screen. Under the
 ## perspective camera the hand sits much closer to the lens, so 2.8 drew a ~340 x 480 px card that covered
@@ -848,22 +857,108 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 	arr.insert(to_index, element)
 	return arr
 	
-## Character previews stay in a lower screen band while the pointer can roam the board.
-@export_range(0.6, 0.95) var character_drag_screen_y: float = 0.80
-@export_range(0.5, 2.0) var character_drag_scale: float = 1.35
+## CHARACTER CAST STANCE. While a Character drag is below this screen-Y
+## threshold it behaves like a normal hand drag. Pushing the pointer above the
+## threshold latches it into the lower cast stance; coming back below the
+## threshold before mana charging is engaged resumes the normal drag.
+@export_range(0.55, 0.95) var character_drag_trigger_y: float = 0.80
+## Screen-Y of the latched card's centre, as a fraction of viewport height.
+@export_range(0.50, 0.95) var character_drag_screen_y: float = 0.74
+## Screen-facing scale of the latched card.
+@export_range(0.5, 3.0) var character_drag_scale: float = 2.0
+## Pitch around the card's local X. Negative rotates the top edge back under
+## the right-hand rule with +X to the right.
+@export_range(-45.0, 0.0) var character_drag_pitch_degrees: float = -15.0
+## World-Y lift for the latched card, so it leaves the mat and reads larger.
+@export_range(0.0, 2.0) var character_drag_lift_y: float = 0.45
 
-func update_character_drag(card: Card, pointer: Vector2) -> void:
-	_release_hover(card)
-	card.stop_hand_layout()
-	var camera := get_viewport().get_camera_3d()
-	if camera == null:
+func begin_character_drag(card: Card) -> void:
+	_character_drag_card = card
+	_character_drag_latched = false
+	_character_drag_charging = false
+	_character_drag_lock_x = 0.0
+	_character_drag_restore_scale = card.scale.x if card != null else 1.0
+	_character_drag_stance = Transform3D()
+
+func character_drag_latched() -> bool:
+	return _character_drag_latched
+
+func begin_character_charge(card: Card) -> void:
+	_character_drag_card = card
+	_character_drag_latched = true
+	_character_drag_charging = true
+
+func end_character_drag(card: Card = null) -> void:
+	if card != null and card != _character_drag_card:
 		return
+	_character_drag_card = null
+	_character_drag_latched = false
+	_character_drag_charging = false
+	_character_drag_lock_x = 0.0
+	_character_drag_restore_scale = 1.0
+	_character_drag_stance = Transform3D()
+
+## Returns true while the stance owns the card's transform. False means the
+## caller should run the ordinary mouse-plane drag update.
+func update_character_drag(card: Card, pointer: Vector2) -> bool:
+	if card == null or not is_instance_valid(card):
+		return false
+	if card != _character_drag_card:
+		begin_character_drag(card)
 	var viewport_size := get_viewport().get_visible_rect().size
-	var preview_pointer := Vector2(clampf(pointer.x, viewport_size.x * 0.20, viewport_size.x * 0.80), viewport_size.y * character_drag_screen_y)
-	var plane := Plane(Vector3.UP, field.play_area_bounds().end.y + 0.25)
-	var hit = plane.intersects_ray(camera.project_ray_origin(preview_pointer), camera.project_ray_normal(preview_pointer))
+	var threshold: float = viewport_size.y * character_drag_trigger_y
+	var in_hand_band: bool = pointer.y >= threshold
+	if not _character_drag_latched:
+		if in_hand_band:
+			return false
+		# CROSSED UPWARD. Lock the X where it crossed, not where the pointer is later.
+		_character_drag_latched = true
+		_character_drag_lock_x = pointer.x
+		_release_hover(card)
+		card.stop_hand_layout()
+		_character_drag_stance = _build_character_drag_stance(pointer.x)
+		card.global_transform = _character_drag_stance
+		return true
+	# Charging is a one-way latch. Before that, returning to the hand band puts the
+	# card back under the ordinary drag.
+	if not _character_drag_charging and in_hand_band:
+		_resume_normal_character_drag(card)
+		return false
+	return true
+
+func _build_character_drag_stance(pointer_x: float) -> Transform3D:
+	var camera := get_viewport().get_camera_3d()
+	var viewport_size := get_viewport().get_visible_rect().size
+	if camera == null:
+		return Transform3D()
+	# Keep the whole card on screen when the crossing happened near an edge.
+	var screen := Vector2(
+		clampf(pointer_x, viewport_size.x * 0.08, viewport_size.x * 0.92),
+		viewport_size.y * character_drag_screen_y)
+	var ray_origin := camera.project_ray_origin(screen)
+	var ray := camera.project_ray_normal(screen)
+	var plane_y: float = field.play_area_bounds().end.y + 0.25 + character_drag_lift_y
+	var hit = Plane(Vector3.UP, plane_y).intersects_ray(ray_origin, ray)
+	var position := ray_origin + ray * 6.0
 	if hit != null:
-		card.global_transform = Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * character_drag_scale), hit)
+		position = hit
+	# Screen-facing basis: local X stays screen-right, local Y faces the camera,
+	# local +Z is screen-down. The negative X pitch tips the card into the stance
+	# shown in the reference rather than leaving it flush with the screen.
+	var cam_basis := camera.global_transform.basis.orthonormalized()
+	var screen_basis := Basis(cam_basis.x, cam_basis.z, -cam_basis.y)
+	var pitch := Basis(Vector3.RIGHT, deg_to_rad(character_drag_pitch_degrees))
+	var basis := screen_basis * pitch
+	return Transform3D(basis.scaled(Vector3.ONE * character_drag_scale), position)
+
+func _resume_normal_character_drag(card: Card) -> void:
+	card.stop_hand_layout()
+	card.rotation = Vector3.ZERO
+	card.scale = Vector3.ONE * _character_drag_restore_scale
+	card.global_position = card._get_mouse_3d_position_on_card_plane()
+	card.offset = Vector3.ZERO
+	_character_drag_latched = false
+	_character_drag_stance = Transform3D()
 
 func character_drop_over_board(pointer: Vector2) -> bool:
 	var camera := get_viewport().get_camera_3d()
@@ -920,9 +1015,9 @@ func remove_card(card):
 	
 						
 ## Begins paying for a card. Returns false when it cannot legally be played now.
-## Both a Summon and a Character leave the hand for the parked Stack slot; the
-## Character gets the thin gold cast-pending aura and is blocked from being
-## selected as a mana source until the payment is confirmed or cancelled.
+## A Summon leaves the hand for the parked Stack slot. A Character leaves the
+## hand's card list but stays parented to the hand in its cast stance; both get
+## the thin gold cast-pending aura and are blocked from mana selection.
 func charge(card) -> bool:
 	if card.type == 'Summon':
 		# Summons can be cast with a stack on it — they are the instant-speed
@@ -951,10 +1046,10 @@ func charge(card) -> bool:
 	if not can_play_character(card):
 		push_warning("[Rules] %s cannot be played now: turn player only, empty stack required" % card.card_name)
 		return false
-	# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is not
-	# a legal stack object, but it is staged there with the thin gold aura, and
-	# it fades from that spot on confirm. `charging_card` keeps it out of the
-	# mana selection.
+	# A CHARACTER STAYS IN THE HAND'S CAST STANCE while its cost is paid. It is
+	# removed from `cards` so the fan does not re-lay it out, and the thin gold
+	# aura marks it as the play. It fades from that stance on confirm;
+	# `charging_card` keeps it out of the mana selection.
 	remove_card(card)
 	charging_card = card
 	charge_start.emit(card)
@@ -1159,6 +1254,10 @@ func animate_card(card, target_position, target_tilt: float = 0.0):
 func _on_assistant_charge_complete() -> void:
 	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
 		return
+	# The Character may still be visible in its cast stance while Stack fades it
+	# out; only the hand's drag bookkeeping is finished here.
+	if charging_card != null:
+		end_character_drag(charging_card)
 	# The payment cards fly to the graveyard FIRST. Stack awaits
 	# `await_mana_discard()` before it fades a Character out of hand.
 	_mana_discard_in_progress = true
@@ -1192,9 +1291,17 @@ func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()
 	selected_cards_for_mana_conversion = []
-	# Both a Summon and a Character are parked on the Stack while being paid
-	# for; cancelling hands the parked card back to its owner's hand.
-	if charging_card and charging_card.get_parent() == stack:
-		add_card(charging_card)
+	# Both a Summon and a Character leave the hand while being paid for.
+	# Cancelling hands the card back: a Summon is parked on the Stack, while a
+	# Character is still parented to this Hand in its cast stance.
+	if charging_card != null:
+		end_character_drag(charging_card)
+		if charging_card.get_parent() == self:
+			if not cards.has(charging_card):
+				cards.append(charging_card)
+				charging_card.index = cards.size() - 1
+				charging_card.enter_zone(Card.Zone.HAND)
+		else:
+			add_card(charging_card)
 	charging_card = null
 	update_card_positions()

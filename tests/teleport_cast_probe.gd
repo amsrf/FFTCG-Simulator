@@ -1,8 +1,9 @@
 extends Node
 ## Teleport cast presentation checks.
 ##
-## A Character is paid for in the Stack row, dissolves there, and then
-## materialises at its field slot. The card must never travel between the two.
+## A Character is paid for in the hand/cast stance, dissolves where it sits,
+## and then materialises at its field slot. The card must never travel between
+## the two, and it is never parked in the Stack.
 
 const GAME_SCENE := preload("res://game.tscn")
 const HAND_CARD := 25  # Squire, vanilla Forward
@@ -55,8 +56,8 @@ func _ready() -> void:
 	_expect(card != null, "the test Character is in hand")
 	_hand.charge(card)
 	await get_tree().process_frame
-	_expect(card.get_parent() == _stack,
-		"the Character starts parked in the fake Stack")
+	_expect(card.get_parent() == _hand and card.current_zone == Card.Zone.HAND,
+		"the paying Character stays in hand instead of the fake Stack")
 	_expect(card.ring_cast_pending(),
 		"and is marked with the thin gold cast-pending aura")
 	_hand.add_card_to_mana_conversion(card)
@@ -69,8 +70,8 @@ func _ready() -> void:
 	# the Character fade, and only then does the field teleport begin.
 	_assistant.on_charge_complete()
 	await get_tree().create_timer(0.10).timeout
-	_expect(card.get_parent() == _stack,
-		"during the shine the card is still in the Stack")
+	_expect(card.get_parent() == _hand,
+		"during the shine the card is still in its hand-side stance")
 	_expect(card.global_position.distance_to(source_position) < 0.02,
 		"and it does not move while shining")
 	_expect(_param(card, "teleport_glow") > 0.05,

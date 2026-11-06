@@ -4,8 +4,8 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-06
 ### Changed
-- Player Character drags use a flat, smaller preview constrained to the bottom screen band (`Hand.update_character_drag`). Release checks the pointer against the board and keeps the preview through payment instead of using the stack layout. Summons retain their existing flow.
-- Extended `tests/flow_probe.gd` to cover the constrained pose, payment staging and cancellation.
+- Player Character drags now switch into a latched cast stance when the pointer crosses above the hand band: the card locks its X position, faces the screen, pitches about −15° on local X and lifts/scales up (`Hand.update_character_drag`). Returning to the hand band before payment resumes the normal drag; releasing in the stance begins mana charging. The Character stays in the hand-side stance through payment instead of being parked in the fake Stack. Summons retain their existing flow.
+- Extended `tests/flow_probe.gd`, `tests/drop_area_probe.gd` and `tests/teleport_cast_probe.gd` to cover the stance latch, horizontal lock, payment staging, cancellation and field teleport.
 
 ## [Unreleased] — 2026-09-11
 ### Card Damage Reaction (clip4 reference)

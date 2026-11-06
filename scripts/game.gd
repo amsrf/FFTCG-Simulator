@@ -891,11 +891,11 @@ func play_card_for(player_id: int, card: Card) -> bool:
 	var agent: Agent = agent_for(player_id)
 	if owner_hand == null or card == null or agent == null:
 		return false
-	# charge() emits charge_start and removes the card from hand; Stack parks
-	# both Characters and Summons on the fake Stack. Assistant then opens the
-	# payment modal + sets mana_cost from the card. It returns false when the
-	# play is illegal (a Character off-turn, or with a non-empty stack) — nothing
-	# was charged, so there is nothing to pay.
+	# charge() emits charge_start and removes the card from hand. A Summon is
+	# parked on the Stack; a Character stays in its hand-side cast stance.
+	# Assistant then opens the payment modal + sets mana_cost from the card. It
+	# returns false when the play is illegal (a Character off-turn, or with a
+	# non-empty stack) — nothing was charged, so there is nothing to pay.
 	if not owner_hand.charge(card):
 		return false
 	if agent is LocalAgent:
