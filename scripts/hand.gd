@@ -865,7 +865,7 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 ## Screen-Y of the latched card's centre, as a fraction of viewport height.
 @export_range(0.50, 0.95) var character_drag_screen_y: float = 0.74
 ## Screen-facing scale of the latched card.
-@export_range(0.5, 3.0) var character_drag_scale: float = 2.0
+@export_range(0.5, 3.0) var character_drag_scale: float = 2.8
 ## Pitch around the card's local X. Negative rotates the top edge back under
 ## the right-hand rule with +X to the right.
 @export_range(-45.0, 0.0) var character_drag_pitch_degrees: float = -15.0
@@ -937,7 +937,10 @@ func _build_character_drag_stance(pointer_x: float) -> Transform3D:
 		viewport_size.y * character_drag_screen_y)
 	var ray_origin := camera.project_ray_origin(screen)
 	var ray := camera.project_ray_normal(screen)
-	var plane_y: float = field.play_area_bounds().end.y + 0.25 + character_drag_lift_y
+	# ABOVE THE HAND, not below it. The old plane sat at the mat surface, so the
+	# fan (at hand height) drew over the stance card. Lifting from the hand's own
+	# Y guarantees the card is in front of every fan card as well as larger.
+	var plane_y: float = global_position.y + character_drag_lift_y
 	var hit = Plane(Vector3.UP, plane_y).intersects_ray(ray_origin, ray)
 	var position := ray_origin + ray * 6.0
 	if hit != null:

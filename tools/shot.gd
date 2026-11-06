@@ -81,6 +81,36 @@ func _ready() -> void:
 					hand_idx, hand_cards[hand_idx].scale.x])
 			else:
 				print("[Shot] --hover-hand %d is out of range" % hand_idx)
+		# --character-stance <index>: drive a real Character drag into its latched cast
+		# stance so the pose (screen-facing, -15 deg X, lifted above the fan) can be captured.
+		# Add --character-charge to release it and show mana charging.
+		if _args.has("character-stance"):
+			await _settle(3)
+			var stance_hand: Node = game.get("hand")
+			var stance_cards: Array = stance_hand.get("cards") if stance_hand != null else []
+			var stance_card: Card = null
+			var wanted_index: int = int(_args["character-stance"])
+			if wanted_index >= 0 and wanted_index < stance_cards.size():
+				stance_card = stance_cards[wanted_index]
+			else:
+				for c in stance_cards:
+					if c != null and c.type != "Summon":
+						stance_card = c
+						break
+			if stance_card != null:
+				stance_hand.call("begin_character_drag", stance_card)
+				stance_card.call("begin_drag")
+				var stance_vp: Vector2 = get_viewport().get_visible_rect().size
+				var latched: bool = bool(stance_hand.call("update_character_drag", stance_card,
+					Vector2(stance_vp.x * 0.5, stance_vp.y * 0.1)))
+				print("[Shot] character stance '%s' latched=%s pos=%s basis=%s" % [
+					stance_card.card_name, str(latched), str(stance_card.global_position),
+					str(stance_card.global_basis)])
+				if _args.has("character-charge"):
+					stance_card.call("release_drag")
+					await _settle(4)
+					print("[Shot] character charge started=%s" % str(stance_hand.get("charging_card") != null))
+			await _settle(4)
 		# --stack-card <id[,id...]>: put real cards on the Stack so the stack presentation can be
 		# captured without playing a match. Uses the same add_card_to_tree() the game uses.
 		if _args.has("stack-card"):
