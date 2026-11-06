@@ -27,7 +27,10 @@ func handle_grabbed():
 			if card.matches_criteria(hand.choose_card_criteria):
 				hand.toggle_effect_card_selection(card)
 		_:
-			card.is_dragging = true
+			card.begin_drag()
+			if card.type != "Summon":
+				hand.update_character_drag(card, card.get_viewport().get_mouse_position())
+				return
 			card.position +=  Vector3(0, 0.1,-0.1)
 			card.rotation = Vector3.ZERO
 			# NO SIZE CHANGE HERE. The card keeps the size it already has, which after a hover is the STACK's size —
@@ -49,8 +52,11 @@ func handle_released():
 	# rectangle in the hand, inside an 8 x 4 m playmat, so most of the visible
 	# board rejected the drop. Ask the Field for its real bounds instead.
 	var over_board: bool = hand.field != null and hand.field.is_in_play_area(card.global_position)
+	if card.type != "Summon":
+		over_board = hand.character_drop_over_board(card.get_viewport().get_mouse_position())
+	var charged := false
 	if over_board && card.can_be_played():
-		hand.charge(card)
+		charged = hand.charge(card)
 	else:
 		hand.move_element(hand.cards,card.index,new_index)
 		card.index = new_index
@@ -59,4 +65,5 @@ func handle_released():
 	# Back to whatever size its zone wants. apply_zone_scale() rather than a hard-coded Vector3.ONE, because a card
 	# that was just PLAYED has already been parked on the stack and must keep the stack's size — and because the
 	# hand's own resting size lives in Card.ZONE_PRESENTATION, where a copy of it here would drift.
-	card.apply_zone_scale()
+	if not charged:
+		card.apply_zone_scale()

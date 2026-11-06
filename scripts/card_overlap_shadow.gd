@@ -111,9 +111,10 @@ static func update(container: Node3D, cards: Array, stack_order: bool, hovered: 
 			var radius_local: float = card_corner_radius_m * upper_scale / maxf(lower_scale, 0.0001)
 			var corner_u: float = radius_local / maxf(lower_face.x, 0.0001)
 			var corner_v: float = radius_local / maxf(lower_face.y, 0.0001)
-			var previous: Dictionary = best.get(lower_index, {})
+			var shadow_key := Vector2i(lower_index, int(side))
+			var previous: Dictionary = best.get(shadow_key, {})
 			if previous.is_empty() or overlap > float(previous.get("overlap", 0.0)):
-				best[lower_index] = {
+				best[shadow_key] = {
 					"side": side,
 					"edge": edge,
 					"slope": slope,
@@ -124,8 +125,13 @@ static func update(container: Node3D, cards: Array, stack_order: bool, hovered: 
 					"overlap": overlap,
 				}
 
-	for index in best:
-		var card: Card = cards[int(index)]
-		var entry: Dictionary = best[index]
+	var applied: Dictionary = {}
+	# Keep the strongest overlap in the primary slot for existing observers.
+	var keys := best.keys()
+	keys.sort_custom(func(a, b): return best[a]["overlap"] > best[b]["overlap"])
+	for key in keys:
+		var card: Card = cards[key.x]
+		var entry: Dictionary = best[key]
 		card.set_edge_shadow(entry["side"], entry["edge"], entry["slope"], entry["strength"],
-			overlap_shadow_width, entry["corner_u"], entry["corner_v"], entry["v_range"])
+			overlap_shadow_width, entry["corner_u"], entry["corner_v"], entry["v_range"], applied.has(key.x))
+		applied[key.x] = true

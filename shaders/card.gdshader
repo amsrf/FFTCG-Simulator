@@ -119,6 +119,15 @@ void teleport_rect(vec2 uv, float depth_limit, float stop_level, float stop_chan
     }
 }
 
+uniform float shadow2_strength : hint_range(0.0, 1.0) = 0.0;
+uniform float shadow2_side = 1.0;          // +1: upper card is to the RIGHT; -1: to the LEFT
+uniform float shadow2_edge : hint_range(0.0, 1.0) = 0.0;
+uniform float shadow2_slope = 0.0;
+uniform vec2 shadow2_v_range = vec2(0.0, 1.0);
+uniform float shadow2_corner_u = 0.0;
+uniform float shadow2_corner_v = 0.0;
+uniform float shadow2_width : hint_range(0.001, 0.30) = 0.055;
+
 void fragment() {
     // PIXEL DISSOLVE. Kept as discard rather than alpha blending: the card
     // stays opaque wherever it exists, which avoids transparent-card sorting
@@ -209,6 +218,32 @@ void fragment() {
     float soft = exp(-max(d, 0.0) / max(shadow_width, 0.0001));
     float contact = exp(-max(d, 0.0) / max(shadow_width * 0.22, 0.0001));
     float shade = (contact * 0.42 + soft * 0.58) * visible * shadow_strength;
+    {
+    float edge_x = shadow2_edge + shadow2_slope * (UV.y - 0.5);
+    // Rounded-corner curl. At the card middle the shift is zero; at either end it reaches
+    // the corner radius and follows the quarter-ellipse of the upper card's silhouette.
+    if (shadow2_corner_v > 0.0001) {
+        float q_top = clamp((shadow2_v_range.x + shadow2_corner_v - UV.y) / shadow2_corner_v, 0.0, 1.0);
+        float q_bottom = clamp((UV.y - (shadow2_v_range.y - shadow2_corner_v)) / shadow2_corner_v, 0.0, 1.0);
+        float q = max(q_top, q_bottom);
+        if (q > 0.0) {
+            float shift = shadow2_corner_u * (1.0 - sqrt(max(0.0, 1.0 - q * q)));
+            edge_x += (shadow2_side >= 0.0 ? shift : -shift);
+        }
+    }
+    float d = shadow2_side >= 0.0 ? edge_x - UV.x : UV.x - edge_x;
+    // ANALYTIC EDGE ANTI-ALIASING. A hard `step(0.0, d)` puts the darkest part of the shadow
+    // exactly on the upper card's rasterised silhouette, so any half-pixel mismatch between
+    // the computed edge and that silhouette reads as a jagged seam. fwidth() gives the UV
+    // change per screen pixel, so fading across one pixel hides the seam without making the
+    // contact shadow visibly softer.
+    float aa = max(fwidth(d), 0.00001);
+    float visible = smoothstep(-aa, aa, d) * step(shadow2_v_range.x, UV.y) * step(UV.y, shadow2_v_range.y);
+    float soft = exp(-max(d, 0.0) / max(shadow2_width, 0.0001));
+    float contact = exp(-max(d, 0.0) / max(shadow2_width * 0.22, 0.0001));
+    float second_shade = (contact * 0.42 + soft * 0.58) * visible * shadow2_strength;
+    shade = max(shade, second_shade);
+    }
     shade = clamp(shade, 0.0, 0.82);
 
     vec3 art = base * (1.0 - shade);

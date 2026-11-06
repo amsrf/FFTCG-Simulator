@@ -2,6 +2,11 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-06
+### Changed
+- Player Character drags use a flat, smaller preview constrained to the bottom screen band (`Hand.update_character_drag`). Release checks the pointer against the board and keeps the preview through payment instead of using the stack layout. Summons retain their existing flow.
+- Extended `tests/flow_probe.gd` to cover the constrained pose, payment staging and cancellation.
+
 ## [Unreleased] — 2026-09-11
 ### Card Damage Reaction (clip4 reference)
 

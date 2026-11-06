@@ -26,6 +26,12 @@ var mat: ShaderMaterial
 @export var is_valid_target = false;
 @export var cost: int
 @export var is_dragging = false
+## Set when a drag has already been ended, so the mouse-release signal and the
+## per-frame button check cannot both run the drop logic.
+var _drag_release_handled := false
+## True only for a drag started by a real grab. The per-frame fallback uses it so
+## code that merely sets is_dragging (tests, staging) is never auto-released.
+var _drag_input_active := false
 @export var selected = false
 @export var type: String
 @export var card_name: String
@@ -332,22 +338,24 @@ func set_revealed(is_revealed: bool) -> void:
 ## the covering card is to this card's right, -1 when it is to the left. `edge` is the covering
 ## card's edge in this card's UV.x, and `strength` fades the whole band.
 func set_edge_shadow(side: float, edge: float, slope: float, strength: float, width: float = 0.055,
-		corner_u: float = 0.0, corner_v: float = 0.0, v_range := Vector2(0, 1)) -> void:
+		corner_u: float = 0.0, corner_v: float = 0.0, v_range := Vector2(0, 1), secondary := false) -> void:
 	if mat == null:
 		return
-	mat.set_shader_parameter("shadow_side", 1.0 if side >= 0.0 else -1.0)
-	mat.set_shader_parameter("shadow_edge", edge)
-	mat.set_shader_parameter("shadow_v_range", v_range)
-	mat.set_shader_parameter("shadow_slope", slope)
-	mat.set_shader_parameter("shadow_corner_u", maxf(corner_u, 0.0))
-	mat.set_shader_parameter("shadow_corner_v", maxf(corner_v, 0.0))
-	mat.set_shader_parameter("shadow_strength", clampf(strength, 0.0, 1.0))
-	mat.set_shader_parameter("shadow_width", clampf(width, 0.001, 0.30))
+	var prefix := "shadow2_" if secondary else "shadow_"
+	mat.set_shader_parameter(prefix + "side", 1.0 if side >= 0.0 else -1.0)
+	mat.set_shader_parameter(prefix + "edge", edge)
+	mat.set_shader_parameter(prefix + "v_range", v_range)
+	mat.set_shader_parameter(prefix + "slope", slope)
+	mat.set_shader_parameter(prefix + "corner_u", maxf(corner_u, 0.0))
+	mat.set_shader_parameter(prefix + "corner_v", maxf(corner_v, 0.0))
+	mat.set_shader_parameter(prefix + "strength", clampf(strength, 0.0, 1.0))
+	mat.set_shader_parameter(prefix + "width", clampf(width, 0.001, 0.30))
 
 func clear_edge_shadow() -> void:
 	if mat == null:
 		return
 	mat.set_shader_parameter("shadow_strength", 0.0)
+	mat.set_shader_parameter("shadow2_strength", 0.0)
 
 ## Hidden/inert staging for a REVEALED card: the card is out of the deck and in Game.revealed_cards, but it must not
 ## render or accept input until an effect moves it somewhere. The reverse is applied by enter_zone().
@@ -403,13 +411,43 @@ func assign_card_texture():
 
 		
 func _process(_delta):
-	if is_dragging:
-		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			is_dragging = false
-		else:
-			# Update object position to mouse position
-			emit_signal("card_dragged", self)
-			global_transform.origin = _get_mouse_3d_position_on_card_plane() + offset
+	if not is_dragging or not _drag_input_active:
+		return
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		# THE MOUSE-RELEASE SIGNAL IS NOT GUARANTEED. It comes from CardArea3D,
+		# which only sees the event while the pointer is over the card. A fast
+		# release, or one just off the card's edge, missed it — and the old code
+		# merely cleared is_dragging here, leaving the card wherever it was
+		# dropped until some unrelated hand re-layout moved it. End the drag
+		# through the same state handler the signal uses.
+		release_drag()
+		return
+	if current_zone == Zone.HAND and type != "Summon" and controller == "player":
+		get_parent().update_character_drag(self, get_viewport().get_mouse_position())
+		return
+	# Update object position to mouse position
+	emit_signal("card_dragged", self)
+	global_transform.origin = _get_mouse_3d_position_on_card_plane() + offset
+
+## Start an interactive drag. Called by HandCardState when the pointer grabs a
+## hand card; tests and staging that set is_dragging directly do not arm the
+## per-frame release fallback.
+func begin_drag() -> void:
+	_drag_release_handled = false
+	_drag_input_active = true
+	is_dragging = true
+
+## Finish a drag exactly once. Both the CardArea3D release signal and the
+## per-frame mouse check can reach here; whichever is first owns the drop.
+func release_drag() -> void:
+	if not is_dragging or _drag_release_handled:
+		_drag_input_active = false
+		return
+	_drag_release_handled = true
+	_drag_input_active = false
+	is_dragging = false
+	if current_state != null:
+		current_state.handle_released()
 			
 
 		
@@ -505,6 +543,7 @@ func _on_card_area_3d_card_grabbed(_card: Variant):
 			host.call("_show_zone_view", zone, title)
 		return
 	if current_state :
+		_drag_release_handled = false
 		current_state.handle_grabbed()
 
 ## Hover on the card's own area. The hand's LIFT is driven separately by HandMesh
@@ -670,7 +709,7 @@ var _size_tween: Tween = null
 func tween_to_scale(to_scale: float, seconds: float) -> void:
 	if _size_tween != null and _size_tween.is_valid():
 		_size_tween.kill()
-	if not is_inside_tree():
+	if seconds <= 0.0 or not is_inside_tree():
 		scale = Vector3.ONE * to_scale
 		return
 	_size_tween = create_tween()
@@ -720,6 +759,7 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	_upright_y = rotation_degrees.y
 	apply_zone_scale()
 	is_dragging = false
+	_drag_input_active = false
 	is_valid_target = false
 	# EVERY meaning of the ring is about a card in its CURRENT zone: the prompt, "you picked
 	# this", "they picked this", "you may activate this", "mana was spent on this", and
@@ -1707,8 +1747,7 @@ func reset():
 	clear_mana_crystal()
 
 func _on_card_area_3d_card_released(_card: Variant) -> void:
-	if current_state :
-		current_state.handle_released()
+	release_drag()
 		
 ## Glow ring marking a card the game is asking the player to choose or target.
 ## ALL of the look lives in shaders/target_border_material.tres — open it in the

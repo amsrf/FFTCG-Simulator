@@ -63,6 +63,21 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
+	# Drag preview follows horizontal motion, but never follows the cursor up the board.
+	var screen_size := get_viewport().get_visible_rect().size
+	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.7))
+	var preview_pose := chemist.global_transform
+	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.1))
+	_expect(chemist.global_transform.is_equal_approx(preview_pose), "Character drag stays in the bottom band when the pointer moves upward")
+	_expect(chemist.global_basis.y.normalized().dot(Vector3.UP) > 0.99, "Character drag lays the card flat")
+	hand.remove_card(chemist)
+	stack._on_hand_charge_start(chemist)
+	_expect(chemist.global_transform.is_equal_approx(preview_pose) and not stack.layout_cards().has(chemist), "Character payment preserves the drag pose outside the stack layout")
+	_expect(chemist.current_zone != Card.Zone.STACK, "Character payment keeps the printed card presentation")
+	stack._on_assistant_charge_cancelled()
+	hand.add_card(chemist)
+	_expect(hand.cards.has(chemist) and chemist.current_zone == Card.Zone.HAND, "cancelled Character preview returns to hand")
+
 	# Exactly what Field._on_tween_finished() calls when a played card lands.
 	field.execute_card_effect(chemist, "when_enter_field")
 
@@ -414,6 +429,8 @@ func _check_demo_stack_fan() -> void:
 	var stack: Stack = demo.stack
 	var count := hand.cards.size()
 	for i in range(count):
+		var previous_top: Card = stack.cards.back() if not stack.cards.is_empty() else null
+		var previous_slot: Vector3 = previous_top.global_position if previous_top != null else Vector3.ZERO
 		demo._cast()
 		var flight := stack._opponent_summon_flight
 		if flight == null:
@@ -421,6 +438,12 @@ func _check_demo_stack_fan() -> void:
 			break
 		flight.custom_step(stack.opponent_flight_seconds + 0.001)
 		var top: Card = stack.cards.back()
+		if previous_top != null:
+			previous_top.stack_tween.custom_step(0.31)
+			var camera := get_viewport().get_camera_3d()
+			_expect(camera.unproject_position(previous_top.global_position).y
+				> camera.unproject_position(previous_slot).y,
+				"new card pushes the previous top down during flight")
 		_expect(stack.cards.size() == i + 1 and hand.cards.size() == count - i - 1
 			and top.revealed and top.position.distance_to(stack.calculate_card_position(i)) < 0.001,
 			"demo holds %d cards with the latest in its stack slot" % (i + 1))
@@ -449,7 +472,7 @@ func _check_demo_stack_fan() -> void:
 			_expect(absf(offset.dot(pose.y) - stack.FAN_HEIGHT_STEP) < 0.0001
 				and view_camera.unproject_position(upper.global_position).y < view_camera.unproject_position(lower.global_position).y - 1.0 and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0,
 				"stack layer %d steps visibly upward while retaining its normal depth" % (i + 1))
-		_expect(stack.cards.front().position.is_zero_approx(), "the bottom card anchors the stack")
+		_expect(stack.cards.back().position.is_zero_approx(), "the newest card occupies the fixed top slot")
 		_expect(float(stack.cards.back().mat.get_shader_parameter("shadow_strength")) == 0.0,
 			"top stack card receives no overlap shadow")
 		var inspected: Card = stack.cards.front()
@@ -501,6 +524,35 @@ func _check_hover_shadow(hand: Hand) -> void:
 	var upper: Card = fan.back()
 	var lower: Card = fan[-2]
 	hand.set_hovered(upper, true)
+	var hover_start := upper.global_position
+	_expect(is_equal_approx(upper.scale.x, hand.HOVER_CARD_SCALE) and upper.rotation.is_zero_approx(),
+		"hand hover enlarges and straightens immediately")
+	await get_tree().create_timer(0.45).timeout
+	_expect(upper.global_position.z > hover_start.z + 0.03 and is_equal_approx(upper.global_position.x, hover_start.x)
+		and is_equal_approx(upper.global_position.y, hover_start.y), "enlarged hand card drifts slightly along world Z")
+	# Reproduce a physics mouse-exit while the pointer is in the retained footprint.
+	hand._pointer_hover_region = Rect2(hand.get_viewport().get_mouse_position() - Vector2.ONE * 5, Vector2.ONE * 10)
+	hand._pointer_hover_active = true
+	hand.pointer_hover(upper, false)
+	_expect(hand.hovered_card == upper, "drift-induced mouse exit keeps the enlarged card open")
+	var leave := InputEventMouseMotion.new()
+	leave.position = Vector2(-100, -100)
+	hand._input(leave)
+	_expect(hand.hovered_card == null, "leaving the stable hover region dismisses the card")
+	hand.set_hovered(upper, true)
+	hand._pointer_hover_region = hand._card_screen_rect(upper).grow(3.0)
+	hand._pointer_hover_active = true
+	var move := InputEventMouseMotion.new()
+	move.position = cam.unproject_position(hand.to_global(hand.calculate_card_position(fan[-3].index, false)))
+	var underneath := hand._resting_card_at(move.position)
+	hand._input(move)
+	_expect(underneath != null and underneath != upper and hand.hovered_card == underneath,
+		"mouse movement transfers hover to the frontmost resting card underneath")
+	var transferred := hand.hovered_card
+	hand.pointer_hover(upper, false)
+	_expect(hand.hovered_card == transferred, "old card exit does not clear transferred hover")
+	hand.set_hovered(transferred, false)
+	hand.set_hovered(upper, true)
 	await get_tree().create_timer(0.45).timeout
 	var edge := float(lower.mat.get_shader_parameter("shadow_edge"))
 	var lower_size := lower._card_face_size()
@@ -515,6 +567,18 @@ func _check_hover_shadow(hand: Hand) -> void:
 	print("[FlowProbe] hover active=%s shadow=%s error_px=%.3f" % [hand.hovered_card == upper, lower.mat.get_shader_parameter("shadow_strength"), distance_px])
 	_expect(hand.hovered_card == upper and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0 and distance_px < 1.0,
 		"the hovered card's projected edge meets its neighbour's shadow within one pixel")
+	hand.set_hovered(upper, false)
+	hand.set_hovered(fan[-3], true)
+	await get_tree().create_timer(0.45).timeout
+	_expect(float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0
+		and float(lower.mat.get_shader_parameter("shadow2_strength")) > 0.0
+		and float(lower.mat.get_shader_parameter("shadow_side")) != float(lower.mat.get_shader_parameter("shadow2_side")),
+		"hovering the left neighbour preserves the right neighbour shadow")
+	hand.set_hovered(fan[-3], false)
+	await get_tree().create_timer(0.45).timeout
+	_expect(float(lower.mat.get_shader_parameter("shadow2_strength")) == 0.0,
+		"leaving hover removes the extra overlap shadow")
+
 
 func _check_opponent_translation(game) -> void:
 	var stack: Stack = game.get_node("Stack")
@@ -524,8 +588,8 @@ func _check_opponent_translation(game) -> void:
 	var original = card.mat.get_shader_parameter("texture_albedo")
 	if hand.charge(card):
 		var face = card.get_node_or_null("StackAbilityFace")
-		_expect(face != null and not card.revealed and face.get_node("Ability").text.contains("Forward"),
-			"hidden opponent Summon has spell text before its first flight frame")
+		_expect(face != null and card.revealed and card.hand_mesh.get_surface_override_material(0) == card.mat and face.get_node("Ability").text.contains("Forward"),
+			"opponent Summon has its artwork material before its first flight frame")
 		game.get_node("Assistant").on_charge_cancelled()
 		_expect(card.current_zone == Card.Zone.HAND and not card.has_node("StackAbilityFace")
 			and card.mat.get_shader_parameter("texture_albedo") == original, "mid-flight cancellation restores the printed hand face")

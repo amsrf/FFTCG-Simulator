@@ -7,6 +7,7 @@ extends Node
 
 const GAME_SCENE := preload("res://game.tscn")
 const HAND_CARD := 25  # Squire, cost 2
+const SUMMON_CARD := 62  # Valefor, no target required
 
 var _checks: int = 0
 var _fails: int = 0
@@ -44,6 +45,12 @@ func _ready() -> void:
 	_field = _game.get("field")
 	_hand = _game.get("hand")
 	_assistant = _game.get("assistant")
+	# Character drops now check the POINTER (the preview stays in a bottom band), while
+	# Summon drops still check the card itself. Use a no-target Summon for the board-drop
+	# checks below, then the Character for the payment-fade checks.
+	var summon: Card = _game.create_card(SUMMON_CARD, "player")
+	_game.add_child(summon)
+	_hand.add_card(summon)
 
 	var bounds: AABB = _field.play_area_bounds()
 	print("[DropArea] bounds position=%s end=%s" % [bounds.position, bounds.end])
@@ -58,8 +65,8 @@ func _ready() -> void:
 	_expect(not _field.is_in_play_area(Vector3(5.0, 0.5, 0.0)),
 		"a point beyond the right edge is outside")
 
-	var card: Card = _hand.cards[0]
-	_expect(card != null, "the test card is in hand")
+	var card: Card = summon
+	_expect(card != null, "the test Summon is in hand")
 	# Real players hover the card before dragging it. Keep that state active:
 	# it used to survive the cast and lay the returned card out at the hover
 	# offset instead of in the fan.
@@ -74,7 +81,7 @@ func _ready() -> void:
 	_expect(card.get_parent() == _game.get("stack"),
 		"and the card is parked in the fake Stack")
 	_expect(not _hand.cards.has(card), "and the hand no longer owns it")
-	_expect(card.ring_cast_pending(), "and it is marked with the thin gold pending aura")
+	_expect(not card.ring_cast_pending(), "and a Summon is parked without the Character pending aura")
 	_expect(_hand.hovered_card != card,
 		"and starting the cast clears the stale hover state")
 
@@ -89,13 +96,34 @@ func _ready() -> void:
 	_expect(card.position.distance_to(target_position) < 0.05,
 		"and it settles into its fan slot without a manual reorder")
 
+	# THE RELEASE SIGNAL CAN BE MISSED. It only fires while the pointer is over the
+	# card's CardArea3D, so a fast release or a release just off the edge used to
+	# leave the card parked wherever it was dropped until an unrelated re-layout.
+	# Card.release_drag() is the fallback; calling it twice must only drop once.
+	card.begin_drag()
+	card.global_position = Vector3(5.0, 0.5, 0.0)
+	card.release_drag()
+	card.release_drag()
+	await get_tree().create_timer(0.35).timeout
+	var fallback_home: Vector3 = _hand.calculate_card_position(card.index)
+	_expect(card.get_parent() == _hand and _hand.cards.has(card) and not card.is_dragging,
+		"a missed release returns the card to the hand instead of leaving it on the board")
+	_expect(card.position.distance_to(fallback_home) < 0.05,
+		"and it lands in its fan slot")
+
+	# The Summon was only for the drop path; the rest of the probe is about the
+	# Character payment presentation.
+	_hand.remove_card(card)
+	card.queue_free()
+	var character: Card = _hand.cards[0]
+	_expect(character != null, "the Character is in hand")
 	# Confirm pays the mana cards FIRST; the marked Character must not start
 	# fading until their discard flight has landed.
-	_expect(_hand.charge(card), "the Character can be charged again")
+	_expect(_hand.charge(character), "the Character can be charged again")
 	await get_tree().process_frame
 	var mana_card: Card = null
 	for c in _hand.cards:
-		if c != card:
+		if c != character:
 			mana_card = c
 			break
 	_expect(mana_card != null, "another hand card is available to pay")
@@ -106,10 +134,10 @@ func _ready() -> void:
 	await get_tree().create_timer(0.15).timeout
 	_expect(mana_card.get_parent() == _hand.graveyard,
 		"the payment card is already in the Break Zone")
-	_expect(_param(card, "teleport_glow") <= 0.001,
+	_expect(_param(character, "teleport_glow") <= 0.001,
 		"the Character fade waits for the discard flight")
 	await get_tree().create_timer(0.65).timeout
-	_expect(_param(card, "teleport_glow") > 0.001,
+	_expect(_param(character, "teleport_glow") > 0.001,
 		"the fade starts only after the discard flight")
 
 	print("[DropArea] %d checks | failures: %d" % [_checks, _fails])

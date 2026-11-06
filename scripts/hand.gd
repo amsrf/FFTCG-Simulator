@@ -6,7 +6,13 @@ const CARD_CHARGE = 2
 ## Hover: the hovered card GROWS to a readable size, STRAIGHTENS UP, LIFTS toward the camera so nothing can
 ## overlap it, and is fitted to the bottom of the screen so its whole face can be read — see set_hovered()
 ## and _hover_offset(). This is the timeline for all of it.
-const HOVER_SECONDS := 0.16
+const HOVER_SECONDS := 0.0
+const HOVER_DRIFT_SECONDS := 0.30
+const HOVER_DRIFT_DISTANCE := 0.04
+var _hover_drift: Tween
+var _hover_drift_amount := 0.0
+var _pointer_hover_region := Rect2()
+var _pointer_hover_active := false
 ## The size a hovered hand card grows to. This used to be Card.STACK_CARD_SCALE (2.8), which was chosen for
 ## the ORTHOGRAPHIC board where a hand card and a stack card were the same size on screen. Under the
 ## perspective camera the hand sits much closer to the lens, so 2.8 drew a ~340 x 480 px card that covered
@@ -550,7 +556,7 @@ func _screen_down() -> Vector3:
 		return Vector3(0.0, 0.0, 1.0)
 	return global_transform.basis.inverse() * (-cam.global_transform.basis.y.normalized())
 
-func calculate_card_position(i) -> Vector3:
+func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 	var t: float = i - (cards.size() - 1) / 2.0
 	# x is symmetric about zero, so the row is CENTRED on the Hand whatever its size is.
 	var x_offset: float = t * spacing()
@@ -606,9 +612,10 @@ func calculate_card_position(i) -> Vector3:
 	# FACE DOWN when mirrored: we see backs, they see faces. Done here rather than at the deal because this runs on every
 	# layout, and Card.set_revealed() returns immediately when nothing has changed.
 	cards[i].set_revealed(not mirror_presentation)
-	if hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
+	if include_hover and hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
 		spot += _hover_offset(i, spot)
+		spot += global_basis.inverse() * Vector3(0.0, 0.0, _hover_drift_amount)
 	return spot
 
 
@@ -618,6 +625,68 @@ func calculate_card_position(i) -> Vector3:
 ## The size is set on the CARD, not on its mesh. That is what the drag and the zone system already use, and it is the
 ## CARD's scale that has to be right when it lands on the stack: growing only the mesh would leave the card at hand
 ## size, so playing it would shrink it and then pop it back up as it landed.
+## Pointer hover retains the whole enlarged footprint while the card drifts.
+## Programmatic calls to set_hovered still clear immediately (payment, drag, etc.).
+func pointer_hover(card: Card, entered: bool) -> void:
+	var pointer := get_viewport().get_mouse_position()
+	if _pointer_hover_active and _pointer_hover_region.has_point(pointer):
+		return
+	set_hovered(card, entered)
+	if entered and hovered_card == card:
+		_pointer_hover_region = _card_screen_rect(card).grow(3.0)
+		_pointer_hover_active = true
+
+func _card_screen_rect(card: Card) -> Rect2:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return Rect2()
+	var half := card._card_face_size() * 0.5
+	var rect := Rect2(camera.unproject_position(card.hand_mesh.to_global(Vector3(-half.x, 0, -half.y))), Vector2.ZERO)
+	for corner in [Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
+		rect = rect.expand(camera.unproject_position(card.hand_mesh.to_global(corner)))
+	return rect
+
+func _resting_card_at(pointer: Vector2) -> Card:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return null
+	var ray_origin := camera.project_ray_origin(pointer)
+	var ray := camera.project_ray_normal(pointer)
+	var nearest: Card = null
+	var nearest_distance := INF
+	for i in range(cards.size()):
+		var card: Card = cards[i]
+		if not is_instance_valid(card) or card.get_parent() != self or card.is_dragging:
+			continue
+		var resting := global_transform * Transform3D(
+			Basis.from_euler(Vector3(0.0, fan_angle_for(i), 0.0)).scaled(Vector3.ONE * hand_scale),
+			calculate_card_position(i, false))
+		var face := resting * card.hand_mesh.transform
+		var plane := Plane(face.basis.y.normalized(), face.origin)
+		var hit = plane.intersects_ray(ray_origin, ray)
+		if hit == null:
+			continue
+		var local: Vector3 = face.affine_inverse() * hit
+		var half := card._card_face_size() * 0.5
+		if absf(local.x) > half.x or absf(local.z) > half.y:
+			continue
+		var distance: float = ray_origin.distance_to(hit)
+		if distance < nearest_distance:
+			nearest = card
+			nearest_distance = distance
+	return nearest
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and _pointer_hover_active:
+		var next := _resting_card_at(event.position)
+		if next != null and next != hovered_card:
+			set_hovered(next, true)
+			if hovered_card == next:
+				_pointer_hover_region = _card_screen_rect(next).grow(3.0)
+				_pointer_hover_active = true
+		elif not _pointer_hover_region.has_point(event.position):
+			set_hovered(hovered_card, false)
+
 func set_hovered(card: Card, entered: bool) -> void:
 	# THE OPPONENT'S CARDS DO NOT REACT TO THE POINTER. They are face down, and they are not the local player's to touch;
 	# letting them grow, lift and straighten meant that sweeping the mouse along the top of the screen played the whole
@@ -638,15 +707,34 @@ func set_hovered(card: Card, entered: bool) -> void:
 	# Unchanged request: leave a pointer drifting within one card alone, or every frame restarts the tween.
 	if hovered_card == was:
 		return
+	_pointer_hover_active = false
+	if _hover_drift != null and _hover_drift.is_valid():
+		_hover_drift.kill()
+	_hover_drift_amount = 0.0
 	if was != null and is_instance_valid(was):
 		_size_card(was, false)
 		_set_hover_edge(was, true)
 	if hovered_card != null:
 		_size_card(hovered_card, true)
 		_set_hover_edge(hovered_card, false)
-	# RE-LAY OUT: the hovered card's POSITION is part of the hover now — lifted toward the camera and fitted to the
-	# bottom of the screen (see _hover_offset). animate_card()'s tween is what animates it out and back.
 	update_card_positions()
+	if was != null and is_instance_valid(was) and cards.has(was) and not was.is_dragging:
+		was.stop_hand_layout()
+		was.position = calculate_card_position(was.index)
+		was.rotation = Vector3(0.0, fan_angle_for(was.index), 0.0)
+	if hovered_card != null:
+		_hover_drift = create_tween()
+		_hover_drift.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_hover_drift.tween_method(_apply_hover_drift, 0.0, HOVER_DRIFT_DISTANCE, HOVER_DRIFT_SECONDS)
+
+func _apply_hover_drift(amount: float) -> void:
+	_hover_drift_amount = amount
+	if is_instance_valid(hovered_card) and hovered_card.get_parent() == self and not hovered_card.is_dragging:
+		hovered_card.position = calculate_card_position(hovered_card.index)
+		if _pointer_hover_active:
+			_pointer_hover_region = _pointer_hover_region.merge(_card_screen_rect(hovered_card).grow(3.0))
+		_update_edge_shadows()
+
 
 
 ## THE HOVERED CARD'S THICKNESS EDGE IS HIDDEN. The dark rounded prism that gives a card its thickness
@@ -760,6 +848,29 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 	arr.insert(to_index, element)
 	return arr
 	
+## Character previews stay in a lower screen band while the pointer can roam the board.
+@export_range(0.6, 0.95) var character_drag_screen_y: float = 0.80
+@export_range(0.5, 2.0) var character_drag_scale: float = 1.35
+
+func update_character_drag(card: Card, pointer: Vector2) -> void:
+	_release_hover(card)
+	card.stop_hand_layout()
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var preview_pointer := Vector2(clampf(pointer.x, viewport_size.x * 0.20, viewport_size.x * 0.80), viewport_size.y * character_drag_screen_y)
+	var plane := Plane(Vector3.UP, field.play_area_bounds().end.y + 0.25)
+	var hit = plane.intersects_ray(camera.project_ray_origin(preview_pointer), camera.project_ray_normal(preview_pointer))
+	if hit != null:
+		card.global_transform = Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * character_drag_scale), hit)
+
+func character_drop_over_board(pointer: Vector2) -> bool:
+	var camera := get_viewport().get_camera_3d()
+	var plane := Plane(Vector3.UP, field.play_area_bounds().end.y)
+	var hit = plane.intersects_ray(camera.project_ray_origin(pointer), camera.project_ray_normal(pointer))
+	return hit != null and field.is_in_play_area(hit)
+
 func _on_card_dragged(card: Variant) -> void:
 	var new_index = find_index(card)
 	if(card.index != new_index):
@@ -773,6 +884,10 @@ func _release_hover(card: Card) -> void:
 	# without this, the returned card is laid out at the hover offset (lifted and
 	# grown) instead of joining the fan.
 	if hovered_card == card:
+		_pointer_hover_active = false
+		if _hover_drift != null and _hover_drift.is_valid():
+			_hover_drift.kill()
+		_hover_drift_amount = 0.0
 		hovered_card = null
 
 
@@ -1030,6 +1145,10 @@ func animate_card(card, target_position, target_tilt: float = 0.0):
 	# after the card has been reparented to the Stack.
 	if card.has_method("stop_hand_layout"):
 		card.stop_hand_layout()
+	if card == hovered_card:
+		card.position = target_position
+		card.rotation = Vector3.ZERO
+		return
 	var tween = create_tween()
 	card.hand_tween = tween
 	tween.set_parallel(true) 

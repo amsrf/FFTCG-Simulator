@@ -88,6 +88,8 @@ func _cast() -> void:
 		stack.summon_mana_deferred_until_target_confirm = false
 		opponent_hand.finish_summon_cast(card)
 		stack.cards.append(card)
+		# Reserve the new top slot immediately so the existing fan moves down as the card flies.
+		stack.update_card_positions()
 		var flight := stack._opponent_summon_flight
 		if flight != null:
 			await flight.finished

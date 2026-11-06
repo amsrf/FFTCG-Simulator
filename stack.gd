@@ -54,7 +54,7 @@ func _ready() -> void:
 func layout_cards() -> Array:
 	var list: Array = cards.duplicate()
 	var parked = summon_casting_card if summon_casting_card != null else casting_card
-	if parked != null:
+	if parked != null and parked.current_zone == Card.Zone.STACK:
 		list.append(parked)
 	return list
 
@@ -249,32 +249,31 @@ func _update_stack_shadows() -> void:
 
 func calculate_card_position(i: int) -> Vector3:
 	var list := layout_cards()
+	var top := list.size() - 1
+	var pose := _stack_card_local_basis(list[top])
 	var spacing := _stack_spacing(list.size())
-	var pose := _stack_card_local_basis(list[0])
-	var center := Vector3.ZERO
-	var camera := get_viewport().get_camera_3d()
+	var fraction: float = spacing / card_width
 	var half_width: Vector3 = pose.x * card_width * 0.5
-	# At the three-card spacing, climb roughly a quarter of a card height per layer.
-	var climb := spacing * 0.85
-	for index in range(1, i + 1):
-		var depth := index * FAN_HEIGHT_STEP
-		if list[index] == selected_card:
-			depth += FAN_RAISE
-		# Keep the bottom card at the stack origin. Each layer has a fixed
-		# normal depth; the in-plane climb gives the pile its diagonal silhouette.
-		var layer := pose.y * depth - pose.z * (climb * index)
-		var sideways := center.dot(pose.x) - spacing
+	var camera := get_viewport().get_camera_3d()
+	var center := Vector3.ZERO
+	for index in range(top - 1, i - 1, -1):
+		var layer := -pose.y * ((top - index) * FAN_HEIGHT_STEP) + pose.z * ((top - index) * spacing * 0.85)
+		var sideways := center.dot(pose.x) + spacing
 		if camera != null:
-			var left := camera.unproject_position(to_global(center - half_width))
-			var right := camera.unproject_position(to_global(center + half_width))
-			var edge := right.lerp(left, spacing / card_width)
-			# All points at this screen X lie in a camera-vertical plane.
-			# Intersect it with the new layer's right-edge travel line.
-			var ray := camera.project_ray_normal(edge)
-			var plane_normal := ray.cross(camera.global_basis.y)
-			var along_width := plane_normal.dot(global_basis * pose.x)
-			if absf(along_width) > 0.00001:
-				sideways = plane_normal.dot(camera.project_ray_origin(edge) - to_global(layer + half_width)) / along_width
+			var covering_edge := camera.unproject_position(to_global(center + half_width)).x
+			var low: float = center.dot(pose.x) - card_width * 2.0
+			var high: float = center.dot(pose.x) + card_width * 3.0
+			# Solve the exposed fraction in camera space with the newest card fixed.
+			for iteration in range(24):
+				sideways = (low + high) * 0.5
+				var candidate := layer + pose.x * sideways
+				var left := camera.unproject_position(to_global(candidate - half_width)).x
+				var right := camera.unproject_position(to_global(candidate + half_width)).x
+				var exposed := (right - covering_edge) / (right - left)
+				if exposed < fraction:
+					low = sideways
+				else:
+					high = sideways
 		center = layer + pose.x * sideways
 	return center
 
@@ -450,9 +449,8 @@ func _commit_summon_to_stack() -> void:
 	# tap backup mana), then put the summon on the stack.
 	field.apply_deferred_skill_mana_payment()
 	owner_hand.apply_deferred_skill_mana_payment()
-	# It is entering the stack from here on, so it becomes public — but if the opponent flight
-	# is still running, keep the card face-down until it lands; the reference flight is face-down
-	# the whole way. The flight completion reveals it.
+	# Opponent flights install the face at launch. A stationary parked card is
+	# revealed when its cast commits.
 	if not flighting:
 		reveal_parked(card)
 	summon_mana_deferred_until_target_confirm = false
@@ -691,7 +689,15 @@ func _on_hand_charge_start(card: Card) -> void:
 		# not in `cards`, so it is not legally on the stack; `park_card()` gives
 		# it the Stack presentation, then the thin gold aura marks it as the play.
 		casting_card = card
-		park_card(card)
+		if card.controller == "player":
+			# Preserve the printed Character and its staging pose through payment.
+			var preview := card.global_transform
+			card.stop_hand_layout()
+			card.reparent(self)
+			card.enter_zone(Card.Zone.NONE)
+			card.global_transform = preview
+		else:
+			park_card(card)
 		card.set_cast_pending_highlight(true)
 
 
@@ -712,6 +718,9 @@ func _fly_opponent_summon(card: Card, start: Transform3D) -> void:
 		return
 	_stop_opponent_summon_flight()
 	card.stop_stack_layout()
+	# The mesh's reverse side hides the artwork until the pitch turns the front
+	# toward the viewer. Install the stack face before the first flight frame.
+	card.set_revealed(true)
 	var flight_curve: Curve3D = curve.duplicate()
 	flight_curve.set_point_position(0, opponent_flight_path.to_local(start.origin))
 	var last := flight_curve.point_count - 1

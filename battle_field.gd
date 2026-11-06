@@ -1261,9 +1261,21 @@ func set_target_card(card: Card):
 	var local_chooser: bool = source_card == null or source_card.controller == "player"
 	# Clicking another valid target MOVES the selection — and the ring with it — rather
 	# than being ignored, so either player can change their mind.
+	#
+	# FOR A ONE-PICK STAGE IT ALSO REPLACES THE PICK. This list is what every effect
+	# reads, so appending on every click meant select A -> change to B -> Confirm acted
+	# on BOTH cards (Alchemist's "Dull it" tapped two). A stage that asks for one target
+	# has exactly one slot; a later click overwrites it instead of adding a second.
+	var stage_pick_index: int = targeting_block_start
+	var replaces_single_pick: bool = (targeting_count == 1
+			and targeting_picked.size() > stage_pick_index)
+	var previous_pick: Card = targeting_picked[stage_pick_index] if replaces_single_pick else null
 	if target_card != null and is_instance_valid(target_card):
 		target_card.set_selected_highlight(false)
 		target_card.set_targeted_highlight(false)
+	if previous_pick != null and is_instance_valid(previous_pick) and previous_pick != target_card:
+		previous_pick.set_selected_highlight(false)
+		previous_pick.set_targeted_highlight(false)
 	target_card = card
 	if local_chooser:
 		card.set_selected_highlight(true)
@@ -1271,7 +1283,10 @@ func set_target_card(card: Card):
 		card.set_targeted_highlight(true)
 	print("[Targeting] target selected: ", card.card_name)
 	arrow.lock_arc(card.get_global_face_centre())
-	targeting_picked.append(card)
+	if replaces_single_pick:
+		targeting_picked[stage_pick_index] = card
+	else:
+		targeting_picked.append(card)
 	# THIS STAGE IS FULL: either the next stage takes over (Hades: Forward, then Backup) or the session is complete.
 	var stage_full: bool = targeting_picked.size() >= targeting_block_start + targeting_count
 	if stage_full and targeting_block_index + 1 < targeting_blocks.size():
@@ -1312,6 +1327,18 @@ func set_target_card(card: Card):
 ## picks were never taken off the list, which is the "it cancels the last target and then the button stops working"
 ## report. Stepping back re-opens the session: a new aiming arc appears and the picks that remain are still picks.
 func clear_target_selection() -> void:
+	# A ONE-TARGET STAGE HAS ONE SLOT. Dropping the pick is what makes right-click
+	# cancellation real: leaving it in `targeting_picked` let the next click append a
+	# second card, and the already-confirmed effect then resolved against both.
+	if targeting_count == 1 and targeting_block_index == 0 and not targeting_picked.is_empty():
+		_drop_pick(targeting_picked.size() - 1)
+		target_card = null
+		if assistant != null:
+			if targeting_allow_cancel:
+				assistant.prepare_targeting_phase_cancel()
+			else:
+				assistant.hide_buttons()
+		return
 	if targeting_count > 1 and not targeting_picked.is_empty():
 		# ONE call. `_drop_pick` removes that pick's arc AND re-establishes the aiming one (see _aim_with_current).
 		# Also freeing the aiming arc here, as this used to, is what let a single step back take TWO arrows off the

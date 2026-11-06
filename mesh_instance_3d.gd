@@ -20,7 +20,7 @@ func _on_card_area_3d_mouse_entered():
 	# A card already in the air keeps whatever it has: re-growing it under the pointer would be a second animation.
 	if card.is_dragging:
 		return
-	(owner_hand as Hand).set_hovered(card, true)
+	(owner_hand as Hand).pointer_hover(card, true)
 
 func _on_card_area_3d_mouse_exited() -> void:
 	var card: Card = get_parent() as Card
@@ -28,7 +28,7 @@ func _on_card_area_3d_mouse_exited() -> void:
 		return
 	var owner_hand: Node = card.get_parent()
 	if owner_hand is Hand:
-		(owner_hand as Hand).set_hovered(card, false)
+		(owner_hand as Hand).pointer_hover(card, false)
 
 func _on_card_area_3d_card_grabbed(_card: Variant) -> void:
 	# Deliberately does nothing to the size. The card keeps the size it grew to — it is on its way to the stack, which

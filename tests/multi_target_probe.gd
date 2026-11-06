@@ -130,6 +130,23 @@ func _ready() -> void:
 	_expect(field.targeting_picked.size() == 1 and _confirms == 1,
 		"one pick goes straight to Confirm, exactly as before")
 
+	# CHANGING A ONE-PICK SELECTION REPLACES IT. Alchemist's "Dull it" read the whole
+	# targeting_picked list, so selecting A, changing to B and confirming used to dull both.
+	field.set_target_card(backups[2])
+	print("[Multi] single target after changing pick: picked=%d (%s)" % [
+		field.targeting_picked.size(), field.targeting_picked[0].card_name])
+	_expect(field.targeting_picked.size() == 1 and field.targeting_picked[0] == backups[2],
+		"clicking another target replaces the one-pick selection instead of appending")
+
+	# RIGHT-CLICK CLEARS THE PICK ITSELF, not only the ring. A stale entry here is what
+	# let the next click turn a cancelled choice into a second target.
+	field.clear_target_selection()
+	print("[Multi] single target after cancel: picked=%d" % field.targeting_picked.size())
+	_expect(field.targeting_picked.is_empty(), "cancelling a one-pick selection drops the pick")
+	field.set_target_card(backups[1])
+	_expect(field.targeting_picked.size() == 1 and field.targeting_picked[0] == backups[1],
+		"and a fresh pick after cancelling is the only target")
+
 	_finish()
 
 func _finish() -> void:
