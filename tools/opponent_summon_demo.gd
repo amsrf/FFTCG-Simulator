@@ -18,6 +18,8 @@ const SLOW_SCALE := 0.35
 var game: Node
 var stack: Stack
 var opponent_hand: Hand
+var _local_preview: Card
+var _paused := false
 var _casting: bool = false
 var _slow: bool = false
 var _help_visible: bool = true
@@ -26,11 +28,13 @@ var _hud_label: Label
 var _hud_timer: float = 0.0
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	MatchSetup.config = MatchSetup.build_config("debug")
 	var opening: Array = MatchSetup.config["opponent_hand"]
 	opening.fill(SUMMON_ID)
 	await get_tree().process_frame
 	game = GAME_SCENE.instantiate()
+	game.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(game)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -56,7 +60,7 @@ func _build_hud() -> void:
 	_hud_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_hud_panel.offset_left = 24.0
 	_hud_panel.offset_right = 600.0
-	_hud_panel.offset_top = -238.0
+	_hud_panel.offset_top = -310.0
 	_hud_panel.offset_bottom = -24.0
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.02, 0.03, 0.05, 0.80)
@@ -109,8 +113,53 @@ func _preview_ability(card_id: int) -> void:
 			_update_hud()
 			return
 
+## Preview the local cast without selecting payment cards every replay.
+## Confirm drives the production commit, dissolve and flight functions.
+func _stage_local_summon() -> void:
+	if _casting or is_instance_valid(_local_preview):
+		return
+	var local_hand: Hand = game.get_node("Player/Hand")
+	_local_preview = game.create_card(SUMMON_ID, "player")
+	local_hand.add_card(_local_preview)
+	local_hand.set_hovered(_local_preview, true)
+	local_hand.begin_character_drag(_local_preview)
+	var size := get_viewport().get_visible_rect().size
+	local_hand._character_drag_start_pointer_y = size.y * 0.95
+	local_hand.update_character_drag(_local_preview, size * Vector2(0.5, 0.6))
+	local_hand.remove_card(_local_preview)
+	local_hand.charging_card = _local_preview
+	stack._on_hand_charge_start(_local_preview)
+	local_hand.begin_character_charge(_local_preview)
+	_update_hud()
+
+func _confirm_local_summon() -> void:
+	if _casting or not is_instance_valid(_local_preview):
+		return
+	_casting = true
+	_local_preview = null
+	stack._commit_summon_to_stack()
+	await stack.local_summon_landed
+	_casting = false
+	_update_hud()
+
+func _toggle_pause() -> void:
+	_paused = not _paused
+	get_tree().paused = _paused
+	_update_hud()
+
+func _step_frame() -> void:
+	if not _paused:
+		return
+	var card := stack._local_summon_presentation
+	if card != null and card._teleport_tween != null and card._teleport_tween.is_valid():
+		card._teleport_tween.custom_step(1.0 / 60.0)
+	elif stack._opponent_summon_flight != null:
+		stack._opponent_summon_flight.custom_step(1.0 / 60.0)
+	_update_hud()
+
 func _reset() -> void:
-	if stack != null and not stack.cards.is_empty():
+	if stack != null:
+		get_tree().paused = false
 		get_tree().reload_current_scene()
 
 func _toggle_slow() -> void:
@@ -126,6 +175,14 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	match event.keycode:
+		KEY_8:
+			_stage_local_summon()
+		KEY_9:
+			_confirm_local_summon()
+		KEY_P:
+			_toggle_pause()
+		KEY_PERIOD:
+			_step_frame()
 		KEY_7:
 			if not _casting and stack != null:
 				for source in game.get_node("Field").get_all_cards():
@@ -166,8 +223,10 @@ func _update_hud() -> void:
 	if not _casting and opponent_hand.cards.is_empty():
 		state = "HAND EMPTY"
 	_hud_label.text = "\n".join([
-		"OPPONENT SUMMON FLIGHT — TEST MODE",
+		"SUMMON FLIGHTS — TEST MODE",
 		"[1] Cast next Valefor onto the stack",
+		"[8] Stage local Summon    [9] Confirm / fly",
+		"[P] Pause: %s    [.] Step 1/60 second" % ("ON" if _paused else "OFF"),
 		"[2] Reset / replay",
 		"[3] Slow motion: %s" % ("ON (0.35x)" if _slow else "OFF"),
 		"[4] Toggle this panel",
@@ -177,4 +236,5 @@ func _update_hud() -> void:
 	])
 
 func _exit_tree() -> void:
+	get_tree().paused = false
 	Engine.time_scale = 1.0

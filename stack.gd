@@ -11,6 +11,8 @@ var cards = []
 var card_width = 0.429 * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
 var player_mode = GlobalVariables.get_player_mode();
 var start_x: float = 0.0
+var _local_summon_presentation: Card
+signal local_summon_landed
 var casting_card: Card
 ## Stack copy for skill activation. The node exists early for UI; the activation is not
 ## de facto committed until commit_skill_activation_costs_if_pending runs (after final Confirm).
@@ -213,7 +215,7 @@ func update_card_positions(previous_hover: Card = null, hover_changed := false):
 	for i in range(list.size()):
 		var card = list[i]
 		card.index = i
-		if card == _opponent_summon_flight_card:
+		if card == _opponent_summon_flight_card or card == _local_summon_presentation:
 			continue
 		var slot := calculate_card_position(i)
 		if card == hovered_card:
@@ -242,10 +244,11 @@ func _process(delta: float) -> void:
 func _update_stack_shadows() -> void:
 	var settled := layout_cards()
 	settled.erase(_opponent_summon_flight_card)
+	settled.erase(_local_summon_presentation)
 	if is_instance_valid(hovered_card) and settled.has(hovered_card):
 		settled.erase(hovered_card)
 		settled.append(hovered_card)
-	preload("res://scripts/card_overlap_shadow.gd").update(self, settled, true)
+	preload("res://scripts/card_overlap_shadow.gd").update(self, settled)
 
 func calculate_card_position(i: int) -> Vector3:
 	var list := layout_cards()
@@ -445,6 +448,9 @@ func _commit_summon_to_stack() -> void:
 	var flighting: bool = _opponent_summon_flight != null and _opponent_summon_flight_card == summon_casting_card
 	var card: Card = summon_casting_card
 	var owner_hand: Hand = _owner_hand(card)
+	var local_preview := card.controller == "player" and card.get_parent() == owner_hand
+	if local_preview:
+		_local_summon_presentation = card
 	# Target is confirmed: finalize mana payment now (discard hand mana,
 	# tap backup mana), then put the summon on the stack.
 	field.apply_deferred_skill_mana_payment()
@@ -462,7 +468,9 @@ func _commit_summon_to_stack() -> void:
 	# the stack list and resolves as a normal stack object.
 	cards.append(card)
 	card.index = cards.size() - 1
-	if not flighting:
+	if local_preview:
+		_present_local_summon(card)
+	elif not flighting:
 		update_card_positions()
 	# Casting a Summon is a priority action: it is on the stack now, so priority
 	# moves to the opponent. (Emitting in the Agent's case is harmless — no one
@@ -681,9 +689,12 @@ func _on_hand_charge_start(card: Card) -> void:
 		# middle — and the card is visibly leaving the hand rather than appearing there.
 		var opponent_cast: bool = card.controller == "opponent"
 		var start: Transform3D = card.global_transform
-		park_card(card)
 		if opponent_cast:
+			park_card(card)
 			_fly_opponent_summon(card, start)
+		else:
+			card.stop_hand_layout()
+			card.set_cast_pending_highlight(true)
 	else:
 		# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is
 		# not in `cards`, so it is not legally on the stack; `park_card()` gives
@@ -709,7 +720,7 @@ func opponent_launch_offset(owner_hand: Hand) -> Vector3:
 
 ## The first two curve points are the launch and the frame-132 waypoint.
 ## The final point follows the actual slot, including any fan layout changes.
-func _fly_opponent_summon(card: Card, start: Transform3D) -> void:
+func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3D = null) -> void:
 	if opponent_flight_path == null or opponent_flight_path.curve == null:
 		return
 	var curve := opponent_flight_path.curve
@@ -720,7 +731,7 @@ func _fly_opponent_summon(card: Card, start: Transform3D) -> void:
 	# The mesh's reverse side hides the artwork until the pitch turns the front
 	# toward the viewer. Install the stack face before the first flight frame.
 	card.set_revealed(true)
-	var flight_curve: Curve3D = curve.duplicate()
+	var flight_curve: Curve3D = entrance_curve if entrance_curve != null else curve.duplicate()
 	flight_curve.set_point_position(0, opponent_flight_path.to_local(start.origin))
 	var last := flight_curve.point_count - 1
 	var slot := calculate_card_position(card.index)
@@ -765,6 +776,155 @@ func _fly_opponent_summon(card: Card, start: Transform3D) -> void:
 		if cards.has(card):
 			reveal_parked(card)
 		update_card_positions()
+
+## Fade the printed Summon and transfer its cast to a new stack card.
+func _present_local_summon(card: Card) -> void:
+	card.set_cast_pending_highlight(false)
+	await card.teleport_out(0.08, 0.20).finished
+	if not is_instance_valid(card) or not cards.has(card):
+		_local_summon_presentation = null
+		local_summon_landed.emit()
+		return
+	# Replace the faded printed card with a separate stack card, preserving its cast picks.
+	var effect_card: Card = get_parent().create_card(card.id, card.controller)
+	effect_card.key_word_effect = card.key_word_effect
+	effect_card.effect_kind = card.effect_kind
+	effect_card.set_effect_targets(card.effect_targets)
+	var slot_index: int = cards.find(card)
+	cards[slot_index] = effect_card
+	effect_card.index = slot_index
+	add_child(effect_card)
+	effect_card.enter_zone(Card.Zone.STACK)
+	_local_summon_presentation = effect_card
+	card.queue_free()
+	var camera := get_viewport().get_camera_3d()
+	var size := get_viewport().get_visible_rect().size
+	var pixel := size * Vector2(0.5, 1.05)
+	var plane := Plane(Vector3.UP, global_position.y - 0.35)
+	var hit = plane.intersects_ray(camera.project_ray_origin(pixel), camera.project_ray_normal(pixel))
+	var launch := effect_card.global_transform
+	launch.origin = hit if hit != null else camera.project_ray_origin(pixel) + camera.project_ray_normal(pixel) * 6.0
+	# Reserve the incoming top slot now, so the existing fan shifts during flight.
+	# The presentation card is excluded from layout and keeps its own trajectory.
+	update_card_positions()
+	await _fly_local_summon_translation(effect_card, launch.origin)
+	_local_summon_presentation = null
+	update_card_positions()
+	local_summon_landed.emit()
+
+## Local Summon: rise through a parabolic arc, turn edge-on at its apex, then reveal.
+func local_summon_flight_seconds() -> float:
+	return 50.0 / 60.0
+
+func _fly_local_summon_translation(card: Card, launch: Vector3) -> void:
+	_stop_opponent_summon_flight()
+	card.stop_stack_layout()
+	card.set_revealed(true)
+	card.basis = _stack_card_local_basis(card).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE))
+	var camera := get_viewport().get_camera_3d()
+	var screen_start := camera.unproject_position(launch)
+	var screen_height := get_viewport().get_visible_rect().size.y
+	var sample := func(p: float) -> void:
+		if not is_instance_valid(card) or card.get_parent() != self:
+			return
+		var destination := to_global(calculate_card_position(card.index))
+		var destination_screen := camera.unproject_position(destination)
+		# Preserve the established rotation waypoint while lowering translation only.
+		var peak_t := clampf(0.5 + (screen_start.y - destination_screen.y) / (8.0 * screen_height * 0.32), 0.1, 0.95)
+		# The reference spends most of its final 30 frames settling very slowly.
+		# One continuous exponential ease, normalized to land exactly at frame 50.
+		var motion_p := (1.0 - exp(-3.2 * p)) / (1.0 - exp(-3.2))
+		var t := motion_p + motion_p * motion_p * (1.0 - motion_p)
+		# Hermite segments share a nonzero angular velocity at the peak.
+		var before_peak := t <= peak_t
+		var span := peak_t if before_peak else 1.0 - peak_t
+		var u := t / span if before_peak else (t - peak_t) / span
+		var from_angle := PI if before_peak else PI * 0.5
+		var to_angle := PI * 0.5 if before_peak else 0.0
+		var from_slope := -PI * span
+		var to_slope := -PI * span if before_peak else 0.0
+		var turn := (2.0 * u * u * u - 3.0 * u * u + 1.0) * from_angle \
+			+ (u * u * u - 2.0 * u * u + u) * from_slope \
+			+ (-2.0 * u * u * u + 3.0 * u * u) * to_angle \
+			+ (u * u * u - u * u) * to_slope
+		# Rotation uses elapsed descent time rather than the heavily eased spatial
+		# progress, so it continues unfolding during the long settling approach.
+		var low := 0.0
+		var high := 1.0
+		for _iteration in range(18):
+			var middle := (low + high) * 0.5
+			var m := (1.0 - exp(-3.2 * middle)) / (1.0 - exp(-3.2))
+			if m + m * m * (1.0 - m) < peak_t:
+				low = middle
+			else:
+				high = middle
+		var peak_time := (low + high) * 0.5
+		var rotation_descent := clampf((p - peak_time) / (1.0 - peak_time), 0.0, 1.0)
+		if not before_peak:
+			var peak_m := (1.0 - exp(-3.2 * peak_time)) / (1.0 - exp(-3.2))
+			var spatial_speed := (1.0 + 2.0 * peak_m - 3.0 * peak_m * peak_m) * 3.2 * exp(-3.2 * peak_time) / (1.0 - exp(-3.2))
+			var power := maxf(1.1, 2.0 * spatial_speed * (1.0 - peak_time))
+			turn = PI * 0.5 * pow(1.0 - rotation_descent, power)
+		var axes := camera.global_basis.orthonormalized()
+		var facing := global_basis.orthonormalized().inverse() * Basis(axes.x, axes.z, -axes.y)
+		var final_pose := _stack_card_local_basis(card)
+		var settling := 1.0 - pow(1.0 - rotation_descent, 2.0)
+		var base := Basis(facing.get_rotation_quaternion().slerp(final_pose.get_rotation_quaternion(), settling))
+		# Local Y turns the artwork upside down in its own plane; local Z
+		# brings the back through edge-on to the front. No animated X turn.
+		var y_turn := turn * (1.0 - smoothstep(0.0, 0.30, rotation_descent))
+		var z_turn := turn
+		# The reference stays foreshortened after the reveal: its upper edge
+		# recedes in depth before the card opens fully. This is a small depth
+		# tilt, not the earlier full X-axis flip.
+		var depth_tilt := deg_to_rad(40.0) * rotation_descent * rotation_descent * pow(1.0 - rotation_descent, 8.0) / (0.04 * pow(0.8, 8.0))
+		card.basis = (base * Basis(Vector3.UP, y_turn) * Basis(Vector3.BACK, z_turn) * Basis(Vector3.RIGHT, depth_tilt)).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE))
+		var screen := screen_start.lerp(camera.unproject_position(destination), t)
+		screen.y -= screen_height * 0.24 * 4.0 * t * (1.0 - t)
+		var plane := Plane(Vector3.UP, lerpf(launch.y, destination.y, t))
+		var hit = plane.intersects_ray(camera.project_ray_origin(screen), camera.project_ray_normal(screen))
+		if hit != null:
+			card.global_position = hit
+		_clear_local_flight_from_stack(card, camera)
+		if p >= 1.0:
+			card.global_position = destination
+	sample.call(0.0)
+	var flight := create_tween()
+	_opponent_summon_flight = flight
+	_opponent_summon_flight_card = card
+	flight.tween_method(sample, 0.0, 1.0, local_summon_flight_seconds())
+	await flight.finished
+	_opponent_summon_flight = null
+	_opponent_summon_flight_card = null
+
+## Keep the entire rotating face above the existing stack, not just its centre.
+## Moving on the viewing ray preserves the centre's screen-space trajectory.
+func _clear_local_flight_from_stack(card: Card, camera: Camera3D) -> void:
+	var normal := (global_basis.orthonormalized() * _stack_card_local_basis(card)).y.normalized()
+	var ceiling := -INF
+	for other in cards:
+		if other == card or not is_instance_valid(other) or other.get_parent() != self:
+			continue
+		ceiling = maxf(ceiling, _card_face_depth_range(other, normal).y)
+	if ceiling == -INF:
+		return
+	var bottom := _card_face_depth_range(card, normal).x
+	var missing := ceiling + 0.003 - bottom
+	if missing <= 0.0:
+		return
+	var toward_camera := -camera.project_ray_normal(camera.unproject_position(card.global_position))
+	var alignment := toward_camera.dot(normal)
+	if alignment > 0.05:
+		card.global_position += toward_camera * (missing / alignment)
+
+func _card_face_depth_range(card: Card, normal: Vector3) -> Vector2:
+	var half := card._card_face_size() * 0.5
+	var result := Vector2(INF, -INF)
+	for corner in [Vector3(-half.x, 0, -half.y), Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
+		var depth: float = card.hand_mesh.to_global(corner).dot(normal)
+		result.x = minf(result.x, depth)
+		result.y = maxf(result.y, depth)
+	return result
 
 func _stop_opponent_summon_flight() -> void:
 	if _opponent_summon_flight != null and _opponent_summon_flight.is_valid():
@@ -871,6 +1031,8 @@ func cancel_stack_card(card: Card) -> void:
 	update_card_positions()
 
 func resolve_top_effect() -> void:
+	if _local_summon_presentation != null:
+		await local_summon_landed
 	## Stack resolution: run effect instructions only; costs were applied at
 	## commit for skills. The effect handler may await a modal (e.g. Auron's
 	## "may play a Backup" choice), so resolution waits for the game to signal

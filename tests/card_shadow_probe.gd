@@ -17,21 +17,6 @@ func _expect(ok: bool, what: String) -> void:
 func _strength(card: Card) -> float:
 	return float(card.mat.get_shader_parameter("shadow_strength"))
 
-func _side(card: Card) -> float:
-	return float(card.mat.get_shader_parameter("shadow_side"))
-
-func _edge(card: Card) -> float:
-	return float(card.mat.get_shader_parameter("shadow_edge"))
-
-func _slope(card: Card) -> float:
-	return float(card.mat.get_shader_parameter("shadow_slope"))
-
-func _corner_u(card: Card) -> float:
-	return float(card.mat.get_shader_parameter("shadow_corner_u"))
-
-func _corner_v(card: Card) -> float:
-	return float(card.mat.get_shader_parameter("shadow_corner_v"))
-
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("debug")
 	_game = GAME_SCENE.instantiate()
@@ -47,24 +32,22 @@ func _ready() -> void:
 	var cards: Array = hand.cards
 	print("[Shadow] hand has %d cards" % cards.size())
 	var shadowed: int = 0
-	var sloped: int = 0
+	var silhouettes: int = 0
 	for card in cards:
 		var s: float = _strength(card)
 		if s > 0.0:
 			shadowed += 1
 		_expect(s >= 0.0 and s <= 1.0, "%s shadow strength in range (%.2f)" % [card.card_name, s])
-		var edge: float = _edge(card)
-		_expect(edge >= 0.0 and edge <= 1.0, "%s shadow edge in range (%.2f)" % [card.card_name, edge])
-		var slope: float = _slope(card)
-		var cu: float = _corner_u(card)
-		var cv: float = _corner_v(card)
-		print("[Shadow] %s slope %.4f edge %.4f corner %.4f/%.4f" % [card.card_name, slope, edge, cu, cv])
-		_expect(is_finite(slope), "%s shadow slope is finite" % card.card_name)
-		_expect(cu >= 0.0 and cv >= 0.0, "%s rounded-corner radii are non-negative" % card.card_name)
-		if absf(slope) > 0.005:
-			sloped += 1
+		if s > 0.0:
+			var shape: Vector3 = card.mat.get_shader_parameter("shadow_shape")
+			var inverse: Transform3D = card.mat.get_shader_parameter("shadow_inverse")
+			_expect(shape.x > 0.0 and shape.y > 0.0 and shape.z >= 0.0,
+				"%s has a complete rounded silhouette" % card.card_name)
+			_expect(is_finite(inverse.basis.determinant()) and absf(inverse.basis.determinant()) > 0.00001,
+				"%s caster projection is invertible" % card.card_name)
+			silhouettes += 1
 	_expect(shadowed >= cards.size() - 1, "every covered card has a shadow (%d of %d)" % [shadowed, cards.size()])
-	_expect(sloped > 0, "the shadow edge follows the fan tilt, not a vertical line in the lower card")
+	_expect(silhouettes > 0, "shadows use current caster transforms and full silhouettes")
 	_expect(shadowed < cards.size(), "the topmost card has no shadow")
 
 	# Hover the middle card: it rises above both neighbours, so they must be shadowed and it must not.

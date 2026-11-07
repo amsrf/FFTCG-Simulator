@@ -13,24 +13,28 @@ render_mode unshaded;
 uniform sampler2D texture_albedo : source_color;
 uniform bool effect_enabled = false;
 
-// ARTIFICIAL CARD-DEPTH SHADOW. Every overlapping card shades the one BELOW it along the edge where
-// the upper card ends. This is not lighting: the shadow is deliberately constant, independent of
-// the board light, and only darkens the covered card's own texture. Hand computes `shadow_edge`
-// from the overlap and only turns it on for cards that are actually covered.
-uniform float shadow_strength : hint_range(0.0, 1.0) = 0.0;
-uniform float shadow_side = 1.0;          // +1: upper card is to the RIGHT; -1: to the LEFT
-uniform float shadow_edge : hint_range(0.0, 1.0) = 0.0;
-// The upper card is rotated independently of the lower one, so its edge is not a vertical
-// line in the lower card's UV space. `shadow_slope` is du/dv; without it the shadow stays
-// parallel to the LOWER card's edge and drifts away from the upper edge as it goes up.
-uniform float shadow_slope = 0.0;
-// The card mesh itself has rounded corners. A straight edge line would run through the
-// corner and leave the shadow detached there, so the edge also curls inward over the last
-// `shadow_corner_v` of the card height, by `shadow_corner_u` of its width.
-uniform vec2 shadow_v_range = vec2(0.0, 1.0);
-uniform float shadow_corner_u = 0.0;
-uniform float shadow_corner_v = 0.0;
-uniform float shadow_width : hint_range(0.001, 0.30) = 0.055;
+// Full rounded-card silhouettes, traced in world space toward the camera.
+// Four strongest nearby casters per receiver. Pixel depth rejects surfaces behind it.
+uniform vec3 shadow_camera;
+uniform vec3 shadow_direction = vec3(0.0, 1.0, 0.0);
+uniform bool shadow_orthographic = false;
+varying vec3 shadow_world;
+uniform mat4 shadow_inverse;
+uniform vec3 shadow_shape = vec3(0.2145, 0.3, 0.03);
+uniform float shadow_strength = 0.0;
+uniform float shadow_width = 0.02;
+uniform mat4 shadow2_inverse;
+uniform vec3 shadow2_shape = vec3(0.2145, 0.3, 0.03);
+uniform float shadow2_strength = 0.0;
+uniform float shadow2_width = 0.02;
+uniform mat4 shadow3_inverse;
+uniform vec3 shadow3_shape = vec3(0.2145, 0.3, 0.03);
+uniform float shadow3_strength = 0.0;
+uniform float shadow3_width = 0.02;
+uniform mat4 shadow4_inverse;
+uniform vec3 shadow4_shape = vec3(0.2145, 0.3, 0.03);
+uniform float shadow4_strength = 0.0;
+uniform float shadow4_width = 0.02;
 
 // TELEPORT PRESENTATION. Progress is a screen-door dissolve in card UV space:
 // 0 is the normal card, 1 discards every pixel. Glow is a separate additive-ish
@@ -119,14 +123,30 @@ void teleport_rect(vec2 uv, float depth_limit, float stop_level, float stop_chan
     }
 }
 
-uniform float shadow2_strength : hint_range(0.0, 1.0) = 0.0;
-uniform float shadow2_side = 1.0;          // +1: upper card is to the RIGHT; -1: to the LEFT
-uniform float shadow2_edge : hint_range(0.0, 1.0) = 0.0;
-uniform float shadow2_slope = 0.0;
-uniform vec2 shadow2_v_range = vec2(0.0, 1.0);
-uniform float shadow2_corner_u = 0.0;
-uniform float shadow2_corner_v = 0.0;
-uniform float shadow2_width : hint_range(0.001, 0.30) = 0.055;
+
+void vertex() {
+    shadow_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+float card_silhouette_shadow(mat4 caster_inverse, vec3 shape, float strength, float softness) {
+    if (strength <= 0.0) { return 0.0; }
+    vec3 ray_world = shadow_orthographic ? shadow_direction : normalize(shadow_camera - shadow_world);
+    vec3 point = (caster_inverse * vec4(shadow_world, 1.0)).xyz;
+    vec3 ray = (caster_inverse * vec4(ray_world, 0.0)).xyz;
+    if (abs(ray.y) < 0.00001) { return 0.0; }
+    float travel = -point.y / ray.y;
+    if (travel <= 0.00001) { return 0.0; }
+    vec3 hit = point + ray * travel;
+    float radius = min(shape.z, min(shape.x, shape.y));
+    vec2 q = abs(hit.xz) - (shape.xy - vec2(radius));
+    float distance_to_card = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+    float aa = max(fwidth(distance_to_card), 0.00001);
+    float outside = smoothstep(-aa, aa, distance_to_card);
+    float d = max(distance_to_card, 0.0);
+    float soft = exp(-d / max(softness, 0.0001));
+    float contact = exp(-d / max(softness * 0.22, 0.0001));
+    return (contact * 0.42 + soft * 0.58) * outside * strength;
+}
 
 void fragment() {
     // PIXEL DISSOLVE. Kept as discard rather than alpha blending: the card
@@ -193,57 +213,10 @@ void fragment() {
         base = vec3(0.1);
     }
 
-    // Distance from the upper card's edge, going INWARD along the covered card. Negative means
-    // the pixel is underneath the upper card and is not visible, so it receives no shadow.
-    float edge_x = shadow_edge + shadow_slope * (UV.y - 0.5);
-    // Rounded-corner curl. At the card middle the shift is zero; at either end it reaches
-    // the corner radius and follows the quarter-ellipse of the upper card's silhouette.
-    if (shadow_corner_v > 0.0001) {
-        float q_top = clamp((shadow_v_range.x + shadow_corner_v - UV.y) / shadow_corner_v, 0.0, 1.0);
-        float q_bottom = clamp((UV.y - (shadow_v_range.y - shadow_corner_v)) / shadow_corner_v, 0.0, 1.0);
-        float q = max(q_top, q_bottom);
-        if (q > 0.0) {
-            float shift = shadow_corner_u * (1.0 - sqrt(max(0.0, 1.0 - q * q)));
-            edge_x += (shadow_side >= 0.0 ? shift : -shift);
-        }
-    }
-    float d = shadow_side >= 0.0 ? edge_x - UV.x : UV.x - edge_x;
-    // ANALYTIC EDGE ANTI-ALIASING. A hard `step(0.0, d)` puts the darkest part of the shadow
-    // exactly on the upper card's rasterised silhouette, so any half-pixel mismatch between
-    // the computed edge and that silhouette reads as a jagged seam. fwidth() gives the UV
-    // change per screen pixel, so fading across one pixel hides the seam without making the
-    // contact shadow visibly softer.
-    float aa = max(fwidth(d), 0.00001);
-    float visible = smoothstep(-aa, aa, d) * step(shadow_v_range.x, UV.y) * step(UV.y, shadow_v_range.y);
-    float soft = exp(-max(d, 0.0) / max(shadow_width, 0.0001));
-    float contact = exp(-max(d, 0.0) / max(shadow_width * 0.22, 0.0001));
-    float shade = (contact * 0.42 + soft * 0.58) * visible * shadow_strength;
-    {
-    float edge_x = shadow2_edge + shadow2_slope * (UV.y - 0.5);
-    // Rounded-corner curl. At the card middle the shift is zero; at either end it reaches
-    // the corner radius and follows the quarter-ellipse of the upper card's silhouette.
-    if (shadow2_corner_v > 0.0001) {
-        float q_top = clamp((shadow2_v_range.x + shadow2_corner_v - UV.y) / shadow2_corner_v, 0.0, 1.0);
-        float q_bottom = clamp((UV.y - (shadow2_v_range.y - shadow2_corner_v)) / shadow2_corner_v, 0.0, 1.0);
-        float q = max(q_top, q_bottom);
-        if (q > 0.0) {
-            float shift = shadow2_corner_u * (1.0 - sqrt(max(0.0, 1.0 - q * q)));
-            edge_x += (shadow2_side >= 0.0 ? shift : -shift);
-        }
-    }
-    float d = shadow2_side >= 0.0 ? edge_x - UV.x : UV.x - edge_x;
-    // ANALYTIC EDGE ANTI-ALIASING. A hard `step(0.0, d)` puts the darkest part of the shadow
-    // exactly on the upper card's rasterised silhouette, so any half-pixel mismatch between
-    // the computed edge and that silhouette reads as a jagged seam. fwidth() gives the UV
-    // change per screen pixel, so fading across one pixel hides the seam without making the
-    // contact shadow visibly softer.
-    float aa = max(fwidth(d), 0.00001);
-    float visible = smoothstep(-aa, aa, d) * step(shadow2_v_range.x, UV.y) * step(UV.y, shadow2_v_range.y);
-    float soft = exp(-max(d, 0.0) / max(shadow2_width, 0.0001));
-    float contact = exp(-max(d, 0.0) / max(shadow2_width * 0.22, 0.0001));
-    float second_shade = (contact * 0.42 + soft * 0.58) * visible * shadow2_strength;
-    shade = max(shade, second_shade);
-    }
+    float shade = card_silhouette_shadow(shadow_inverse, shadow_shape, shadow_strength, shadow_width);
+    shade = max(shade, card_silhouette_shadow(shadow2_inverse, shadow2_shape, shadow2_strength, shadow2_width));
+    shade = max(shade, card_silhouette_shadow(shadow3_inverse, shadow3_shape, shadow3_strength, shadow3_width));
+    shade = max(shade, card_silhouette_shadow(shadow4_inverse, shadow4_shape, shadow4_strength, shadow4_width));
     shade = clamp(shade, 0.0, 0.82);
 
     vec3 art = base * (1.0 - shade);

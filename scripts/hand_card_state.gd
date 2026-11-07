@@ -28,16 +28,7 @@ func handle_grabbed():
 				hand.toggle_effect_card_selection(card)
 		_:
 			card.begin_drag()
-			if card.type != "Summon":
-				# Character drags first behave like any other hand drag. Card._process
-				# latches the lower cast stance when the pointer crosses the band.
-				hand.begin_character_drag(card)
-			card.position +=  Vector3(0, 0.1,-0.1)
-			card.rotation = Vector3.ZERO
-			# NO SIZE CHANGE HERE. The card keeps the size it already has, which after a hover is the STACK's size —
-			# and the stack is where it is going. This used to force it to 1.05, which fought the hover and made a
-			# played card shrink on the way out and then pop back up as it landed.
-			card.offset = card.global_transform.origin - card._get_mouse_3d_position_on_card_plane()
+			hand.begin_character_drag(card)
 
 func handle_released():
 	if card.controller != "player":
@@ -48,10 +39,10 @@ func handle_released():
 		hand.update_card_positions()
 		card.apply_zone_scale()
 		return
-	# A CHARACTER RELEASED FROM THE CAST STANCE IS COMMITTING THE PLAY.
+	# RELEASING A HAND CARD FROM THE CAST STANCE STARTS PAYMENT.
 	# The stance itself is the drop confirmation: the pointer has already left
 	# the hand band, so there is no extra "is the pointer over the mat" check.
-	if card.type != "Summon" and hand.character_drag_latched():
+	if hand.character_drag_latched():
 		if card.can_be_played() and hand.charge(card):
 			hand.begin_character_charge(card)
 			card.is_dragging = false
@@ -62,24 +53,11 @@ func handle_released():
 		hand.update_card_positions()
 		card.apply_zone_scale()
 		return
+	# Below the ready boundary, release only reorders the hand.
 	var new_index = hand.find_index(card)
-	# THE BOARD OWNS THE DROP AREA. This used to be a hard-coded 3 x 1.25 m
-	# rectangle in the hand, inside an 8 x 4 m playmat, so most of the visible
-	# board rejected the drop. Ask the Field for its real bounds instead.
-	var over_board: bool = hand.field != null and hand.field.is_in_play_area(card.global_position)
-	if card.type != "Summon":
-		over_board = hand.character_drop_over_board(card.get_viewport().get_mouse_position())
-		hand.end_character_drag(card)
-	var charged := false
-	if over_board && card.can_be_played():
-		charged = hand.charge(card)
-	else:
-		hand.move_element(hand.cards,card.index,new_index)
-		card.index = new_index
+	hand.end_character_drag(card)
+	hand.move_element(hand.cards, card.index, new_index)
+	card.index = new_index
 	card.is_dragging = false
 	hand.update_card_positions()
-	# Back to whatever size its zone wants. apply_zone_scale() rather than a hard-coded Vector3.ONE, because a card
-	# that was just PLAYED has already been parked on the stack and must keep the stack's size — and because the
-	# hand's own resting size lives in Card.ZONE_PRESENTATION, where a copy of it here would drift.
-	if not charged:
-		card.apply_zone_scale()
+	card.apply_zone_scale()

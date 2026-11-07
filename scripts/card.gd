@@ -334,28 +334,25 @@ func set_revealed(is_revealed: bool) -> void:
 	$HandMesh.set_surface_override_material(0, surface_material)
 	$FieldMesh.set_surface_override_material(0, surface_material)
 
-## Artificial contact shadow for a card that is partially covered by a neighbour. `side` is +1 when
-## the covering card is to this card's right, -1 when it is to the left. `edge` is the covering
-## card's edge in this card's UV.x, and `strength` fades the whole band.
-func set_edge_shadow(side: float, edge: float, slope: float, strength: float, width: float = 0.055,
-		corner_u: float = 0.0, corner_v: float = 0.0, v_range := Vector2(0, 1), secondary := false) -> void:
-	if mat == null:
+## Per-caster full silhouette data used by both hand and stack contact shadows.
+func set_overlap_shadow(slot: int, world_to_caster: Transform3D, face: Vector2,
+		radius: float, strength: float, softness: float, view_camera: Camera3D) -> void:
+	if mat == null or slot < 0 or slot >= 4:
 		return
-	var prefix := "shadow2_" if secondary else "shadow_"
-	mat.set_shader_parameter(prefix + "side", 1.0 if side >= 0.0 else -1.0)
-	mat.set_shader_parameter(prefix + "edge", edge)
-	mat.set_shader_parameter(prefix + "v_range", v_range)
-	mat.set_shader_parameter(prefix + "slope", slope)
-	mat.set_shader_parameter(prefix + "corner_u", maxf(corner_u, 0.0))
-	mat.set_shader_parameter(prefix + "corner_v", maxf(corner_v, 0.0))
+	var prefix := "shadow_" if slot == 0 else "shadow%d_" % (slot + 1)
+	mat.set_shader_parameter(prefix + "inverse", world_to_caster)
+	mat.set_shader_parameter(prefix + "shape", Vector3(face.x * 0.5, face.y * 0.5, radius))
 	mat.set_shader_parameter(prefix + "strength", clampf(strength, 0.0, 1.0))
-	mat.set_shader_parameter(prefix + "width", clampf(width, 0.001, 0.30))
+	mat.set_shader_parameter(prefix + "width", maxf(softness, 0.0001))
+	mat.set_shader_parameter("shadow_camera", view_camera.global_position)
+	mat.set_shader_parameter("shadow_direction", view_camera.global_basis.z.normalized())
+	mat.set_shader_parameter("shadow_orthographic", view_camera.projection == Camera3D.PROJECTION_ORTHOGONAL)
 
 func clear_edge_shadow() -> void:
 	if mat == null:
 		return
-	mat.set_shader_parameter("shadow_strength", 0.0)
-	mat.set_shader_parameter("shadow2_strength", 0.0)
+	for prefix in ["shadow_", "shadow2_", "shadow3_", "shadow4_"]:
+		mat.set_shader_parameter(prefix + "strength", 0.0)
 
 ## Hidden/inert staging for a REVEALED card: the card is out of the deck and in Game.revealed_cards, but it must not
 ## render or accept input until an effect moves it somewhere. The reverse is applied by enter_zone().
@@ -391,12 +388,6 @@ func assign_card_texture():
 	mat.set_shader_parameter("texture_albedo", full_texture)
 	mat.set_shader_parameter("effect_enabled", false)
 	mat.set_shader_parameter("shadow_strength", 0.0)
-	mat.set_shader_parameter("shadow_side", 1.0)
-	mat.set_shader_parameter("shadow_edge", 1.0)
-	mat.set_shader_parameter("shadow_slope", 0.0)
-	mat.set_shader_parameter("shadow_corner_u", 0.0)
-	mat.set_shader_parameter("shadow_corner_v", 0.0)
-	mat.set_shader_parameter("shadow_width", 0.055)
 	mat.set_shader_parameter("teleport_progress", 0.0)
 	mat.set_shader_parameter("teleport_glow", 0.0)
 	mat.set_shader_parameter("teleport_reveal", 1.0)
@@ -422,7 +413,7 @@ func _process(_delta):
 		# through the same state handler the signal uses.
 		release_drag()
 		return
-	if current_zone == Zone.HAND and type != "Summon" and controller == "player":
+	if current_zone == Zone.HAND and controller == "player":
 		var owner_hand := get_parent()
 		if owner_hand is Hand and owner_hand.update_character_drag(self, get_viewport().get_mouse_position()):
 			return

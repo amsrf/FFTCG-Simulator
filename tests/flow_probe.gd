@@ -68,34 +68,75 @@ func _ready() -> void:
 	var screen_size := get_viewport().get_visible_rect().size
 	var in_hand_band := screen_size * Vector2(0.5, 0.9)
 	var above_band := screen_size * Vector2(0.5, 0.1)
-	_expect(not hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
-		"a Character drag inside the hand band stays in the normal drag state")
+	hand.set_hovered(chemist, true)
+	var before_lift := chemist.global_position.y
+	hand.begin_character_drag(chemist)
+	hand._character_drag_start_pointer_y = in_hand_band.y
+	_expect(chemist.global_position.y > before_lift, "Character grab lifts immediately in world Y")
+	_expect(hand._card_screen_rect(chemist).end.y > screen_size.y, "Character grab starts with its bottom below the screen")
+	var lifted_pose := chemist.global_transform
+	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.84))
+	_expect(not chemist.global_transform.is_equal_approx(lifted_pose) and not hand.character_drag_latched(),
+		"partial upward drag moves and pitches before reaching the final stance")
+	_expect(not chemist.ring_cast_pending(), "partial pitch has no cast-ready gold aura")
+	hand.update_character_drag(chemist, screen_size * Vector2(0.5, hand.character_drag_trigger_y))
+	_expect(hand.character_drag_latched() and chemist.ring_cast_pending(), "full pitch and gold aura coincide with the cast boundary")
+	var boundary_bottom: float = hand._card_screen_rect(chemist).end.y
+	_expect(absf(boundary_bottom - screen_size.y * 0.94) < 1.0, "cast boundary leaves a small bottom margin")
+	hand.update_character_drag(chemist, screen_size * Vector2(0.5, hand.character_drag_trigger_y - 0.08))
+	_expect(absf(hand._card_screen_rect(chemist).end.y - boundary_bottom) < 1.0 and chemist.ring_cast_pending(),
+		"full rotation and maximum bottom gap are reached together")
+	_expect(chemist.global_basis.get_scale().x < lifted_pose.basis.get_scale().x,
+		"casting preview shrinks from the enlarged hand preview")
 	_expect(hand.update_character_drag(chemist, above_band) and hand.character_drag_latched(),
 		"crossing above the hand band latches the cast stance")
+	_expect(absf(hand._card_screen_rect(chemist).end.y - screen_size.y * 0.94) < 1.0, "full casting pose places the bottom edge at the screen boundary")
 	var preview_pose := chemist.global_transform
 	var cam_basis: Basis = get_viewport().get_camera_3d().global_transform.basis.orthonormalized()
 	var expected_basis := Basis(cam_basis.x, cam_basis.z, -cam_basis.y) * Basis(Vector3.RIGHT, deg_to_rad(hand.character_drag_pitch_degrees))
 	_expect(chemist.global_basis.orthonormalized().is_equal_approx(expected_basis.orthonormalized()),
 		"the latched card is screen-facing with the negative X pitch")
+	var face_normal := chemist.global_basis.y.normalized()
+	_expect(face_normal.dot(cam_basis.z) < 0.75 and face_normal.dot(cam_basis.y) > 0.5,
+		"casting pose visibly lays back with its top edge receding from the camera")
 	hand.update_character_drag(chemist, screen_size * Vector2(0.85, 0.1))
 	_expect(chemist.global_transform.is_equal_approx(preview_pose),
 		"a latched Character stance does not move horizontally")
-	_expect(not hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
+	_expect(hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
 		"returning to the hand band before payment resumes the normal drag")
+	_expect(not chemist.ring_cast_pending(), "retreating below the cast boundary removes the gold aura")
 	# Re-latch and verify that payment keeps this pose without parking it in the Stack.
 	hand.update_character_drag(chemist, above_band)
 	var stance_pose := chemist.global_transform
+	var original_hand_index: int = hand.cards.find(chemist)
 	hand.remove_card(chemist)
+	hand.charging_card = chemist
 	stack._on_hand_charge_start(chemist)
 	_expect(chemist.global_transform.is_equal_approx(stance_pose) and not stack.layout_cards().has(chemist),
 		"Character payment keeps the cast stance and stays out of the stack fan")
 	_expect(chemist.get_parent() == hand and chemist.current_zone != Card.Zone.STACK,
 		"Character payment does not park the card in the Stack")
 	stack._on_assistant_charge_cancelled()
-	hand.end_character_drag(chemist)
-	hand.add_card(chemist)
+	hand._on_assistant_charge_cancelled()
+	_expect(hand.cards.find(chemist) == original_hand_index, "mana cancellation restores the original hand slot")
 	_expect(hand.cards.has(chemist) and chemist.current_zone == Card.Zone.HAND,
 		"cancelled Character preview returns to hand")
+
+	hand.begin_character_drag(chemist)
+	hand._character_drag_start_pointer_y = in_hand_band.y
+	hand.update_character_drag(chemist, above_band)
+	var still_pose := chemist.global_transform
+	hand._update_character_waver(0.4)
+	_expect(not chemist.global_transform.is_equal_approx(still_pose) and chemist.global_position.distance_to(still_pose.origin) < 0.015,
+		"ready Character gently wavers within a small distance of its baseline")
+	hand.begin_character_charge(chemist)
+	hand._update_character_waver(0.3)
+	_expect(not chemist.global_transform.is_equal_approx(still_pose), "Character waver continues during mana payment")
+	hand.end_character_drag(chemist)
+	var stopped_pose := chemist.global_transform
+	hand._update_character_waver(0.4)
+	_expect(chemist.global_transform.is_equal_approx(stopped_pose), "ending the Character preview stops its waver")
+	hand.update_card_positions()
 
 	# Exactly what Field._on_tween_finished() calls when a played card lands.
 	field.execute_card_effect(chemist, "when_enter_field")
@@ -532,8 +573,167 @@ func _check_demo_stack_fan() -> void:
 		and earth_face.get_node("Ability").text.begins_with("Choose 1 Forward blocking."),
 		"Earth ability has its own palette and cost-free effect text")
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
+	var local_hand: Hand = demo.game.get_node("Player/Hand")
+	var local_summon: Card = demo.game.create_card(62, "player")
+	local_hand.add_card(local_summon)
+	local_hand.begin_character_drag(local_summon)
+	local_hand._character_drag_start_pointer_y = get_viewport().get_visible_rect().size.y * 0.9
+	local_hand.update_character_drag(local_summon, get_viewport().get_visible_rect().size * Vector2(0.5, 0.1))
+	var printed_face = local_summon.mat.get_shader_parameter("texture_albedo")
+	local_hand.remove_card(local_summon)
+	local_hand.charging_card = local_summon
+	stack._on_hand_charge_start(local_summon)
+	local_hand.begin_character_charge(local_summon)
+	_expect(local_summon.get_parent() == local_hand and local_summon.current_zone == Card.Zone.HAND
+		and local_summon.mat.get_shader_parameter("texture_albedo") == printed_face,
+		"local Summon keeps its printed drag preview through payment and targeting")
+	local_summon.set_effect_targets([demo.game.get_node("Field").get_all_cards().front()])
+	var picked := local_summon.effect_targets.duplicate()
+	var previous_local_top: Card = stack.cards.back()
+	var previous_local_top_position := previous_local_top.position
+	stack._commit_summon_to_stack()
+	_expect(stack.cards.has(local_summon) and local_summon.get_parent() == local_hand,
+		"confirmed local Summon commits while its printed preview fades in place")
+	local_summon._teleport_tween.custom_step(0.30)
+	var printed_summon := local_summon
+	local_summon = stack.cards.back()
+	_expect(local_summon != printed_summon and printed_summon.is_queued_for_deletion(),
+		"local entrance creates a new stack card after fading the printed card")
+	var entrance_camera := get_viewport().get_camera_3d()
+	var entrance_screen := entrance_camera.unproject_position(local_summon.global_position)
+	var entrance_size := get_viewport().get_visible_rect().size
+	_expect(absf(entrance_screen.x - entrance_size.x * 0.5) < 1.0 and entrance_screen.y > entrance_size.y,
+		"local effect card enters from below screen at horizontal center")
+	_expect(previous_local_top.stack_tween != null, "local entrance starts shifting the existing stack at launch")
+	if previous_local_top.stack_tween != null:
+		previous_local_top.stack_tween.custom_step(0.15)
+		var shifted_slot := stack.calculate_card_position(previous_local_top.index)
+		_expect(previous_local_top.position.distance_to(previous_local_top_position) > 0.001
+			and previous_local_top.position.distance_to(shifted_slot) < previous_local_top_position.distance_to(shifted_slot)
+			and stack._local_summon_presentation == local_summon,
+			"existing stack moves toward its new slots while the local effect card is still arriving")
+	var entrance: Tween = stack._opponent_summon_flight
+	_expect(entrance != null and local_summon.get_parent() == stack and local_summon.current_zone == Card.Zone.STACK,
+		"local Summon changes to its stack face for the separate entrance")
+	if entrance != null:
+		var destination := stack.to_global(stack.calculate_card_position(local_summon.index))
+		var destination_screen := entrance_camera.unproject_position(destination)
+		_expect(local_summon.global_basis.y.normalized().dot(entrance_camera.global_basis.z) < -0.9, "local Summon starts with its back toward the camera")
+		_expect(local_summon.global_basis.z.normalized().dot(entrance_camera.global_basis.y) > 0.9, "local Summon launches upside down with its bottom pointing up the screen")
+		var highest_y := entrance_screen.y
+		var has_descent := false
+		var apex_facing := 1.0
+		var apex_pitch_up := 0.0
+		var previous_screen := entrance_screen
+		var previous_rotation := local_summon.quaternion
+		var continuous := true
+		var captured_poses: Array = []
+		var late_distance := 0.0
+		var preceding_distance := 0.0
+		var clears_existing_stack := true
+		var late_rotation := 0.0
+		var preceding_rotation := 0.0
+		for _frame in range(49):
+			entrance.custom_step(1.0 / 60.0)
+			var screen := entrance_camera.unproject_position(local_summon.global_position)
+			var stack_normal := (stack.global_basis.orthonormalized() * stack._stack_card_local_basis(local_summon)).y.normalized()
+			var moving_bottom: float = stack._card_face_depth_range(local_summon, stack_normal).x
+			for existing in stack.cards:
+				if existing != local_summon:
+					clears_existing_stack = clears_existing_stack and moving_bottom >= stack._card_face_depth_range(existing, stack_normal).y + 0.002
+
+			if _frame == 19:
+				var half_face := local_summon._card_face_size() * 0.5
+				var top_mid := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(0, 0, -half_face.y)))
+				var bottom_mid := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(0, 0, half_face.y)))
+				var final_transform := stack.global_transform * Transform3D(stack._stack_card_local_basis(local_summon).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)), stack.calculate_card_position(local_summon.index)) * local_summon.hand_mesh.transform
+				var final_top := entrance_camera.unproject_position(final_transform * Vector3(0, 0, -half_face.y))
+				var final_bottom := entrance_camera.unproject_position(final_transform * Vector3(0, 0, half_face.y))
+				_expect(absf(bottom_mid.y - top_mid.y) < absf(final_bottom.y - final_top.y) * 0.85,
+					"early descent stays visibly foreshortened before opening to full height")
+			if _frame == 25:
+				var half_size := local_summon._card_face_size() * 0.5
+				var top_left := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(-half_size.x, 0, -half_size.y)))
+				var top_right := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(half_size.x, 0, -half_size.y)))
+				_expect(absf((top_right - top_left).normalized().y) < 0.15,
+					"by frame 26 the card top is nearly level while the face continues opening")
+			if _frame == 31:
+				var remaining_angle := local_summon.quaternion.angle_to(stack._stack_card_local_basis(local_summon).get_rotation_quaternion())
+				_expect(remaining_angle > deg_to_rad(3.0) and remaining_angle < deg_to_rad(30.0),
+					"card is still unfolding at frame 32 instead of already matching the final pose")
+			if _frame == 43:
+				_expect(local_summon.quaternion.angle_to(stack._stack_card_local_basis(local_summon).get_rotation_quaternion()) < deg_to_rad(2.0),
+					"only a small orientation adjustment remains in the final six frames")
+			if OS.get_cmdline_user_args().has("--capture-local-flight"):
+				var half := local_summon._card_face_size() * 0.5
+				var corners: Array = []
+				for corner in [Vector3(-half.x, 0, -half.y), Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
+					var projected := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(corner))
+					corners.append([projected.x, projected.y])
+				captured_poses.append({"frame": _frame + 1, "corners": corners, "angle_to_final": rad_to_deg(local_summon.quaternion.angle_to(stack._stack_card_local_basis(local_summon).get_rotation_quaternion()))})
+			if _frame > 3 and _frame < 27:
+				continuous = continuous and screen.distance_to(previous_screen) > 0.01 and local_summon.quaternion.angle_to(previous_rotation) > 0.0001
+			if _frame >= 39:
+				late_distance += screen.distance_to(previous_screen)
+				late_rotation += local_summon.quaternion.angle_to(previous_rotation)
+			elif _frame >= 29:
+				preceding_distance += screen.distance_to(previous_screen)
+				preceding_rotation += local_summon.quaternion.angle_to(previous_rotation)
+			previous_screen = screen
+			previous_rotation = local_summon.quaternion
+
+			has_descent = has_descent or screen.y > highest_y + 2.0
+			highest_y = minf(highest_y, screen.y)
+			var facing_amount := absf(local_summon.global_basis.y.normalized().dot(entrance_camera.global_basis.z))
+			if facing_amount < apex_facing:
+				apex_facing = facing_amount
+				apex_pitch_up = local_summon.global_basis.y.normalized().dot(entrance_camera.global_basis.y)
+		if not captured_poses.is_empty():
+			var capture := FileAccess.open("res://references/local_flight_poses.json", FileAccess.WRITE)
+			capture.store_string(JSON.stringify(captured_poses))
+		_expect(clears_existing_stack, "the entire arriving face clears the existing stack throughout its rotation")
+		_expect(late_rotation < preceding_rotation * 0.35, "final rotation decays with the slow approach instead of making a late correction")
+		_expect(late_distance < preceding_distance * 0.35, "final ten flight frames travel far less than the preceding ten")
+		_expect(continuous, "local flight maintains movement and rotation through the peak without pausing")
+		_expect(highest_y < destination_screen.y - entrance_size.y * 0.02 and has_descent,
+			"local parabola rises visibly above its stack slot then descends into it")
+		_expect(apex_facing < 0.2, "local Summon preserves its edge-on 90-degree Z waypoint")
+		_expect(absf(apex_pitch_up) > 0.95, "combined Y/Z turn preserves the edge-on pose after lowering the path")
+		_expect(stack._local_summon_presentation != null, "local flight is still active at frame 49 of the reference 50-frame duration")
+		entrance.custom_step(1.0 / 60.0 + 0.01)
+	_expect(local_summon.basis.orthonormalized().is_equal_approx(stack._stack_card_local_basis(local_summon)), "local Summon finishes its turn at the exact stack orientation")
+	_expect(local_summon.effect_targets == picked and stack._local_summon_presentation == null,
+		"local Summon entrance retains chosen targets and finishes presentation")
+	_expect(local_summon.position.distance_to(stack.calculate_card_position(local_summon.index)) < 0.001,
+		"local Summon entrance settles at its actual stack slot")
+	var landing_pose := stack._stack_card_local_basis(local_summon).get_rotation_quaternion()
+	if local_summon.stack_tween != null:
+		local_summon.stack_tween.custom_step(0.15)
+	var handoff_angle := local_summon.quaternion.angle_to(landing_pose)
+	print("[FlowProbe] local landing handoff rotation error: %.3f degrees" % rad_to_deg(handoff_angle))
+	_expect(handoff_angle < deg_to_rad(0.1), "landing handoff does not spin the card after it reaches its stack pose")
+	demo._stage_local_summon()
+	var demo_preview: Card = demo._local_preview
+	_expect(demo_preview != null and stack.summon_casting_card == demo_preview,
+		"demo stages a local Summon using the production cast preview")
+	demo._toggle_pause()
+	demo._confirm_local_summon()
+	for _frame in range(85):
+		demo._step_frame()
+	_expect(not demo._casting and stack._local_summon_presentation == null and stack.cards.back() != demo_preview and stack.cards.back().current_zone == Card.Zone.STACK,
+		"paused demo frame stepping completes the dissolve and local entrance")
+	demo._toggle_pause()
 	await _check_hover_shadow(demo.game.get_node("Player/Hand"))
 	demo.queue_free()
+
+func _shadow_slot_for(receiver: Card, caster_inverse: Transform3D) -> int:
+	for slot in range(4):
+		var prefix := "shadow_" if slot == 0 else "shadow%d_" % (slot + 1)
+		if float(receiver.mat.get_shader_parameter(prefix + "strength")) > 0.0:
+			var supplied: Transform3D = receiver.mat.get_shader_parameter(prefix + "inverse")
+			if supplied.is_equal_approx(caster_inverse):
+				return slot
+	return -1
 
 func _check_hover_shadow(hand: Hand) -> void:
 	var cam := get_viewport().get_camera_3d()
@@ -573,30 +773,81 @@ func _check_hover_shadow(hand: Hand) -> void:
 	hand.set_hovered(transferred, false)
 	hand.set_hovered(upper, true)
 	await get_tree().create_timer(0.45).timeout
-	var edge := float(lower.mat.get_shader_parameter("shadow_edge"))
-	var lower_size := lower._card_face_size()
-	var shadow_px := cam.unproject_position(lower.hand_mesh.to_global(Vector3((edge - 0.5) * lower_size.x, 0, 0)))
-	var half := upper._card_face_size() * 0.5
-	var x := half.x
-	if cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, 0))).x > cam.unproject_position(upper.global_position).x:
-		x = -x
-	var a := cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, -half.y)))
-	var b := cam.unproject_position(upper.hand_mesh.to_global(Vector3(x, 0, half.y)))
-	var distance_px := absf((b - a).normalized().cross(shadow_px - a))
-	print("[FlowProbe] hover active=%s shadow=%s error_px=%.3f" % [hand.hovered_card == upper, lower.mat.get_shader_parameter("shadow_strength"), distance_px])
-	_expect(hand.hovered_card == upper and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0 and distance_px < 1.0,
-		"the hovered card's projected edge meets its neighbour's shadow within one pixel")
+	var upper_inverse: Transform3D = upper.hand_mesh.global_transform.affine_inverse()
+	var upper_slot := _shadow_slot_for(lower, upper_inverse)
+	_expect(hand.hovered_card == upper and upper_slot >= 0, "hovered card supplies a full silhouette to its neighbour")
+	if upper_slot >= 0:
+		var prefix := "shadow_" if upper_slot == 0 else "shadow%d_" % (upper_slot + 1)
+		var supplied: Transform3D = lower.mat.get_shader_parameter(prefix + "inverse")
+		var shape: Vector3 = lower.mat.get_shader_parameter(prefix + "shape")
+		var half := upper._card_face_size() * 0.5
+		var source := upper.hand_mesh.to_global(Vector3(-half.x, 0, half.y))
+		var pixel := cam.unproject_position(source)
+		var plane := Plane(lower.hand_mesh.global_basis.y.normalized(), lower.hand_mesh.global_position)
+		var hit: Vector3 = plane.intersects_ray(cam.project_ray_origin(pixel), cam.project_ray_normal(pixel))
+		var ray := -cam.project_ray_normal(pixel)
+		var origin_local: Vector3 = supplied * hit
+		var ray_local: Vector3 = supplied.basis * ray
+		var caster_hit := origin_local + ray_local * (-origin_local.y / ray_local.y)
+		_expect(Vector2(caster_hit.x, caster_hit.z).distance_to(Vector2(-half.x, half.y)) < 0.001
+			and is_equal_approx(shape.x, half.x) and is_equal_approx(shape.y, half.y),
+			"silhouette projection follows the complete caster face including its far corner")
+	var before_strength: float = lower.mat.get_shader_parameter("shadow_strength")
+	var reversed := hand.cards.duplicate()
+	reversed.reverse()
+	preload("res://scripts/card_overlap_shadow.gd").update(hand, reversed)
+	_expect(is_equal_approx(before_strength, float(lower.mat.get_shader_parameter("shadow_strength"))),
+		"actual depth determines shadow casting independently of list order")
+
 	hand.set_hovered(upper, false)
 	hand.set_hovered(fan[-3], true)
 	await get_tree().create_timer(0.45).timeout
-	_expect(float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0
-		and float(lower.mat.get_shader_parameter("shadow2_strength")) > 0.0
-		and float(lower.mat.get_shader_parameter("shadow_side")) != float(lower.mat.get_shader_parameter("shadow2_side")),
-		"hovering the left neighbour preserves the right neighbour shadow")
+	_expect(_shadow_slot_for(lower, upper.hand_mesh.global_transform.affine_inverse()) >= 0
+		and _shadow_slot_for(lower, fan[-3].hand_mesh.global_transform.affine_inverse()) >= 0,
+		"hovering the left neighbour preserves silhouettes from both neighbours")
 	hand.set_hovered(fan[-3], false)
 	await get_tree().create_timer(0.45).timeout
-	_expect(float(lower.mat.get_shader_parameter("shadow2_strength")) == 0.0,
-		"leaving hover removes the extra overlap shadow")
+	_expect(_shadow_slot_for(lower, fan[-3].hand_mesh.global_transform.affine_inverse()) < 0,
+		"leaving hover removes the silhouette of the now-behind neighbour")
+
+
+	var saved_upper := upper.global_transform
+	upper.stop_hand_layout()
+	upper.global_transform = lower.global_transform
+	upper.global_position += cam.global_basis.x * 0.2 + cam.global_basis.z * 0.05
+	var shadows := preload("res://scripts/card_overlap_shadow.gd")
+	shadows.update(hand, [lower, upper])
+	var tight_width: float = lower.mat.get_shader_parameter("shadow_width")
+	var tight_strength: float = lower.mat.get_shader_parameter("shadow_strength")
+	upper.global_position += cam.global_basis.z * 0.5
+	shadows.update(hand, [lower, upper])
+	_expect(float(lower.mat.get_shader_parameter("shadow_width")) > tight_width
+		and float(lower.mat.get_shader_parameter("shadow_strength")) < tight_strength,
+		"larger card separation makes the shadow softer and lighter")
+	upper.global_transform = lower.global_transform
+	upper.global_position -= cam.global_basis.z * 0.3
+	shadows.update(hand, [lower, upper])
+	_expect(float(lower.mat.get_shader_parameter("shadow_strength")) == 0.0,
+		"a card behind the receiver cannot cast onto it even when listed last")
+	upper.global_transform = saved_upper
+	hand._update_edge_shadows()
+
+	# A preceding card can leave while the hovered card still has a drift callback.
+	hand.set_hovered(upper, true)
+	var removed: Card = hand.cards.front()
+	if removed == upper:
+		removed = hand.cards[1]
+	hand.remove_card(removed)
+	upper.index = hand.cards.size() # Reproduce the stale out-of-range index from the report.
+	hand._apply_hover_drift(0.02)
+	_expect(upper.index == hand.cards.find(upper) and upper.position.is_equal_approx(hand.calculate_card_position(upper.index)),
+		"hover drift uses live hand membership after a preceding card leaves")
+	hand.remove_card(upper)
+	hand.set_hovered(upper, true)
+	hand._apply_hover_drift(0.03)
+	_expect(hand.hovered_card == null, "a cast preview still parented to Hand cannot restart hand hover")
+	hand.add_card(removed)
+	hand.add_card(upper)
 
 
 func _check_opponent_translation(game) -> void:

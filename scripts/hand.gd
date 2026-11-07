@@ -16,12 +16,16 @@ var _pointer_hover_active := false
 ## A Character drag has its own lower-band cast stance. These fields hold the
 ## one active drag, the X position where it latched, and whether the card has
 ## already been committed to mana charging.
+var _character_waver_time := 0.0
+var _character_drag_original_index := -1
 var _character_drag_card: Card = null
 var _character_drag_latched := false
 var _character_drag_charging := false
 var _character_drag_lock_x := 0.0
 var _character_drag_restore_scale := 1.0
 var _character_drag_stance := Transform3D()
+var _character_drag_start := Transform3D()
+var _character_drag_start_pointer_y := 0.0
 ## The size a hovered hand card grows to. This used to be Card.STACK_CARD_SCALE (2.8), which was chosen for
 ## the ORTHOGRAPHIC board where a hand card and a stack card were the same size on screen. Under the
 ## perspective camera the hand sits much closer to the lens, so 2.8 drew a ~340 x 480 px card that covered
@@ -340,6 +344,7 @@ func update_card_positions(ignore = -1):
 ## Recompute shadows while the hand is animating. This is a short, bounded window, not
 ## permanent polling: only hover growth, re-fans and draw landings need it.
 func _process(delta: float) -> void:
+	_update_character_waver(delta)
 	if _shadow_track_seconds <= 0.0:
 		return
 	_shadow_track_seconds -= delta
@@ -358,7 +363,7 @@ func _process(delta: float) -> void:
 ## separate left/right rules — and, crucially, the shadow travels with the card instead of snapping
 ## to its destination on the first frame.
 func _update_edge_shadows() -> void:
-	preload("res://scripts/card_overlap_shadow.gd").update(self, cards, false, hovered_card,
+	preload("res://scripts/card_overlap_shadow.gd").update(self, cards,
 		overlap_shadow_strength, overlap_shadow_width, card_corner_radius_m)
 
 func last_card_position():
@@ -566,6 +571,8 @@ func _screen_down() -> Vector3:
 	return global_transform.basis.inverse() * (-cam.global_transform.basis.y.normalized())
 
 func calculate_card_position(i, include_hover: bool = true) -> Vector3:
+	if i < 0 or i >= cards.size():
+		return Vector3.ZERO
 	var t: float = i - (cards.size() - 1) / 2.0
 	# x is symmetric about zero, so the row is CENTRED on the Hand whatever its size is.
 	var x_offset: float = t * spacing()
@@ -697,6 +704,8 @@ func _input(event: InputEvent) -> void:
 			set_hovered(hovered_card, false)
 
 func set_hovered(card: Card, entered: bool) -> void:
+	if entered and (not is_instance_valid(card) or not cards.has(card) or card.get_parent() != self):
+		return
 	# THE OPPONENT'S CARDS DO NOT REACT TO THE POINTER. They are face down, and they are not the local player's to touch;
 	# letting them grow, lift and straighten meant that sweeping the mouse along the top of the screen played the whole
 	# hover animation on cards nobody can read.
@@ -739,7 +748,12 @@ func set_hovered(card: Card, entered: bool) -> void:
 func _apply_hover_drift(amount: float) -> void:
 	_hover_drift_amount = amount
 	if is_instance_valid(hovered_card) and hovered_card.get_parent() == self and not hovered_card.is_dragging:
-		hovered_card.position = calculate_card_position(hovered_card.index)
+		var current_index: int = cards.find(hovered_card)
+		if current_index < 0:
+			_release_hover(hovered_card)
+			return
+		hovered_card.index = current_index
+		hovered_card.position = calculate_card_position(current_index)
 		if _pointer_hover_active:
 			_pointer_hover_region = _pointer_hover_region.merge(_card_screen_rect(hovered_card).grow(3.0))
 		_update_edge_shadows()
@@ -865,20 +879,34 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 ## Screen-Y of the latched card's centre, as a fraction of viewport height.
 @export_range(0.50, 0.95) var character_drag_screen_y: float = 0.74
 ## Screen-facing scale of the latched card.
-@export_range(0.5, 3.0) var character_drag_scale: float = 2.8
+@export_range(0.5, 3.0) var character_drag_scale: float = 1.65
 ## Pitch around the card's local X. Negative rotates the top edge back under
 ## the right-hand rule with +X to the right.
-@export_range(-45.0, 0.0) var character_drag_pitch_degrees: float = -15.0
+@export_range(-80.0, 0.0) var character_drag_pitch_degrees: float = -60.0
 ## World-Y lift for the latched card, so it leaves the mat and reads larger.
 @export_range(0.0, 2.0) var character_drag_lift_y: float = 0.45
 
 func begin_character_drag(card: Card) -> void:
+	_character_waver_time = 0.0
+	_character_drag_original_index = cards.find(card)
 	_character_drag_card = card
 	_character_drag_latched = false
 	_character_drag_charging = false
 	_character_drag_lock_x = 0.0
 	_character_drag_restore_scale = card.scale.x if card != null else 1.0
 	_character_drag_stance = Transform3D()
+	_release_hover(card)
+	card.stop_hand_layout()
+	_character_drag_start = card.global_transform
+	_character_drag_start.origin.y += character_drag_lift_y
+	card.set_cast_pending_highlight(false)
+	var camera := get_viewport().get_camera_3d()
+	if camera != null:
+		var axes := camera.global_basis.orthonormalized()
+		_character_drag_start.basis = Basis(axes.x, axes.z, -axes.y).scaled(card.global_basis.get_scale())
+	_character_drag_start_pointer_y = get_viewport().get_mouse_position().y
+	_character_drag_start = _fit_character_drag_bottom(card, _character_drag_start, 1.10)
+	card.global_transform = _character_drag_start
 
 func character_drag_latched() -> bool:
 	return _character_drag_latched
@@ -891,6 +919,9 @@ func begin_character_charge(card: Card) -> void:
 func end_character_drag(card: Card = null) -> void:
 	if card != null and card != _character_drag_card:
 		return
+	if is_instance_valid(_character_drag_card):
+		_character_drag_card.set_cast_pending_highlight(false)
+	_character_waver_time = 0.0
 	_character_drag_card = null
 	_character_drag_latched = false
 	_character_drag_charging = false
@@ -905,26 +936,75 @@ func update_character_drag(card: Card, pointer: Vector2) -> bool:
 		return false
 	if card != _character_drag_card:
 		begin_character_drag(card)
+	if _character_drag_charging:
+		_apply_character_waver()
+		return true
 	var viewport_size := get_viewport().get_visible_rect().size
 	var threshold: float = viewport_size.y * character_drag_trigger_y
-	var in_hand_band: bool = pointer.y >= threshold
+	# Reach full pitch at the cast boundary; allow a short motion for a grab above it.
+	var finish_y: float = minf(threshold, _character_drag_start_pointer_y - viewport_size.y * 0.02)
+	var progress := clampf((_character_drag_start_pointer_y - pointer.y) / maxf(1.0, _character_drag_start_pointer_y - finish_y), 0.0, 1.0)
 	if not _character_drag_latched:
-		if in_hand_band:
-			return false
-		# CROSSED UPWARD. Lock the X where it crossed, not where the pointer is later.
-		_character_drag_latched = true
-		_character_drag_lock_x = pointer.x
-		_release_hover(card)
-		card.stop_hand_layout()
 		_character_drag_stance = _build_character_drag_stance(pointer.x)
-		card.global_transform = _character_drag_stance
-		return true
-	# Charging is a one-way latch. Before that, returning to the hand band puts the
-	# card back under the ordinary drag.
-	if not _character_drag_charging and in_hand_band:
-		_resume_normal_character_drag(card)
-		return false
+		_character_drag_stance.origin.y = _character_drag_start.origin.y
+		# Hold the horizontal position during the pitch, then lock the completed stance.
+		_character_drag_stance.origin.x = _character_drag_start.origin.x
+		_character_drag_stance = _fit_character_drag_bottom(card, _character_drag_stance, 0.94)
+	_character_drag_latched = progress >= 1.0
+	card.set_cast_pending_highlight(_character_drag_latched and card.can_be_played())
+	var amount := smoothstep(0.0, 1.0, progress)
+	card.global_transform = _character_drag_start.interpolate_with(_character_drag_stance, amount)
+	if _character_drag_latched:
+		_apply_character_waver()
+	else:
+		_character_waver_time = 0.0
+
 	return true
+
+## Small, bounded motion layered over the ready pose; never accumulated into it.
+func _update_character_waver(delta: float) -> void:
+	if not _character_drag_latched or not is_instance_valid(_character_drag_card):
+		return
+	if _character_drag_card.get_parent() != self or _character_drag_card.current_zone != Card.Zone.HAND:
+		return
+	_character_waver_time += delta
+	_apply_character_waver()
+
+func _apply_character_waver() -> void:
+	if not is_instance_valid(_character_drag_card):
+		return
+	var t := _character_waver_time
+	var fade := smoothstep(0.0, 0.3, t)
+	var pose := _character_drag_stance
+	var tilt := Vector3(sin(t * 2.3) * 0.6, sin(t * 1.7) * 0.3, sin(t * 1.9) * 0.45) * (PI / 180.0) * fade
+	pose.basis = pose.basis * Basis.from_euler(tilt)
+	var camera := get_viewport().get_camera_3d()
+	if camera != null:
+		pose.origin += (camera.global_basis.x * sin(t * 1.6) * 0.006 + camera.global_basis.y * sin(t * 2.1) * 0.004) * fade
+	_character_drag_card.global_transform = pose
+
+## Fit the visible face to the screen bottom by moving only along world Z.
+## Y stays lifted above the hand and field throughout the drag.
+func _fit_character_drag_bottom(card: Card, pose: Transform3D, screen_fraction: float) -> Transform3D:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return pose
+	var target_y := get_viewport().get_visible_rect().size.y * screen_fraction
+	var half := card._card_face_size() * 0.5
+	for _step in range(16):
+		var bottom := -INF
+		var shifted_bottom := -INF
+		for corner in [Vector3(-half.x, 0, -half.y), Vector3(half.x, 0, -half.y), Vector3(-half.x, 0, half.y), Vector3(half.x, 0, half.y)]:
+			var world_point: Vector3 = pose * (card.hand_mesh.transform * corner)
+			bottom = maxf(bottom, camera.unproject_position(world_point).y)
+			shifted_bottom = maxf(shifted_bottom, camera.unproject_position(world_point + Vector3(0, 0, 0.01)).y)
+		if absf(target_y - bottom) < 0.25:
+			break
+		var derivative: float = (shifted_bottom - bottom) / 0.01
+		if absf(derivative) < 0.001:
+			break
+		pose.origin.z += clampf((target_y - bottom) / derivative, -0.5, 0.5)
+	return pose
 
 func _build_character_drag_stance(pointer_x: float) -> Transform3D:
 	var camera := get_viewport().get_camera_3d()
@@ -1014,7 +1094,9 @@ func stage_cast_card_at_middle(card: Card) -> void:
 
 func remove_card(card):
 	_release_hover(card)
-	cards.remove_at(card.index)
+	cards.erase(card)
+	for i in range(cards.size()):
+		cards[i].index = i
 	
 						
 ## Begins paying for a card. Returns false when it cannot legally be played now.
@@ -1071,6 +1153,7 @@ func active_controller() -> String:
 	return "player" if stack.get_parent().turn_owner == 1 else "opponent"
 
 func finish_summon_cast(card: Card) -> void:
+	end_character_drag(card)
 	# The summon left the hand when the cast began and has been parked on
 	# the stack; committing it only clears the hand reference.
 	if charging_card == card:
@@ -1078,9 +1161,8 @@ func finish_summon_cast(card: Card) -> void:
 
 func cancel_summon_cast() -> void:
 	# Return the parked summon to the hand. Nothing was paid or tapped.
-	if charging_card != null and charging_card.get_parent() == stack:
-		add_card(charging_card)
-	charging_card = null
+	if charging_card != null:
+		_on_assistant_charge_cancelled()
 
 func has_card_matching_criteria(criteria: Dictionary) -> bool:
 	for card in cards:
@@ -1306,5 +1388,8 @@ func _on_assistant_charge_cancelled() -> void:
 				charging_card.enter_zone(Card.Zone.HAND)
 		else:
 			add_card(charging_card)
+	if charging_card != null and cards.has(charging_card):
+		cards.erase(charging_card)
+		cards.insert(clampi(_character_drag_original_index, 0, cards.size()), charging_card)
 	charging_card = null
 	update_card_positions()
