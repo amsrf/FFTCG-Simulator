@@ -13,14 +13,12 @@ extends Node3D
 signal finished
 
 const CARD_SCENE := preload("res://card.tscn")
+const CARD_SHARDS := preload("res://card_shards.tscn")
 const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
 
 @export_group("Choreography")
 @export var lift_height: float = 0.85
 @export var lift_seconds: float = 0.22
-## Smooth size growth during the lift. It is tweened, never assigned, so the cards grow into
-## the cinematic instead of snapping to a larger size.
-@export var lift_scale: float = 1.18
 ## How long the cards take to turn into their clash orientation. The turn happens during the lift,
 ## before the retreat, so alignment is complete before the charge.
 @export var align_seconds: float = 0.28
@@ -28,12 +26,14 @@ const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
 @export var same_column_pixels: float = 28.0
 @export var windup_distance: float = 0.80
 @export var windup_seconds: float = 0.32
+@export_range(-70.0, 70.0) var windup_pitch_degrees: float = -32.0
 ## A deliberate beat with no movement at the end of the pull-back. This is the "moment of nothing" before the charge.
 @export var windup_hold_seconds: float = 0.22
 @export var charge_seconds: float = 0.075
 @export var hitstop_seconds: float = 0.10
 @export var recovery_seconds: float = 0.32
-@export var defeat_seconds: float = 0.95
+## Time spent tumbling intact before the airborne shatter.
+@export var defeat_seconds: float = 0.55
 
 @export_group("Defeat")
 @export var knockback_speed: float = 2.4
@@ -42,8 +42,9 @@ const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
 @export var tumble_speed: float = 520.0
 
 @export_group("Impact")
-@export var impact_flash_size: float = 1.1
-@export var impact_flash_seconds: float = 0.18
+@export var impact_flash_size: float = 0.65
+@export var impact_flash_seconds: float = 0.12
+@export var impact_flash_intensity: float = 2.0
 @export var camera_shake_seconds: float = 0.22
 @export var camera_shake_strength: float = 0.045
 @export var random_seed: int = 0
@@ -129,8 +130,6 @@ func _choreograph() -> void:
 	var b_base_rot: Vector3 = b_rot0
 	var a_scale0: Vector3 = _proxy_a.scale
 	var b_scale0: Vector3 = _proxy_b.scale
-	var lift_scale_vec_a: Vector3 = a_scale0 * lift_scale
-	var lift_scale_vec_b: Vector3 = b_scale0 * lift_scale
 	var aligned: bool = not _same_column(a0, b0)
 	var a_pose_rot: Vector3 = a_base_rot
 	var b_pose_rot: Vector3 = b_base_rot
@@ -169,13 +168,15 @@ func _choreograph() -> void:
 	var lift_time: float = maxf(lift_seconds, align_seconds) if aligned else lift_seconds
 	await _move_both(a0 + lift, b0 + lift,
 		a_pose_rot, b_pose_rot,
-		lift_time, Tween.TRANS_SINE, Tween.EASE_OUT,
-		lift_scale_vec_a, lift_scale_vec_b)
+		lift_time, Tween.TRANS_SINE, Tween.EASE_OUT)
 
+	# Pitch around each card's own right axis while drawing it back.
+	var a_windup := (Basis.from_euler(a_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_a.controller == "opponent" else windup_pitch_degrees))).get_euler()
+	var b_windup := (Basis.from_euler(b_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_b.controller == "opponent" else windup_pitch_degrees))).get_euler()
 	# Wind-up: retreat away from the midpoint.
 	await _move_both(a0 + lift + a_away * windup_distance,
 		b0 + lift + b_away * windup_distance,
-		a_pose_rot, b_pose_rot,
+		a_windup, b_windup,
 		windup_seconds, Tween.TRANS_BACK, Tween.EASE_OUT)
 
 	# The beat before the hit. No movement, no easing to distract from it; the cards are simply held back.
@@ -190,7 +191,6 @@ func _choreograph() -> void:
 	_shake_camera()
 	await _wait(hitstop_seconds)
 
-	var started: int = Time.get_ticks_msec()
 	var recovery: Array[Tween] = []
 	if _survives_a:
 		recovery.append(_start_recovery(_proxy_a, a_start, a_base_rot, a_scale0))
@@ -201,15 +201,12 @@ func _choreograph() -> void:
 	else:
 		_start_defeat(_proxy_b, axis)
 
-	if not _defeated.is_empty():
-		for tween in recovery:
-			await tween.finished
-		var spent: float = float(Time.get_ticks_msec() - started) / 1000.0
-		# No shatter: the defeated proxy finishes its knock-down and is cleaned up with the cinematic.
-		await _wait(maxf(0.0, defeat_seconds - spent))
-	else:
-		for tween in recovery:
-			await tween.finished
+	for tween in recovery:
+		await tween.finished
+	# Simulation time owns the delay, including slow motion and pause.
+	while not _defeated.is_empty():
+		await get_tree().process_frame
+
 
 
 ## Same column means the two centres project to the same screen x. That is the case where the
@@ -267,6 +264,7 @@ func _start_defeat(proxy: Card, direction: Vector3) -> void:
 	if spin_axis.length_squared() < 0.0001:
 		spin_axis = Vector3.RIGHT
 	_defeated[proxy] = {
+		"age": 0.0,
 		"velocity": direction * knockback_speed + Vector3.UP * upward_impulse,
 		"spin": spin_axis * deg_to_rad(tumble_speed * _rng.randf_range(0.75, 1.2)),
 	}
@@ -277,14 +275,32 @@ func _process(delta: float) -> void:
 		return
 	for proxy in _defeated.keys():
 		if proxy == null or not is_instance_valid(proxy):
+			_defeated.erase(proxy)
 			continue
 		var state: Dictionary = _defeated[proxy]
 		var velocity: Vector3 = state["velocity"]
 		velocity.y -= gravity * delta
 		state["velocity"] = velocity
 		proxy.position += velocity * delta
-		proxy.rotation += (state["spin"] as Vector3) * delta
+		var spin: Vector3 = state["spin"]
+		if spin.length_squared() > 0.00001:
+			proxy.quaternion = Quaternion(spin.normalized(), spin.length() * delta) * proxy.quaternion
+		state["age"] = float(state["age"]) + delta
+		if float(state["age"]) >= defeat_seconds:
+			_shatter_defeated(proxy, velocity, spin)
+			_defeated.erase(proxy)
 
+
+
+func _shatter_defeated(proxy: Card, velocity: Vector3, spin: Vector3) -> void:
+	var shards := CARD_SHARDS.instantiate()
+	# Keep fragments alive after this cinematic releases its visual proxies.
+	get_parent().add_child(shards)
+	var game_field := get_parent().get_node_or_null("Field") as Node3D
+	if game_field != null:
+		shards.floor_world_y = game_field.global_position.y
+	shards.burst_from_card(proxy, global_basis * velocity, global_basis.orthonormalized() * spin)
+	proxy.visible = false
 
 
 func _impact_flash(point: Vector3) -> void:
@@ -295,7 +311,7 @@ func _impact_flash(point: Vector3) -> void:
 	var material := ShaderMaterial.new()
 	material.shader = HALO_SHADER
 	material.set_shader_parameter("halo_color", Color(1.0, 0.86, 0.55, 1.0))
-	material.set_shader_parameter("intensity", 4.5)
+	material.set_shader_parameter("intensity", impact_flash_intensity)
 	material.set_shader_parameter("falloff", 2.0)
 	material.set_shader_parameter("skirt_amount", 0.8)
 	quad.material_override = material
@@ -303,10 +319,10 @@ func _impact_flash(point: Vector3) -> void:
 	var basis: Basis = _camera.global_transform.basis if _camera != null else Basis()
 	quad.global_transform = Transform3D(basis, point)
 	var tween: Tween = create_tween().set_parallel(true)
-	tween.tween_property(quad, "scale", Vector3.ONE * 2.2, impact_flash_seconds)
+	tween.tween_property(quad, "scale", Vector3.ONE * 1.6, impact_flash_seconds)
 	tween.tween_method(func(value: float) -> void:
 		material.set_shader_parameter("intensity", value),
-		4.5, 0.0, impact_flash_seconds)
+		impact_flash_intensity, 0.0, impact_flash_seconds)
 	tween.chain().tween_callback(quad.queue_free)
 
 

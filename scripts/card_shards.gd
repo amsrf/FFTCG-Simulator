@@ -111,15 +111,21 @@ func _make_glass_material() -> void:
 
 ## Break `card` visually. The caller should add this node to the tree first, so
 ## the shard scene can inherit a valid world transform.
-func burst_from_card(card: Card) -> void:
+func burst_from_card(card: Card, inherited_velocity := Vector3.ZERO, inherited_spin := Vector3.ZERO) -> void:
 	if card == null or not is_instance_valid(card) or not is_inside_tree():
 		return
 	var art: Material = null
 	if card.mat != null:
 		art = card.mat.duplicate()
 		if art is ShaderMaterial:
-			art.set_shader_parameter("shadow_strength", 0.0)
+			for prefix in ["shadow_", "shadow2_", "shadow3_", "shadow4_"]:
+				art.set_shader_parameter(prefix + "strength", 0.0)
 	burst(card.global_transform, art)
+	var local_velocity := global_basis.inverse() * inherited_velocity
+	var local_spin := global_basis.orthonormalized().inverse() * inherited_spin
+	for i in range(_pieces.size()):
+		_velocities[i] += local_velocity + local_spin.cross(_pieces[i].position)
+		_spins[i] += local_spin
 
 
 func burst(from: Transform3D, art_material: Material) -> void:

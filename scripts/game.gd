@@ -764,6 +764,9 @@ const EFFECT_SHADERS: Array[Shader] = [
 	# damage, so without a warm-up the first strike would hitch mid-animation.
 	preload("res://shaders/lightning_bolt.gdshader"),
 	preload("res://shaders/lightning_impact.gdshader"),
+	# Warm the Earth dust shader before its first damage presentation.
+	preload("res://shaders/earth_dust.gdshader"),
+	preload("res://shaders/earth_ground_crack.gdshader"),
 ]
 
 func _ready():

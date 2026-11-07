@@ -16,6 +16,8 @@ enum Kind {
 
 var kind: Kind = Kind.STATUS_APPLIED
 var targets: Array = []
+## Pre-damage presentation snapshots survive rules-driven zone changes.
+var target_visuals: Dictionary = {}
 var source: Card = null
 var element: String = ""
 var amount: int = 0

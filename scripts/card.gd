@@ -1011,7 +1011,8 @@ func suffer_damage(damage: int, source_kind: String = "", source_controller: Str
 	# COMBAT damage is the empty kind. Effect/Summon damage gets the reaction;
 	# combat has its own clash presentation.
 	if damage > 0 and is_on_field() and not source_kind.is_empty():
-		play_damage_reaction(damage, reaction_delay)
+		if not Vfx.owns_damage_reaction(source_card):
+			play_damage_reaction(damage, reaction_delay)
 
 func take_damage(damage: int, source_kind: String = "", source_controller: String = "",
 		source_card: Card = null, reaction_delay: float = 0.0):
@@ -1044,6 +1045,102 @@ func play_damage_reaction(damage: int, delay: float = 0.0) -> void:
 	tween.tween_callback(_finish_damage_reaction)
 	_damage_reaction_tween = tween
 
+
+## Earth launch follows gravity and returns exactly to the mesh's resting pose.
+const EARTH_LAUNCH_HEIGHTS: Array[float] = [1.0, 1.6, 2.2, 2.9]
+const EARTH_LAUNCH_GRAVITY := 9.8
+signal earth_landed
+var earth_contact_seconds := 0.0
+var _earth_chrome_active := false
+var _earth_edge_home := Transform3D.IDENTITY
+var _earth_power_was_visible := false
+
+func earth_launch_seconds(damage: int) -> float:
+	return sqrt(8.0 * EARTH_LAUNCH_HEIGHTS[VfxEvent.damage_tier_for(damage)] / EARTH_LAUNCH_GRAVITY)
+
+func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> Tween:
+	if hand_mesh == null or not is_on_field():
+		return null
+	normalize_damage_reaction()
+	var duration := earth_launch_seconds(damage)
+	var velocity := EARTH_LAUNCH_GRAVITY * duration * 0.5
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	# Small bounded wavering replaces full turns. The envelope fades away
+	# before touchdown, preserving the planned landing pose.
+	var frequencies := Vector3(rng.randf_range(5.0, 7.0), rng.randf_range(3.0, 5.0), rng.randf_range(4.0, 6.0))
+	var phases := Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
+	var excursion := Vector3(rng.randf_range(-0.045, 0.045), 0.0, rng.randf_range(-0.035, 0.035))
+	var landing_offset := Vector3(rng.randf_range(-0.006, 0.006), 0.0, rng.randf_range(-0.006, 0.006))
+	var landing_tilt := Vector3(rng.randf_range(-0.015, 0.015), rng.randf_range(-0.020, 0.020), rng.randf_range(-0.015, 0.015))
+	var pose_at := func(time: float) -> Transform3D:
+		var p := clampf(time / duration, 0.0, 1.0)
+		var height := velocity * time - 0.5 * EARTH_LAUNCH_GRAVITY * time * time
+		var lateral := excursion * pow(sin(PI * p), 2.0) + landing_offset * smoothstep(0.45, 0.94, p)
+		var position_local := global_basis.inverse() * (Vector3.UP * height + lateral)
+		var envelope := pow(sin(PI * p), 2.0)
+		var angles := Vector3(
+			sin(time * frequencies.x + phases.x) * deg_to_rad(7.5),
+			sin(time * frequencies.y + phases.y) * deg_to_rad(3.0),
+			sin(time * frequencies.z + phases.z) * deg_to_rad(6.0)) * envelope
+		angles += landing_tilt * smoothstep(0.65, 0.94, p)
+		var orientation := Basis(Vector3.RIGHT, angles.x) * Basis(Vector3.UP, angles.y) * Basis(Vector3.BACK, angles.z)
+		return Transform3D(orientation, position_local)
+	# First corner contact ends the free fall. The centre need not reach zero:
+	# a tilted card touches the ground earlier than a flat one.
+	var resting_bottom := _earth_lowest_offset(Transform3D.IDENTITY)
+	var low := duration * 0.5
+	var high := duration + 0.2
+	for i in range(1, 81):
+		var sample_time := lerpf(duration * 0.5, duration + 0.2, float(i) / 80.0)
+		if _earth_lowest_offset(pose_at.call(sample_time)) <= resting_bottom:
+			high = sample_time
+			break
+		low = sample_time
+	for _iteration in range(18):
+		var middle := (low + high) * 0.5
+		if _earth_lowest_offset(pose_at.call(middle)) > resting_bottom:
+			low = middle
+		else:
+			high = middle
+	earth_contact_seconds = high
+	var contact_pose: Transform3D = pose_at.call(earth_contact_seconds)
+	var edge := get_node_or_null("CardEdge") as Node3D
+	_earth_edge_home = edge.transform if edge != null else Transform3D.IDENTITY
+	_earth_power_was_visible = power_label.visible if power_label != null else false
+	_earth_chrome_active = true
+	if power_label != null:
+		power_label.visible = false
+	var apply_pose := func(pose: Transform3D) -> void:
+		if not is_on_field():
+			return
+		hand_mesh.transform = pose
+		if is_instance_valid(edge):
+			edge.transform = pose * _earth_edge_home
+	var tween := create_tween()
+	if delay > 0.0:
+		tween.tween_interval(delay)
+	tween.tween_method(func(time: float): apply_pose.call(pose_at.call(time)), 0.0, earth_contact_seconds, earth_contact_seconds)
+	tween.tween_callback(func(): earth_landed.emit())
+	# A small damped rebound and short roll/slide bring a survivor back to its
+	# slot after contact, instead of steering it upright while still airborne.
+	tween.tween_method(func(p: float) -> void:
+		var settle := 1.0 - pow(1.0 - p, 3.0)
+		var pose := contact_pose.interpolate_with(Transform3D.IDENTITY, settle)
+		var penetration := resting_bottom - _earth_lowest_offset(pose)
+		pose.origin += global_basis.inverse() * Vector3.UP * (maxf(0.0, penetration) + sin(PI * p) * 0.012 * (1.0 - p))
+		apply_pose.call(pose)
+	, 0.0, 1.0, 0.12)
+	tween.tween_callback(_finish_damage_reaction)
+	_damage_reaction_tween = tween
+	return tween
+
+func _earth_lowest_offset(pose: Transform3D) -> float:
+	var half := _card_face_size() * 0.5
+	var lowest := INF
+	for corner in [Vector3(-half.x, 0, -half.y), Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
+		lowest = minf(lowest, (global_basis * (pose * corner)).y)
+	return lowest
 
 func normalize_damage_reaction() -> void:
 	if _damage_reaction_tween != null and _damage_reaction_tween.is_valid():
@@ -1121,6 +1218,13 @@ func _reset_damage_pose() -> void:
 	hand_mesh.position = Vector3.ZERO
 	hand_mesh.rotation = Vector3.ZERO
 	hand_mesh.scale = Vector3.ONE
+	if _earth_chrome_active:
+		var edge := get_node_or_null("CardEdge") as Node3D
+		if edge != null:
+			edge.transform = _earth_edge_home
+		if power_label != null:
+			power_label.visible = _earth_power_was_visible and current_zone == Zone.FIELD
+		_earth_chrome_active = false
 
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.

@@ -59,7 +59,7 @@ func status_removed(card: Card, status: String) -> void:
 
 ## `mode`: "single" (default), "multi", "sequence", "radial".
 func damage(targets: Array, amount: int, element: String, source: Card = null,
-		mode: String = "single") -> void:
+		mode: String = "single", target_visuals: Dictionary = {}) -> void:
 	var hits: Array = []
 	for target in targets:
 		if target != null and is_instance_valid(target):
@@ -70,20 +70,24 @@ func damage(targets: Array, amount: int, element: String, source: Card = null,
 	if spread.is_empty():
 		spread = "single" if hits.size() == 1 else "multi"
 	var kind: VfxEvent.Kind = VfxEvent.Kind.BOARD_DAMAGE if spread == "board" else VfxEvent.Kind.DAMAGE
-	_emit(VfxEvent.new(kind, hits, element, amount, source, spread))
+	var event := VfxEvent.new(kind, hits, element, amount, source, spread)
+	_attach_damage_visuals(event, target_visuals)
+	_emit(event)
 
 
 ## Whole-board damage is a distinct event so presets can choose a wave rather
 ## than N unrelated single-target impacts.
 func board_damage(targets: Array, amount: int, element: String,
-		source: Card = null, mode: String = "radial") -> void:
+		source: Card = null, mode: String = "radial", target_visuals: Dictionary = {}) -> void:
 	var hits: Array = []
 	for target in targets:
 		if target != null and is_instance_valid(target):
 			hits.append(target)
 	if hits.is_empty():
 		return
-	_emit(VfxEvent.new(VfxEvent.Kind.BOARD_DAMAGE, hits, element, amount, source, mode))
+	var event := VfxEvent.new(VfxEvent.Kind.BOARD_DAMAGE, hits, element, amount, source, mode)
+	_attach_damage_visuals(event, target_visuals)
+	_emit(event)
 
 
 func card_broken(card: Card, cause: String = "") -> void:
@@ -99,6 +103,32 @@ func preset_for(event: VfxEvent) -> VfxPreset:
 	if _presets.has(event.element):
 		return _presets[event.element]
 	return null
+
+
+## Position-only snapshots let an impact stay at the hit location after a
+## defeated card moves to the Break Zone. They never delay rules or break FX.
+func capture_damage_visuals(targets: Array) -> Dictionary:
+	var snapshots: Dictionary = {}
+	for target in targets:
+		if is_instance_valid(target) and target is Card and target.is_on_field():
+			snapshots[target.get_instance_id()] = {"transform": target.global_transform,
+				"floor_y": target.get_parent().global_position.y}
+	return snapshots
+
+func _attach_damage_visuals(event: VfxEvent, snapshots: Dictionary) -> void:
+	var positions := capture_damage_visuals(event.targets) if snapshots.is_empty() else snapshots
+	for target: Card in event.targets:
+		var id := target.get_instance_id()
+		if positions.has(id):
+			var visual: Dictionary = positions[id].duplicate()
+			visual["lethal"] = not target.is_on_field()
+			event.target_visuals[id] = visual
+
+func owns_damage_reaction(source: Card) -> bool:
+	if not is_instance_valid(source):
+		return false
+	var preset: VfxPreset = preset_for_element(source.element)
+	return preset != null and preset.owns_damage_reaction
 
 
 func preset_for_element(element: String) -> VfxPreset:

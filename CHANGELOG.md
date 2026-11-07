@@ -2,8 +2,63 @@
 
 All notable changes to the FF TCG Simulator project.
 
-## [Unreleased] — 2026-11-06
+## [Unreleased] — 2026-11-07
+### Added
+- Reshaped the Earth ground mark into a wider network of connected, irregular slab cracks with a broken perimeter and softer edges, following the reference.
+- Added a procedural black ground-crack mark under Earth totems, appearing during eruption and fading after withdrawal. Each instance owns its fade/variation. Earth damage demo adds M for multi-target previews using the production area cue.
+- Added the Earth damage cue: a totem launches surviving field targets into damage-tiered gravitational arcs with tumbling, then wobbles and withdraws with dust during descent. The mesh returns exactly to its field pose; interruption cleans up its reaction. Added `tools/earth_damage_demo.tscn` for four damage-tier previews.
+- Added two native earth-totem dust emitters: a short chunky base-puff burst and lighter lingering wisps. A procedural billboard shader provides irregular cloud silhouettes; editable growth/fade curves control lifetime appearance. The rise timeline triggers dust at 0.02 seconds, and replay clears old particles.
+- Added an editable eight-rock base using Models 0, 1 and 2. The base emerges through a native rise-animation track and shares the totem material; normalized source meshes are reused between base stones and debris.
+- Added native GPUParticles3D debris emitters for Rock Models 0 and 1, using varied pebble sizes, randomized angles/spin, upward velocity and gravity. The rise timeline triggers them at 0.04 seconds; both particle materials remain editable in the Inspector.
+- Added `assets/effects/earth/earth_totem.tscn` with two editable Rock Model 3 FBX instances and the Arid texture material. A shared Lift node rises over 55/60 seconds. `tools/earth_totem_demo.tscn` provides replay, underground reset, raised placement and slow-motion controls.
+
 ### Changed
+- Increased Earth launch heights to 1.0/1.6/2.2/2.9 metres by damage tier and strengthened bounded wobble and lateral sway, retaining the precise landing pose.
+- Replaced airborne Earth card rotations with small bounded pitch/yaw/roll wavering and reduced lateral sway. Wavering fades before the same precise landing; launch height, gravity and lethal behavior are unchanged.
+- Planned Earth launch rotations and lateral travel around a deterministic landing pose: all damage tiers return within 3 degrees and 1 cm at contact. Reduced the post-contact settle to 0.12 seconds with a tiny rebound, avoiding large on-board repositioning.
+- Simplified lethal Earth damage to the normal immediate break effect plus a totem/dust eruption at the saved hit location. Removed the airborne lethal Card proxy and break suppression. Nonlethal launch, tumble and settling remain unchanged; K in the damage demo previews immediate lethal shatter.
+- Earth damage tumble now uses seeded varying multi-axis angular motion and slight lateral drift. First-corner ground contact ends the ballistic flight, followed by a brief rebound/settle for survivors. Lethal hits resolve rules immediately but defer visual shatter to proxy contact; the damage demo adds K for lethal preview.
+- Made earth totem emergence more forceful: the main column shoots up in 0.2 seconds, overshoots by 0.06 m and settles by 0.35 seconds; base rocks emerge in 0.15 seconds. All motion remains in the editable rise timeline.
+- Increased earth debris launch velocity and tightened its upward cone so both models rise above the totem. Extended lifetime/culling bounds and widened the demo camera to show the higher arcs.
+- Moved earth totem ascent from a scripted tween into the native `AnimationPlayer/rise` timeline, with an editable Y-position Bezier curve and 60-fps snapping.
+- Clash wind-up now uses +32 degrees for the opponent and -32 for the player. Reduced impact flash diameter, expansion, brightness and duration.
+- Clash proxies lift without scale growth, then pull back while pitching around local X before unwinding into impact. Defeated cards tumble intact for 0.55 seconds before shattering at their airborne pose; fragments inherit knockback and spin. Survivors retain their exact original transform.
+
+## [Unreleased] — 2026-11-06
+### Fixed
+- Prevented local Summon flight from intersecting existing stack cards: clearance now accounts for every face corner and moves the incoming card along its viewing ray, preserving its screen path.
+- Existing stack cards now shift into their new slots at local Summon flight launch instead of waiting for landing; the incoming card retains its independent flight trajectory.
+- Removed the local Summon pause at the apex. Translation now uses one continuous timeline; Y/Z turns share a nonzero angular velocity through the peak and ease only at arrival.
+- Local Summon descent now occupies half the flight with shared translation and rotation progress, avoiding a compressed final tumble. Verified the post-flight layout handoff retains the final orientation.
+- Corrected local Summon overshoot by adapting its curve to the bottom entrance. Launch is now just below the screen so most of the shared 32-frame flight is visible. Added frame-by-frame checks for forward progress and duration.
+- Fixed stale hand indices during hover drift after card removal. Drift now resolves live membership, removals reindex immediately, and cards outside the hand list cannot restart hover.
+
+### Changed
+- Replaced hand/stack edge-strip shadows with full rounded-card silhouettes traced in world space. Current depth determines casting; card separation controls softness and opacity. Up to four nearby casters shade each receiver. Extended flow regressions for projected corners, ordering, hover neighbours, depth rejection and gap response.
+- Added a temporary depth tilt during local Summon descent to preserve the reference foreshortening before the card opens upright. This tilt blends in and out smoothly without a full X-axis flip.
+- Split local Summon Y and Z timing: Y straightens during the early descent, while Z continues opening the face through the slow approach. Translation and total duration remain unchanged.
+- Lowered the local Summon arc from 32% to 24% of screen height to bring the edge-on portion closer to the stack.
+- Based on final-frame comparisons, local Summon rotation now follows elapsed descent time instead of the heavily eased translation progress. Removed the early Y unwind so the card continues unfolding throughout the settling approach.
+- Separated local Summon Y unwind from the Z reveal and moved stack-orientation alignment earlier in the descent, reducing late rotation correction during the slow approach.
+- Local Summon flight now lasts 50 frames at 60 fps and uses stronger continuous ease-out, reserving its final 30 frames for a slow settling approach like clip5 frames 124–154.
+- Added ten frames at 60 fps to the local Summon final approach while retaining the initial flight speed; the extended tail decelerates smoothly into the stack.
+- Replaced the local Summon X half-turn with combined local Y/Z rotation. The effect card starts upside down and back-facing, turns edge-on near the peak, and unwinds upright into the stack.
+- Local Summon X rotation now continues negatively from -90 degrees at the apex to -180 degrees at landing, using a back-facing launch basis so the final front matches the stack pose.
+- Added negative local-X pitch to the local Summon flight, reaching -90 degrees at the arc apex alongside its Z turn, then easing back into its final stack pose.
+- Added local-Z rotation to the local Summon arc: starts back-facing, reaches 90 degrees edge-on at the translation apex, then reveals its front and settles into the stack orientation.
+- Lowered the local Summon parabola height from 50% to 32% of screen height for a smaller overshoot above the stack.
+- Local Summon entrance is now a translation-only parabolic study: fixed stack rotation, a visible apex above the destination, and an eased descent into the stack. Opponent animation is unchanged.
+- Local Summons now create a separate stack card after fading the original, preserving chosen targets. Both entrances use the opponent authored waypoint, 32/60-second timing, flip and easing; only the local offscreen launch differs.
+- Compared clip5 frames 111–141: local Summon entrance now uses a higher arc and 0.32-second flight. Added local preview/confirm (8/9), pause (P), and 60-fps stepping (.) to `tools/opponent_summon_demo.tscn`; 3 retains slow motion.
+- Local Summon effect cards launch from below the screen at horizontal center, independently of the original drag position, before curving toward the stack.
+- Local Summons now use the raised drag/payment/target preview. Confirmation dissolves the printed face, then brings its stack effect face in from offscreen right using the shared Summon flip flight; chosen targets stay on the same logical card. Resolution waits for the entrance to finish.
+- Added subtle bounded sway and sub-degree tilts to the ready Character casting pose, fading in over 0.3 seconds and continuing through mana payment. The motion stops when the preview ends.
+- Full Character rotation now coincides with the maximum bottom gap; further pointer travel leaves the pose fixed. Cancelling mana payment restores the original Character hand slot.
+- Added a 2.5% bottom margin to the full Character casting stance and a small additional upward drag range after full pitch, retaining the gold readiness aura.
+- Fit Character drag endpoints to the projected card bottom: grab starts below the screen and full pitch ends at the bottom edge, using Z movement while retaining the raised Y height.
+- Reduced Character cast preview scale to 1.65 and pitched it to -60 degrees at the cast boundary. Gold aura now marks full rotation and clears on retreat; releasing before full rotation returns the card to hand.
+- Increased the Character casting pitch from -15 to -50 degrees relative to the camera, making the top edge recede and the face visibly foreshortened. Added an independent face-normal assertion to the flow probe.
+- Character grab now lifts immediately in world Y; upward pointer travel progressively moves along Z and pitches around X into the bounded casting stance, instead of snapping to it.
 - Player Character drags now switch into a latched cast stance when the pointer crosses above the hand band: the card locks its X position, faces the screen, pitches about −15° on local X and lifts/scales up (`Hand.update_character_drag`). Returning to the hand band before payment resumes the normal drag; releasing in the stance begins mana charging. The Character stays in the hand-side stance through payment instead of being parked in the fake Stack. Summons retain their existing flow.
 - Extended `tests/flow_probe.gd`, `tests/drop_area_probe.gd` and `tests/teleport_cast_probe.gd` to cover the stance latch, horizontal lock, payment staging, cancellation and field teleport.
 

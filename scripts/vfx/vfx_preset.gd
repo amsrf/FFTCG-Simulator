@@ -7,6 +7,8 @@ extends Resource
 @export var element: String = ""
 @export var status: String = ""
 @export var tint: Color = Color.WHITE
+## The cue animates the target instead of the generic damage recoil.
+@export var owns_damage_reaction := false
 @export var impact_scene: PackedScene
 @export var board_impact_scene: PackedScene
 @export var shard_scene: PackedScene

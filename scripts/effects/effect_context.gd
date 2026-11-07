@@ -373,23 +373,25 @@ func choose_crystal_in_circle(elements: Array) -> String:
 ## Damage all cards in `cards` from the effect's source. All damage goes through Field.cause_damage, the single
 ## entry point that applies damage modifiers and source-aware riders.
 func damage(cards: Array, amount: int, mode: String = "") -> void:
+	var visuals: Dictionary = Vfx.capture_damage_visuals(cards)
 	var hits: Array = _apply_damage_to_cards(cards, amount)
 	if hits.is_empty():
 		return
 	var spread: String = mode if not mode.is_empty() else ("single" if hits.size() == 1 else "multi")
 	var origin: Card = source if source != null and is_instance_valid(source) else null
-	Vfx.damage(hits, amount, origin.element if origin != null else "", origin, spread)
+	Vfx.damage(hits, amount, origin.element if origin != null else "", origin, spread, visuals)
 
 
 ## Convenience for effects that explicitly hit the whole board. The director
 ## can then choose a board wave preset instead of N single-target impacts.
 func board_damage(cards: Array, amount: int, mode: String = "radial") -> void:
+	var visuals: Dictionary = Vfx.capture_damage_visuals(cards)
 	var hits: Array = _apply_damage_to_cards(cards, amount)
 	if hits.is_empty():
 		return
 	var origin: Card = source if source != null and is_instance_valid(source) else null
 	Vfx.board_damage(hits, amount, origin.element if origin != null else "",
-		origin, "radial" if mode.is_empty() else mode)
+		origin, "radial" if mode.is_empty() else mode, visuals)
 
 
 func _apply_damage_to_cards(cards: Array, amount: int) -> Array:

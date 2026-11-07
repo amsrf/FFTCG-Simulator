@@ -147,8 +147,350 @@ func _ready() -> void:
 	_expect(_field.block_arrows.is_empty(), "reset_blocker() disposes of every arc")
 	_expect(not their_blocker.ring_selected(), "reset_blocker() clears any orange")
 
+	await _check_clash_presentation(game)
+	_check_earth_totem()
+	await _check_earth_launch(game)
 	_report()
 	get_tree().quit()
+
+func _check_earth_launch(game: Node) -> void:
+	var card: Card = _field.get_front_cards_for("player").front()
+	var root_pose := card.global_transform
+	var motion := card.play_earth_launch(3000, 42)
+	motion.pause()
+	motion.custom_step(card.earth_launch_seconds(3000) * 0.5)
+	var weak_height := card.hand_mesh.global_position.y - card.global_position.y
+	_expect(card.get_node("CardEdge").transform.is_equal_approx(card.hand_mesh.transform) and not card.power_label.visible,
+		"earth waver carries the thickness edge and hides the stationary power readout")
+	_expect(absf(weak_height - 1.0) < 0.01 and card.global_transform.is_equal_approx(root_pose),
+		"earth launch follows its gravity arc while leaving the field-owned card root unchanged")
+	var landed: Array = []
+	var record_landing := func(): landed.append(true)
+	card.earth_landed.connect(record_landing)
+	motion.custom_step(card.earth_contact_seconds - card.earth_launch_seconds(3000) * 0.5 - 0.001)
+	_expect(not card.hand_mesh.basis.is_equal_approx(Basis.IDENTITY) and landed.is_empty(),
+		"earth target approaches the ground with only a small residual tilt")
+	motion.custom_step(0.002)
+	_expect(landed.size() == 1 and not card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
+		"survivor makes first contact with a small residual pose before settling")
+	motion.custom_step(0.08)
+	_expect(card._earth_lowest_offset(card.hand_mesh.transform) >= card._earth_lowest_offset(Transform3D.IDENTITY) - 0.001,
+		"post-contact settling keeps all card corners above the resting plane")
+	card.earth_landed.disconnect(record_landing)
+	motion.custom_step(card.earth_launch_seconds(3000))
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
+		"earth launch lands exactly in its original mesh pose")
+	motion = card.play_earth_launch(10000, 42)
+	motion.pause()
+	motion.custom_step(card.earth_launch_seconds(10000) * 0.5)
+	_expect(card.hand_mesh.global_position.y - card.global_position.y > weak_height * 2.0
+		and card.earth_launch_seconds(10000) > card.earth_launch_seconds(3000),
+		"higher Earth damage produces greater launch height and longer airtime")
+	card.normalize_damage_reaction()
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY) and not card.is_damage_reacting(),
+		"interrupting an earth launch clears its tumbling pose")
+	for amount in [3000, 6000, 8000, 10000]:
+		for seed_value in [11, 42, 173, 901]:
+			var contact_poses: Array[Transform3D] = []
+			var save_contact := func(): contact_poses.append(card.hand_mesh.transform)
+			card.earth_landed.connect(save_contact)
+			motion = card.play_earth_launch(amount, seed_value)
+			motion.pause()
+			var contact_time := card.earth_contact_seconds
+			var bounded_waver := true
+			var visible_waver := false
+			for _sample in range(24):
+				motion.custom_step(contact_time / 25.0)
+				var tilt := card.hand_mesh.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY)
+				bounded_waver = bounded_waver and tilt < deg_to_rad(14.0)
+				visible_waver = visible_waver or tilt > deg_to_rad(1.0)
+			_expect(bounded_waver and visible_waver, "Earth card gently wavers without full rotations throughout the arc")
+			motion.custom_step(contact_time / 25.0 + 0.00001)
+			var contact: Transform3D = contact_poses.front()
+			var world_offset: Vector3 = card.global_basis * contact.origin
+			_expect(contact.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < deg_to_rad(3.0)
+				and Vector2(world_offset.x, world_offset.z).length() < 0.01,
+				"planned Earth landing is within 3 degrees and 1 cm (damage %d, seed %d)" % [amount, seed_value])
+			motion.custom_step(0.13)
+			card.earth_landed.disconnect(save_contact)
+			motion = card.play_earth_launch(amount, seed_value)
+			motion.pause()
+			_expect(is_equal_approx(card.earth_contact_seconds, contact_time),
+				"Earth contact timing repeats deterministically for the same damage and seed")
+			card.normalize_damage_reaction()
+	var cue = preload("res://assets/effects/earth/earth_totem_cue.tscn").instantiate()
+	game.add_child(cue)
+	cue.play(preload("res://scripts/vfx/vfx_event.gd").new(VfxEvent.Kind.DAMAGE, [card], "土", 6000))
+	var totem: Node3D = cue.get_child(0)
+	var dust_bursts: Array = []
+	totem.dust_emitted.connect(func(): dust_bursts.append(true))
+	await get_tree().create_timer(0.08 + card.earth_launch_seconds(6000) * 0.5 + 0.05).timeout
+	_expect(totem.get_node("AnimationPlayer").current_animation == "retreat" and card.is_damage_reacting(),
+		"earth totem starts withdrawing while the launched card is still falling")
+	await get_tree().create_timer(0.19).timeout
+	_expect(dust_bursts.size() >= 2,
+		"withdrawing earth totem emits another dust burst")
+	cue.queue_free()
+	await get_tree().process_frame
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
+		"cancelling the Earth cue restores the target mesh")
+	var preset := Vfx.preset_for_element("土")
+	_expect(preset != null and preset.owns_damage_reaction and preset.impact_scene != null and preset.board_impact_scene != null,
+		"Earth damage preset owns launch presentation for single and area hits")
+	var source: Card = game.create_card(100, "player")
+	game.add_child(source)
+	var ctx = preload("res://scripts/effects/effect_context.gd").new(game, source, "test")
+	ctx.damage([card], 1000)
+	_expect(card.is_damage_reacting() and Vfx.get_events().back().element == "土",
+		"normal EffectContext Earth damage starts the configured launch presentation")
+	await get_tree().create_timer(2.5).timeout
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
+		"normal Earth damage completes with the field card back at rest")
+	var second_target: Card = _field.get_front_cards_for("opponent").front()
+	ctx.board_damage([card, second_target], 1000)
+	await get_tree().create_timer(0.35).timeout
+	var area_totems: Array[Node3D] = []
+	for cue_node in Vfx.get_children():
+		for effect in cue_node.get_children():
+			if effect is Node3D and effect.has_node("GroundCrack"):
+				area_totems.append(effect)
+	_expect(area_totems.size() == 2 and card.is_damage_reacting() and second_target.is_damage_reacting(),
+		"real area Earth damage launches every target with its own staggered totem")
+	if area_totems.size() == 2:
+		var crack_a := area_totems[0].get_node("GroundCrack") as MeshInstance3D
+		var crack_b := area_totems[1].get_node("GroundCrack") as MeshInstance3D
+		_expect(crack_a.material_override != crack_b.material_override
+			and float(crack_a.material_override.get_shader_parameter("opacity")) > 0.5
+			and float(crack_b.material_override.get_shader_parameter("opacity")) > 0.5,
+			"multiple Earth impacts show independent ground cracks without shared fade state")
+	await get_tree().create_timer(2.4).timeout
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY)
+		and second_target.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
+		"all area Earth targets return to their resting poses")
+	var snapshot := card.global_transform
+	var shards_before := game.find_children("CardShards*", "Node3D", true, false).size()
+	ctx.damage([card], 100000)
+	_expect(not card.is_on_field() and card.current_zone == Card.Zone.GRAVEYARD,
+		"lethal Earth damage moves the real card to the Break Zone immediately")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(game.find_children("EarthDefeatProxy*", "Node3D", true, false).is_empty(),
+		"lethal Earth damage creates no airborne Card proxy")
+	_expect(game.find_children("CardShards*", "Node3D", true, false).size() == shards_before + 1,
+		"lethal Earth hit uses exactly one normal immediate break effect")
+	_expect(card.visible and not card.is_damage_reacting(),
+		"broken card stays visible in the Break Zone without airborne motion")
+	var totem_at_hit := false
+	for cue_node in Vfx.get_children():
+		for effect in cue_node.get_children():
+			if effect is Node3D and effect.has_node("Lift") and effect.has_node("BaseRocks"):
+				totem_at_hit = effect.global_position.distance_to(Vector3(snapshot.origin.x, _field.global_position.y, snapshot.origin.z)) < 0.001
+	_expect(totem_at_hit, "lethal Earth hit still erupts at the original field position")
+	await get_tree().create_timer(3.0).timeout
+	source.queue_free()
+	var demo = preload("res://tools/earth_damage_demo.tscn").instantiate()
+	add_child(demo)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(demo.target != null, "earth damage demo selects a real field card for preview")
+	demo._hit()
+	_expect(demo.target.is_damage_reacting(), "earth damage demo replays the production launch cue")
+	demo._area = true
+	demo._hit()
+	await get_tree().create_timer(0.25).timeout
+	_expect(demo._preview_targets.size() > 1 and demo._cue.get_child_count() > 1,
+		"damage demo multi-target mode previews several production totems")
+	demo._area = false
+	demo._lethal = true
+	demo._hit()
+	demo._hit()
+	await get_tree().process_frame
+	_expect(not demo.target.visible and not demo.target.is_damage_reacting() and demo._preview_shards.size() == 1,
+		"lethal preview immediately shatters the target without launching it")
+	demo._reset()
+	await get_tree().process_frame
+	_expect(demo.target.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY) and demo.target.visible,
+		"earth damage demo reset restores its target")
+	demo.queue_free()
+
+
+func _check_earth_totem() -> void:
+	var demo = preload("res://tools/earth_totem_demo.tscn").instantiate()
+	add_child(demo)
+	var totem = demo.get_node("EarthTotem")
+	totem.show_raised()
+	var lower: Node3D = totem.get_node("Lift/LowerRock")
+	var upper: Node3D = totem.get_node("Lift/UpperRock")
+	var lower_pose := lower.transform
+	var upper_pose := upper.transform
+	_expect(lower.scene_file_path.ends_with("Free_Rock_Model_3.fbx") and upper.scene_file_path.ends_with("Free_Rock_Model_3.fbx"),
+		"earth totem contains two independently editable Model 3 instances")
+	var lower_bounds := _totem_bounds(lower)
+	var upper_bounds := _totem_bounds(upper)
+	var total := lower_bounds.merge(upper_bounds)
+	print("[BlockProbe] totem assembly bounds: %s" % total)
+	_expect(total.size.y > 1.4 and total.size.y < 2.2 and absf(total.position.y) < 0.1
+		and upper_bounds.position.y <= lower_bounds.end.y,
+		"two rocks form a continuous upright column resting on the floor")
+	for model in [0, 1]:
+		var emitter: GPUParticles3D = totem.get_node("Debris/Rocks%d" % model)
+		var mesh: Mesh = emitter.draw_pass_1
+		_expect(emitter.source_scene.resource_path.ends_with("Free_Rock_Model_%d.fbx" % model) and mesh != null,
+			"debris emitter uses the selected Rock Model %d mesh" % model)
+		if mesh != null:
+			var mesh_bounds := mesh.get_aabb()
+			_expect(mesh_bounds.get_center().length() < 0.001
+				and maxf(mesh_bounds.size.x, maxf(mesh_bounds.size.y, mesh_bounds.size.z)) < 1.001,
+				"debris Model %d is centered and normalized for small particle scales" % model)
+		var particles := emitter.process_material as ParticleProcessMaterial
+		_expect(emitter.one_shot and particles.scale_min < particles.scale_max and particles.scale_max < 0.2
+			and particles.angular_velocity_min < 0.0 and particles.angular_velocity_max > 0.0
+			and particles.gravity.y < 0.0,
+			"debris Model %d has varied sizes, spin and falling gravity" % model)
+		var minimum_upward_speed := particles.initial_velocity_min * cos(deg_to_rad(particles.spread))
+		var minimum_peak := emitter.global_position.y + minimum_upward_speed * minimum_upward_speed / (2.0 * absf(particles.gravity.y))
+		_expect(minimum_peak > total.end.y + 0.1 and emitter.lifetime > particles.initial_velocity_max / absf(particles.gravity.y),
+			"debris Model %d can clear the totem even at its slowest wide-angle launch" % model)
+	var base: Node3D = totem.get_node("BaseRocks")
+	var used_models: Dictionary = {}
+	for stone: MeshInstance3D in base.get_children():
+		used_models[stone.source_scene.resource_path] = true
+		_expect(stone.mesh != null and stone.material_override != null,
+			"base stone has its selected normalized mesh and earth material")
+	_expect(base.get_child_count() == 8 and used_models.size() == 3,
+		"totem base combines eight individually editable rocks from Models 0, 1 and 2")
+	var puffs: GPUParticles3D = totem.get_node("Dust/BasePuffs")
+	var wisps: GPUParticles3D = totem.get_node("Dust/Wisps")
+	for dust in [puffs, wisps]:
+		var process := dust.process_material as ParticleProcessMaterial
+		var dust_material := dust.material_override as ShaderMaterial
+		_expect(dust.one_shot and dust.draw_pass_1 is QuadMesh and dust_material != null
+			and dust_material.shader.resource_path == "res://shaders/earth_dust.gdshader",
+			"dust layer uses a one-shot billboard with its own cloud shader")
+		_expect(process.color_ramp.gradient.get_color(0).a == 0.0
+			and process.color_ramp.gradient.get_color(process.color_ramp.gradient.get_point_count() - 1).a == 0.0
+			and process.scale_curve.curve.sample(1.0) > process.scale_curve.curve.sample(0.0),
+			"dust grows and fades fully over its lifetime")
+	_expect(wisps.lifetime > puffs.lifetime and float(wisps.material_override.get_shader_parameter("opacity")) < float(puffs.material_override.get_shader_parameter("opacity")),
+		"wisps linger longer and remain lighter than the base burst")
+	var crack: MeshInstance3D = totem.get_node("GroundCrack")
+	_expect(crack.position.y > 0.0 and crack.mesh is PlaneMesh
+		and crack.mesh.size == Vector2(2.5, 2.5)
+		and crack.material_override.shader.resource_path == "res://shaders/earth_ground_crack.gdshader",
+		"totem has a procedural black crack plane just above the floor")
+	var another = preload("res://assets/effects/earth/earth_totem.tscn").instantiate()
+	add_child(another)
+	another.reset()
+	_expect(crack.material_override != another.get_node("GroundCrack").material_override
+		and float(crack.material_override.get_shader_parameter("opacity")) > 0.9,
+		"resetting one totem does not fade another totem's crack")
+	another.queue_free()
+	var rise: AnimationPlayer = totem.play()
+	rise.advance(0.03)
+	_expect(puffs.emitting and wisps.emitting and not totem.get_node("Debris/Rocks0").emitting,
+		"rise timeline starts dust just before the flying rock burst")
+	rise.advance(0.10 - 0.03)
+	_expect(totem.get_node("Debris/Rocks0").emitting and totem.get_node("Debris/Rocks1").emitting,
+		"rise animation triggers both debris bursts")
+	var lift: Node3D = totem.get_node("Lift")
+	_expect(lift.position.y > -0.4 and lift.position.y < 0.07
+		and lower.transform.is_equal_approx(lower_pose) and upper.transform.is_equal_approx(upper_pose),
+		"totem rises as one unit without overwriting editable rock offsets")
+	rise.advance(0.10)
+	_expect(lift.position.y > 0.0 and lift.position.y < 0.1, "totem punches slightly above its final height by 0.2 seconds")
+	rise.advance(0.15)
+	_expect(absf(lift.position.y) < 0.001, "totem settles back from its small overshoot by 0.35 seconds")
+	rise.advance(totem.rise_seconds)
+	_expect(lift.position.is_zero_approx(), "totem ascent finishes at its raised placement")
+	_expect(base.position.is_zero_approx(), "base rocks emerge into their final ground placement")
+	var retreat: AnimationPlayer = totem.retreat()
+	retreat.advance(0.06)
+	_expect(lift.position.y > 0.03, "retreat begins with a small upward wobble")
+	retreat.advance(0.6)
+	_expect(lift.position.y <= -1.79 and base.position.y < -0.3, "retreat sinks both totem and base beneath the floor")
+	retreat.advance(0.4)
+	_expect(float(crack.material_override.get_shader_parameter("opacity")) < 0.01,
+		"ground crack fades away after the totem withdraws")
+	totem.reset()
+	_expect(base.position.y < -0.3, "reset hides the base stones beneath the ground before the next rise")
+	_expect(not puffs.visible and not wisps.visible and not puffs.emitting and not wisps.emitting,
+		"reset also hides and stops dust from the previous replay")
+	_expect(not totem.get_node("Debris/Rocks0").visible and not totem.get_node("Debris/Rocks1").emitting,
+		"reset hides and stops debris from the previous replay")
+	demo.queue_free()
+
+func _totem_bounds(node: Node3D) -> AABB:
+	var result := AABB()
+	var first := true
+	for child in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := child as MeshInstance3D
+		var bounds: AABB = mesh.global_transform * mesh.get_aabb()
+		result = bounds if first else result.merge(bounds)
+		first = false
+		_expect(mesh.material_override != null, "totem rock uses the supplied earth texture material")
+	return result
+
+func _check_clash_presentation(game: Node) -> void:
+	var player_cards: Array = _field.get_front_cards_for("player")
+	var opponent_cards: Array = _field.get_front_cards_for("opponent")
+	if player_cards.is_empty() or opponent_cards.is_empty():
+		_expect(false, "clash presentation has two field cards")
+		return
+	var attacker: Card = player_cards.front()
+	var defender: Card = opponent_cards.front()
+	var original_a := attacker.global_transform
+	var original_b := defender.global_transform
+	var cinema = preload("res://clash_cinematic.tscn").instantiate()
+	game.add_child(cinema)
+	cinema.random_seed = 42
+	cinema.play(attacker, defender, original_a, original_b, true, false)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().create_timer(0.10).timeout
+	_expect(cinema._proxy_a.global_basis.get_scale().is_equal_approx(original_a.basis.get_scale())
+		and cinema._proxy_b.global_basis.get_scale().is_equal_approx(original_b.basis.get_scale()),
+		"clash lift preserves both cards' original scale")
+	_expect(cinema._proxy_a.global_position.y > original_a.origin.y,
+		"clash starts by lifting the card in world Y")
+	var aligned: bool = not cinema._same_column(original_a.origin, original_b.origin)
+	var lift_time: float = maxf(cinema.lift_seconds, cinema.align_seconds) if aligned else cinema.lift_seconds
+	await get_tree().create_timer(lift_time + cinema.windup_seconds - 0.10 + 0.02).timeout
+	var proxy_a: Card = cinema._proxy_a
+	var aligned_rotation := Vector3(0.0, cinema._yaw_towards(original_a.origin, original_b.origin), 0.0) if aligned else original_a.basis.orthonormalized().get_euler()
+	var relative := Basis.from_euler(aligned_rotation).inverse() * proxy_a.basis.orthonormalized()
+	_expect(relative.is_equal_approx(Basis(Vector3.RIGHT, deg_to_rad(cinema.windup_pitch_degrees))),
+		"wind-up pitches around the aligned card's own X axis")
+	var defender_alignment := Vector3(0.0, cinema._yaw_towards(original_b.origin, original_a.origin), 0.0) if aligned else original_b.basis.orthonormalized().get_euler()
+	var defender_relative: Basis = Basis.from_euler(defender_alignment).inverse() * cinema._proxy_b.basis.orthonormalized()
+	_expect(defender_relative.is_equal_approx(Basis(Vector3.RIGHT, deg_to_rad(32.0))),
+		"opponent winds up with positive 32-degree X pitch opposite the player")
+	var away := original_a.origin - original_b.origin
+	away.y = 0.0
+	_expect((proxy_a.global_position - original_a.origin).dot(away.normalized()) > cinema.windup_distance * 0.8,
+		"wind-up draws the card backward before the impact")
+	await get_tree().create_timer(cinema.windup_hold_seconds + cinema.charge_seconds + cinema.hitstop_seconds + 0.02).timeout
+	var defeated_proxy: Card = cinema._proxy_b
+	var tumble_start := defeated_proxy.global_transform
+	_expect(not cinema._defeated.is_empty() and defeated_proxy.visible,
+		"defeated proxy remains intact at the start of knockback")
+	await get_tree().create_timer(0.15).timeout
+	_expect(defeated_proxy.visible and defeated_proxy.global_position.distance_to(tumble_start.origin) > 0.1
+		and not defeated_proxy.global_basis.orthonormalized().is_equal_approx(tumble_start.basis.orthonormalized()),
+		"defeated card travels and tumbles before shattering")
+	await cinema.finished
+	var shards: Array = game.find_children("CardShards*", "Node3D", true, false)
+	_expect(not shards.is_empty(), "clash creates delayed shards for the defeated card")
+	if not shards.is_empty():
+		var effect: Node3D = shards.back()
+		_expect(effect.global_transform.is_equal_approx(defeated_proxy.global_transform),
+			"defeated card shatters at its current airborne spinning pose")
+	_expect(attacker.global_transform.is_equal_approx(original_a) and defender.global_transform.is_equal_approx(original_b),
+		"clash proxies leave the real card transforms unchanged")
+	_expect(attacker.visible and defender.visible,
+		"clash cleanup restores real card visibility")
+	cinema.queue_free()
 
 func _untapped_forwards(controller: String) -> Array:
 	var out: Array = []

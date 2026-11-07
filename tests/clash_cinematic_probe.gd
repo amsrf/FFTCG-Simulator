@@ -68,7 +68,7 @@ func _ready() -> void:
 	_expect(not _defender.is_on_field(), "scenario 0 removes the defender")
 	_expect(_attacker.base_power == 8000 and _attacker.power == 8000,
 		"scenario 0 does not change Dark Knight's printed power")
-	_expect(_shards() == 0, "the clash no longer spawns a shatter effect")
+	_expect(_shards() > 0, "the defeated clash card shatters after its tumble")
 	_expect(_cinematics() == 0, "the cinematic cleans up after itself")
 	_expect((_game.get("_clash_suppressed_cards") as Dictionary).is_empty(),
 		"break shatter suppression is released")

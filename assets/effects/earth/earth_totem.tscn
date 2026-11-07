@@ -1,0 +1,457 @@
+[gd_scene format=4 uid="uid://bgpl1lwvy5uuu"]
+
+[ext_resource type="Script" uid="uid://cjk54sapr6aps" path="res://scripts/vfx/earth_totem.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://cup3j6oawnt0r" path="res://assets/effects/earth/Free_Rock_Model_3.fbx" id="2"]
+[ext_resource type="Texture2D" uid="uid://cnhkxgbu0821c" path="res://assets/effects/earth/textures/Rocks_N_Boulders_Free_Arid.tga" id="3"]
+[ext_resource type="Texture2D" uid="uid://bxqnry1rywpwa" path="res://assets/effects/earth/textures/Rocks_N_Boulders_Free_Arid_NRM.tga" id="4"]
+[ext_resource type="Script" path="res://scripts/vfx/rock_mesh_particles.gd" id="5"]
+[ext_resource type="PackedScene" uid="uid://c6fd14ved7ck5" path="res://assets/effects/earth/Free_Rock_Model_0.fbx" id="6"]
+[ext_resource type="PackedScene" uid="uid://bphj3m06sbesl" path="res://assets/effects/earth/Free_Rock_Model_1.fbx" id="7"]
+
+[ext_resource type="Script" path="res://scripts/vfx/rock_piece.gd" id="8"]
+[ext_resource type="PackedScene" path="res://assets/effects/earth/Free_Rock_Model_2.fbx" id="9"]
+
+[ext_resource type="Shader" path="res://shaders/earth_dust.gdshader" id="10"]
+
+[ext_resource type="Shader" path="res://shaders/earth_ground_crack.gdshader" id="11"]
+
+[sub_resource type="StandardMaterial3D" id="RockMaterial"]
+albedo_texture = ExtResource("3")
+roughness = 0.88
+normal_enabled = true
+normal_texture = ExtResource("4")
+
+[sub_resource type="Animation" id="Reset"]
+resource_name = "RESET"
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Lift:position:y")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}
+
+tracks/1/type = "value"
+tracks/1/path = NodePath("BaseRocks:position:y")
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [0.0]
+}
+
+tracks/2/type = "value"
+tracks/2/path = NodePath("GroundCrack:material_override:shader_parameter/opacity")
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [1.0]
+}
+
+[sub_resource type="Animation" id="Rise"]
+resource_name = "rise"
+length = 0.9166667
+step = 0.016666668
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Lift:position:y")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(-1.8, -0.05, 0, 0.05, 1.86, 0.06, -0.066667, 0, 0.04, 0, 0, -0.05, 0, 0.05, 0),
+"times": PackedFloat32Array(0, 0.2, 0.35)
+}
+tracks/1/type = "method"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath(".")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0.04),
+"transitions": PackedFloat32Array(1),
+"values": [{
+"args": [],
+"method": &"emit_debris"
+}]
+}
+
+tracks/2/type = "bezier"
+tracks/2/path = NodePath("BaseRocks:position:y")
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.15),
+"points": PackedFloat32Array(-0.4, -0.05, 0, 0.05, 0.4, 0, -0.05, 0, 0.05, 0),
+"handle_modes": PackedInt32Array(0, 0)
+}
+
+tracks/3/type = "method"
+tracks/3/path = NodePath(".")
+tracks/3/keys = {
+"times": PackedFloat32Array(0.02),
+"transitions": PackedFloat32Array(1),
+"values": [{"method": &"emit_dust", "args": []}]
+}
+
+tracks/4/type = "value"
+tracks/4/path = NodePath("GroundCrack:material_override:shader_parameter/opacity")
+tracks/4/interp = 1
+tracks/4/keys = {
+"times": PackedFloat32Array(0, 0.06, 0.18),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [0.0, 0.8, 1.0]
+}
+
+[sub_resource type="Animation" id="Retreat"]
+resource_name = "retreat"
+length = 0.95
+step = 0.016666667
+tracks/0/type = "value"
+tracks/0/path = NodePath("Lift:position:y")
+tracks/0/interp = 2
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.06, 0.12, 0.18, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1),
+"update": 0,
+"values": [0.0, 0.065, -0.035, 0.025, -1.8]
+}
+tracks/1/type = "bezier"
+tracks/1/path = NodePath("BaseRocks:position:y")
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.18, 0.6),
+"points": PackedFloat32Array(0, -0.06, 0, 0.06, 0, 0, -0.06, 0, 0.14, 0, -0.4, -0.14, 0, 0.14, 0),
+"handle_modes": PackedInt32Array(0, 0, 0)
+}
+tracks/2/type = "method"
+tracks/2/path = NodePath(".")
+tracks/2/keys = {
+"times": PackedFloat32Array(0.18),
+"transitions": PackedFloat32Array(1),
+"values": [{"method": &"emit_dust", "args": []}]
+}
+
+tracks/3/type = "value"
+tracks/3/path = NodePath("GroundCrack:material_override:shader_parameter/opacity")
+tracks/3/interp = 1
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.6, 0.95),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [1.0, 0.85, 0.0]
+}
+
+[sub_resource type="AnimationLibrary" id="Library"]
+_data = {
+&"RESET": SubResource("Reset"),
+&"rise": SubResource("Rise"),
+&"retreat": SubResource("Retreat")
+}
+
+[sub_resource type="ParticleProcessMaterial" id="Debris0"]
+particle_flag_rotate_y = true
+emission_shape = 6
+emission_ring_axis = Vector3(0, 1, 0)
+emission_ring_height = 0.08
+emission_ring_radius = 0.52
+emission_ring_inner_radius = 0.32
+emission_ring_cone_angle = 90.0
+angle_max = 360.0
+direction = Vector3(0, 1, 0)
+spread = 32.0
+initial_velocity_min = 6.0
+initial_velocity_max = 7.0
+angular_velocity_min = -240.0
+angular_velocity_max = 240.0
+gravity = Vector3(0, -7, 0)
+scale_min = 0.055
+scale_max = 0.14
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_bf7po"]
+_surfaces = [{
+"aabb": AABB(-0.5, -0.47456262, -0.44135836, 1, 0.9491252, 0.8827167),
+"attribute_data": PackedByteArray("fu2YPvCAqT6Ixao+LNmQPv4PtT7qSbI+F9a9PgRfgj6mjYs+6gOMPooHkj5o/Gs+Jvi3PoDHPj7M6NU+1KAuPn2Suz70IRQ+ckK+Pmpelz6gKts+OK+fPmHZ1D6a4Kg+pkqwPuDWWj68l9Y++LlEPp5AoT7oonM+2iiePsgFnj6hjNM+qteNPo4FxD4QTWg+XHDNPghacD7sLMg+XIo1Pppatz5UeCY+1zaYPkaKjz6W6p0+tguIPmWIjT46toE+6OerPqaHnz65dKM+PIOtPi9ltz62Z6U+j3a1PgjQkj6WPMI+rPSNPqnZyz70e5U+suPJPpaaoT5w8d8+UniXPjL/xj6KbIY+Kem5PgS3hz4+9q4+KOyHPgFDsT7YyXs+g7LOPjD8Tj7EgsM+lLZHPkZPxj6Uehs+"),
+"format": 34359742487,
+"index_count": 144,
+"index_data": PackedByteArray("DwAYABkAGQAAAA8AAgAZABgAGAAaAAIAGAAPAAEACQAaABgAAQAbABgAGAAbAAkAHAAJABsACQAcAB0AHQAeAAkAHgAdAAoACgALAB4ACgAdABAAEAAfAAoAIAAQAB0AHQAcACAAGwAhABwAIAAcACEAIgAhABsAGwABACIAIQADACAAEgAgAAMAIQAiACMAIwADACEAAwARABIAEQADACMAJAASABEADgAjACIAIwAMABEAJQARAAwAEQAlACQADAAGACUAJAAlABMAEwAlAAYAEwANACQABwANABMABgAUABMAEwAmAAcAJgATABQAFAAIACYAFwAFAA4AIgAWAA4ADgAWABcAFgAiAAEAAQAVABYAFwAWABUAFQAEABcA"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 39,
+"vertex_data": PackedByteArray("q3q1vt/58r7oJd0+ck9Nvj9nlj4wyr0+56DIPnr+xL4VHqM+oCToPckB7D40iFK+q3q1vt/58r7oJd0+hWePvpux0L4GguC9hWePvpux0L4GguC956DIPnr+xL4VHqM+q3q1vt/58r7oJd0+rGOtPkoGrD7Z/aY+AAAAP4u6s75eTV8956DIPnr+xL4VHqM+Puynvlt+0rzYcsq9AAAAP4u6s75eTV89Puynvlt+0rzYcsq99a61vhEBFr65+eE+gcS+PgjhZz16cUi+lA89PsGnhDu5+eG+gcS+PgjhZz16cUi+uOy3PQwy5b6/R+c9pCvGvsFD8b5ExTI+9a61vhEBFr65+eE+AAAAv/JZWDtOsoo+pCvGvsFD8b5ExTI+KURGvKQv27ydFdQ+pLGBvfYB6b5xmdg++dyfPlU4WL2xvqo+HHmjPbCT1D7vDrY+HAXGPt358j6uuZM9s6PFPkht7D3GRZs9+dyfPlU4WL2xvqo+7d+wPkF3sb7USgy+CkjDPnrN1j44qDS+isqXPV8/7j5XBHC7+7Zovrui2j68Pws+VBRlvq9zsz4+IQO+7d+wPkF3sb7USgy+UMIoPSDdw778Axi+pLGBvfYB6b5xmdg+cmDtUsPK8sFyYsGkYcP94dyqLV6l2a/g1jTv82T1ja1yYO1S+Vku3mcl3CanR+T2ZyXcJq3al6Hcqi1eI8k44nJg7VK5zji8/rC0loTpoZ7J3SRWpDlgjdyqLV5MzICLyAOhv5fs3ZnJ3SRWxJkR28gDob81qPj0015FienCs9Pf+whSKEbuipkFFwdp5O2v3/sIUj+jPbW2l74MbNr2w7E6gzbvtkSk015FiaFkEPpkHr+W6aU39rE6gzZFNHnn5Y51hc/bedgyj25RY91y0OWycYYX4/bj6IGvunXoK9fAuRC4Adthl37tw4jSu/GE5bJxhsHDSZWe2qcnWTuKn47gH8gDr9eUqXfz7u72oNfVTBbEpdIe5OkfStDc5BjintqnJ73GJMQevfcAUupFuzKPblFU4MjP")
+}]
+
+[sub_resource type="ParticleProcessMaterial" id="Debris1"]
+particle_flag_rotate_y = true
+emission_shape = 6
+emission_ring_axis = Vector3(0, 1, 0)
+emission_ring_height = 0.08
+emission_ring_radius = 0.5
+emission_ring_inner_radius = 0.3
+emission_ring_cone_angle = 90.0
+angle_max = 360.0
+direction = Vector3(0, 1, 0)
+spread = 35.0
+initial_velocity_min = 6.2
+initial_velocity_max = 7.2
+angular_velocity_min = -300.0
+angular_velocity_max = 300.0
+gravity = Vector3(0, -7, 0)
+scale_min = 0.045
+scale_max = 0.11
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_syeex"]
+_surfaces = [{
+"aabb": AABB(-0.41775814, -0.36549205, -0.49999997, 0.8355163, 0.7309841, 1),
+"attribute_data": PackedByteArray("MTTSPU7DmT5EgRU+7MO3Pustmj1IAM4+kgAFPgQs3T4ZvRk+wlGdPpF0xz2soHQ+nIU1PRbVgD6NRjA+6JRhPrCJRD4GVK0++nN4PvJljj7CWYM9gFw6PrMwAD6oiA8+eGfGPTYJsj5JYLo9QkrYPqD/Az58WW0+XtRfPUiXnz5XUd09LG9JPklesT1wPSc+t7dKPjJ2jz7sYxg+FpaxPvc3zj0sWZ8+EfHkPX4xxD4CHxQ+TDXIPsjVBD5eook+r+3QPdygjD7TCLY9qs+MPr/4uT1I5Zs+Kg91PUKbjz6cJyY+tiuJPtWHLD5MVzA+cExcPtjOcD7HTjs+cMCpPhoJWj6GXaA+dijHPdIYrD4Ai/k9xMmuPko//T0W1Kc+jRvKPTi1pT5kFBo+FnuqPi8WGj68kaM+BR8APvCRoT6mUfY9ivq0PjRssj0goL4+XX4BPsKwmz48gJM9xBSNPj9yqj1kaHE+LGmLPXAlcD5xvJ89YomdPnqcYT0Ip3g+y6mFPRLjnj5szUU9/DOSPovY8D3oYlo+9x60PYDbZj5oaqI9aCxXPtJ8MT444kk+dpNFPuBdZj620hY+RKIdPuiVyj1APzs+6c2QPcx1Rz61Rjk+qPCLPkL/Iz6uJqE+1wEwPioRpT7EbGw+PFCDPrPxUT5IdJc+"),
+"format": 34359742487,
+"index_count": 240,
+"index_data": PackedByteArray("DAAhACIAIwAiACEAIQAkACMAIgAjACUAJgAlACMAJQATACIAIwAnACYAJwAjACQAJAAUACcAKAAiABMAIgAoAAwAEwABACgAJwAUAAAAFQAoAAEADAAoABUAAQAWABUAFQApAAwAFQAWAAMAAgApABUAAwANABUAFQANAAIAAAAqACcAJwAqAAQABAAmACcAKgAAABgABAAqABcAGAAXACoAGQAYAAAAAAAaABkAFwAYAAUABQAYABkAKwAZABoAGQAsAAUALAAZACsAKwAtACwAGgAuACsALwAtACsAGwArAC4AKwAbAC8ABgAvABsALgAwABsAGwAxAAYAMQAbADAAMAAPADEABQAOABcAMgAOAAUABQAzADIAHAAXAA4AMgAzADQAFwAcAAQADgAyADUANQAHAA4ADgAHABwAHQA1ADIAHAAHADYAMgAQAB0ANAAQADIANwAdABAAOAAQADQAEAA4ADcACwA3ADgANAA5ADgAOAARAAsAEQA4ADkAOQAKABEANgA6ABwABAAcADoAOgA7AAQAOgA2AB4APAA7ADoAHgASADoAOgASADwAEgAeAD0APAASAD4APQA+ABIAPgA9AAkAPgAfADwACQAgAD4AHwA+ACAAIAAIAB8A"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 63,
+"vertex_data": PackedByteArray("SZKXvpREFz4XGOg+8FspPgMnmb4Tjv4+2MSwvl6pkr5ZeUO9CpRGPgIaqr6IKze+8IX3PW19Ej6uadw+Uk7GvlWrNT41kfy92MSwvl6pkr5ZeUO9nTKGPsYhuz7QPam+8FspPgMnmb4Tjv4+CpRGPgIaqr6IKze+2MSwvl6pkr5ZeUO9CpRGPgIaqr6IKze+Dy+Tvs+2ib5eGPU+mMAwvuXsuL6O/j6+LsUqvoNesT7Tk4O+Dy+Tvs+2ib5eGPU+I/aRvin+kr3///++mMAwvuXsuL6O/j6+ZeTVPurMe72vJos9cRsuPi//Sr6Hifk+9AObvhvnTj3MDfE+yB2mvcYhu74IZl0+OhtpPieUoL6mKGA+p9PwvZVtiz6T5P094OrPvnohhD65qG0+z5DFvshw2z33Xlk+9AObvhvnTj3MDfE+BlasvpzaMr6arV8+F39IPrqKfT5YeqQ9+bzHPhTXEzyWysW++bzHPhTXEzyWysW+cRsuPi//Sr6Hifk+OhtpPieUoL6mKGA+SHGZvotBM77t3fc+aN2avWVgPb6Yvvw+2wiivS2kfr33qvE+Ebebvm75fr0vJfU++6MnPsSVm708vuw+G1wUPtStLD0FXOc+zNyqvQbcTT2NX+0+8sGUvV4Ymb4AAAA/Rh+hvmjYkL6+vXw+5ue1vdLOHz5Q3eE+mRmzvtDaXr2W20I+7gPRvnGybj1rMx++ZeTVvloxmL3X3TC+Ebebvm75fr0vJfU+YDfFvuRzQ77f+Oa9SHGZvotBM77t3fc+Rh+hvmjYkL6+vXw+3E1qvgR9Fj4L2Mq+7gPRvnGybj1rMx++ZeTVvloxmL3X3TC+nHGtPplnVD6nMb++nHGtPplnVD6nMb++LJuYPkQmN778hJO+WhJvvlgBab530re+YDfFvuRzQ77f+Oa9V6KjPsAYzD2oQo09G1wUPtStLD0FXOc++6MnPsSVm708vuw+LJuYPkQmN778hJO+5AisPtdoR76itxI+sV7ipRzFjtsFpgZWR9it3SE4u0O0rveiJL44II7LC8wDpiuvA+G7ooUlnbhNvszrITi7QwNKNuDRwpzgZtTzpwWmBlZyvGKAJL44IIgTdaQhOLtDB/t5hSS+OCBi1jHeIFP5V96977OUUE4LTNZdtc5DYOjE4ALRIFP5Vx5keuG6C48X08+a4pRQTgvX6kjpA+eegjW1hoV4uIODLPIA4UlF5IOSuPbKaHq5D5Piwr5asGU5hsAw1xSCweNz/WLK50INsoy63ONGHWJyfXSO8klF5IMbkMvzfRvRcqJ0H/M/qbS849jWovP1BjYatOXS8/UGNh9VPY94uIODCbcQkFqwZTngIpuU+EBqfGe3a8fUfv2Lxe9kyA2CnY2w7x/Kiz9vgIG1+8mztMGOMf223kSyEpfJ+ECgoYPKj2Twt8o5ej9GrOljw2tAqElHsGamHIU4wC35ssuNHrVxmHOK8qoPgKHTjyv0PwveZQpzAPaLP2+AI4of9kkjhFRPXLHp+EBqfH6CFPprQKhJnk8Z3k0lhue701LYqg+AofXMU/Y/C95lF96i++/goNTbwcnC7+Cg1OuxN4xa0KslXcdX28Y60guS2SvrSSOEVD/6sfvYwD+n6MYrlkSyEpc5xX2Ys7TBjqe/NJVa0Ksl7iEKoy7JpFamOn2M")
+}]
+
+[sub_resource type="ShaderMaterial" id="DustMaterial"]
+shader = ExtResource("10")
+shader_parameter/dust_color = Color(0.88, 0.86, 0.81, 1)
+shader_parameter/opacity = 0.95
+shader_parameter/edge_softness = 0.06
+
+[sub_resource type="ShaderMaterial" id="WispMaterial"]
+shader = ExtResource("10")
+shader_parameter/dust_color = Color(0.83, 0.82, 0.79, 1)
+shader_parameter/opacity = 0.5
+shader_parameter/edge_softness = 0.18
+
+[sub_resource type="Gradient" id="DustFade"]
+offsets = PackedFloat32Array(0, 0.06, 0.48, 1)
+colors = PackedColorArray(1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0.8, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="DustFadeTexture"]
+gradient = SubResource("DustFade")
+
+[sub_resource type="Curve" id="DustGrowth"]
+max_value = 2.0
+_data = [Vector2(0, 0.5), 0.0, 0.0, 0, 0, Vector2(0.3, 1.15), 0.0, 0.0, 0, 0, Vector2(1, 1.8), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="DustGrowthTexture"]
+curve = SubResource("DustGrowth")
+
+[sub_resource type="QuadMesh" id="DustQuad"]
+size = Vector2(0.65, 0.65)
+
+[sub_resource type="QuadMesh" id="WispQuad"]
+size = Vector2(0.45, 0.45)
+
+[sub_resource type="ParticleProcessMaterial" id="DustProcess"]
+emission_shape = 6
+emission_ring_axis = Vector3(0, 1, 0)
+emission_ring_height = 0.06
+emission_ring_radius = 0.62
+emission_ring_inner_radius = 0.4
+direction = Vector3(0, 1, 0)
+spread = 85.0
+initial_velocity_min = 0.65
+initial_velocity_max = 1.25
+gravity = Vector3(0, 0.08, 0)
+damping_min = 1.2
+damping_max = 2.0
+angle_min = 0.0
+angle_max = 360.0
+angular_velocity_min = -35.0
+angular_velocity_max = 35.0
+scale_min = 0.75
+scale_max = 1.1
+scale_curve = SubResource("DustGrowthTexture")
+color_ramp = SubResource("DustFadeTexture")
+
+[sub_resource type="ParticleProcessMaterial" id="WispProcess"]
+emission_shape = 6
+emission_ring_axis = Vector3(0, 1, 0)
+emission_ring_height = 0.06
+emission_ring_radius = 0.65
+emission_ring_inner_radius = 0.42
+direction = Vector3(0, 1, 0)
+spread = 65.0
+initial_velocity_min = 0.18
+initial_velocity_max = 0.4
+gravity = Vector3(0, 0.12, 0)
+angle_min = 0.0
+angle_max = 360.0
+angular_velocity_min = -22.0
+angular_velocity_max = 22.0
+scale_min = 0.65
+scale_max = 1.1
+scale_curve = SubResource("DustGrowthTexture")
+color_ramp = SubResource("DustFadeTexture")
+
+[sub_resource type="ShaderMaterial" id="GroundCrackMaterial"]
+resource_local_to_scene = true
+shader = ExtResource("11")
+shader_parameter/opacity = 1.0
+shader_parameter/seed = 2.0
+
+[sub_resource type="PlaneMesh" id="GroundCrackPlane"]
+size = Vector2(2.5, 2.5)
+
+[node name="EarthTotem" type="Node3D" unique_id=1129005608]
+script = ExtResource("1")
+rock_material = SubResource("RockMaterial")
+
+[node name="Lift" type="Node3D" parent="." unique_id=1761928462]
+
+[node name="LowerRock" parent="Lift" unique_id=648080852 instance=ExtResource("2")]
+transform = Transform3D(0.55, 0, 0, 0, 0.55, 0, 0, 0, 0.55, 0.024, 0.49, 0.09)
+
+[node name="UpperRock" parent="Lift" unique_id=1445496512 instance=ExtResource("2")]
+transform = Transform3D(-0.54790705, 0, 0.047935735, 0, 0.55, 0, -0.047935735, 0, -0.54790705, 0.05809777, 1.1423876, -0.09)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=843317789]
+callback_mode_method = 1
+libraries/ = SubResource("Library")
+
+[node name="Debris" type="Node3D" parent="." unique_id=1696330515]
+
+[node name="Rocks0" type="GPUParticles3D" parent="Debris" unique_id=1865685128]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+material_override = SubResource("RockMaterial")
+emitting = false
+amount = 14
+lifetime = 2.2
+one_shot = true
+explosiveness = 0.9
+randomness = 0.25
+visibility_aabb = AABB(-3, -2, -3, 6, 8, 6)
+process_material = SubResource("Debris0")
+draw_pass_1 = SubResource("ArrayMesh_bf7po")
+script = ExtResource("5")
+source_scene = ExtResource("6")
+
+[node name="Rocks1" type="GPUParticles3D" parent="Debris" unique_id=1449879392]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+material_override = SubResource("RockMaterial")
+emitting = false
+amount = 12
+lifetime = 2.2
+one_shot = true
+explosiveness = 0.88
+randomness = 0.25
+visibility_aabb = AABB(-3, -2, -3, 6, 8, 6)
+process_material = SubResource("Debris1")
+draw_pass_1 = SubResource("ArrayMesh_syeex")
+script = ExtResource("5")
+source_scene = ExtResource("7")
+
+[node name="BaseRocks" type="Node3D" parent="."]
+
+[node name="Rock01_Model2" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(0.47, 0.12, 0.23)
+rotation = Vector3(-0.20943951023931956, 0.20943951023931956, -0.15707963267948966)
+scale = Vector3(0.45, 0.3825, 0.49500000000000005)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("9")
+
+[node name="Rock02_Model0" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(0.19, 0.08, 0.47)
+rotation = Vector3(0.0, 1.0995574287564276, 0.15707963267948966)
+scale = Vector3(0.3, 0.255, 0.33)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("6")
+
+[node name="Rock03_Model1" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(-0.22, 0.1, 0.47)
+rotation = Vector3(0.20943951023931956, 2.129301687433082, -0.15707963267948966)
+scale = Vector3(0.36, 0.306, 0.396)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("7")
+
+[node name="Rock04_Model2" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(-0.49, 0.1, 0.16)
+rotation = Vector3(-0.20943951023931956, 3.036872898470133, 0.15707963267948966)
+scale = Vector3(0.43, 0.3655, 0.47300000000000003)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("9")
+
+[node name="Rock05_Model1" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(-0.46, 0.1, -0.23)
+rotation = Vector3(0.0, 3.839724354387525, -0.15707963267948966)
+scale = Vector3(0.38, 0.323, 0.41800000000000004)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("7")
+
+[node name="Rock06_Model0" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(-0.14, 0.07, -0.49)
+rotation = Vector3(0.20943951023931956, 4.6600291028248595, 0.15707963267948966)
+scale = Vector3(0.29, 0.24649999999999997, 0.319)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("6")
+
+[node name="Rock07_Model2" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(0.23, 0.11, -0.43)
+rotation = Vector3(-0.20943951023931956, 5.445427266222308, -0.15707963267948966)
+scale = Vector3(0.4, 0.34, 0.44000000000000006)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("9")
+
+[node name="Rock08_Model1" type="MeshInstance3D" parent="BaseRocks"]
+position = Vector3(0.51, 0.09, -0.14)
+rotation = Vector3(0.0, 6.073745796940266, 0.15707963267948966)
+scale = Vector3(0.34, 0.28900000000000003, 0.37400000000000005)
+material_override = SubResource("RockMaterial")
+script = ExtResource("8")
+source_scene = ExtResource("7")
+
+[node name="Dust" type="Node3D" parent="."]
+
+[node name="BasePuffs" type="GPUParticles3D" parent="Dust"]
+position = Vector3(0, 0.13, 0)
+material_override = SubResource("DustMaterial")
+emitting = false
+amount = 16
+lifetime = 0.8
+one_shot = true
+explosiveness = 0.92
+randomness = 0.25
+local_coords = false
+draw_order = 3
+visibility_aabb = AABB(-3, -1, -3, 6, 4, 6)
+process_material = SubResource("DustProcess")
+draw_pass_1 = SubResource("DustQuad")
+
+[node name="Wisps" type="GPUParticles3D" parent="Dust"]
+position = Vector3(0, 0.18, 0)
+material_override = SubResource("WispMaterial")
+emitting = false
+amount = 8
+lifetime = 1.2
+one_shot = true
+explosiveness = 0.75
+randomness = 0.3
+local_coords = false
+draw_order = 3
+visibility_aabb = AABB(-3, -1, -3, 6, 4, 6)
+process_material = SubResource("WispProcess")
+draw_pass_1 = SubResource("WispQuad")
+
+[node name="GroundCrack" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.008, 0)
+cast_shadow = 0
+mesh = SubResource("GroundCrackPlane")
+material_override = SubResource("GroundCrackMaterial")
