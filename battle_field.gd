@@ -85,6 +85,9 @@ signal attacker_changed
 signal blocker_changed
 ## A target pick was accepted (in pick order). Online play records picks from this, whoever made them.
 signal target_picked(card: Card)
+## A targeting session began for `source` (whose controller makes the picks). Online play uses it to tell the local
+## player's sessions from the remote seat's.
+signal targeting_started(source: Card)
 signal card_activated_ability(cost:Dictionary)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
 var phase: GlobalVariables.Phase:
@@ -1100,6 +1103,7 @@ func untap_cards_for(controller_name: String) -> void:
 		card.untap()
 		
 func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
+	targeting_started.emit(card)
 	targeting_criteria = _legacy_target_criteria(targeting_criteria)
 	# Always start a targeting session fresh. Leftover target_card from a
 	# previous session made set_target_card() ignore clicks (stuck UI).

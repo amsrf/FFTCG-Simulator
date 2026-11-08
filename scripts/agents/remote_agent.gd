@@ -35,6 +35,12 @@ func _next(kind: String) -> Dictionary:
 		return {}
 	return message
 
+func _as_array(value: Variant) -> Array:
+	return value if value is Array else []
+
+func _as_int(value: Variant) -> int:
+	return int(value) if (value is int or value is float) else -1
+
 func _result(kind: String) -> Variant:
 	var message: Dictionary = await _next(kind)
 	return CODEC.decode(message.get("result"), game)
@@ -81,38 +87,38 @@ func choose_target(_owner_id: int, _source: Card, _criteria: Dictionary) -> void
 		game.assistant.on_target_complete()
 
 func decide_attacker(_p: int) -> Card:
-	await _settle(); return await _result("decide_attacker")
+	await _settle(); var card = await _result("decide_attacker"); return card if card is Card else null
 func decide_attackers(_p: int) -> Array:
-	await _settle(); return await _result("decide_attackers")
+	await _settle(); return _as_array(await _result("decide_attackers"))
 func decide_blocker(_p: int, _attacker: Card) -> Card:
-	await _settle(); return await _result("decide_blocker")
+	await _settle(); var card = await _result("decide_blocker"); return card if card is Card else null
 func choose_party_damage_split(_p: int, _party: Array, _total: int) -> Array:
-	await _settle(); return await _result("choose_party_damage_split")
+	await _settle(); return _as_array(await _result("choose_party_damage_split"))
 func choose_damage_split(_p: int, _cards: Array, _total: int) -> Array:
-	await _settle(); return await _result("choose_damage_split")
+	await _settle(); return _as_array(await _result("choose_damage_split"))
 func confirm_optional(_p: int, _prompt: String) -> bool:
 	await _settle(); return bool(await _result("confirm_optional"))
 func choose_hand_card_to_play(_o: int, _ids: Array, _filter: Dictionary) -> int:
-	await _settle(); return int(await _result("choose_hand_card_to_play"))
+	await _settle(); return _as_int(await _result("choose_hand_card_to_play"))
 func choose_hand_card_to_bottom(_o: int, _cards: Array) -> Card:
-	await _settle(); return await _result("choose_hand_card_to_bottom")
+	await _settle(); var card = await _result("choose_hand_card_to_bottom"); return card if card is Card else null
 func choose_break_zone_card(_o: int, _ids: Array, _filter: Dictionary) -> int:
-	await _settle(); return int(await _result("choose_break_zone_card"))
+	await _settle(); return _as_int(await _result("choose_break_zone_card"))
 func choose_field_card(_o: int, _candidates: Array, _prompt: String = "Choose a card") -> Card:
-	await _settle(); return await _result("choose_field_card")
+	await _settle(); var card = await _result("choose_field_card"); return card if card is Card else null
 func choose_deck_card(_o: int, _ids: Array, _filter: Dictionary) -> int:
-	await _settle(); return int(await _result("choose_deck_card"))
+	await _settle(); return _as_int(await _result("choose_deck_card"))
 func choose_deck_cards(_o: int, _ids: Array, _filter: Dictionary, _request, _prompt: String = "Choose cards") -> Array:
-	await _settle(); return await _result("choose_deck_cards")
+	await _settle(); return _as_array(await _result("choose_deck_cards"))
 func choose_element(_o: int, _options: Array, _prompt: String = "Choose an Element") -> String:
 	await _settle(); return str(await _result("choose_element"))
 func choose_number(_o: int, _minimum: int, _maximum: int, _prompt: String = "Choose a number") -> int:
-	await _settle(); return int(await _result("choose_number"))
+	await _settle(); return _as_int(await _result("choose_number"))
 func choose_mana_color(_o: int, _card: Card, _options: Array) -> String:
 	await _settle(); return str(await _result("choose_mana_color"))
 func choose_discard(_o: int, _cards: Array) -> Card:
-	await _settle(); return await _result("choose_discard")
+	await _settle(); var card = await _result("choose_discard"); return card if card is Card else null
 func choose_skill(_p: int, _card: Card, _skills: Array, _usable: Array = []) -> int:
-	await _settle(); return int(await _result("choose_skill"))
+	await _settle(); return _as_int(await _result("choose_skill"))
 func choose_sacrifice(_p: int, _candidates: Array) -> Card:
-	await _settle(); return await _result("choose_sacrifice")
+	await _settle(); var card = await _result("choose_sacrifice"); return card if card is Card else null

@@ -17,6 +17,10 @@ var SEED := 424242
 var TURNS := 3
 ## --tamper drops one message on the way to machine B: the probe then REQUIRES the divergence to be caught.
 var TAMPER := false
+## --human: seat 1 on machine A is a HUMAN (LocalAgent) driven through the real UI calls by _drive_human().
+var HUMAN := false
+var _human_casts := 0
+var _human_cancels := 0
 var _checks := 0
 var _fails := 0
 
@@ -35,6 +39,8 @@ func _read_args() -> void:
 			TURNS = int(a.get_slice("=", 1))
 		elif a == "--tamper":
 			TAMPER = true
+		elif a == "--human":
+			HUMAN = true
 
 func _base() -> Dictionary:
 	var cfg: Dictionary = MatchSetup.build_config("ai", {"player_type": "ai", "opponent_type": "ai", "seed": SEED, "starting_player": 1})
@@ -57,10 +63,16 @@ func _mirrored(cfg: Dictionary) -> Dictionary:
 	out["local_seat"] = 2
 	return out
 
+var _human_driver_pending = null
+## Set when machine A's match is over: the driver must not touch a game that is being freed.
+var _driver_stop := false
+
 func _play(cfg: Dictionary, label: String) -> Dictionary:
 	MatchSetup.config = cfg
 	var game: Node = GAME_SCENE.instantiate()
 	add_child(game)
+	if _human_driver_pending != null:
+		_drive_human(game, _human_driver_pending)
 	var start := Time.get_ticks_msec()
 	var desyncs: Array = []
 	game.desync_detected.connect(func(t, a, b): desyncs.append("turn %s: %s vs %s" % [t, a, b]))
@@ -69,6 +81,7 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 		if (Time.get_ticks_msec() - start) / 1000.0 > TIME_LIMIT:
 			print("[Lockstep] %s hit the time limit at turn %d" % [label, game.turn_number])
 			break
+	_driver_stop = true
 	var out := {"hashes": game.turn_hashes.duplicate(), "turn": game.turn_number, "desyncs": desyncs,
 		"snapshot": game.snapshot_by_seat()}
 	print("[Lockstep] %s: turn %d after %.1fs" % [label, game.turn_number, (Time.get_ticks_msec() - start) / 1000.0])
@@ -77,27 +90,105 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 	await get_tree().process_frame
 	return out
 
+## THE SCRIPTED HUMAN: plays seat 1 through the same calls the UI makes (Hand.charge, selecting mana, the Assistant's
+## confirm / cancel / pass, no attack, no block). In its first priority window it starts a cast and CANCELS it (a draft:
+## nothing may be sent), then casts for real.
+func _drive_human(game: Node, holder: Array) -> void:
+	var last_window := -1
+	var announced := {}
+	while not _driver_stop and is_instance_valid(game) and not game.match_over:
+		await get_tree().create_timer(0.05).timeout
+		var rec = holder[0]
+		if _driver_stop or rec == null or not is_instance_valid(game):
+			continue
+		var assistant = game.assistant
+		match rec.pending_kind:
+			"take_priority":
+				if rec.window_serial == last_window:
+					continue
+				last_window = rec.window_serial
+				if _human_cancels == 0 and await _human_cast(game, true) == "cancelled":
+					_human_cancels += 1
+				if await _human_cast(game, false) == "cast":
+					_human_casts += 1
+				else:
+					assistant.pressed_pass_priority.emit()
+			"decide_attackers", "decide_attacker":
+				assistant.advance_attack_declaration_step.emit()
+			"decide_blocker":
+				assistant.advance_blocker_declaration_step.emit()
+			"":
+				pass
+			_:
+				if not announced.has(rec.pending_kind):
+					announced[rec.pending_kind] = true
+					print("[Lockstep] human driver has no answer for '%s'" % rec.pending_kind)
+
+func _human_cast(game: Node, cancel: bool) -> String:
+	var hand = game.hand_for(1)
+	var field = game.field
+	var assistant = game.assistant
+	for card in hand.cards.duplicate():
+		if card.type != Card.FORWARD and card.type != Card.BACKUP:
+			continue
+		if not hand.charge(card):
+			continue
+		await get_tree().process_frame
+		if _driver_stop or not is_instance_valid(game):
+			return "none"
+		if cancel:
+			assistant.on_charge_cancelled()
+			await get_tree().process_frame
+			return "cancelled"
+		for backup in field.get_back_cards_for(Card.PLAYER):
+			if assistant.can_pay_cost():
+				break
+			if not backup.tapped:
+				field.add_card_to_mana_conversion(backup, backup.mana_element())
+		for other in hand.cards.duplicate():
+			if assistant.can_pay_cost():
+				break
+			if other != card:
+				hand.add_card_to_mana_conversion(other)
+		if assistant.can_pay_cost():
+			assistant.on_charge_complete()
+			await get_tree().process_frame
+			return "cast"
+		assistant.on_charge_cancelled()
+		await get_tree().process_frame
+	return "none"
+
 func _ready() -> void:
 	_read_args()
-	print("[Lockstep] seed=%d turns=%d tamper=%s" % [SEED, TURNS, TAMPER])
+	print("[Lockstep] seed=%d turns=%d tamper=%s human=%s" % [SEED, TURNS, TAMPER, HUMAN])
 	PRESENTATION.fast_mode = true
 	var base := _base()
 
 	# MACHINE A: seat 1 is local; its decisions are recorded.
 	var recorder := [null]
 	var cfg_a := base.duplicate()
+	if HUMAN:
+		cfg_a["player_type"] = "local"
 	cfg_a["wrap_agent"] = func(local_id: int, agent: Agent) -> Agent:
 		if local_id == 1:
 			recorder[0] = RECORDING_AGENT.new(agent)
 			return recorder[0]
 		return agent
+	if HUMAN:
+		_human_driver_pending = recorder
+	_driver_stop = false
 	var a: Dictionary = await _play(cfg_a, "machine A (seat 1, recording)")
+	_human_driver_pending = null
 	var messages: Array = recorder[0].sent if recorder[0] != null else []
 	var plays := 0
 	for m in messages:
 		if m.contains("\"take_priority\"") and m.contains("\"card\""):
 			plays += 1
 	print("[Lockstep] seat 1 sent %d messages (%d priority windows with a play)" % [messages.size(), plays])
+	if HUMAN:
+		print("[Lockstep] scripted human: %d casts, %d cancelled drafts" % [_human_casts, _human_cancels])
+		_expect(_human_casts > 0 and _human_cancels > 0, "the human both cast and cancelled (%d / %d)" % [_human_casts, _human_cancels])
+		_expect(plays == _human_casts, "only committed casts were sent (%d sent, %d cast, %d cancelled)" % [plays, _human_casts, _human_cancels])
 	_expect(messages.size() > 5, "seat 1 sent decisions to replay (%d)" % messages.size())
 
 	if TAMPER and messages.size() > 3:
