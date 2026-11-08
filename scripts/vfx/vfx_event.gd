@@ -12,10 +12,15 @@ enum Kind {
 	DAMAGE,
 	BOARD_DAMAGE,
 	CARD_BROKEN,
+	## A zone move or other board presentation. The rules have ALREADY changed the state; `presenter` only animates
+	## it (reparent, fly, lay out). Run in queue order like every other event.
+	PRESENT,
 }
 
 var kind: Kind = Kind.STATUS_APPLIED
 var targets: Array = []
+## PRESENT only: the coroutine that animates an already-applied rules change.
+var presenter: Callable
 ## Pre-damage presentation snapshots survive rules-driven zone changes.
 var target_visuals: Dictionary = {}
 var source: Card = null

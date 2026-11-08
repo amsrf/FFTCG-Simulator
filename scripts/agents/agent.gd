@@ -22,10 +22,13 @@ func bind(game_root: Node) -> void:
 
 ## Keeps every seam method a coroutine, so callers can `await` uniformly no
 ## matter which implementation is plugged in (local, AI or remote).
+## It is also the ONE place every decision waits for the presentation queue to drain (Vfx.idle()), so a player
+## never decides about something still animating.
 func _settle() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree != null:
 		await tree.process_frame
+	await Vfx.idle()
 
 ## Called when this side receives priority. Returns **true if this player
 ## performed an action** (played a card / activated an ability), false if they

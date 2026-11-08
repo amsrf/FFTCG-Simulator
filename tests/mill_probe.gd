@@ -47,15 +47,19 @@ func _ready() -> void:
 		expected_order.append(opp_deck.deck_cards[i].card_name)
 
 	# --- the animation itself: three cards, one after another, 0.5 s each -----------------------------------
+	# RULES FIRST: the state changes at once; the flights are queued on the presentation director (Vfx).
 	var started: int = Time.get_ticks_msec()
 	await _game.call("mill_player", 2, 3)
-	var elapsed: int = Time.get_ticks_msec() - started
-	print("[Mill] milled 3 in %d ms (deck %d -> %d, pile -> %d)" % [
-		elapsed, deck_before, opp_deck.deck_cards.size(), pile.graveyard_cards.size()])
+	var rules_ms: int = Time.get_ticks_msec() - started
 	_expect(opp_deck.deck_cards.size() == deck_before - 3, "mill_player(3) takes three cards off the deck")
-	_expect(pile.graveyard_cards.size() == 3, "and puts three cards into the Break Zone")
-	# Sequential, not simultaneous: three 0.5 s animations cannot finish faster than one and a half seconds.
-	_expect(elapsed >= 1400, "the three mills run one AFTER another (took %d ms for 3 x 0.5 s)" % elapsed)
+	_expect(pile.graveyard_cards.size() == 3, "and puts three cards into the Break Zone at once")
+	_expect(rules_ms < 200, "the rules do not wait for the flights (took %d ms)" % rules_ms)
+	# THEN THE SCREEN: three 0.5 s flights, one after another, cannot finish faster than one and a half seconds.
+	await Vfx.idle()
+	var elapsed: int = Time.get_ticks_msec() - started
+	print("[Mill] rules %d ms, flights done after %d ms (deck %d -> %d, pile -> %d)" % [
+		rules_ms, elapsed, deck_before, opp_deck.deck_cards.size(), pile.graveyard_cards.size()])
+	_expect(elapsed >= 1400, "the three flights play one AFTER another (took %d ms for 3 x 0.5 s)" % elapsed)
 
 	var landed: Array = []
 	for c in pile.graveyard_cards:

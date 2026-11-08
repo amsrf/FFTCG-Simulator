@@ -13,6 +13,9 @@ extends Node3D
 signal event_queued(event: VfxEvent)
 signal event_started(event: VfxEvent)
 signal event_finished(event: VfxEvent)
+## The queue has drained and nothing is playing.
+signal idle_reached
+const PRESENTATION := preload("res://scripts/presentation.gd")
 
 const ELEMENT_PRESET_DIR := "res://assets/vfx/elements"
 const STATUS_PRESET_DIR := "res://assets/vfx/status"
@@ -150,6 +153,26 @@ func clear_events() -> void:
 	_events.clear()
 
 
+## Queue the animation of a rules change that has ALREADY happened. The rules carry on immediately; `presenter`
+## (a coroutine: reparent, fly, lay out) runs when its turn in the queue comes.
+func present(presenter: Callable) -> void:
+	var event := VfxEvent.new()
+	event.kind = VfxEvent.Kind.PRESENT
+	event.presenter = presenter
+	event.timestamp_ms = Time.get_ticks_msec()
+	_emit(event)
+
+func is_idle() -> bool:
+	return not _playing and _pending.is_empty()
+
+## THE SCREEN CATCHES UP BEFORE ANYONE DECIDES. Agent._settle() awaits this before every decision, so no prompt can
+## appear while the board is still animating what led to it. Fast mode (no one watching) does not wait.
+func idle() -> void:
+	if PRESENTATION.fast_mode:
+		return
+	while not is_idle():
+		await idle_reached
+
 func _emit(event: VfxEvent) -> void:
 	_events.append(event)
 	event_queued.emit(event)
@@ -165,6 +188,7 @@ func _pump() -> void:
 		var event: VfxEvent = _pending.pop_front()
 		await _present(event)
 	_playing = false
+	idle_reached.emit()
 
 
 ## Presentation slots are intentionally ready for the next VFX pass. Until a
@@ -172,6 +196,11 @@ func _pump() -> void:
 ## queue in a deterministic order.
 func _present(event: VfxEvent) -> void:
 	event_started.emit(event)
+	if event.kind == VfxEvent.Kind.PRESENT:
+		if event.presenter.is_valid():
+			await event.presenter.call()
+		event_finished.emit(event)
+		return
 	var preset: VfxPreset = preset_for(event)
 	var scene: PackedScene = _scene_for(event, preset)
 	if scene != null:

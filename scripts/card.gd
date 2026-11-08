@@ -397,6 +397,9 @@ func _executeAuraEffects():
 ## CARD INPUT IS THE ZONE'S BUSINESS. A click, release or hover is forwarded to the card's parent zone (Hand, Field,
 ## Stack, Graveyard, DamageZone), which decides what it means there. A parent without the method simply ignores it.
 func _on_card_area_3d_card_grabbed(_card: Variant):
+	# No clicks while the board is still showing what just happened: decisions wait for it too (Agent._settle).
+	if not Vfx.is_idle():
+		return
 	_drag_release_handled = false
 	var zone: Node = get_parent()
 	if zone != null and zone.has_method("on_card_grabbed"):

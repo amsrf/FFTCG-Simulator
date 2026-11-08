@@ -111,7 +111,7 @@ func mill_player(player_id: int, count: int = 1) -> void:
 			return
 		var card = d.deck_cards.pop_front()
 		LOG.info("Mill", "P%d mills %s" % [player_id, card.card_name])
-		await side.graveyard.call("draw", card)
+		side.graveyard.call("draw", card)
 
 ## The caster's opponent mills. Same seat logic as opponent_discards(): the victim is the other player.
 ## PLAY 1 CARD FROM HAND FOR FREE. "Play 1 Wind Forward of cost 3 or less from your hand onto the field."

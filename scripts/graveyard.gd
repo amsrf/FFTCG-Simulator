@@ -39,27 +39,38 @@ var randomness_range = Vector3(0.015, 0.005, 0.015)
 func draw(card: Card) -> void:
 	if card == null or not is_instance_valid(card):
 		return
+	# RULES, at once: the milled card is in the pile from this moment. It came from the deck, so no "from the field"
+	# trigger can fire. Only the zone is recorded here; enter_zone() is presentation and runs with the flight.
 	var start: Vector3 = card.global_position
+	var index: int = graveyard_cards.size()
+	graveyard_cards.append(card)
+	card.current_zone = zone
+	# PRESENTATION, queued: lift it off the deck and carry it onto the pile. Several mills play one after another,
+	# because the queue is serial.
+	Vfx.present(func() -> void: await _fly_milled(card, start, index))
+
+func _fly_milled(card: Card, start: Vector3, index: int) -> void:
+	if not is_instance_valid(card):
+		return
+	# Moved into THIS node's frame first, keeping its world position, so the Break Zone look applies for the whole
+	# flight rather than popping in on landing.
 	if card.get_parent() != self:
 		card.reparent(self, false)
-		card.global_position = start
+	card.global_position = start
 	card.enter_zone(zone)
-
-	# Where the card will land: the same slot update_card_positions() will give it, in this node's own space.
-	var index: int = graveyard_cards.size()
+	# Where the card will land: the slot update_card_positions() gives it, in this node's own space.
 	var destination: Vector3 = global_transform * (card_offset * index)
 	# Quadratic Bezier through a control point above the midpoint — the parabola the eye reads as "lifted and carried".
 	var peak: Vector3 = (start + destination) * 0.5 + Vector3.UP * mill_arc_height
-
 	var t: Tween = create_tween()
 	t.set_trans(Tween.TRANS_SINE).set_ease(mill_ease)
 	t.tween_method(func(k: float) -> void:
 		# De Casteljau: two lerps along the two control legs, then one between them.
 		card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
 	, 0.0, 1.0, mill_seconds)
-	await PRESENTATION.wait(t)
-	add_card(card)
-		
+	await t.finished
+	update_card_positions()
+
 ## Discard from a hand. The card joins the pile at once and the tween moves its visual from wherever it was to
 ## the slot the pile already gave it. That ordering matters: discard effects, S costs and AI choices all proceed
 ## immediately, while the player still sees the card travel instead of teleporting.
