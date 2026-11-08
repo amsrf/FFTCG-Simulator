@@ -22,3 +22,6 @@ tools/shots/
 *.blend1
 *.log
 *.psd
+
+# Probe runner output (tools/run_all_probes.ps1)
+tools/probe_logs/
