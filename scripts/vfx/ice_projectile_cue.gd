@@ -9,7 +9,7 @@ func play(event: VfxEvent) -> void:
 			continue
 		var visual: Dictionary = event.target_visuals.get(target.get_instance_id(), {})
 		if visual.is_empty():
-			if not target.is_on_field():
+			if not target.is_drawn_on_field():
 				continue
 			visual = {"transform": target.global_transform, "floor_y": target.get_parent().global_position.y}
 		var pose: Transform3D = visual.transform

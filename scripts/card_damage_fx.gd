@@ -56,7 +56,7 @@ func normalize() -> void:
 ## Quick physical recoil on the visible mesh.
 func play_reaction(damage: int, delay: float = 0.0) -> void:
 	var hand_mesh = _card.hand_mesh
-	if damage <= 0 or hand_mesh == null or not _card.is_on_field():
+	if damage <= 0 or hand_mesh == null or not _card.is_drawn_on_field():
 		return
 	_ensure_curves()
 	var tier: int = VfxEvent.damage_tier_for(damage)
@@ -78,7 +78,7 @@ func earth_launch_seconds(damage: int) -> float:
 
 func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> Tween:
 	var hand_mesh = _card.hand_mesh
-	if hand_mesh == null or not _card.is_on_field():
+	if hand_mesh == null or not _card.is_drawn_on_field():
 		return null
 	normalize()
 	var duration := earth_launch_seconds(damage)
@@ -134,7 +134,7 @@ func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> 
 		power_label.visible = false
 	var edge_home := _earth_edge_home
 	var apply_pose := func(pose: Transform3D) -> void:
-		if not card.is_on_field():
+		if not card.is_drawn_on_field():
 			return
 		hand_mesh.transform = pose
 		if is_instance_valid(edge):
@@ -192,7 +192,7 @@ func _set_reaction_pose(progress: float) -> void:
 	var hand_mesh = _card.hand_mesh
 	if hand_mesh == null or not is_instance_valid(hand_mesh):
 		return
-	if not _card.is_on_field():
+	if not _card.is_drawn_on_field():
 		_reset_pose()
 		return
 	var bounce: float = _bounce_curve.sample(progress)

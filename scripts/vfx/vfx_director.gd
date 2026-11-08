@@ -110,7 +110,7 @@ func preset_for(event: VfxEvent) -> VfxPreset:
 func capture_damage_visuals(targets: Array) -> Dictionary:
 	var snapshots: Dictionary = {}
 	for target in targets:
-		if is_instance_valid(target) and target is Card and target.is_on_field():
+		if is_instance_valid(target) and target is Card and target.is_drawn_on_field():
 			snapshots[target.get_instance_id()] = {"transform": target.global_transform,
 				"floor_y": target.get_parent().global_position.y}
 	return snapshots
@@ -121,7 +121,7 @@ func _attach_damage_visuals(event: VfxEvent, snapshots: Dictionary) -> void:
 		var id := target.get_instance_id()
 		if positions.has(id):
 			var visual: Dictionary = positions[id].duplicate()
-			visual["lethal"] = not target.is_on_field()
+			visual["lethal"] = not target.is_drawn_on_field()
 			event.target_visuals[id] = visual
 
 func owns_damage_reaction(source: Card) -> bool:

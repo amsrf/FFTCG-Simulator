@@ -373,6 +373,10 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	card.reparent(self, false)
 	card.position = Vector3.ZERO
 	card.global_transform = trans
+	# Record the zone FIRST: everything below (statuses, the continuous-effect refresh) asks is_on_field(), which reads
+	# current_zone. enter_zone() also normalises the look; the global transform above is kept so the travel animation
+	# starts where the card was.
+	card.enter_zone(Card.Zone.FIELD)
 
 	# HISTORY. Recorded here because this is where a Character actually reaches the field — the "was played" event —
 	# and `record` is false for the SETUP BOARD, where pre-placed cards were not played at all. Returning a card to
@@ -401,7 +405,6 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 		target_array = opponent_back_cards if is_opponent else back_cards
 		target_node = $OpponentBackrowCard if is_opponent else $BackrowCard
 	
-	# Add card to appropriate array
 	var n = target_array.size()
 	target_array.append(card)
 	refresh_continuous_effects()
@@ -413,12 +416,6 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	else:
 		target_position += ((n+1)/2) * Vector3(ROW_CARD_STEP, 0, 0)
 	
-	# The card is entering the field: normalise its look first (rotation, scale and
-	# the power/damage readout). Without this a card played from hand keeps the
-	# hand's fan tilt, because the reparent above deliberately preserves the whole
-	# global transform so the travel animation starts where the card was.
-	#
-	card.enter_zone(Card.Zone.FIELD)
 
 	# ENTRY RULES (Ultimecia 152: "all Forwards other than Ultimecia enter the field dull"). Read from the board at
 	# the moment of entry — nothing is registered, so a source that leaves the field simply stops being found. O(field)

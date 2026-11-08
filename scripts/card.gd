@@ -439,7 +439,14 @@ func can_be_played():
 		return true
 	return false
 	
-func is_on_field():
+## RULES: is this card on the field? Reads the zone the rules recorded (enter_zone), not the node tree — the node can
+## still be drawn on the field while an animation catches up.
+func is_on_field() -> bool:
+	return current_zone == Zone.FIELD
+
+## PRESENTATION: is this card currently DRAWN on the field? Visual effects use this, because they animate what is on
+## screen — a card the rules already moved to the Break Zone can still be shattering at its field slot.
+func is_drawn_on_field() -> bool:
 	return get_parent() is Field
 
 func showPower():

@@ -359,11 +359,11 @@ func _cleanup() -> void:
 	_defeated.clear()
 	if _attacker != null and is_instance_valid(_attacker):
 		_attacker.set_hidden(false)
-		if _survives_a and _attacker.is_on_field():
+		if _survives_a and _attacker.is_drawn_on_field():
 			_attacker.global_transform = _snap_a
 	if _defender != null and is_instance_valid(_defender):
 		_defender.set_hidden(false)
-		if _survives_b and _defender.is_on_field():
+		if _survives_b and _defender.is_drawn_on_field():
 			_defender.global_transform = _snap_b
 	if _camera != null and is_instance_valid(_camera):
 		_camera.global_transform = _camera_home

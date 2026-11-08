@@ -10,10 +10,10 @@ func play(event: VfxEvent) -> void:
 		if not is_instance_valid(target):
 			continue
 		var visual: Dictionary = event.target_visuals.get(target.get_instance_id(), {})
-		if not target.is_on_field() and visual.is_empty():
+		if not target.is_drawn_on_field() and visual.is_empty():
 			continue
 		var delay := float(i) * (0.20 if event.mode != "sequence" else 0.35)
-		var lethal: bool = visual.get("lethal", not target.is_on_field())
+		var lethal: bool = visual.get("lethal", not target.is_drawn_on_field())
 		var presentation_seconds := 2.15 if lethal else 0.07 + target.damage_fx.earth_launch_seconds(event.amount) + 1.2
 		longest = maxf(longest, delay + presentation_seconds)
 		_strike(target, event.amount, event.seed + i * 173, delay, visual)
@@ -26,7 +26,7 @@ func _strike(target: Card, damage: int, seed_value: int, delay: float, visual: D
 	if not is_instance_valid(target):
 		return
 	if visual.is_empty():
-		if not target.is_on_field():
+		if not target.is_drawn_on_field():
 			return
 		visual = {"transform": target.global_transform, "floor_y": target.get_parent().global_position.y}
 	var pose: Transform3D = visual.transform
@@ -37,7 +37,7 @@ func _strike(target: Card, damage: int, seed_value: int, delay: float, visual: D
 	totem.get_node("GroundCrack").material_override.set_shader_parameter("seed", float(seed_value % 10000))
 	totem.play()
 	var retreat_delay := 0.35
-	if not visual.get("lethal", false) and target.is_on_field():
+	if not visual.get("lethal", false) and target.is_drawn_on_field():
 		var motion: Tween = target.damage_fx.play_earth_launch(damage, seed_value, 0.07)
 		_active.append({"card": target, "motion": motion})
 		retreat_delay = 0.07 + target.damage_fx.earth_launch_seconds(damage) * 0.5
