@@ -1,5 +1,10 @@
 extends Node3D
 class_name Hand
+## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
+## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
+var game: Game:
+	get:
+		return get_node_or_null("../..")  # Player -> Game
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
@@ -77,8 +82,8 @@ var _mana_discard_in_progress: bool = false
 @onready var graveyard: Node = get_parent().get_node("Graveyard")
 # Relative, not get_tree().current_scene — see damage_zone.gd. This also resolves the same
 # way for Opponent/Hand, which shares this script.
-@onready var stack: Stack = get_node("../../Stack") as Stack
-@onready var field: Field = get_node("../../Field") as Field
+@onready var stack: Stack = game.get_node("Stack") as Stack
+@onready var field: Field = game.get_node("Field") as Field
 
 ## RETURNING A CARD FROM THE FIELD. Two phases, tuned in the Inspector:
 ##   1. grow into the hand's size and rise into its plane — deliberately quick, because the card should look like it
@@ -1144,7 +1149,7 @@ func can_play_character(card: Card) -> bool:
 
 ## Controller name of the side whose turn it is.
 func active_controller() -> String:
-	return "player" if stack.get_parent().turn_owner == 1 else "opponent"
+	return Card.PLAYER if game.turn_owner == 1 else Card.OPPONENT
 
 func finish_summon_cast(card: Card) -> void:
 	end_character_drag(card)
@@ -1280,8 +1285,7 @@ func send_selected_cards_to_graveyard() -> void:
 func add_card_to_mana_conversion(card:Card):
 	# RULES: the CP cost is exact. Once fulfilled, ignore further selections. The hand-card exception (2 CP for a
 	# 1-CP gap) is still allowed because the guard is checked BEFORE the card that fulfils the cost is recorded.
-	var game_node = stack.get_parent() if stack != null else null
-	var assistant = game_node.get("assistant") if game_node != null else null
+	var assistant = game.get("assistant") if game != null else null
 	if assistant != null and assistant.payment_is_full():
 		print("[Mana] cost already fulfilled; ignoring extra charge")
 		return

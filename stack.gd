@@ -1,5 +1,10 @@
 extends Node3D
 class_name Stack
+## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
+## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
+var game: Game:
+	get:
+		return get_parent()
 
 const EVENTS := preload("res://scripts/effects/events.gd")
 
@@ -37,9 +42,9 @@ var s_cost_active: bool = false
 var s_cost_source: Card = null
 var s_cost_skill_index: int = -1
 var s_cost_selected_card: Card = null
-@onready var field: Field = get_parent().get_node("Field") as Field
-@onready var hand: Hand = get_parent().get_node("Player/Hand") as Hand
-@onready var assistant: Assistant = get_parent().get_node("Assistant") as Assistant
+@onready var field: Field = game.get_node("Field") as Field
+@onready var hand: Hand = game.get_node("Player/Hand") as Hand
+@onready var assistant: Assistant = game.get_node("Assistant") as Assistant
 @onready var card_scene = preload("res://card.tscn")
 
 signal execute_card_effect(card:Card)
@@ -368,7 +373,7 @@ func cast_card():
 		casting_card.key_word_effect = "when_cast"
 		# HISTORY AT THE CAST, not at resolution: "if you have cast X this turn" becomes true the moment the card is
 		# played, and a Summon that is invalidated before it resolves was still cast.
-		get_parent().record_action("Casted %s" % casting_card.card_name, [],
+		game.record_action("Casted %s" % casting_card.card_name, [],
 			1 if casting_card.controller == Card.PLAYER else 2)
 		# Board-wide "when a Summon is cast" triggers (Yuna 214, Lenne 215) fire at the cast, not at resolution.
 		field.trigger_event(EVENTS.Event.SUMMON_CAST, {"card": casting_card})
@@ -388,7 +393,7 @@ func cast_card():
 		_shatter_paid_cost()
 		# The CAST is the action, not the end of its presentation. Record it
 		# before the ~1.3 s teleport so priority sees the action immediately.
-		get_parent().note_action_taken()
+		game.note_action_taken()
 		var owner_hand: Hand = _owner_hand(landing)
 		# DISCARD FIRST. The mana cards have already joined the Graveyard, but
 		# their flight was started by Hand._on_assistant_charge_complete(); wait
@@ -438,7 +443,7 @@ func _continue_summon_after_mana(card: Card) -> void:
 ## Summons too: committing through the wrong hand would leave a stale
 ## `charging_card` there, which can later pull the card back off the stack.
 func _owner_hand(card: Card) -> Hand:
-	return get_parent().hand_for(1 if card.controller == Card.PLAYER else 2)
+	return game.hand_for(1 if card.controller == Card.PLAYER else 2)
 
 func _commit_summon_to_stack() -> void:
 	if summon_casting_card == null:
@@ -475,7 +480,7 @@ func _commit_summon_to_stack() -> void:
 	# Casting a Summon is a priority action: it is on the stack now, so priority
 	# moves to the opponent. (Emitting in the Agent's case is harmless — no one
 	# is awaiting the signal; the agent reports through take_priority().)
-	get_parent().note_action_taken()
+	game.note_action_taken()
 
 
 func begin_triggered_ability(source: Card, keyword: String) -> void:
@@ -546,7 +551,7 @@ func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -
 	var proxy := create_skill_proxy(source, skill_index, definition, x_value)
 	skill_activation_proxy = proxy
 	skill_mana_deferred_until_target_confirm = true
-	get_parent().note_action_taken()
+	game.note_action_taken()
 	return true
 
 func create_skill_proxy(source: Card, skill_index: int, definition: Dictionary, x_value: int = -1) -> Card:
@@ -601,7 +606,7 @@ func commit_skill_activation_costs_if_pending() -> void:
 		if bool(return_def.get("return_self", false)):
 			var return_src: Card = skill_activation_proxy.effect_source
 			if return_src != null and is_instance_valid(return_src):
-				var owner_hand: Hand = get_parent().hand_for(1 if return_src.controller == Card.PLAYER else 2)
+				var owner_hand: Hand = game.hand_for(1 if return_src.controller == Card.PLAYER else 2)
 				if owner_hand != null:
 					field.remove_card(return_src)
 					owner_hand.add_card(return_src)
@@ -613,7 +618,7 @@ func commit_skill_activation_costs_if_pending() -> void:
 				var sac_src: Card = skill_activation_proxy.effect_source
 				if sac_src != null and is_instance_valid(sac_src) and sac_src.is_on_field():
 					print("[Sacrifice] %s -> Break Zone (deferred)" % sac_src.card_name)
-					get_parent().put_card_into_graveyard(sac_src)
+					game.put_card_into_graveyard(sac_src)
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
 		hand.discard_card(s_cost_selected_card)
@@ -644,7 +649,7 @@ func _clear_skill_proxy() -> void:
 	skill_activation_proxy = null
 	skill_mana_deferred_until_target_confirm = false
 	# A damage split chosen for THIS ability must not outlive it: the next divide-damage ability would inherit it.
-	get_parent()._damage_division.clear()
+	game.clear_damage_division()
 	if was_pending:
 		var src: Card = p.effect_source
 		if src != null and is_instance_valid(src) and src.tapped:
@@ -786,7 +791,7 @@ func _present_local_summon(card: Card) -> void:
 		local_summon_landed.emit()
 		return
 	# Replace the faded printed card with a separate stack card, preserving its cast picks.
-	var effect_card: Card = get_parent().create_card(card.id, card.controller)
+	var effect_card: Card = game.create_card(card.id, card.controller)
 	effect_card.key_word_effect = card.key_word_effect
 	effect_card.effect_kind = card.effect_kind
 	effect_card.set_effect_targets(card.effect_targets)
@@ -1024,7 +1029,6 @@ func cancel_stack_card(card: Card) -> void:
 		summon_casting_card = null
 	if casting_card == card:
 		casting_card = null
-	var game: Node = get_parent()
 	var pile = game.get("player_graveyard") if card.controller == Card.PLAYER else game.get("opponent_graveyard")
 	if pile != null:
 		pile.add_card(card)
@@ -1067,7 +1071,7 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 	if summon_casting_card != null:
 		# A STAGED SUMMON records every pick, not just the last (Hades: Forward + Backup). The single-target
 		# assignment stays for the ordinary case.
-		var summon_picks: Array = get_parent().field.targeting_picked
+		var summon_picks: Array = game.field.targeting_picked
 		if summon_picks.size() > 1:
 			summon_casting_card.set_effect_targets(summon_picks)
 		else:
@@ -1085,7 +1089,7 @@ func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: boo
 	# assigning the single card would leave only the last one — which is exactly the wall this had. The session's picks
 	# are captured HERE, at the moment of the pick: from then on the EFFECT owns them, and nothing downstream has to go
 	# looking in the targeting UI's state, which the next session overwrites.
-	var picks: Array = get_parent().field.targeting_picked
+	var picks: Array = game.field.targeting_picked
 	if picks.size() > 1:
 		effect_card.set_effect_targets(picks)
 	else:
@@ -1120,7 +1124,7 @@ func _on_assistant_target_complete() -> void:
 	# is already attached by request_target_confirmation as each pick is made; a LIST has to be copied onto the stack
 	# object here, or the effect resolves against only the last one.
 	if summon_casting_card == null and skill_activation_proxy == null:
-		var chosen: Array = get_parent().field.targeting_picked
+		var chosen: Array = game.field.targeting_picked
 		var top: Card = cards.back() if not cards.is_empty() else null
 		if top != null and chosen.size() > 1:
 			top.set_effect_targets(chosen)
@@ -1135,10 +1139,10 @@ func _on_assistant_target_complete() -> void:
 	# distribution screen step back to target selection instead of stranding a committed effect.
 	var pool: int = _divide_damage_total(skill_activation_proxy)
 	if pool >= 0:
-		var field_ref = get_parent().field
+		var field_ref = game.field
 		var picks: Array = field_ref.targeting_picked.duplicate()
 		var owner_id: int = 1 if skill_activation_proxy.controller == Card.PLAYER else 2
-		var agent: Agent = get_parent().agent_for(owner_id)
+		var agent: Agent = game.agent_for(owner_id)
 		var split: Array = await agent.choose_damage_split(owner_id, picks, pool)
 		if split.is_empty():
 			# BACK ONE STEP. The targeting session was never torn down — picks and arcs are intact — so the only thing
@@ -1148,7 +1152,7 @@ func _on_assistant_target_complete() -> void:
 			field_ref.request_target_confirmation.emit(
 				picks.back() if not picks.is_empty() else null, field_ref.targeting_allow_cancel)
 			return
-		get_parent()._damage_division = split
+		game.set_damage_division(split)
 	commit_skill_activation_costs_if_pending()
 	_shatter_paid_cost()          # activation committed: costs paid, target chosen
 	# Same as the no-target path below: clear the button that got us here, then put the player's pass button back. Hiding the
@@ -1222,7 +1226,7 @@ func _on_assistant_target_cancel() -> void:
 ## uses, and the Field owns the session, so this branch only forwards the click.
 func on_card_grabbed(card: Card) -> void:
 	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET and card.is_valid_target:
-		var field = get_parent().get("field")
+		var field = game.get("field")
 		if field != null:
 			field.set_target_card(card)
 			_mark_input_handled(card)

@@ -1,5 +1,10 @@
 extends Node3D
 class_name DamageZone
+## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
+## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
+var game: Game:
+	get:
+		return get_node_or_null("../..")  # Player -> Game
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
@@ -14,8 +19,8 @@ var grabbed_card_index = 0;
 # the top-level scene, so it silently yields null for anything that instantiates it
 # elsewhere (the headless probe, a future self-play or preview). Walking the tree works
 # wherever the scene is mounted.
-@onready var field: Field = get_node("../../Field")
-@onready var assistant: Assistant = get_node("../../Assistant")
+@onready var field: Field = game.get_node("Field")
+@onready var assistant: Assistant = game.get_node("Assistant")
 
 func set_deck(deck_node: Node) -> void:
 	deck = deck_node
@@ -138,6 +143,5 @@ func animate_card(card, target_position):
 ## uses, so the player can check what is in the zone. The host is two levels up (pile -> Player -> Game) and it is
 ## duck-typed, so a pile mounted anywhere else simply does nothing rather than erroring.
 func on_card_grabbed(_card: Card) -> void:
-	var host: Node = get_parent().get_parent() if get_parent() != null else null
-	if host != null and host.has_method("_show_zone_view"):
-		host.call("_show_zone_view", self, "Damage Zone")
+	if game != null and game.has_method("_show_zone_view"):
+		game.call("_show_zone_view", self, "Damage Zone")

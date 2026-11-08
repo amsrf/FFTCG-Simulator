@@ -1,4 +1,5 @@
 extends Node3D
+class_name Game
 
 @onready var player: PlayerSide = $Player
 @onready var opponent: PlayerSide = $Opponent
@@ -413,6 +414,13 @@ func cast_summon_for_free(criteria: Dictionary = {}) -> void:
 ## Damage amounts chosen in the split window, waiting for the ability that asked for them to resolve. ONE SLOT is
 ## enough: the ability commits immediately after the split, so no other effect can claim it in between.
 var _damage_division: Array = []
+
+## Stack sets the split when a divided-damage Summon resolves, and clears it when one is cancelled.
+func set_damage_division(split: Array) -> void:
+	_damage_division = split
+
+func clear_damage_division() -> void:
+	_damage_division.clear()
 
 ## "Divide 6000 damage among them as you like." The amounts were chosen BEFORE the ability committed (so Cancel
 ## could step back to targeting); this applies them to `_targets` in the order they were picked.

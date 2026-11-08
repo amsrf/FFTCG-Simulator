@@ -1,5 +1,10 @@
 extends Node3D
 class_name Field
+## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
+## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
+var game: Game:
+	get:
+		return get_parent()
 
 
 const CARD_CHARGE = 1
@@ -82,7 +87,7 @@ signal card_activated_ability(cost:Dictionary)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
 var phase: GlobalVariables.Phase:
 	get:
-		return get_parent().phase
+		return game.phase
 @export var selected_cards_for_mana_conversion: Array[Card] = []
 ## The colour each selected source actually generated. A source can offer several colours, so a refund
 ## must return the chosen one rather than re-deriving it from the card.
@@ -90,9 +95,9 @@ var selected_mana_elements: Dictionary = {}
 const MANA_CHOICE := preload("res://mana_choice.tscn")
 var mana_choice = null
 @onready var ballistic_arrow_scene = preload("res://ballistic_arrow.tscn")
-@onready var assistant: Assistant = get_parent().get_node("Assistant")
-@onready var stack: Stack = get_parent().get_node("Stack") as Stack
-@onready var hand: Hand = get_parent().get_node("Player/Hand") as Hand
+@onready var assistant: Assistant = game.get_node("Assistant")
+@onready var stack: Stack = game.get_node("Stack") as Stack
+@onready var hand: Hand = game.get_node("Player/Hand") as Hand
 
 # ------------------------------------------------------------------
 # Field card preview (hover)
@@ -287,7 +292,7 @@ func open_mana_choice(card: Card, elements: Array) -> String:
 		mana_choice.queue_free()
 	hide_card_preview()
 	mana_choice = MANA_CHOICE.instantiate()
-	get_parent().add_child(mana_choice)
+	game.add_child(mana_choice)
 	var state: Dictionary = {"picked": "", "done": false}
 	mana_choice.chosen.connect(func(element: String) -> void:
 		state["picked"] = element
@@ -353,17 +358,16 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
 	# Setup boards (animate == false) are exempt, like summoning sickness, so test grounds may place a board directly.
 	if animate and card != null and card.is_character():
-		var unique_game: Node = get_parent()
-		if unique_game != null and unique_game.has_method("would_be_unique_name_conflict") \
-				and unique_game.would_be_unique_name_conflict(card):
+		if game != null and game.has_method("would_be_unique_name_conflict") \
+				and game.would_be_unique_name_conflict(card):
 			print("[Unique] %s is already on the field; the new copy goes to the Break Zone" % card.card_name)
-			unique_game.send_off_field_card_to_break_zone(card)
+			game.send_off_field_card_to_break_zone(card)
 			return
 		# RULE 7.7.5: normally one Light or Dark card per side. Cosmos/Chaos carry the printed exception.
-		if unique_game != null and unique_game.has_method("would_break_light_dark_limit") \
-				and unique_game.would_break_light_dark_limit(card):
+		if game != null and game.has_method("would_break_light_dark_limit") \
+				and game.would_break_light_dark_limit(card):
 			print("[Light/Dark] %s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
-			unique_game.send_off_field_card_to_break_zone(card)
+			game.send_off_field_card_to_break_zone(card)
 			return
 	var trans = card.global_transform
 	card.reparent(self, false)
@@ -375,8 +379,8 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# the field (Vanille) also lands here; it is logged as played, which is a known simplification.
 	if record:
 		var controller_name: String = card.controller
-		var owner_id: int = 1 if controller_name == "player" else 2
-		get_parent().record_action("%s %s was played" % [card.type, card.card_name], [], owner_id)
+		var owner_id: int = 1 if controller_name == Card.PLAYER else 2
+		game.record_action("%s %s was played" % [card.type, card.card_name], [], owner_id)
 
 	# SUMMONING SICKNESS. A card that just entered the field cannot tap until its controller's next turn: it cannot
 	# attack, a Backup cannot be tapped for mana, and a tap-costed skill is closed. Haste — printed or granted —
@@ -538,10 +542,9 @@ func trigger_party_attacks(controller: String) -> void:
 ## Trigger-level conditions are evaluated by Game, because that is where the condition vocabulary lives
 ## (controls:, cast_this_turn:, party_has_named:). Field forwards rather than keeping a second copy of the rules.
 func _trigger_condition_holds(condition: String) -> bool:
-	var host: Node = get_parent()
-	if host == null or not host.has_method("_condition_holds"):
+	if game == null or not game.has_method("_condition_holds"):
 		return true
-	return bool(host.call("_condition_holds", condition))
+	return bool(game.call("_condition_holds", condition))
 
 ## Fire "a party you control dealt damage to the opponent" (Andoria, Boko).
 func trigger_party_deals_damage(controller: String) -> void:
@@ -565,8 +568,7 @@ func trigger_party_deals_damage(controller: String) -> void:
 ## instructions all happen at resolution (Game._resolve_event_trigger), so either player can respond first and a
 ## "may" choice is made when the ability resolves, not when it triggers.
 func trigger_event(event_name, context = null) -> void:
-	var host: Node = get_parent()
-	if host == null:
+	if game == null:
 		return
 	var event_id: int = EVENTS.normalize(event_name)
 	var event_key: String = EVENTS.name_of(event_id)
@@ -607,13 +609,13 @@ func trigger_event(event_name, context = null) -> void:
 			if not _event_filter_holds(source, trigger.get("filter", {}), event_data):
 				continue
 			var once: bool = bool(trigger.get("once_per_turn", false))
-			var turn: int = int(host.get("turn_number"))
+			var turn: int = int(game.get("turn_number"))
 			var fire_key: String = "%d:%d:%d" % [source.get_instance_id(), index, turn]
-			if once and host.has_method("event_trigger_already_fired") \
-					and bool(host.call("event_trigger_already_fired", fire_key)):
+			if once and game.has_method("event_trigger_already_fired") \
+					and bool(game.call("event_trigger_already_fired", fire_key)):
 				continue
-			if once and host.has_method("mark_event_trigger_fired"):
-				host.call("mark_event_trigger_fired", fire_key)
+			if once and game.has_method("mark_event_trigger_fired"):
+				game.call("mark_event_trigger_fired", fire_key)
 			stack.enqueue_event_trigger(source, trigger, event_data)
 
 func _as_event_context(event_id: int, context) -> EVENT_CONTEXT:
@@ -677,7 +679,6 @@ func end_phase_cleanup():
 	# End Phase cleanup: resolve "break it at the end of the turn" first, then remove all damage from every card
 	# on the field and expire "until end of turn" effects. (No end-of-turn priority window exists yet, so this runs
 	# immediately on entering the End Phase.)
-	var game: Node = get_parent()
 	for c in get_all_cards().duplicate():
 		if c == null or not is_instance_valid(c) or not c.status_effects.has("break_at_end_of_turn"):
 			continue
@@ -703,7 +704,6 @@ func try_activate_from_field(card: Card) -> void:
 ## still FREE/INSTANT_SPEED_TIME, so the mode alone cannot answer this question. A finished
 ## match is not a window either.
 func has_priority() -> bool:
-	var game: Node = get_parent()
 	if game == null:
 		return false
 	if bool(game.get("match_over")):
@@ -716,9 +716,8 @@ func has_priority() -> bool:
 func ability_x_max(card: Card) -> int:
 	if card == null:
 		return -1
-	var game_node: Node = get_parent()
 	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
-	var owner_hand: Hand = game_node.hand_for(owner_id) if game_node != null else null
+	var owner_hand: Hand = game.hand_for(owner_id) if game != null else null
 	var useful: int = -1
 	if owner_hand != null:
 		for c in owner_hand.cards:
@@ -768,7 +767,7 @@ func can_activate_now(card: Card) -> bool:
 		# "You can only use this ability during your turn" (Devout 48). Checked PER ABILITY, because a card may have
 		# one time-restricted skill and one that is always available.
 		var owner_id_now: int = 1 if card.controller == Card.PLAYER else 2
-		if bool(def.get("only_your_turn", false)) and int(get_parent().turn_owner) != owner_id_now:
+		if bool(def.get("only_your_turn", false)) and int(game.turn_owner) != owner_id_now:
 			continue
 		# "You can only use this ability while <card> is blocking." A per-ability gate, like only_your_turn:
 		# the same card may have another ability that is always available.
@@ -807,7 +806,6 @@ func can_activate_now(card: Card) -> bool:
 ## Damage in the controller's Damage Zone. Used by "you can only use this ability if you have received N damage"
 ## (Gilgamesh 207); the zone holds one card per point, so its count is the number.
 func _damage_received_by(card: Card) -> int:
-	var game: Node = get_parent()
 	if game == null:
 		return 0
 	var side = game.side_for(1 if card.controller == Card.PLAYER else 2)
@@ -856,7 +854,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			var usable: Array = []
 			for def in skills:
 				var turn_ok: bool = (not bool(def.get("only_your_turn", false)) \
-					or int(get_parent().turn_owner) == (1 if card.controller == Card.PLAYER else 2)) \
+					or int(game.turn_owner) == (1 if card.controller == Card.PLAYER else 2)) \
 					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking")) \
 					and (not bool(def.get("tap", false)) or card.can_tap()) \
 					and (not def.has("only_if_damage_received")
@@ -870,7 +868,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 					can_pay = hand != null and hand.cards.size() >= int(def.get("discard", 0))
 				usable.append(can_pay)
 			var chooser_id: int = 1 if card.controller == Card.PLAYER else 2
-			var agent: Agent = get_parent().agent_for(chooser_id)
+			var agent: Agent = game.agent_for(chooser_id)
 			if agent == null:
 				return
 			skill_index = await agent.choose_skill(chooser_id, card, skills, usable)
@@ -890,7 +888,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		if x_max < 0:
 			return
 		var x_owner: int = 1 if card.controller == Card.PLAYER else 2
-		var x_agent: Agent = get_parent().agent_for(x_owner)
+		var x_agent: Agent = game.agent_for(x_owner)
 		if x_agent == null:
 			return
 		x_value = await x_agent.choose_number(x_owner, int(def.get("x_min", 0)), x_max, "Choose X")
@@ -928,23 +926,23 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		else:
 			var candidates: Array = _sacrifice_candidates(sacrifice, card)
 			if not candidates.is_empty():
-				picked = await get_parent().agent_for(owner_id).choose_sacrifice(owner_id, candidates)
+				picked = await game.agent_for(owner_id).choose_sacrifice(owner_id, candidates)
 		if picked == null:
 			stack.call("_clear_skill_proxy")
 			return
 		print("[Sacrifice] %s -> Break Zone" % picked.card_name)
-		get_parent().put_card_into_graveyard(picked)
+		game.put_card_into_graveyard(picked)
 	# DISCARD AS A COST (Ninja 78). The owner picks which cards leave their hand, through the same agent seam the
 	# discard effects use — so the human gets the hand picker and the AI chooses for itself. A refused pick aborts the
 	# activation and clears the proxy, which is what keeps "cancel" from costing a card.
 	var discard_count: int = int(def.get("discard", 0))
 	if discard_count > 0:
-		var owner_hand: Hand = get_parent().hand_for(owner_id)
+		var owner_hand: Hand = game.hand_for(owner_id)
 		for _i in range(discard_count):
 			if owner_hand == null or owner_hand.cards.is_empty():
 				stack.call("_clear_skill_proxy")
 				return
-			var discarded: Card = await get_parent().agent_for(owner_id).choose_discard(
+			var discarded: Card = await game.agent_for(owner_id).choose_discard(
 				owner_id, owner_hand.cards.duplicate())
 			if discarded == null:
 				stack.call("_clear_skill_proxy")
@@ -1003,8 +1001,7 @@ func execute_card_effect(card, event):
 	if event_id == EVENTS.Event.NONE:
 		return
 	if card.abilities_enabled() and card.effect_handles_event(event_id):
-		var game_node: Node = get_parent()
-		var stack_node = game_node.get("stack") if game_node != null else null
+		var stack_node = game.get("stack") if game != null else null
 		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
 			stack_node.enqueue_code_trigger(card, event_id, {})
 		return
@@ -1038,7 +1035,6 @@ func execute_card_effect(card, event):
 
 ## The stack's copy of the effect triggered by `source`, if it exists yet.
 func _stack_effect_card_for(source: Card) -> Card:
-	var game: Node = get_parent()
 	if game == null:
 		return null
 	var s: Variant = game.get("stack")
@@ -1054,15 +1050,15 @@ func get_all_cards() -> Array[Card]:
 
 func get_front_cards_for(controller_name: String) -> Array[Card]:
 	# Forwards of one side. Agents use this for attack / block decisions.
-	return front_cards if controller_name == "player" else opponent_front_cards
+	return front_cards if controller_name == Card.PLAYER else opponent_front_cards
 
 func get_back_cards_for(controller_name: String) -> Array[Card]:
 	# Backups of one side: the AI taps these to pay card costs.
-	return back_cards if controller_name == "player" else opponent_back_cards
+	return back_cards if controller_name == Card.PLAYER else opponent_back_cards
 
 func untap_cards_for(controller_name: String) -> void:
 	# Active Phase untaps only the turn player's cards.
-	var cards: Array[Card] = (front_cards + back_cards) if controller_name == "player" else (opponent_front_cards + opponent_back_cards)
+	var cards: Array[Card] = (front_cards + back_cards) if controller_name == Card.PLAYER else (opponent_front_cards + opponent_back_cards)
 	for card in cards:
 		# FROZEN: "does not activate during its controller's next Active Phase."
 		#
@@ -1119,7 +1115,7 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	reset_targets()
 	# The stack's review link draws the same arrow shape and paints the same aura, so it has to
 	# let go of both before this session claims them.
-	var stack_node = get_parent().get("stack")
+	var stack_node = game.get("stack")
 	if stack_node != null:
 		stack_node.release_target_display()
 	print("[Targeting] request_target source=%s stages=%d" % [card.card_name, targeting_blocks.size()])
@@ -1174,7 +1170,7 @@ func _begin_target_block(index: int) -> void:
 			taken.set_targeted_highlight(true)
 	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
 	var owner_id: int = 1 if source_card != null and source_card.controller == Card.PLAYER else 2
-	var agent: Agent = get_parent().agent_for(owner_id)
+	var agent: Agent = game.agent_for(owner_id)
 	if agent != null and not (agent is LocalAgent):
 		agent.choose_target(owner_id, source_card, targeting_criteria_now)
 
@@ -2011,7 +2007,7 @@ func forced_blocker_for(attacker: Card) -> Card:
 	var attackers: Array = party_members()
 	if attackers.is_empty():
 		attackers = [attacker]
-	var defender: String = "opponent" if attacker.controller == Card.PLAYER else "player"
+	var defender: String = Card.OPPONENT if attacker.controller == Card.PLAYER else Card.PLAYER
 	for card in get_front_cards_for(defender):
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
