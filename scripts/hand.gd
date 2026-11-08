@@ -1379,7 +1379,9 @@ func on_card_released(card: Card) -> void:
 	# The stance itself is the drop confirmation: the pointer has already left
 	# the hand band, so there is no extra "is the pointer over the mat" check.
 	if character_drag_latched():
-		if card.can_be_played() and charge(card):
+		# ONLY WHILE YOU HOLD PRIORITY. Against the AI this never shows, because it answers its priority at once; online
+		# the other player may still be holding it, and a cast made then would happen on this machine only.
+		if card.can_be_played() and field.has_priority() and charge(card):
 			begin_character_charge(card)
 			card.is_dragging = false
 			return

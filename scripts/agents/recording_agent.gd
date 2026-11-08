@@ -144,6 +144,9 @@ func _on_targeting_done(cancelled: bool) -> void:
 	_send(entry)
 
 func _on_window_ended(acted: bool) -> void:
+	if acted and not _draft.is_empty() and _window.is_empty() and _human:
+		# An action committed while this seat did not hold priority: it happened on this machine only.
+		push_error("[Lockstep] %s committed outside this seat's priority window - it was NOT sent" % str(_draft.get("card")))
 	if acted and not _draft.is_empty() and not _window.is_empty():
 		if not _is_activation():
 			_add_payment_if_missing()
