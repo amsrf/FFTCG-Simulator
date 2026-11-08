@@ -1235,6 +1235,12 @@ func discard_card(card: Card) -> void:
 	graveyard.call("discard", card)
 	update_card_positions()
 	
+## Queue the payment cards' discard now if it has not been already (send_selected_cards_to_graveyard empties the
+## selection, so a second call does nothing). Stack calls this before queueing a cast dissolve.
+func flush_mana_discard() -> void:
+	if not selected_cards_for_mana_conversion.is_empty():
+		send_selected_cards_to_graveyard()
+
 ## The selected mana cards join the Break Zone at once (rules see the payment immediately); their flights are queued
 ## on the presentation director as one batch.
 func send_selected_cards_to_graveyard() -> void:

@@ -396,20 +396,20 @@ func cast_card():
 		# before the ~1.3 s teleport so priority sees the action immediately.
 		game.note_action_taken()
 		var owner_hand: Hand = _owner_hand(landing)
-		# DISCARD FIRST. The mana cards have already joined the Graveyard, but
-		# their flight was started by Hand._on_assistant_charge_complete(); wait
-		# for it to land before the marked card starts to fade.
+		# DISCARD FIRST: the payment cards' flights must be QUEUED before the dissolve, so they play first. Flushing
+		# here makes that order explicit instead of depending on which charge_complete handler runs first.
 		if owner_hand != null:
-			await owner_hand.await_mana_discard()
+			owner_hand.flush_mana_discard()
 		# The gold aura has done its job; let it fade with the card.
 		landing.set_cast_pending_highlight(false)
-		# Source half of the teleport: shine and dissolve IN PLACE in the Stack.
-		# Only then does Field place the invisible card at its slot and
-		# materialise it. Nothing travels across the board.
-		var dissolve: Tween = landing.teleport.play_out(
-			field.teleport_shine_seconds, field.teleport_fade_seconds)
-		# A tween is not a signal: awaiting the object itself returns immediately.
-		await PRESENTATION.wait(dissolve)
+		# PRESENTATION, queued: shine and dissolve IN PLACE, where the player sees the card. Nothing travels across the
+		# board; Field then materialises it at its slot (also queued, behind this).
+		var shine: float = field.teleport_shine_seconds
+		var fade: float = field.teleport_fade_seconds
+		Vfx.present(func() -> void:
+			if is_instance_valid(landing):
+				await landing.teleport.play_out(shine, fade).finished)
+		# RULES, at once: the Character is on the field.
 		field.play_card(landing, landing.controller != Card.PLAYER, true, true, false, true)
 	
 	

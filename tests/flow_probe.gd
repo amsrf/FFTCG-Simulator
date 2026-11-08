@@ -138,7 +138,7 @@ func _ready() -> void:
 	_expect(chemist.global_transform.is_equal_approx(stopped_pose), "ending the Character preview stops its waver")
 	hand.update_card_positions()
 
-	# Exactly what Field._on_tween_finished() calls when a played card lands.
+	# Exactly what Field.play_card() schedules when a card enters the field.
 	field.execute_card_effect(chemist, "when_enter_field")
 
 	# 1. The effect copy is on the stack, pointing back at the played card.

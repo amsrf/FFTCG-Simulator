@@ -369,14 +369,9 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 			LOG.info("Light/Dark", "%s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
 			game.send_off_field_card_to_break_zone(card)
 			return
-	var trans = card.global_transform
-	card.reparent(self, false)
-	card.position = Vector3.ZERO
-	card.global_transform = trans
-	# Record the zone FIRST: everything below (statuses, the continuous-effect refresh) asks is_on_field(), which reads
-	# current_zone. enter_zone() also normalises the look; the global transform above is kept so the travel animation
-	# starts where the card was.
-	card.enter_zone(Card.Zone.FIELD)
+	# RULES: record the zone FIRST — everything below (statuses, the continuous-effect refresh) asks is_on_field(),
+	# which reads current_zone. Moving the NODE (reparent + enter_zone's look) is presentation: see _arrive() below.
+	card.current_zone = Card.Zone.FIELD
 
 	# HISTORY. Recorded here because this is where a Character actually reaches the field — the "was played" event —
 	# and `record` is false for the SETUP BOARD, where pre-placed cards were not played at all. Returning a card to
@@ -423,44 +418,59 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	if animate:
 		_apply_entry_rules(card)
 
+	# PRESENTATION, queued: move the node onto the board (keeping its on-screen transform, so whatever was queued
+	# before — a cast dissolve, say — has already played where the player saw the card), then the arrival (teleport
+	# materialise, or the hop into the slot) and the landing pulse. A non-animated placement (the setup board) is
+	# drawn at once.
 	if animate and teleport:
-		# NO TRAVEL. The source has already dissolved in place; put the card
-		# directly on its slot while it is fully dithered, then resolve it there.
-		card.position = target_position
-		card.visible = true
-		card.teleport.set_visual(1.0, 0.35, 0.0)
-		var materialize: Tween = card.teleport.play_in(
-			teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
-		materialize.finished.connect(_on_tween_finished.bind(card, suppress_auto))
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			_arrive(card)
+			# NO TRAVEL. The source has already dissolved in place; the card appears directly on its slot.
+			card.position = target_position
+			card.visible = true
+			card.teleport.set_visual(1.0, 0.35, 0.0)
+			var materialize: Tween = card.teleport.play_in(
+				teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
+			await materialize.finished
+			_play_arrival_pulse(card))
 	elif animate:
-		var tween = create_tween().set_ease(Tween.EASE_OUT)
-		tween.set_parallel(true)
-		tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)
-		tween.set_trans(Tween.TRANS_BACK)
-		# Same 1.2 as enter_zone: the pop must not leave the card at a different
-		# size than a play that skipped the animation.
-		tween.tween_property(card, "scale", Vector3.ONE*1.2, 0.5)
-		tween.set_parallel(false)
-		tween.tween_property(card, "position", target_position + Vector3(0, 2, 0), 0.6).set_delay(0.2)
-		tween.tween_property(card, "position", target_position, 0.4)
-		
-		# Execute ETB after the ENTIRE tween sequence finishes
-		tween.finished.connect(_on_tween_finished.bind(card, suppress_auto))
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			_arrive(card)
+			var tween = create_tween().set_ease(Tween.EASE_OUT)
+			tween.set_parallel(true)
+			tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)
+			tween.set_trans(Tween.TRANS_BACK)
+			tween.tween_property(card, "scale", Vector3.ONE*1.2, 0.5)
+			tween.set_parallel(false)
+			tween.tween_property(card, "position", target_position + Vector3(0, 2, 0), 0.6).set_delay(0.2)
+			tween.tween_property(card, "position", target_position, 0.4)
+			await tween.finished
+			_play_arrival_pulse(card))
 	else:
+		_arrive(card)
 		card.position = target_position
-		GlobalVariables.refresh_mode()
-	
-func _on_tween_finished(card: Card, suppress_auto: bool = false):
 	GlobalVariables.refresh_mode()
-	_play_arrival_pulse(card)
-	if suppress_auto:
-		return
-	#var instructions = card.create_instruction_from_json(card.card_effects['when_enter_field']['instructions'])
-	execute_card_effect(card, EVENTS.Event.ENTER_FIELD)
-	#request_target_confirmation.emit()
+	# RULES: the card has entered the field, so its ENTER_FIELD abilities trigger now — at the end of this frame, not
+	# when its arrival animation lands. A trigger that needs a decision (a target) still waits for the queue
+	# (Agent._settle), so the player sees the card arrive before being asked.
+	if animate and not suppress_auto:
+		execute_card_effect.call_deferred(card, EVENTS.Event.ENTER_FIELD)
 
 ## Cost bands for the field-arrival pulse: 0-4 has no pulse, 5-7 is mild, and
 ## 8+ is the big impact.
+## Draw a card that the rules already put on the field: reparent it here keeping its global transform, and give it
+## the field look (enter_zone normalises rotation, scale and the power readout).
+func _arrive(card: Card) -> void:
+	if card.get_parent() != self:
+		var trans: Transform3D = card.global_transform
+		card.reparent(self, false)
+		card.global_transform = trans
+	card.enter_zone(Card.Zone.FIELD)
+
 func slam_tier(card: Card) -> int:
 	if card == null:
 		return 0
