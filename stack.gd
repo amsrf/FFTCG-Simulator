@@ -789,7 +789,7 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 ## card only fades. The swap happens NOW, so the stack's contents never change in the middle of an animation.
 func _queue_local_summon(card: Card) -> void:
 	card.set_cast_pending_highlight(false)
-	var effect_card: Card = game.create_card(card.id, card.controller)
+	var effect_card: Card = game.create_card(card.id, card.controller, card.uid)
 	effect_card.key_word_effect = card.key_word_effect
 	effect_card.effect_kind = card.effect_kind
 	effect_card.set_effect_targets(card.effect_targets)

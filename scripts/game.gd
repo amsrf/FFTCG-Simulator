@@ -821,6 +821,10 @@ func _warm_up_effect_shaders() -> void:
 		quad.queue_free()
 
 func start_match(config: Dictionary) -> void:
+	# ONLINE PERSPECTIVE: which seat this machine is. Must be set before any card is created (uids use it).
+	local_seat = int(config.get("local_seat", 1))
+	# Who goes first, in THIS machine's terms (1 = the local player).
+	turn_owner = int(config.get("starting_player", 1))
 	var match_seed: int = int(config.get("seed", 0))
 	if match_seed != 0:
 		rng.seed = match_seed
@@ -1168,15 +1172,30 @@ func _unhandled_input(event):
 		if($FocusCard):
 			$FocusCard.visible = false
 
-## STABLE CARD IDENTITY. Every card the rules can refer to gets a uid: seat * 100000 + that seat's creation count.
+## ONLINE PERSPECTIVE. Every machine runs the match as "player" = itself and "opponent" = the other person, so the code
+## reads the way the game is played. `local_seat` (1 or 2) is which SEAT this machine is; seats are what both machines
+## agree on, so anything that crosses the network (uids, decisions, who goes first) is translated through these.
+var local_seat: int = 1
+
+## The seat (1 or 2) of a "player"/"opponent" label on THIS machine.
+func seat_of_controller(controller: String) -> int:
+	return local_seat if controller == Card.PLAYER else 3 - local_seat
+
+func seat_of(card: Card) -> int:
+	return seat_of_controller(card.controller)
+
+## The "player"/"opponent" label of a seat on THIS machine.
+func controller_of_seat(seat: int) -> String:
+	return Card.PLAYER if seat == local_seat else Card.OPPONENT
+
+## STABLE CARD IDENTITY. Every card the rules can refer to gets a uid: SEAT * 100000 + that seat's creation count.
 ## Each seat's cards are created in the same order on every machine (setup: hand, deck, piles, field; then whatever the
-## rules create, identically everywhere), so the numbering matches across an online match regardless of which side is
-## drawn at the bottom. Seat is 1 for "player" and 2 for "opponent" until a perspective mapping exists.
+## rules create, identically everywhere), so the numbering matches across an online match whichever side is local.
 var _uid_counters: Dictionary = {1: 0, 2: 0}
 var _cards_by_uid: Dictionary = {}
 
 func assign_uid(card: Card) -> void:
-	var seat: int = 1 if card.controller == Card.PLAYER else 2
+	var seat: int = seat_of(card)
 	_uid_counters[seat] += 1
 	card.uid = seat * 100000 + int(_uid_counters[seat])
 	_cards_by_uid[card.uid] = card
@@ -1186,10 +1205,16 @@ func card_by_uid(uid: int) -> Card:
 	var card = _cards_by_uid.get(uid)
 	return card if is_instance_valid(card) else null
 
-func create_card(id, controller):
+## `reuse_uid`: the new node IS an existing card (a Summon moving to its stack card), so it keeps that card's identity
+## instead of consuming a new number — which would also make the counters differ between the two machines.
+func create_card(id, controller, reuse_uid: int = 0):
 	var card = card_scene.instantiate()  
 	card.initialize(id,controller) 
-	assign_uid(card)
+	if reuse_uid != 0:
+		card.uid = reuse_uid
+		_cards_by_uid[reuse_uid] = card
+	else:
+		assign_uid(card)
 	if card.has_signal("execute_instructions"):
 		card.execute_instructions.connect(_execute_instructions)
 	return card

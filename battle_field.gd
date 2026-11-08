@@ -1048,7 +1048,13 @@ func _stack_effect_card_for(source: Card) -> Card:
 		if c.effect_source == source:
 			found = c
 	return found
+## Every card on the field, TURN PLAYER'S FIRST. Not "mine first": each machine in an online match is its own
+## "player", so a perspective-based order would walk the cards differently on the two machines and anything
+## order-dependent (which card breaks first, which trigger goes on the stack first) would desync. Turn order is the
+## same everywhere — and it is how the rules order simultaneous things anyway.
 func get_all_cards() -> Array[Card]:
+	if game != null and int(game.turn_owner) == 2:
+		return opponent_front_cards + opponent_back_cards + front_cards + back_cards
 	return front_cards + back_cards + opponent_front_cards + opponent_back_cards
 
 func get_front_cards_for(controller_name: String) -> Array[Card]:
