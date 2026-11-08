@@ -3,8 +3,9 @@ extends Node
 ##   10 Black Mage  《Fire》《Dull》 → 4000 damage to a Forward
 ##   88 Archer      《Wind》《Wind》《Dull》 → break a Backup of cost 3 or less
 ##
-## The cost is `"sacrifice": {"is_source": true}`: no picker, because there is nothing to choose. The card leaves the
-## field at ACTIVATION, and the ability still resolves from the stack with its own source already in the Break Zone.
+## The cost is `"sacrifice": {"is_source": true}`: no picker, because there is nothing to choose. FFTCG pays every
+## cost together, so the card leaves the field when the activation COMMITS (target confirmed), not at activation; the
+## ability still resolves from the stack with its own source already in the Break Zone.
 
 const GAME_SCENE := preload("res://game.tscn")
 
@@ -74,8 +75,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("[SelfSac] Black Mage on field=%s, graveyard=%d" % [
 		str(mage.is_on_field()), _game.get("player").graveyard.graveyard_cards.size()])
-	_expect(not mage.is_on_field(), "activating it puts Black Mage into the Break Zone")
-	_expect(_game.get("player").graveyard.graveyard_cards.has(mage), "and it IS in the Break Zone")
+	_expect(mage.is_on_field(), "activating does NOT pay the sacrifice yet (all costs are paid together)")
 	_expect(_stack.stack_length() == 1, "the ability is on the stack")
 
 	# Pay the 《Fire》 and let the flow continue.
@@ -86,10 +86,13 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET,
 		"payment leads straight to target selection")
+	_expect(mage.is_on_field(), "still on the field after paying, until the activation commits")
 	_field.set_target_card(squall)
 	await get_tree().process_frame
 	_assistant.call("on_target_complete")
 	await get_tree().process_frame
+	_expect(not mage.is_on_field() and _game.get("player").graveyard.graveyard_cards.has(mage),
+		"confirming the target commits it: Black Mage is now in the Break Zone")
 	await _stack.resolve_top_effect()
 	await get_tree().process_frame
 	print("[SelfSac] Squall took %d" % squall.accumulated_damage)
@@ -105,7 +108,7 @@ func _ready() -> void:
 
 	_field.call("begin_skill_activation", archer, 0)
 	await get_tree().process_frame
-	_expect(not archer.is_on_field(), "activating it puts Archer into the Break Zone")
+	_expect(archer.is_on_field(), "activating Archer does not pay the sacrifice yet")
 	_assistant.call("charge", 1, "風")
 	_assistant.call("charge", 1, "風")
 	_expect(_assistant.call("can_pay_cost"), "the two wind are paid")
@@ -118,6 +121,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_assistant.call("on_target_complete")
 	await get_tree().process_frame
+	_expect(not archer.is_on_field(), "confirming the target puts Archer into the Break Zone")
 	await _stack.resolve_top_effect()
 	await get_tree().process_frame
 	print("[SelfSac] Chemist on field=%s" % str(chemist.is_on_field()))

@@ -77,9 +77,17 @@ func _ready() -> void:
 		await get_tree().process_frame
 	print("[Chip] hand %d -> %d, graveyard=%d" % [
 		hand_before, hand.cards.size(), _game.get("player").graveyard.graveyard_cards.size()])
-	_expect(hand.cards.size() == hand_before - 1, "activating it discards one card from hand")
-	_expect(_game.get("player").graveyard.graveyard_cards.size() == 1,
-		"and that card went to the Break Zone")
+	# FFTCG pays every cost together: the discard is only PICKED here, and leaves when the activation commits.
+	_expect(hand.cards.size() == hand_before and _game.get("player").graveyard.graveyard_cards.is_empty(),
+		"activating it picks the discard but does not pay it yet")
+	_expect(_stack.pending_cost_discards.size() == 1, "and the picked card is reserved for the cost")
+	# A card already paying one cost cannot pay the mana too.
+	var reserved: Card = _stack.pending_cost_discards[0] if not _stack.pending_cost_discards.is_empty() else null
+	if reserved != null:
+		hand.add_card_to_mana_conversion(reserved)
+		_expect(not hand.selected_cards_for_mana_conversion.has(reserved),
+			"the reserved card cannot also be selected as mana")
+		hand.selected_cards_for_mana_conversion.clear()
 	_expect(_stack.stack_length() == 1, "the ability is on the stack")
 
 	# The AI agent was only there to answer the DISCARD. Put the human back before targeting, or the same agent
@@ -104,6 +112,8 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_assistant.call("on_target_complete")
 	await get_tree().process_frame
+	_expect(hand.cards.size() == hand_before - 1 and _game.get("player").graveyard.graveyard_cards.size() == 1,
+		"confirming the target commits it: the picked card is discarded to the Break Zone")
 	await _stack.resolve_top_effect()
 	await get_tree().process_frame
 	print("[Chip] Squall took %d" % squall.accumulated_damage)

@@ -46,6 +46,15 @@ var s_cost_active: bool = false
 var s_cost_source: Card = null
 var s_cost_skill_index: int = -1
 var s_cost_selected_card: Card = null
+## SACRIFICE / DISCARD COSTS chosen for the pending activation. FFTCG pays every cost together: these are only PICKED
+## during activation and leave at commit_skill_activation_costs_if_pending(); backing out (_clear_skill_proxy) costs
+## nothing. While pending they are spoken for and cannot also pay the mana.
+var pending_cost_sacrifices: Array[Card] = []
+var pending_cost_discards: Array[Card] = []
+
+## True while `card` is already committed to pay another cost of the activation in progress.
+func is_reserved_for_cost(card: Card) -> bool:
+	return card == s_cost_selected_card or pending_cost_sacrifices.has(card) or pending_cost_discards.has(card)
 @onready var field: Field = game.get_node("Field") as Field
 @onready var hand: Hand = game.get_node("Player/Hand") as Hand
 @onready var assistant: Assistant = game.get_node("Assistant") as Assistant
@@ -622,6 +631,19 @@ func commit_skill_activation_costs_if_pending() -> void:
 				if sac_src != null and is_instance_valid(sac_src) and sac_src.is_on_field():
 					LOG.info("Sacrifice", "%s -> Break Zone (deferred)" % sac_src.card_name)
 					game.put_card_into_graveyard(sac_src)
+	# SACRIFICE AND DISCARD COSTS, paid now with everything else (they were only picked during activation).
+	for sacrificed in pending_cost_sacrifices:
+		if sacrificed != null and is_instance_valid(sacrificed) and sacrificed.is_on_field():
+			LOG.info("Sacrifice", "%s -> Break Zone" % sacrificed.card_name)
+			game.put_card_into_graveyard(sacrificed)
+	pending_cost_sacrifices.clear()
+	for discarded in pending_cost_discards:
+		if discarded != null and is_instance_valid(discarded):
+			var discard_hand: Hand = game.hand_for(1 if discarded.controller == Card.PLAYER else 2)
+			if discard_hand != null and discard_hand.cards.has(discarded):
+				LOG.info("Discard", "%s (cost)" % discarded.card_name)
+				discard_hand.discard_card(discarded)
+	pending_cost_discards.clear()
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
 		hand.discard_card(s_cost_selected_card)
@@ -646,6 +668,9 @@ func _clear_skill_proxy() -> void:
 	s_cost_source = null
 	s_cost_skill_index = -1
 	s_cost_selected_card = null
+	# Backing out costs nothing: the picked sacrifice / discard cards simply stay where they are.
+	pending_cost_sacrifices.clear()
+	pending_cost_discards.clear()
 	if skill_activation_proxy == null:
 		return
 	var p = skill_activation_proxy

@@ -1262,7 +1262,7 @@ func add_card_to_mana_conversion(card:Card):
 	# NOR CAN THE CARD ALREADY SPENT ON THIS ABILITY'S S COST. It is still IN HAND — the discard is deferred until the
 	# skill commits, so that backing out can hand it back — but it is spoken for, and letting it also pay the mana would
 	# spend the same card twice.
-	if stack != null and card == stack.s_cost_selected_card:
+	if stack != null and stack.is_reserved_for_cost(card):
 		return
 	if  not selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.push_back(card)

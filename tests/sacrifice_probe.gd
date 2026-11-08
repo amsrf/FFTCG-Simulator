@@ -60,8 +60,30 @@ func _ready() -> void:
 	_game.set("_priority_lock", true)   # absorb the request_priority; the probe resolves the stack itself
 
 	var backups_before: int = _field.get_back_cards_for("player").size()
+	var stack_node = _game.get("stack")
+
+	# BACKING OUT COSTS NOTHING. FFTCG pays every cost together: the sacrifice is only PICKED during activation, so
+	# cancelling before Confirm must leave every Backup where it was.
 	_field.call("begin_skill_activation", mystic, 0)
 	for _i in range(6):
+		await get_tree().process_frame
+	_expect(_field.get_back_cards_for("player").size() == backups_before,
+		"picking the sacrifice does not pay it yet")
+	stack_node.call("_clear_skill_proxy")
+	await get_tree().process_frame
+	_expect(_field.get_back_cards_for("player").size() == backups_before
+		and _game.get("player").graveyard.graveyard_cards.is_empty(),
+		"cancelling the activation loses nothing")
+
+	# CONFIRMING commits every cost at once. (A real cancel goes through the UI, which also restores free play.)
+	GlobalVariables.refresh_mode()
+	_game.set("priority_holder", 1)
+	_expect(_field.can_activate_now(mystic), "after the cancel the ability can be activated again")
+	_field.call("begin_skill_activation", mystic, 0)
+	for _i in range(6):
+		await get_tree().process_frame
+	stack_node.call("confirm_skill_without_target_then_priority")
+	for _i in range(3):
 		await get_tree().process_frame
 	var backups_after: int = _field.get_back_cards_for("player").size()
 	var grave: int = _game.get("player").graveyard.graveyard_cards.size()

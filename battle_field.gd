@@ -314,6 +314,9 @@ func add_card_to_mana_conversion(card:Card, element: String = ""):
 		return
 	if selected_cards_for_mana_conversion.has(card):
 		return
+	# Already picked to pay another cost of this activation (a sacrificed Backup cannot also produce its mana).
+	if stack != null and stack.is_reserved_for_cost(card):
+		return
 	var chosen: String = element
 	if chosen.is_empty():
 		chosen = card.mana_element()
@@ -933,8 +936,8 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		if picked == null:
 			stack.call("_clear_skill_proxy")
 			return
-		LOG.info("Sacrifice", "%s -> Break Zone" % picked.card_name)
-		game.put_card_into_graveyard(picked)
+		# PICKED, NOT PAID: it leaves at commit together with every other cost (Stack.pending_cost_sacrifices).
+		stack.pending_cost_sacrifices.append(picked)
 	# DISCARD AS A COST (Ninja 78). The owner picks which cards leave their hand, through the same agent seam the
 	# discard effects use — so the human gets the hand picker and the AI chooses for itself. A refused pick aborts the
 	# activation and clears the proxy, which is what keeps "cancel" from costing a card.
@@ -942,16 +945,18 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	if discard_count > 0:
 		var owner_hand: Hand = game.hand_for(owner_id)
 		for _i in range(discard_count):
-			if owner_hand == null or owner_hand.cards.is_empty():
+			# Only cards not already picked for this cost can be picked again.
+			var choosable: Array = owner_hand.cards.filter(func(h): return not stack.is_reserved_for_cost(h)) \
+				if owner_hand != null else []
+			if choosable.is_empty():
 				stack.call("_clear_skill_proxy")
 				return
-			var discarded: Card = await game.agent_for(owner_id).choose_discard(
-				owner_id, owner_hand.cards.duplicate())
+			var discarded: Card = await game.agent_for(owner_id).choose_discard(owner_id, choosable)
 			if discarded == null:
 				stack.call("_clear_skill_proxy")
 				return
-			LOG.info("Discard", "%s (cost)" % discarded.card_name)
-			owner_hand.discard_card(discarded)
+			# PICKED, NOT PAID: discarded at commit together with every other cost (Stack.pending_cost_discards).
+			stack.pending_cost_discards.append(discarded)
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
 		# source, then the regular mana payment step follows.
