@@ -830,6 +830,8 @@ func _warm_up_effect_shaders() -> void:
 		quad.queue_free()
 
 func start_match(config: Dictionary) -> void:
+	if not desync_detected.is_connected(_halt_out_of_sync):
+		desync_detected.connect(_halt_out_of_sync)
 	# ONLINE PERSPECTIVE: which seat this machine is. Must be set before any card is created (uids use it).
 	local_seat = int(config.get("local_seat", 1))
 	# Who goes first, in THIS machine's terms (1 = the local player).
@@ -1802,6 +1804,22 @@ func _end_match(winner_id: int) -> void:
 	# Let the result register, then hand control back to the menu.
 	_return_to_menu_after_delay()
 
+## The two machines no longer agree on the game, so nothing either of them does from here can be trusted: the match
+## STOPS. It is over (no phase advances, no priority is asked), with nobody declared the winner, and the board stays as
+## it is on screen so the player can see where it went wrong. Not sent back to the menu automatically, so the
+## snapshots can still be compared.
+var out_of_sync: bool = false
+
+func _halt_out_of_sync(turn: int, local_hash: String, remote_hash: String) -> void:
+	if match_over:
+		return
+	out_of_sync = true
+	match_over = true
+	push_error("[Desync] match stopped at turn %d (%s vs %s)" % [turn, local_hash, remote_hash])
+	if has_node("PhaseText"):
+		$PhaseText.text = "OUT OF SYNC"
+	assistant.hide_buttons()
+
 func _return_to_menu_after_delay() -> void:
 	await get_tree().create_timer(2.5).timeout
 	MatchSetup.go_to_menu()
@@ -2007,6 +2025,8 @@ func priority_round_only() -> void:
 	while true:
 		priority_holder = holder
 		var acted: bool = await agent_for(holder).take_priority(holder)
+		if match_over:
+			break   # a win, or the machines fell out of sync: nobody acts any more
 		if acted:
 			passed_since_action = false
 			holder = 3 - holder
@@ -2242,6 +2262,8 @@ func priority() -> void:
 		LOG.info("Priority", "asking P%s | stack=%d | mode=%s" % [
 			holder, stack.stack_length(), GlobalVariables.get_player_mode()])
 		var acted: bool = await agent_for(holder).take_priority(holder)
+		if match_over:
+			break   # a win, or the machines fell out of sync: nobody acts any more
 		if acted:
 			passed_since_action = false
 			holder = 3 - holder

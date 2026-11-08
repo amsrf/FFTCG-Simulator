@@ -20,6 +20,10 @@ func receive(json: String) -> void:
 	message_arrived.emit()
 
 func _next(kind: String) -> Dictionary:
+	# DIVERGED IS FINAL. The match has been stopped (Game._halt_out_of_sync); every later question gets the empty
+	# answer at once instead of consuming messages that belong to a different game.
+	if diverged:
+		return {}
 	var message: Dictionary
 	if not _replay.is_empty():
 		message = _replay.pop_front()

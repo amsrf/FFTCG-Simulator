@@ -85,6 +85,7 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 			break
 	_driver_stop = true
 	var out := {"hashes": game.turn_hashes.duplicate(), "turn": game.turn_number, "desyncs": desyncs,
+		"out_of_sync": game.out_of_sync, "match_over": game.match_over,
 		"snapshot": game.snapshot_by_seat()}
 	print("[Lockstep] %s: turn %d after %.1fs" % [label, game.turn_number, (Time.get_ticks_msec() - start) / 1000.0])
 	game.queue_free()
@@ -316,9 +317,12 @@ func _ready() -> void:
 				hashes_differ = true
 		_expect((remote[0] != null and remote[0].diverged) or not b["desyncs"].is_empty() or hashes_differ,
 			"a dropped message is detected (diverged=%s, hashes differ=%s)" % [str(remote[0].diverged if remote[0] else null), str(hashes_differ)])
+		_expect(b["out_of_sync"] and b["match_over"], "machine B stopped the match as out of sync")
+		_expect(int(b["turn"]) <= TURNS, "and played no further (stopped at turn %d)" % int(b["turn"]))
 	else:
 		_expect(remote[0] != null and not remote[0].diverged, "every replayed decision was the kind the game asked for")
 		_expect(b["desyncs"].is_empty(), "no desync reported on machine B %s" % str(b["desyncs"]))
+		_expect(not b["out_of_sync"], "machine B's match was not stopped")
 		var h_a: Dictionary = a["hashes"]
 		var h_b: Dictionary = b["hashes"]
 		var same := 0

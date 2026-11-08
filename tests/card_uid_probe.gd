@@ -66,10 +66,13 @@ func _ready() -> void:
 	if victim != null:
 		victim.tapped = not victim.tapped
 		var other_machine: String = a.state_hash()
+		# Taken BEFORE the comparison: a mismatch stops the match, which is itself part of the state.
+		var snap_other: Dictionary = a.snapshot_by_seat()
 		_expect(other_machine != recorded, "one tapped card changes the hash")
 		_expect(not a.compare_remote_hash(a.turn_number, other_machine) and fired[0],
 			"compare_remote_hash reports the mismatch and emits desync_detected")
-		var report: Array = a.diff_snapshots(snap_before, a.snapshot_by_seat())
+		_expect(a.out_of_sync and a.match_over, "and the match is stopped as out of sync")
+		var report: Array = a.diff_snapshots(snap_before, snap_other)
 		_expect(report.size() == 1 and str(report[0]).begins_with("s1.back"),
 			"the diff names exactly what differs (%s)" % (str(report[0]).get_slice("\n", 0) if not report.is_empty() else "nothing"))
 		victim.tapped = not victim.tapped
