@@ -876,6 +876,13 @@ func start_match(config: Dictionary) -> void:
 			opponent_agent = AIAgent.new()
 		_:
 			opponent_agent = MockAgent.new()
+	# ONLINE / TESTS: a config may wrap the seat agents (record one seat's decisions, or answer them from the network).
+	# Called with the LOCAL id (1 = this machine's player) and the agent that seat would otherwise get.
+	var wrap = config.get("wrap_agent", null)
+	if wrap is Callable:
+		player_agent = wrap.call(1, player_agent)
+		opponent_agent = wrap.call(2, opponent_agent)
+		player_agent.bind(self)
 	opponent_agent.bind(self)
 
 	for id in config.get("player_hand", []):
@@ -945,6 +952,9 @@ func play_card_for(player_id: int, card: Card) -> bool:
 	var agent: Agent = agent_for(player_id)
 	if owner_hand == null or card == null or agent == null:
 		return false
+	# Online play: a recording agent notes WHICH card this play attempt is about (see RecordingAgent).
+	if agent.has_method("note_play"):
+		agent.note_play(card)
 	# charge() emits charge_start and removes the card from hand. A Summon is
 	# parked on the Stack; a Character stays in its hand-side cast stance.
 	# Assistant then opens the payment modal + sets mana_cost from the card. It

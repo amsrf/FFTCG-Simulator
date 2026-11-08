@@ -83,6 +83,8 @@ signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
 signal request_target_confirmation(target_card: Card, allow_cancel: bool)
 signal attacker_changed
 signal blocker_changed
+## A target pick was accepted (in pick order). Online play records picks from this, whoever made them.
+signal target_picked(card: Card)
 signal card_activated_ability(cost:Dictionary)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
 var phase: GlobalVariables.Phase:
@@ -1295,6 +1297,7 @@ func set_target_card(card: Card):
 		targeting_picked[stage_pick_index] = card
 	else:
 		targeting_picked.append(card)
+	target_picked.emit(card)
 	# THIS STAGE IS FULL: either the next stage takes over (Hades: Forward, then Backup) or the session is complete.
 	var stage_full: bool = targeting_picked.size() >= targeting_block_start + targeting_count
 	if stage_full and targeting_block_index + 1 < targeting_blocks.size():
