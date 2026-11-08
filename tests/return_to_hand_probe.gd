@@ -40,12 +40,15 @@ func _ready() -> void:
 	_expect(card.current_zone == Card.Zone.FIELD, "the card starts on the FIELD")
 
 	var ctx = EFFECT_CONTEXT.new(_game, card, "test")
-	# AWAITED on purpose: this is what stops the effect resolving while the card is between zones.
+	# RULES FIRST: the move is complete the moment return_to_hand() returns; only the flight is queued.
 	await ctx.return_to_hand([card])
+	_expect(hand.cards.has(card), "the card joined the hand's card list at once (%d -> %d)" % [before, hand.cards.size()])
+	_expect(card.current_zone == Card.Zone.HAND, "its zone is HAND at once (got %d)" % card.current_zone)
+	_expect(not card.is_on_field(), "and the rules no longer see it on the field")
 
-	_expect(hand.cards.has(card), "the card joined the hand's card list (%d -> %d)" % [before, hand.cards.size()])
-	_expect(card.get_parent() == hand, "and it is now a child of the Hand")
-	_expect(card.current_zone == Card.Zone.HAND, "its zone is HAND (got %d)" % card.current_zone)
+	# THEN THE SCREEN: once the presentation queue has played, it is drawn in the hand.
+	await Vfx.idle()
+	_expect(card.get_parent() == hand, "after the flight it is a child of the Hand")
 	var expected: float = hand.hand_scale
 	_expect(absf(card.scale.x - expected) < 0.05,
 		"it is at hand scale (%.3f vs %.3f)" % [card.scale.x, expected])

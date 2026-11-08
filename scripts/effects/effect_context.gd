@@ -615,12 +615,11 @@ func return_from_break_zone(tapped: bool = true) -> void:
 func return_to_hand(cards: Array, source_kind: String = "") -> void:
 	if game == null:
 		return
-	# START EVERY RETURN FIRST, then wait. Awaiting each tween inside the loop serialises the cards, which is exactly
-	# what a mass return must not do.
-	var tweens: Array = []
 	var kind: String = source_kind
 	if kind.is_empty():
 		kind = "Summon" if source != null and source.type == Card.SUMMON else "Ability"
+	# RULES, at once: every returned card leaves the field and joins its owner's hand now.
+	var flights: Array = []
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
@@ -629,12 +628,19 @@ func return_to_hand(cards: Array, source_kind: String = "") -> void:
 		var owner_hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
 		if owner_hand == null:
 			continue
-		var tween = game.move_card_from_field(card, Card.Zone.HAND, "RETURN",
-			func(c): return owner_hand.begin_return_card(c))
-		if tween is Tween:
-			tweens.append(tween)
-	for tween in tweens:
-		await PRESENTATION.wait(tween)
+		game.move_card_from_field(card, Card.Zone.HAND, "RETURN",
+			func(c): owner_hand.take_returned_card(c))
+		flights.append([owner_hand, card])
+	# PRESENTATION, queued as ONE entry: every card flies at once, so a mass return is one gesture, not a queue.
+	if flights.is_empty():
+		return
+	Vfx.present(func() -> void:
+		var tweens: Array = []
+		for f in flights:
+			tweens.append(f[0].fly_returned_card(f[1]))
+		for t in tweens:
+			if t is Tween and t.is_valid() and t.is_running():
+				await t.finished)
 
 
 func _sides(owner: String) -> Array:

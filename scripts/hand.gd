@@ -95,25 +95,29 @@ var _mana_discard_in_progress: bool = false
 ## essentially in place.
 @export_range(0.5, 1.0, 0.01) var return_land_fraction: float = 0.85
 
-## Start bringing a card from the field into THIS hand, and RETURN THE TWEEN so it can be joined.
-##
-## One chained tween, not two: a joinable animation has to be a single awaitable, or a caller doing Promise.all on
-## five cards would have to track five pairs. The landing callback is a step INSIDE the chain, which is why the
-## slide is split at return_land_fraction rather than scheduled by a second tween.
-##
-## MULTI-TARGET: the caller starts every card's tween before awaiting any of them (see EffectContext.return_to_hand),
-## so they fly at the same time instead of one after another.
-func begin_return_card(card: Card) -> Tween:
+## RETURN TO HAND, RULES half: the card is in this hand from this moment (rules, AI and effects see it at once).
+## The flight is fly_returned_card(), run later by the presentation queue.
+func take_returned_card(card: Card) -> void:
+	if card == null or not is_instance_valid(card) or cards.has(card):
+		return
+	cards.append(card)
+	card.index = cards.size() - 1
+	card.current_zone = Card.Zone.HAND
+	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
+		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
+
+## RETURN TO HAND, PRESENTATION half: grow toward the camera over the hand, then settle into the slot the card already
+## owns. Starts the tween and returns it, so a mass return can fly every card at once.
+func fly_returned_card(card: Card) -> Tween:
 	if card == null or not is_instance_valid(card):
 		return null
-
-	var index: int = cards.size()
-	cards.append(card)
+	var index: int = cards.find(card)
+	if index < 0:
+		return null
+	# Make room: the rest of the fan shifts to its final layout while this card is still on its way.
 	update_card_positions(index)
 	var destination: Vector3 = calculate_card_position(index)
-	cards.erase(card)
 
-	# Keep the card's world pose across the reparent, or it teleports to the hand's origin on the first frame.
 	var trans: Transform3D = card.global_transform
 	if card.get_parent() != null:
 		card.reparent(self, false)
@@ -121,8 +125,6 @@ func begin_return_card(card: Card) -> Tween:
 		add_child(card)
 	card.global_transform = trans
 
-	# Staging point: the slot, lifted toward the camera. Phase 2 is then a visible slide into the row rather than a
-	# scale change that happens to translate.
 	var toward_camera: Vector3 = Vector3.UP
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam != null:
@@ -131,13 +133,10 @@ func begin_return_card(card: Card) -> Tween:
 
 	var t: Tween = create_tween()
 	t.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-	# PHASE 1 — grow to hand size and rise into the hand's plane.
 	t.tween_property(card, "position", stage, return_grow_seconds)
 	t.parallel().tween_property(card, "scale", Vector3.ONE * hand_scale, return_grow_seconds)
 	t.parallel().tween_property(card, "rotation", Vector3.ZERO, return_grow_seconds)
 
-	# PHASE 2 — slide in, joining the hand at return_land_fraction of the way in and carrying on to the slot.
 	var land_fraction: float = clampf(return_land_fraction, 0.5, 1.0)
 	var before: float = return_move_seconds * land_fraction
 	var after: float = maxf(0.01, return_move_seconds * (1.0 - land_fraction))
@@ -147,14 +146,10 @@ func begin_return_card(card: Card) -> Tween:
 	t.tween_property(card, "position", destination, after)
 	return t
 
-## The card is home: it becomes a real hand card, so dragging, hovering and the fan all apply to it.
+## Visual landing only: the card was already in `cards` (take_returned_card).
 func _land_returned(card: Card) -> void:
-	if card == null or not is_instance_valid(card) or cards.has(card):
+	if card == null or not is_instance_valid(card) or not cards.has(card):
 		return
-	cards.append(card)
-	card.index = cards.size() - 1
-	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
-		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
 	card.enter_zone(Card.Zone.HAND)
 	update_card_positions()
 
