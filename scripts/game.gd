@@ -886,6 +886,10 @@ func start_match(config: Dictionary) -> void:
 		opponent_agent = wrap.call(2, opponent_agent)
 		player_agent.bind(self)
 	opponent_agent.bind(self)
+	# Online play: the network session wants this game (turn hashes, stopping the match on a disconnect).
+	var started = config.get("on_match_started", null)
+	if started is Callable:
+		started.call(self)
 
 	for id in config.get("player_hand", []):
 		hand.add_card(create_card(int(id), 'player'))
@@ -1814,10 +1818,17 @@ func _halt_out_of_sync(turn: int, local_hash: String, remote_hash: String) -> vo
 	if match_over:
 		return
 	out_of_sync = true
-	match_over = true
 	push_error("[Desync] match stopped at turn %d (%s vs %s)" % [turn, local_hash, remote_hash])
+	halt_match("OUT OF SYNC")
+
+## Stop the match where it stands, with no winner (out of sync, the opponent left). The board stays on screen.
+func halt_match(message: String) -> void:
+	if match_over:
+		return
+	match_over = true
+	LOG.info("Turn", "Match stopped: %s" % message)
 	if has_node("PhaseText"):
-		$PhaseText.text = "OUT OF SYNC"
+		$PhaseText.text = message
 	assistant.hide_buttons()
 
 func _return_to_menu_after_delay() -> void:

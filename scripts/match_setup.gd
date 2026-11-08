@@ -117,6 +117,7 @@ func start_match(preset: String, overrides: Dictionary = {}) -> void:
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 func go_to_menu() -> void:
+	close_online()
 	if is_instance_valid(_demo_navigation):
 		go_to_demo_menu()
 		return
@@ -145,6 +146,72 @@ func resolve_config() -> Dictionary:
 	if config.is_empty():
 		return _debug()
 	return config
+
+# --- online play -----------------------------------------------------------
+
+const NET_SESSION := preload("res://scripts/net/net_session.gd")
+## The open connection to the other player, if any. A child of this autoload, so it survives the scene change into
+## the match.
+var net: Node = null
+
+## The deck this machine brings online: the custom deck from the Deck Editor, else the standard 1-50 list.
+func online_deck() -> Array:
+	var ids: Array = load_deck_ids(custom_deck_name)
+	return ids if not ids.is_empty() else range(1, 51)
+
+## A fresh session; any previous one is closed. The caller connects its signals, then calls host() or join().
+func new_online_session() -> Node:
+	close_online()
+	net = NET_SESSION.new()
+	add_child(net)
+	net.match_ready.connect(func(cfg: Dictionary):
+		config = cfg
+		get_tree().change_scene_to_file(GAME_SCENE))
+	return net
+
+func close_online() -> void:
+	if net != null and is_instance_valid(net):
+		net.close()
+		net.queue_free()
+	net = null
+
+## THE SAME MATCH ON BOTH MACHINES, each from its own side. Seat 1's deck is shuffled with `seed`, seat 2's with
+## seed + 1, whichever machine builds it; then "player" is this machine's seat and "opponent" the other one.
+func online_config(seed_value: int, local_seat: int, starting_seat: int, seat1_deck: Array, seat2_deck: Array,
+		fields: Dictionary = {}) -> Dictionary:
+	var by_seat: Dictionary = {1: _shuffled(seat1_deck, seed_value), 2: _shuffled(seat2_deck, seed_value + 1)}
+	var mine: Array = by_seat[local_seat]
+	var theirs: Array = by_seat[3 - local_seat]
+	var opening_mine: int = mini(5, mine.size())
+	var opening_theirs: int = mini(5, theirs.size())
+	return {
+		"preset": "online",
+		"player_type": "local",
+		"opponent_type": "mock",   # replaced by the session's RemoteAgent
+		"local_seat": local_seat,
+		"starting_player": 1 if starting_seat == local_seat else 2,
+		"seed": seed_value,
+		"shuffle": true,
+		"player_hand": mine.slice(0, opening_mine),
+		"opponent_hand": theirs.slice(0, opening_theirs),
+		"player_deck": mine.slice(opening_mine),
+		"opponent_deck": theirs.slice(opening_theirs),
+		"player_field": _field_entries(fields.get(str(local_seat), [])),
+		"opponent_field": _field_entries(fields.get(str(3 - local_seat), [])),
+		"first_phase": "first_main",
+	}
+
+## Field entries that crossed the network: JSON turns every number into a float.
+func _field_entries(entries) -> Array:
+	var out: Array = []
+	if entries is Array:
+		for entry in entries:
+			if entry is Dictionary:
+				var copy: Dictionary = entry.duplicate()
+				copy["id"] = int(copy.get("id", 0))
+				copy["tapped"] = bool(copy.get("tapped", false))
+				out.append(copy)
+	return out
 
 # --- custom decks ----------------------------------------------------------
 
