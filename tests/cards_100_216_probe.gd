@@ -269,7 +269,11 @@ func _ready() -> void:
 	_expect(victim.status_effects.has("raines_mark"), "and marks it")
 	_game.call("break_card", victim)
 	await _drain()
-	await get_tree().process_frame
+	# The discard is the opponent's DECISION, and every decision waits for the screen to catch up (Agent._settle ->
+	# Vfx.idle): the break is still animating, so let the queue play before looking at the hand.
+	await Vfx.idle()
+	for _i in range(3):
+		await get_tree().process_frame
 	print("[Range] Cid Raines: opponent hand %d -> %d" % [hand_before, _game.get("opponent").hand.cards.size()])
 	_expect(_game.get("opponent").hand.cards.size() == hand_before - 1,
 		"and when that Forward hits the Break Zone the opponent discards 1")
