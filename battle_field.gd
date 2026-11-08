@@ -89,6 +89,8 @@ signal target_picked(card: Card)
 ## player's sessions from the remote seat's.
 signal targeting_started(source: Card)
 signal card_activated_ability(cost:Dictionary)
+## The local human started activating `card`'s ability (online play records it as a draft until it commits).
+signal skill_activation_begun(card: Card)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
 var phase: GlobalVariables.Phase:
 	get:
@@ -757,14 +759,25 @@ func ability_x_max(card: Card) -> int:
 ## begin_skill_activation() uses this as its precondition AND the green availability ring is
 ## driven from it, so the cue and the action can never disagree. Any condition added here
 ## therefore tightens both at once.
-func can_activate_now(card: Card) -> bool:
-	if card == null or card.controller != Card.PLAYER:
+## `by_agent`: the activation is decided by the card's owner's AGENT (a replayed online opponent, a probe), not clicked
+## here. Then the rules are checked for that owner's seat — they hold priority, their hand pays — and the local UI
+## mode is irrelevant. A click keeps the local checks: your card, your priority, a free moment on screen.
+func can_activate_now(card: Card, by_agent: bool = false) -> bool:
+	if card == null or game == null:
 		return false
-	if not has_priority():
-		return false
-	var mode = GlobalVariables.get_player_mode()
-	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-		return false
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
+	if by_agent:
+		if bool(game.get("match_over")) or int(game.get("priority_holder")) != owner_id:
+			return false
+	else:
+		if card.controller != Card.PLAYER:
+			return false
+		if not has_priority():
+			return false
+		var mode = GlobalVariables.get_player_mode()
+		if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			return false
+	var owner_hand: Hand = game.hand_for(owner_id)
 	# A TAPPED CARD CAN STILL USE A NON-TAP ABILITY. The tap rule belongs to the cost, not to the card: Gilgamesh's
 	# 《雷》《雷》 power pump has no dull cost, so it must stay available after he has attacked. The same reasoning
 	# applies to summoning sickness: can_tap() is asked per ability, below, only when the ability asks to tap.
@@ -798,13 +811,13 @@ func can_activate_now(card: Card) -> bool:
 		# An 《X》 ability is only useful if there is a Character in hand it could play.
 		if bool(def.get("x_cost", false)) and ability_x_max(card) < 0:
 			continue
-		if bool(def.get("s_cost", false)) and not hand.has_card_matching_criteria({"is_named": card.card_name}):
+		if bool(def.get("s_cost", false)) and not owner_hand.has_card_matching_criteria({"is_named": card.card_name}):
 			continue
 		# A sacrifice cost with nothing to sacrifice is not an available ability either.
 		if def.has("sacrifice") and _sacrifice_candidates(def["sacrifice"], card).is_empty():
 			continue
 		# Same for a discard cost with too few cards in hand.
-		if int(def.get("discard", 0)) > 0 and (hand == null or hand.cards.size() < int(def.get("discard", 0))):
+		if int(def.get("discard", 0)) > 0 and (owner_hand == null or owner_hand.cards.size() < int(def.get("discard", 0))):
 			continue
 		# An ability that chooses a target is only worth offering when a legal target exists. This
 		# covers FIELD targets (Black Belt needs a Forward with "blocking") as well as STACK targets.
@@ -855,12 +868,18 @@ func refresh_available_effects() -> void:
 
 ## Activate an ability. `skill_index < 0` means ASK: one ability activates directly, two or more open the picker
 ## modal and wait for the choice. Explicit indexes stay supported (probes, and any future "activate ability N").
-func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
-	if not can_activate_now(card):
+## Set per activation: its remaining steps are answered by the owner's agent, not by this machine's UI.
+var _activation_by_agent: bool = false
+
+func begin_skill_activation(card: Card, skill_index: int = -1, by_agent: bool = false) -> void:
+	if not can_activate_now(card, by_agent):
 		return
 	var skills: Array = card.activation_skills()
 	if skills.is_empty():
 		return
+	var owner_hand: Hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
+	if not by_agent:
+		skill_activation_begun.emit(card)
 	if skill_index < 0:
 		skill_index = 0
 		if skills.size() > 1:
@@ -875,12 +894,12 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 					and (not def.has("only_if_damage_received")
 						or _damage_received_by(card) >= int(def["only_if_damage_received"]))
 				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
-					or hand.has_card_matching_criteria({"is_named": card.card_name})) \
+					or owner_hand.has_card_matching_criteria({"is_named": card.card_name})) \
 					and (not bool(def.get("x_cost", false)) or ability_x_max(card) >= 0)
 				if can_pay and def.has("sacrifice"):
 					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
 				if can_pay and int(def.get("discard", 0)) > 0:
-					can_pay = hand != null and hand.cards.size() >= int(def.get("discard", 0))
+					can_pay = owner_hand != null and owner_hand.cards.size() >= int(def.get("discard", 0))
 				usable.append(can_pay)
 			var chooser_id: int = 1 if card.controller == Card.PLAYER else 2
 			var agent: Agent = game.agent_for(chooser_id)
@@ -888,7 +907,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 				return
 			skill_index = await agent.choose_skill(chooser_id, card, skills, usable)
 			# The picker is awaited, so anything could have happened behind it. Re-check before spending anything.
-			if not can_activate_now(card):
+			if not can_activate_now(card, by_agent):
 				return
 		if skill_index < 0:
 			return
@@ -948,7 +967,6 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	# activation and clears the proxy, which is what keeps "cancel" from costing a card.
 	var discard_count: int = int(def.get("discard", 0))
 	if discard_count > 0:
-		var owner_hand: Hand = game.hand_for(owner_id)
 		for _i in range(discard_count):
 			# Only cards not already picked for this cost can be picked again.
 			var choosable: Array = owner_hand.cards.filter(func(h): return not stack.is_reserved_for_cost(h)) \
@@ -962,11 +980,26 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 				return
 			# PICKED, NOT PAID: discarded at commit together with every other cost (Stack.pending_cost_discards).
 			stack.pending_cost_discards.append(discarded)
+	# WHO ANSWERS THE COSTS. A click (or a probe standing in for one) goes through this machine's UI, which only ever
+	# shows the local player's hand; an activation decided by the owner's agent (a replayed online opponent) is
+	# answered by that agent instead.
+	var owner_agent: Agent = game.agent_for(owner_id)
+	var by_ui: bool = not by_agent and card.controller == Card.PLAYER
+	_activation_by_agent = not by_ui
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
 		# source, then the regular mana payment step follows.
-		stack.begin_s_cost_selection(card, skill_index)
-		return
+		if by_ui:
+			stack.begin_s_cost_selection(card, skill_index)
+			return
+		# ANY OTHER OWNER picks the same-named card through its agent, as a discard (it is one, paid at commit).
+		var named: Array = owner_hand.cards.filter(func(h): return h.card_name == card.card_name \
+			and not stack.is_reserved_for_cost(h))
+		var s_card: Card = await owner_agent.choose_discard(owner_id, named) if not named.is_empty() else null
+		if s_card == null:
+			stack.call("_clear_skill_proxy")
+			return
+		stack.s_cost_selected_card = s_card
 	var cost: Dictionary = def.get("cost", {})
 	if cost_is_free(cost):
 		# NOTHING TO PAY, SO NO PAYMENT STAGE — and no Confirm to press on an empty screen before anything can happen.
@@ -974,6 +1007,14 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		continue_skill_activation_after_mana(stack.skill_activation_proxy)
 		return
 	card_activated_ability.emit(cost)
+	if not by_ui:
+		# Same as Game.play_card_for(): the owner's agent pays, and the modal it opened is never shown here.
+		assistant.hide_buttons()
+		var paid: bool = await owner_agent.pay_cost(owner_id, cost)
+		if paid:
+			assistant.on_charge_complete()
+		else:
+			assistant.on_charge_cancelled()
 
 ## A mana cost with nothing in it — absent, empty, or all zeroes. Those cost the player nothing, so showing them a payment
 ## modal asks them to confirm that they intend to pay nothing.
@@ -1002,6 +1043,10 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 		# is unchanged.
 		request_target(choose_target, _proxy, true, "Ability")
 	else:
+		if _activation_by_agent:
+			# Nothing left to decide: only the UI gets a Confirm to press.
+			stack.confirm_skill_without_target_then_priority()
+			return
 		GlobalVariables.refresh_mode()
 		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
 	
@@ -1191,7 +1236,7 @@ func _begin_target_block(index: int) -> void:
 	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
 	var owner_id: int = 1 if source_card != null and source_card.controller == Card.PLAYER else 2
 	var agent: Agent = game.agent_for(owner_id)
-	if agent != null and not (agent is LocalAgent):
+	if agent != null and not agent.is_human():
 		agent.choose_target(owner_id, source_card, targeting_criteria_now)
 
 ## A fresh arc, aimed at the pointer from `from`.

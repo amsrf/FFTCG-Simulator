@@ -24,6 +24,11 @@ func bind(game_root: Node) -> void:
 ## matter which implementation is plugged in (local, AI or remote).
 ## It is also the ONE place every decision waits for the presentation queue to drain (Vfx.idle()), so a player
 ## never decides about something still animating.
+## True only for the agent that decides through THIS machine's UI (LocalAgent, also when wrapped for recording).
+## The rules ask this, not `is LocalAgent`, so a RecordingAgent around the human still counts as the human.
+func is_human() -> bool:
+	return false
+
 func _settle() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree != null:

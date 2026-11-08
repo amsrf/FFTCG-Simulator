@@ -1,5 +1,8 @@
 extends Agent
 class_name LocalAgent
+
+func is_human() -> bool:
+	return true
 ## Human playing at this machine: every decision is answered through the
 ## existing UI (pass button, card clicks, modal buttons).
 

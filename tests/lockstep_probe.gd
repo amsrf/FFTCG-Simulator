@@ -21,6 +21,8 @@ var TAMPER := false
 var HUMAN := false
 var _human_casts := 0
 var _human_cancels := 0
+var _human_activations := 0
+var _human_activation_cancels := 0
 var _checks := 0
 var _fails := 0
 
@@ -107,6 +109,11 @@ func _drive_human(game: Node, holder: Array) -> void:
 				if rec.window_serial == last_window:
 					continue
 				last_window = rec.window_serial
+				if _human_activation_cancels == 0 and await _human_activate(game, true) == "cancelled":
+					_human_activation_cancels += 1
+				if _human_activations < 3 and await _human_activate(game, false) == "activated":
+					_human_activations += 1
+					continue
 				if _human_cancels == 0 and await _human_cast(game, true) == "cancelled":
 					_human_cancels += 1
 				if await _human_cast(game, false) == "cast":
@@ -123,6 +130,91 @@ func _drive_human(game: Node, holder: Array) -> void:
 				if not announced.has(rec.pending_kind):
 					announced[rec.pending_kind] = true
 					print("[Lockstep] human driver has no answer for '%s'" % rec.pending_kind)
+
+## Activate one of the human's field abilities the way the UI does: the click, then the S card, the payment, and
+## the targets or the Confirm. `cancel` backs out at the last step instead, which must send nothing.
+func _human_activate(game: Node, cancel: bool) -> String:
+	var hand = game.hand_for(1)
+	var field = game.field
+	var stack = game.stack
+	var assistant = game.assistant
+	for card in field.get_all_cards():
+		if card.controller != Card.PLAYER or not field.can_activate_now(card):
+			continue
+		var skills: Array = card.activation_skills()
+		if skills.size() != 1:
+			continue
+		var def: Dictionary = skills[0]
+		if bool(def.get("x_cost", false)) or not Dictionary(def.get("sacrifice", {})).is_empty() \
+				or int(def.get("discard", 0)) > 0:
+			continue
+		field.try_activate_from_field(card)
+		await get_tree().process_frame
+		if _driver_stop or not is_instance_valid(game):
+			return "none"
+		if stack.skill_activation_proxy == null:
+			continue
+		if stack.s_cost_active:
+			var named = hand.cards.filter(func(h): return h.card_name == card.card_name)
+			if named.is_empty() or cancel:
+				assistant.choose_card_finished.emit(false)
+				await get_tree().process_frame
+				if cancel:
+					return "cancelled"
+				continue
+			hand.selected_card_for_effect = named[0]
+			assistant.choose_card_finished.emit(true)
+			await get_tree().process_frame
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
+			for backup in field.get_back_cards_for(Card.PLAYER):
+				if assistant.can_pay_cost():
+					break
+				if not backup.tapped and backup != card:
+					field.add_card_to_mana_conversion(backup, backup.mana_element())
+			for other in hand.cards.duplicate():
+				if assistant.can_pay_cost():
+					break
+				if other != stack.s_cost_selected_card:
+					hand.add_card_to_mana_conversion(other)
+			if cancel or not assistant.can_pay_cost():
+				assistant.on_charge_cancelled()
+				await get_tree().process_frame
+				if cancel:
+					return "cancelled"
+				continue
+			assistant.on_charge_complete()
+			await get_tree().process_frame
+		if stack.skill_activation_proxy == null:
+			continue
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			var target = null
+			for c in field.get_all_cards():
+				if c.is_valid_target:
+					target = c
+					break
+			if target == null or cancel:
+				assistant.on_target_cancel()
+				await get_tree().process_frame
+				if cancel:
+					return "cancelled"
+				continue
+			field.set_target_card(target)
+			await get_tree().process_frame
+			if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+				assistant.on_target_complete()
+				await get_tree().process_frame
+		elif cancel:
+			stack.call("_clear_skill_proxy")
+			GlobalVariables.refresh_mode()
+			assistant.show_pass_priority_button()
+			return "cancelled"
+		else:
+			stack.confirm_skill_without_target_then_priority()
+		await get_tree().process_frame
+		if not stack.skill_mana_deferred_until_target_confirm:
+			print("[Lockstep] human activated %s" % card.card_name)
+			return "activated"
+	return "none"
 
 func _human_cast(game: Node, cancel: bool) -> String:
 	var hand = game.hand_for(1)
@@ -186,9 +278,17 @@ func _ready() -> void:
 			plays += 1
 	print("[Lockstep] seat 1 sent %d messages (%d priority windows with a play)" % [messages.size(), plays])
 	if HUMAN:
-		print("[Lockstep] scripted human: %d casts, %d cancelled drafts" % [_human_casts, _human_cancels])
+		print("[Lockstep] scripted human: %d casts, %d cancelled drafts, %d abilities, %d cancelled abilities" % [
+			_human_casts, _human_cancels, _human_activations, _human_activation_cancels])
 		_expect(_human_casts > 0 and _human_cancels > 0, "the human both cast and cancelled (%d / %d)" % [_human_casts, _human_cancels])
-		_expect(plays == _human_casts, "only committed casts were sent (%d sent, %d cast, %d cancelled)" % [plays, _human_casts, _human_cancels])
+		_expect(_human_activations > 0 and _human_activation_cancels > 0,
+			"the human both activated and cancelled abilities (%d / %d)" % [_human_activations, _human_activation_cancels])
+		var acts := 0
+		for m in messages:
+			acts += m.count("\"activate\"")
+		_expect(acts == _human_activations, "only committed abilities were sent (%d sent, %d activated)" % [acts, _human_activations])
+		_expect(plays == _human_casts + _human_activations, "only committed plays were sent (%d sent, %d cast + %d activated)" % [
+			plays, _human_casts, _human_activations])
 	_expect(messages.size() > 5, "seat 1 sent decisions to replay (%d)" % messages.size())
 
 	if TAMPER and messages.size() > 3:

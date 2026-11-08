@@ -62,6 +62,10 @@ func is_reserved_for_cost(card: Card) -> bool:
 
 signal execute_card_effect(card:Card)
 signal request_priority()
+## An ability activation paid everything and is on the stack (online play sends the draft now).
+signal skill_activation_committed(proxy: Card)
+## The human picked the same-named card for an S ability's cost.
+signal s_cost_chosen(card: Card)
 ## Emitted by the game when a stack effect has fully finished resolving.
 signal resolution_complete
 
@@ -546,6 +550,7 @@ func _on_choose_card_finished(play: bool) -> void:
 		return
 
 	s_cost_selected_card = chosen
+	s_cost_chosen.emit(chosen)
 	# S cost chosen. The mana stage follows ONLY if there is mana to pay: when the cost is empty the discarded card WAS the
 	# whole payment, so asking for a Confirm on an empty screen is a button that exists only to be pressed.
 	var def: Dictionary = s_cost_source.activation_skill(s_cost_skill_index)
@@ -565,7 +570,8 @@ func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -
 	var proxy := create_skill_proxy(source, skill_index, definition, x_value)
 	skill_activation_proxy = proxy
 	skill_mana_deferred_until_target_confirm = true
-	game.note_action_taken()
+	# NOT an action yet: the priority window stays open while costs and targets are chosen, and a cancel leaves it as
+	# if nothing happened. The action is the commit (commit_skill_activation_costs_if_pending).
 	return true
 
 func create_skill_proxy(source: Card, skill_index: int, definition: Dictionary, x_value: int = -1) -> Card:
@@ -610,8 +616,12 @@ func _apply_skill_source_tap_from_proxy() -> void:
 func commit_skill_activation_costs_if_pending() -> void:
 	if not skill_mana_deferred_until_target_confirm:
 		return
+	var payer_hand: Hand = hand
+	if skill_activation_proxy != null and skill_activation_proxy.effect_source != null \
+			and is_instance_valid(skill_activation_proxy.effect_source):
+		payer_hand = _owner_hand(skill_activation_proxy.effect_source)
 	field.apply_deferred_skill_mana_payment()
-	hand.apply_deferred_skill_mana_payment()
+	payer_hand.apply_deferred_skill_mana_payment()
 	_apply_skill_source_tap_from_proxy()
 	# RETURN-THIS-CARD-TO-HAND COST (Onion Knight 181). Done at commit, not activation, so backing out of payment
 	# leaves the source on the field. The ability proxy already owns the spec, so the source may leave safely.
@@ -648,7 +658,7 @@ func commit_skill_activation_costs_if_pending() -> void:
 	pending_cost_discards.clear()
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
-		hand.discard_card(s_cost_selected_card)
+		payer_hand.discard_card(s_cost_selected_card)
 		s_cost_selected_card = null
 	# The copied-skill permission is one use. Consume only the exact permission this proxy was created from; a newer
 	# Ronso Rage may have replaced the slot while this activation was waiting.
@@ -657,6 +667,9 @@ func commit_skill_activation_costs_if_pending() -> void:
 		if copied_source != null:
 			copied_source.consume_copied_skill(skill_activation_proxy.copied_skill_token)
 	skill_mana_deferred_until_target_confirm = false
+	# THE ACTIVATION IS THE ACTION: everything is paid and it sits on the stack, so priority moves on.
+	skill_activation_committed.emit(skill_activation_proxy)
+	game.note_action_taken()
 
 func _clear_skill_proxy() -> void:
 	# WAS THIS ACTIVATION STILL PENDING? If so its cost never committed, and the tap that

@@ -962,7 +962,7 @@ func play_card_for(player_id: int, card: Card) -> bool:
 	# non-empty stack) — nothing was charged, so there is nothing to pay.
 	if not owner_hand.charge(card):
 		return false
-	if agent is LocalAgent:
+	if agent.is_human():
 		return true  # the human pays by selecting backups in the modal
 	# The human must never interact with another player's payment modal.
 	assistant.hide_buttons()
@@ -2110,7 +2110,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			# left at the phase default (INSTANT_SPEED_TIME) so the other
 			# player can still hold priority / respond.
 			var attacker_agent: Agent = agent_for(turn_owner)
-			var local_attack: bool = attacker_agent is LocalAgent
+			var local_attack: bool = attacker_agent.is_human()
 			if local_attack:
 				GlobalVariables.push_modal(GlobalVariables.Player_Mode.ATTACKING)
 				assistant.set_declare_attack_button('No Attack')
@@ -2137,7 +2137,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			# for the priority round that follows.
 			var defender_id: int = 3 - turn_owner
 			var defender_agent: Agent = agent_for(defender_id)
-			var local_defence: bool = defender_agent is LocalAgent
+			var local_defence: bool = defender_agent.is_human()
 			# Start from a clean slate: the previous combat's reset_blocker() runs
 			# late, only after the phase it advanced into has finished.
 			field.reset_blocker()

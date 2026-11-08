@@ -5,6 +5,8 @@ extends "res://scripts/agents/agent.gd"
 ##
 ## - A simple decision is {kind, result}, cards as uids.
 ## - A PRIORITY WINDOW is one message: each card the seat tried to play, with the decisions made during that attempt.
+##   An ABILITY activated from the field is an attempt too: {kind: "activate", card, skill, nested}, its nested
+##   decisions in the order the activation asks them (X, sacrifice, discards, S card, payment, targets).
 ## - A PAYMENT is what got selected (Backups with their element, hand cards), so the element picked while paying is
 ##   part of it rather than a separate message. TARGETS are the accepted picks plus confirm / cancel.
 const CODEC := preload("res://scripts/agents/lockstep_codec.gd")
@@ -36,6 +38,9 @@ func _init(wrapped: Agent) -> void:
 	inner = wrapped
 	_human = wrapped is LocalAgent
 
+func is_human() -> bool:
+	return inner.is_human()
+
 func bind(game_root: Node) -> void:
 	super(game_root)
 	inner.bind(game_root)
@@ -56,6 +61,27 @@ func _hook_human() -> void:
 	game.assistant.target_complete.connect(func(): _on_targeting_done(false))
 	game.assistant.target_cancel.connect(func(): _on_targeting_done(true))
 	game.priority_window_ended.connect(_on_window_ended)
+	game.field.skill_activation_begun.connect(_on_activation_begun)
+	game.stack.s_cost_chosen.connect(_on_s_cost_chosen)
+	game.stack.skill_activation_committed.connect(_on_activation_committed)
+
+## An ability activation is a draft like a cast: nothing is sent unless it commits.
+func _on_activation_begun(card: Card) -> void:
+	if card == null or card.controller != Card.PLAYER:
+		return
+	_draft = {"kind": "activate", "card": card, "skill": -1, "nested": []}
+	_payment = {"backups": [], "hand": []}
+
+func _on_s_cost_chosen(card: Card) -> void:
+	if _is_activation():
+		_draft["nested"].append({"kind": "choose_discard", "result": card})
+
+func _on_activation_committed(proxy: Card) -> void:
+	if _is_activation() and proxy != null:
+		_draft["skill"] = proxy.skill_activation_index
+
+func _is_activation() -> bool:
+	return str(_draft.get("kind", "")) == "activate"
 
 func _on_draft_start(card: Card) -> void:
 	if card == null or card.controller != Card.PLAYER:
@@ -83,7 +109,14 @@ func _add_payment_if_missing() -> void:
 	for entry in _draft["nested"]:
 		if entry.get("kind", "") == "pay_cost":
 			return
-	_draft["nested"].push_front({"kind": "pay_cost", "result": {"paid": true, "backups": _payment["backups"], "hand": _payment["hand"]}})
+	var entry := {"kind": "pay_cost", "result": {"paid": true, "backups": _payment["backups"], "hand": _payment["hand"]}}
+	if _is_activation():
+		# An ability pays AFTER its other costs were picked, and only when it has a mana cost (charge_complete): so the
+		# payment goes where it happened, and a free ability never gets one.
+		if game.stack.skill_activation_proxy != null:
+			_draft["nested"].append(entry)
+		return
+	_draft["nested"].push_front(entry)
 
 func _on_draft_dropped() -> void:
 	_draft = {}
@@ -112,7 +145,8 @@ func _on_targeting_done(cancelled: bool) -> void:
 
 func _on_window_ended(acted: bool) -> void:
 	if acted and not _draft.is_empty() and not _window.is_empty():
-		_add_payment_if_missing()
+		if not _is_activation():
+			_add_payment_if_missing()
 		_window["plays"].append(_draft)
 	_draft = {}
 
@@ -126,6 +160,12 @@ func _record(kind: String, result: Variant) -> void:
 	if _opaque_depth > 0:
 		return
 	var entry := {"kind": kind, "result": result}
+	# The human's own decisions while drafting an activation in their priority window belong to that draft. The skill
+	# picker is not recorded: the committed message names the skill.
+	if _human and _is_activation() and not _window.is_empty():
+		if kind != "choose_skill":
+			_draft["nested"].append(entry)
+		return
 	if not _window.is_empty():
 		var plays: Array = _window["plays"]
 		if not plays.is_empty():
@@ -147,7 +187,8 @@ func take_priority(player_id: int) -> bool:
 	# A HUMAN's committed cast: added here as well as in _on_window_ended(), because which of the two runs first depends
 	# on signal connection order. Whichever runs first takes the draft; the other finds it empty.
 	if acted and not _draft.is_empty():
-		_add_payment_if_missing()
+		if not _is_activation():
+			_add_payment_if_missing()
 		_window["plays"].append(_draft)
 		_draft = {}
 	_window["result"] = acted

@@ -51,13 +51,23 @@ func take_priority(player_id: int) -> bool:
 	for attempt in message.get("plays", []):
 		_replay = attempt.get("nested", []).duplicate()
 		var card = CODEC.decode(attempt.get("card"), game)
-		if card is Card:
+		if card is Card and str(attempt.get("kind", "")) == "activate":
+			await _replay_activation(card, int(attempt.get("skill", -1)))
+		elif card is Card:
 			await game.play_card_for(player_id, card)
 		if not _replay.is_empty():
 			push_error("[Lockstep] %d recorded decision(s) were not asked for during a replayed play" % _replay.size())
 			diverged = true
 		_replay = []
 	return bool(message.get("result", false))
+
+## An ability activated from the field: the same activation, decided by this agent from the recorded answers. It
+## returns once the activation has committed (or was abandoned), i.e. when the costs are no longer pending.
+func _replay_activation(card: Card, skill_index: int) -> void:
+	var stack = game.stack
+	await game.field.begin_skill_activation(card, skill_index, true)
+	while stack.skill_mana_deferred_until_target_confirm and not diverged:
+		await game.get_tree().process_frame
 
 func pay_cost(owner_id: int, _cost: Dictionary) -> bool:
 	await _settle()
