@@ -8,12 +8,39 @@ extends Node
 
 const GAME_SCENE := preload("res://game.tscn")
 const PRESENTATION := preload("res://scripts/presentation.gd")
-const SEED := 424242
-const TURNS := 3
+## Defaults; override from the command line to widen coverage, e.g.
+##   godot --headless res://tests/perspective_probe.tscn -- --preset=standard --turns=5 --seed=12345
+## "standard" builds seeded shuffled decks, so different seeds are genuinely different games ("ai" has fixed decks).
+var SEED := 424242
+var TURNS := 3
+var PRESET := "ai"
 const TIME_LIMIT := 120.0
 
+func _read_args() -> void:
+	for arg in OS.get_cmdline_user_args():
+		var a: String = str(arg)
+		if a.begins_with("--seed="):
+			SEED = int(a.get_slice("=", 1))
+		elif a.begins_with("--turns="):
+			TURNS = int(a.get_slice("=", 1))
+		elif a.begins_with("--preset="):
+			PRESET = a.get_slice("=", 1)
+
 func _base() -> Dictionary:
-	return MatchSetup.build_config("ai", {"player_type": "ai", "opponent_type": "ai", "seed": SEED, "starting_player": 1})
+	var cfg: Dictionary = MatchSetup.build_config(PRESET, {"player_type": "ai", "opponent_type": "ai", "seed": SEED, "starting_player": 1})
+	if PRESET == "standard":
+		# Rebuild the standard decks from SEED (the preset picks its own random seed), so a failure replays exactly.
+		var p_deck: Array = MatchSetup._shuffled(range(1, 51), SEED)
+		var o_deck: Array = MatchSetup._shuffled(range(51, 101), SEED + 1)
+		cfg["player_hand"] = p_deck.slice(0, 5)
+		cfg["player_deck"] = p_deck.slice(5)
+		cfg["opponent_hand"] = o_deck.slice(0, 5)
+		cfg["opponent_deck"] = o_deck.slice(5)
+	elif PRESET == "ai" and SEED != 424242:
+		# The practice board has fixed decks; shuffle them by SEED so each seed is a different game the AIs still play.
+		cfg["player_deck"] = MatchSetup._shuffled(cfg.get("player_deck", []), SEED)
+		cfg["opponent_deck"] = MatchSetup._shuffled(cfg.get("opponent_deck", []), SEED + 1)
+	return cfg
 
 ## Swap every player_/opponent_ key and flip who starts: the same match, seen from the other chair.
 func _mirrored(cfg: Dictionary) -> Dictionary:
@@ -71,6 +98,8 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 	return snap
 
 func _ready() -> void:
+	_read_args()
+	print("[Perspective] preset=%s seed=%d turns=%d" % [PRESET, SEED, TURNS])
 	PRESENTATION.fast_mode = true
 	var base := _base()
 	var as_seat_1: Dictionary = await _play(base, "as seat 1")

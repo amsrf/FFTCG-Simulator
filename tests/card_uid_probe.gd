@@ -53,6 +53,27 @@ func _ready() -> void:
 	_expect(cards.all(func(c): return a.card_by_uid(c.uid) == c), "card_by_uid() finds each card again")
 	_expect(cards.all(func(c): return (c.uid / 100000) == (1 if c.controller == Card.PLAYER else 2)),
 		"the uid's seat matches the card's side")
+	# A LOCAL SUMMON MOVES TO A SEPARATE STACK CARD; that stack card is the same card, so it keeps the uid and no
+	# new number is consumed (the opponent's machine never makes that extra card, so a new number would desync).
+	var stack = a.get("stack")
+	var summon: Card = null
+	for c in a.get("hand").cards + a.side_for(1).deck.deck_cards:
+		if c.type == Card.SUMMON:
+			summon = c
+			break
+	_expect(summon != null, "found a Summon to cast")
+	if summon != null:
+		var before_uid: int = summon.uid
+		var counters_before: String = str(a._uid_counters)
+		stack.cards.append(summon)
+		summon.index = stack.cards.size() - 1
+		stack._queue_local_summon(summon)
+		var stack_card: Card = stack.cards.back()
+		_expect(stack_card != summon and stack_card.uid == before_uid,
+			"the Summon's stack card keeps its uid (#%d -> #%d)" % [before_uid, stack_card.uid])
+		_expect(str(a._uid_counters) == counters_before, "and no new uid was consumed")
+		_expect(a.card_by_uid(before_uid) == stack_card, "card_by_uid now finds the stack card")
+		await Vfx.idle()
 	a.queue_free()
 	await get_tree().process_frame
 	var b: Node = await _boot()

@@ -1677,12 +1677,19 @@ func _condition_met(condition: Dictionary, source: Card = null) -> bool:
 ## dynamic power, granted statuses — is collected by one board scan in refresh_continuous_effects() and diffed
 ## against _continuous_ledger.
 
+## Both sides' Forwards, TURN PLAYER'S FIRST — the same order on both machines of an online match. The state-based
+## checks below walk this, and their order decides which "when broken" trigger goes on the stack first.
+func _forwards_turn_player_first() -> Array[Card]:
+	if game != null and int(game.turn_owner) == 2:
+		return opponent_front_cards + front_cards
+	return front_cards + opponent_front_cards
+
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their
 	# current power. A card at 0 power is handled separately (it is put into
 	# the Graveyard, not broken).
 	var ans = []
-	for card in (front_cards + opponent_front_cards):
+	for card in _forwards_turn_player_first():
 		if card.has_zero_power():
 			continue
 		if card.is_broken():
@@ -1693,7 +1700,7 @@ func get_zero_power_cards():
 	# Forwards whose current power is 0 or less. These are put into the
 	# Graveyard without triggering break effects.
 	var ans = []
-	for card in (front_cards + opponent_front_cards):
+	for card in _forwards_turn_player_first():
 		if card.has_zero_power():
 			ans.append(card)
 	return ans
