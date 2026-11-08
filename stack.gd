@@ -362,14 +362,14 @@ func add_created_card_to_tree(card: Card, wording: String):
 func cast_card():
 	# It is being played, so it is public now, whichever branch runs.
 	reveal_parked(casting_card)
-	if casting_card.type == 'Summon':
+	if casting_card.type == Card.SUMMON:
 		# Summons stay on the stack and resolve as effects. Resolution
 		# (game._on_stack_execute_card_effect) sends them to the graveyard.
 		casting_card.key_word_effect = "when_cast"
 		# HISTORY AT THE CAST, not at resolution: "if you have cast X this turn" becomes true the moment the card is
 		# played, and a Summon that is invalidated before it resolves was still cast.
 		get_parent().record_action("Casted %s" % casting_card.card_name, [],
-			1 if casting_card.controller == "player" else 2)
+			1 if casting_card.controller == Card.PLAYER else 2)
 		# Board-wide "when a Summon is cast" triggers (Yuna 214, Lenne 215) fire at the cast, not at resolution.
 		field.trigger_event(EVENTS.Event.SUMMON_CAST, {"card": casting_card})
 	else:
@@ -400,11 +400,11 @@ func cast_card():
 		# Source half of the teleport: shine and dissolve IN PLACE in the Stack.
 		# Only then does Field place the invisible card at its slot and
 		# materialise it. Nothing travels across the board.
-		var dissolve: Tween = landing.teleport_out(
+		var dissolve: Tween = landing.teleport.play_out(
 			field.teleport_shine_seconds, field.teleport_fade_seconds)
 		# A tween is not a signal: awaiting the object itself returns immediately.
 		await dissolve.finished
-		field.play_card(landing, landing.controller != "player", true, true, false, true)
+		field.play_card(landing, landing.controller != Card.PLAYER, true, true, false, true)
 	
 	
 func _on_assistant_charge_complete() -> void:
@@ -438,7 +438,7 @@ func _continue_summon_after_mana(card: Card) -> void:
 ## Summons too: committing through the wrong hand would leave a stale
 ## `charging_card` there, which can later pull the card back off the stack.
 func _owner_hand(card: Card) -> Hand:
-	return get_parent().hand_for(1 if card.controller == "player" else 2)
+	return get_parent().hand_for(1 if card.controller == Card.PLAYER else 2)
 
 func _commit_summon_to_stack() -> void:
 	if summon_casting_card == null:
@@ -448,7 +448,7 @@ func _commit_summon_to_stack() -> void:
 	var flighting: bool = _opponent_summon_flight != null and _opponent_summon_flight_card == summon_casting_card
 	var card: Card = summon_casting_card
 	var owner_hand: Hand = _owner_hand(card)
-	var local_preview := card.controller == "player" and card.get_parent() == owner_hand
+	var local_preview := card.controller == Card.PLAYER and card.get_parent() == owner_hand
 	if local_preview:
 		_local_summon_presentation = card
 	# Target is confirmed: finalize mana payment now (discard hand mana,
@@ -601,7 +601,7 @@ func commit_skill_activation_costs_if_pending() -> void:
 		if bool(return_def.get("return_self", false)):
 			var return_src: Card = skill_activation_proxy.effect_source
 			if return_src != null and is_instance_valid(return_src):
-				var owner_hand: Hand = get_parent().hand_for(1 if return_src.controller == "player" else 2)
+				var owner_hand: Hand = get_parent().hand_for(1 if return_src.controller == Card.PLAYER else 2)
 				if owner_hand != null:
 					field.remove_card(return_src)
 					owner_hand.add_card(return_src)
@@ -670,7 +670,7 @@ func park_card(card: Card) -> void:
 	card.enter_zone(Card.Zone.STACK)
 	# Face-down for anyone but the owning player. Every exit from this node must
 	# call reveal_parked().
-	card.set_revealed(card.controller == "player")
+	card.set_revealed(card.controller == Card.PLAYER)
 	update_card_positions()
 
 ## A parked card is leaving this node (committed to the stack, played to the
@@ -680,14 +680,14 @@ func reveal_parked(card: Card) -> void:
 		card.set_revealed(true)
 
 func _on_hand_charge_start(card: Card) -> void:
-	if card.type == 'Summon':
+	if card.type == Card.SUMMON:
 		# Paid for (and targeted) before it legally enters the stack.
 		summon_casting_card = card
 		summon_mana_deferred_until_target_confirm = true
 		# OPPONENT SUMMONS GET A DEDICATED FLIGHT. Hand.charge() has already staged the cast
 		# card at the middle of the face-down fan, so this transform is already the hand
 		# middle — and the card is visibly leaving the hand rather than appearing there.
-		var opponent_cast: bool = card.controller == "opponent"
+		var opponent_cast: bool = card.controller == Card.OPPONENT
 		var start: Transform3D = card.global_transform
 		if opponent_cast:
 			park_card(card)
@@ -700,7 +700,7 @@ func _on_hand_charge_start(card: Card) -> void:
 		# not in `cards`, so it is not legally on the stack; `park_card()` gives
 		# it the Stack presentation, then the thin gold aura marks it as the play.
 		casting_card = card
-		if card.controller == "player":
+		if card.controller == Card.PLAYER:
 			# THE CHARACTER IS NOT A STACK CARD. It stays parented to the hand,
 			# in the latched cast stance, through payment; the Stack only holds the
 			# reference that cast_card() will fade from. Reparenting it here was
@@ -780,7 +780,7 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 ## Fade the printed Summon and transfer its cast to a new stack card.
 func _present_local_summon(card: Card) -> void:
 	card.set_cast_pending_highlight(false)
-	await card.teleport_out(0.08, 0.20).finished
+	await card.teleport.play_out(0.08, 0.20).finished
 	if not is_instance_valid(card) or not cards.has(card):
 		_local_summon_presentation = null
 		local_summon_landed.emit()
@@ -1025,7 +1025,7 @@ func cancel_stack_card(card: Card) -> void:
 	if casting_card == card:
 		casting_card = null
 	var game: Node = get_parent()
-	var pile = game.get("player_graveyard") if card.controller == "player" else game.get("opponent_graveyard")
+	var pile = game.get("player_graveyard") if card.controller == Card.PLAYER else game.get("opponent_graveyard")
 	if pile != null:
 		pile.add_card(card)
 	update_card_positions()
@@ -1137,7 +1137,7 @@ func _on_assistant_target_complete() -> void:
 	if pool >= 0:
 		var field_ref = get_parent().field
 		var picks: Array = field_ref.targeting_picked.duplicate()
-		var owner_id: int = 1 if skill_activation_proxy.controller == "player" else 2
+		var owner_id: int = 1 if skill_activation_proxy.controller == Card.PLAYER else 2
 		var agent: Agent = get_parent().agent_for(owner_id)
 		var split: Array = await agent.choose_damage_split(owner_id, picks, pool)
 		if split.is_empty():
@@ -1211,3 +1211,31 @@ func _on_assistant_target_cancel() -> void:
 		# It is going back to its owner's hand, so reveal it again.
 		reveal_parked(cancelled)
 		_owner_hand(cancelled).cancel_summon_cast()
+
+## CARD INPUT. Card forwards a click and a hover to whichever zone it sits in; these are the Stack's.
+##
+## A stack object is resolved by the game rather than played by a player, so its only interaction is a click: that
+## selects it, which raises it in the fan and puts ITS targeting on display (see select_card).
+##
+## ONE EXCEPTION: while a targeting session asks for a STACK card (Summoner 53 countering a Summon), a click on a
+## legal candidate means "choose this", not "raise this". `is_valid_target` is the same flag every other candidate
+## uses, and the Field owns the session, so this branch only forwards the click.
+func on_card_grabbed(card: Card) -> void:
+	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET and card.is_valid_target:
+		var field = get_parent().get("field")
+		if field != null:
+			field.set_target_card(card)
+			_mark_input_handled(card)
+			return
+	select_card(card)
+	# Mark the event handled so the "a click anywhere else returns the display to the top of the
+	# stack" fallback cannot immediately undo the selection the player just made.
+	_mark_input_handled(card)
+
+func on_card_hovered(card: Card, entered: bool) -> void:
+	set_hovered(card, entered)
+
+func _mark_input_handled(card: Card) -> void:
+	var viewport: Viewport = card.get_viewport()
+	if viewport != null:
+		viewport.set_input_as_handled()

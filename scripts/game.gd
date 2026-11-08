@@ -95,7 +95,7 @@ func opponent_discards(count: int = 1) -> void:
 	# THE VICTIM IS THE OTHER SEAT. "player" is P1 and "opponent" is P2, so a card controlled by P1 makes P2
 	# discard and vice versa. Getting this backwards is silent — the wrong hand loses a card and the human sees
 	# nothing at all, which is exactly how it shipped the first time.
-	var caster: int = 1 if _current_controller == "player" else 2
+	var caster: int = 1 if _current_controller == Card.PLAYER else 2
 	await discard_from(3 - caster, count)
 
 ## The caster discards — "draw 1 card then discard 1 card from your hand" (Vaan). The mirror of opponent_discards(),
@@ -119,7 +119,7 @@ func mill_player(player_id: int, count: int = 1) -> void:
 ## No cost is paid — the card's text says PLAY, not CAST — and the choice goes through the agent seam, so a human
 ## gets the same search window over their hand while an AI simply takes the first legal card.
 func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	if by == "opponent":
 		owner_id = 3 - owner_id
 	var owner_hand: Hand = hand_for(owner_id)
@@ -165,7 +165,7 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 ## The returning card is reset first (see Card.reset_for_field_arrival): it is a new permanent, not the broken
 ## object that went to the pile, so damage, statuses and temporary buffs must not ride back with it.
 func play_from_break_zone(criteria: Dictionary = {}) -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var pile = player_graveyard if owner_id == 1 else opponent_graveyard
 	if pile == null:
 		return
@@ -201,7 +201,7 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 	field.play_card(picked, owner_id == 2, true)
 
 func opponent_mills(count: int = 1) -> void:
-	var caster: int = 1 if _current_controller == "player" else 2
+	var caster: int = 1 if _current_controller == Card.PLAYER else 2
 	await mill_player(3 - caster, count)
 
 func discard_from(player_id: int, count: int = 1) -> int:
@@ -233,7 +233,7 @@ func discard_from(player_id: int, count: int = 1) -> int:
 ## own entry point; and it must set the success latch because Bahamut Fury branches on whether the discard happened.
 func break_zone_to_hand(filter: Dictionary = {}) -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var side: PlayerSide = side_for(owner_id)
 	var pile = side.graveyard if side != null else null
 	if pile == null or pile.graveyard_cards.is_empty():
@@ -264,7 +264,7 @@ func break_zone_to_hand(filter: Dictionary = {}) -> void:
 ## Choose one card from a player's Break Zone. `chooser` is "self" or "opponent"; the pick is remembered in
 ## `_chosen_cards`. The picker is the same search window used for deck searching, because the Break Zone is a pile.
 func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", _prompt: String = "Choose a card in your Break Zone") -> void:
-	var caster_id: int = 1 if _current_controller == "player" else 2
+	var caster_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
 	var side: PlayerSide = side_for(chooser_id)
 	var pile = side.graveyard if side != null else null
@@ -298,7 +298,7 @@ func put_card_into_hand(_argument = null) -> void:
 	for card in _chosen_cards.duplicate():
 		if card == null or not is_instance_valid(card):
 			continue
-		var owner_id: int = 1 if card.controller == "player" else 2
+		var owner_id: int = 1 if card.controller == Card.PLAYER else 2
 		var side: PlayerSide = side_for(owner_id)
 		var pile = side.graveyard if side != null else null
 		if pile == null or not pile.graveyard_cards.has(card):
@@ -315,7 +315,7 @@ func put_card_into_hand(_argument = null) -> void:
 ## "opponent". Criteria are evaluated relative to the effect source, and the chosen card is remembered in
 ## `_chosen_cards` so a later apply_effect can exclude it.
 func choose_card(criteria: Dictionary, chooser: String = "self", prompt: String = "Choose a card") -> void:
-	var caster_id: int = 1 if _current_controller == "player" else 2
+	var caster_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
 	var source: Card = _current_source_card
 	var candidates: Array = []
@@ -343,7 +343,7 @@ func apply_effect(criteria: Dictionary, exclude_chosen: bool = false) -> void:
 
 ## PUT, not BREAK: triggers when_enter_break_from_field, never when_break.
 func look_top_may_bottom() -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var d = deck if owner_id == 1 else opponent_deck
 	if d == null or d.deck_cards.is_empty():
 		_last_action_succeeded = false
@@ -363,7 +363,7 @@ func look_top_may_bottom() -> void:
 ## moving it is the rules layer's.
 func put_hand_card_on_bottom() -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var owner_hand: Hand = hand_for(owner_id)
 	var d = deck if owner_id == 1 else opponent_deck
 	if owner_hand == null or d == null or owner_hand.cards.is_empty():
@@ -386,7 +386,7 @@ func put_hand_card_on_bottom() -> void:
 ## Summon on the stack (so it can be countered) and its targeting flow intact.
 func cast_summon_for_free(criteria: Dictionary = {}) -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var owner_hand: Hand = hand_for(owner_id)
 	if owner_hand == null or owner_hand.cards.is_empty():
 		return
@@ -465,7 +465,7 @@ func copy_skill(_argument = null) -> void:
 		return
 	var chosen: int = 0
 	if specials.size() > 1:
-		var owner_id: int = 1 if source.controller == "player" else 2
+		var owner_id: int = 1 if source.controller == Card.PLAYER else 2
 		var agent: Agent = agent_for(owner_id)
 		if agent != null:
 			chosen = await agent.choose_skill(owner_id, target, specials)
@@ -489,7 +489,7 @@ func dull_targets(index: int = -1) -> void:
 ## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
 ## it could only ever hit one card.
 func _effect_kind() -> String:
-	if _current_source_card != null and is_instance_valid(_current_source_card) and _current_source_card.type == "Summon":
+	if _current_source_card != null and is_instance_valid(_current_source_card) and _current_source_card.type == Card.SUMMON:
 		return "Summon"
 	return "Ability"
 
@@ -510,7 +510,7 @@ const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
 ##
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
 func extra_attacks_from_damage() -> void:
-	var owner_id: int = 1 if _current_controller == "player" else 2
+	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var side: PlayerSide = side_for(owner_id)
 	if _current_source_card == null or side == null:
 		return
@@ -521,7 +521,7 @@ func extra_attacks_from_damage() -> void:
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
 ## say "player"/"your" and still mean the caster's side.
 func draw_cards(count: int = 1, player_id: int = 0) -> void:
-	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == "player" else 2)
+	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == Card.PLAYER else 2)
 	var d = deck if owner_id == 1 else opponent_deck
 	var h: Hand = hand_for(owner_id)
 	if d == null or h == null:
@@ -582,7 +582,7 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 ## held, then hidden and made inert; its Card object stays in `revealed_cards` for the following instruction. The
 ## animation is deliberately sequential: the next card only starts after the previous one has vanished.
 func reveal_top(count: int = 1, player_id: int = 0) -> void:
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
 	var d = opponent_deck if owner_id == 2 else deck
 	if d == null:
 		return
@@ -641,7 +641,7 @@ func check_revealed(index: int = 0, criteria: Dictionary = {}) -> void:
 ## Pick one card from the revealed staging area. The pick is recorded in `_chosen_cards`, exactly like choose_card,
 ## so the existing hand/play/bottom instructions can act on it.
 func choose_revealed(criteria: Dictionary = {}, prompt: String = "Choose a revealed card") -> void:
-	var owner_id: int = revealed_owner_id if revealed_owner_id != 0 else (2 if _current_controller == "opponent" else 1)
+	var owner_id: int = revealed_owner_id if revealed_owner_id != 0 else (2 if _current_controller == Card.OPPONENT else 1)
 	var candidates: Array = []
 	for card in revealed_cards:
 		if card == null or not is_instance_valid(card):
@@ -758,6 +758,7 @@ var priority_holder: int = 0
 ##
 ## Anything added to the payment/absorb effects belongs in this list.
 const EFFECT_SHADERS: Array[Shader] = [
+	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
 	# Lightning damage. These are first rendered only when a 雷 card deals
@@ -1271,9 +1272,9 @@ func _condition_holds(condition: String) -> bool:
 ## Whose perspective a condition is judged from: the controller of the ability being resolved. `_current_controller`
 ## is set when the effect goes on the stack; fall back to the turn player if a condition is evaluated outside one.
 func _condition_owner() -> int:
-	if _current_controller == "player":
+	if _current_controller == Card.PLAYER:
 		return 1
-	if _current_controller == "opponent":
+	if _current_controller == Card.OPPONENT:
 		return 2
 	return turn_owner
 
@@ -1301,7 +1302,7 @@ func untap_all_matching(criteria: Dictionary = {}) -> void:
 ## EACH PLAYER DISCARDS. The ability's controller chooses first, then the other player — the usual order for a
 ## symmetric discard, and each side goes through its own agent so a human gets a picker and the AI picks its cheapest.
 func each_player_discards(count: int = 1) -> void:
-	var starter: int = 1 if _current_controller == "player" else 2
+	var starter: int = 1 if _current_controller == Card.PLAYER else 2
 	await discard_from(starter, count)
 	await discard_from(3 - starter, count)
 
@@ -1652,7 +1653,7 @@ func take_damage_to_controller(amount: int = 1) -> void:
 	# Controller-relative damage for effects (e.g. Dark Knight death trigger).
 	if _current_source_card == null:
 		return
-	if _current_source_card.controller == "player":
+	if _current_source_card.controller == Card.PLAYER:
 		player.take_damage(amount, _current_source_card)
 	else:
 		opponent.take_damage(amount, _current_source_card)
@@ -1814,7 +1815,7 @@ func _blocker_split(blocker: Card) -> Array:
 		return []
 	if members.size() == 1:
 		return [blocker.power]
-	var owner_id: int = 1 if blocker.controller == "player" else 2
+	var owner_id: int = 1 if blocker.controller == Card.PLAYER else 2
 	var split: Array = await agent_for(owner_id).choose_party_damage_split(owner_id, members, blocker.power)
 	print("[Combat] %s distributes %d across %d: %s" % [
 		blocker.card_name, blocker.power, members.size(), str(split)])
@@ -2146,7 +2147,7 @@ func _send_card_to_graveyard(card: Card) -> int:
 		print("[Yuna] %s is removed from the game instead of the Break Zone" % card.card_name)
 		_send_card_to_removed(card)
 		return Card.Zone.REMOVED
-	if card.controller == "player":
+	if card.controller == Card.PLAYER:
 		player_graveyard.add_card(card)
 	else:
 		opponent_graveyard.add_card(card)
@@ -2172,7 +2173,7 @@ func move_card_from_field(card: Card, to_zone: int, cause: String = "",
 			if place.is_valid():
 				placed = place.call(card)
 			else:
-				var owner_hand: Hand = hand_for(1 if card.controller == "player" else 2)
+				var owner_hand: Hand = hand_for(1 if card.controller == Card.PLAYER else 2)
 				if owner_hand != null:
 					owner_hand.add_card(card)
 		_:
@@ -2191,7 +2192,7 @@ func publish_card_left_field(card: Card, to_zone: int, cause: String = "") -> vo
 	event_ctx.from_zone = Card.Zone.FIELD
 	event_ctx.to_zone = to_zone
 	event_ctx.cause = cause
-	event_ctx.player_id = 1 if card.controller == "player" else 2
+	event_ctx.player_id = 1 if card.controller == Card.PLAYER else 2
 	field.trigger_event(event_ctx.event, event_ctx)
 
 func _yuna_exiles_break_zone() -> bool:
@@ -2201,7 +2202,7 @@ func _yuna_exiles_break_zone() -> bool:
 	return false
 
 func _send_card_to_removed(card: Card) -> void:
-	if card.controller == "player":
+	if card.controller == Card.PLAYER:
 		player_removed.add_card(card)
 	else:
 		opponent_removed.add_card(card)
@@ -2234,7 +2235,7 @@ func remove_targets_from_game(_argument = null) -> void:
 func would_be_unique_name_conflict(card: Card) -> bool:
 	if card == null or not is_instance_valid(card) or not card.is_character():
 		return false
-	var side_name: String = "player" if card.controller == "player" else "opponent"
+	var side_name: String = "player" if card.controller == Card.PLAYER else "opponent"
 	for other in field.get_front_cards_for(side_name) + field.get_back_cards_for(side_name):
 		if other != null and other != card and other.is_character() and other.card_name == card.card_name:
 			return true
@@ -2257,7 +2258,7 @@ func would_break_light_dark_limit(card: Card) -> bool:
 	var kind: String = card.light_dark_kind()
 	if kind.is_empty():
 		return false
-	var side_name: String = "player" if card.controller == "player" else "opponent"
+	var side_name: String = "player" if card.controller == Card.PLAYER else "opponent"
 	var same_kind: bool = false
 	var other_kind: bool = false
 	var enabled_by_field: bool = false
@@ -2447,7 +2448,7 @@ func _resolve_event_trigger(card: Card) -> void:
 	if bool(trigger.get("requires_active", false)) and (not source.is_on_field() or source.tapped):
 		return
 	if bool(trigger.get("may", false)):
-		var owner_id: int = 1 if source.controller == "player" else 2
+		var owner_id: int = 1 if source.controller == Card.PLAYER else 2
 		var agent: Agent = agent_for(owner_id)
 		var use_it: bool = true
 		if agent != null:
@@ -2489,7 +2490,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		return
 	# A real Summon whose when_cast is code-owned. Its targets were chosen at cast time and live on this same card,
 	# so resolution is just the handler plus the normal trip to the Break Zone.
-	if card.type == "Summon" and card.effect_source == null and card.abilities_enabled() \
+	if card.type == Card.SUMMON and card.effect_source == null and card.abilities_enabled() \
 			and card.effect_handles_event(EVENTS.Event.CAST):
 		var summon_picks: Array = card.effect_targets.duplicate()
 		if summon_picks.is_empty() and card.effect_target != null:
@@ -2497,7 +2498,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		var summon_ctx = card.make_effect_context(EVENTS.Event.CAST, {}, card, summon_picks)
 		await card.effect().dispatch(EVENTS.Event.CAST, summon_ctx)
 		field.call("finish_targeting_state")
-		if card.controller == "player":
+		if card.controller == Card.PLAYER:
 			player_graveyard.add_card(card)
 		else:
 			opponent_graveyard.add_card(card)
@@ -2567,7 +2568,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	if card.effect_source == null:
 		# A real card cast from hand (Summon) resolves to its controller's
 		# graveyard instead of being freed.
-		if card.controller == "player":
+		if card.controller == Card.PLAYER:
 			player_graveyard.add_card(card)
 		else:
 			opponent_graveyard.add_card(card)
@@ -2682,7 +2683,7 @@ func search_deck_multi(request, filter: Dictionary = {}, destination: String = "
 	_last_action_succeeded = false
 	if request == null:
 		return
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
 	var deck_node = deck if owner_id == 1 else opponent_deck
 	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null or deck_node.deck_cards.is_empty():
@@ -2743,7 +2744,7 @@ func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool 
 	_last_action_succeeded = false
 	# DEFAULT TO P1 when no controller has been set: direct/test callers have no effect source, and the old
 	# implementation was always the Player deck. An explicit "opponent" still selects P2.
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == "opponent" else 1)
+	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
 	var deck_node = deck if owner_id == 1 else opponent_deck
 	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null:
@@ -2828,14 +2829,14 @@ func return_from_break_zone(tapped: bool = true) -> void:
 	if card == null or not is_instance_valid(card):
 		return
 	var home = null
-	if card.controller == "player":
+	if card.controller == Card.PLAYER:
 		home = player_graveyard
 	else:
 		home = opponent_graveyard
 	if home != null and home.graveyard_cards.has(card):
 		home.graveyard_cards.erase(card)
 	print("[ReturnFromBreakZone] ", card.card_name)
-	field.play_card(card, card.controller != "player")
+	field.play_card(card, card.controller != Card.PLAYER)
 	card.broken = false
 	if tapped:
 		card.tap()

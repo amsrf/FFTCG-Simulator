@@ -70,7 +70,7 @@ func accepts(source: Card, ctx: EVENT_CONTEXT) -> bool:
 		if not ctx.card.matches_criteria(card_filter.to_block(), source):
 			return false
 	if player_scope != PlayerScope.ANY:
-		var owner_id: int = 1 if source != null and source.controller == "player" else 2
+		var owner_id: int = 1 if source != null and source.controller == Card.PLAYER else 2
 		var wanted: int = owner_id if player_scope == PlayerScope.OWNER else 3 - owner_id
 		if ctx.player_id != wanted:
 			return false

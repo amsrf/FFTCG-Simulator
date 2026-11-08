@@ -133,3 +133,11 @@ func animate_card(card, target_position):
 	# Create a Tween to animate the card's movement
 	var tween = create_tween()
 	tween.tween_property(card, "position", target_position, 0.15)
+
+## CARD INPUT. A card in a pile is LOOKED AT, not played: clicking one opens the same fan window the deck search
+## uses, so the player can check what is in the zone. The host is two levels up (pile -> Player -> Game) and it is
+## duck-typed, so a pile mounted anywhere else simply does nothing rather than erroring.
+func on_card_grabbed(_card: Card) -> void:
+	var host: Node = get_parent().get_parent() if get_parent() != null else null
+	if host != null and host.has_method("_show_zone_view"):
+		host.call("_show_zone_view", self, "Damage Zone")

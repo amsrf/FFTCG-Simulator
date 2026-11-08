@@ -34,7 +34,7 @@ func _is_safe_to_play(card: Card) -> bool:
 	# target is chosen through Agent.choose_target() (Field.request_target
 	# delegates to it for a non-local owner). Only cast one when a legal target
 	# actually exists, otherwise the targeting session opens with nothing valid.
-	if card.type == "Summon":
+	if card.type == Card.SUMMON:
 		var criteria = card.get_cast_target_criteria()
 		if criteria.is_empty():
 			return true
@@ -47,9 +47,9 @@ func _is_safe_to_play(card: Card) -> bool:
 	# that would create a sixth: the AI test board is meant to be inspectable, and a row of nine
 	# Backups is not a legal field. The human side still relies on the engine for the cap.
 	var side: String = card.controller
-	if card.type == "Backup" and game.field.get_back_cards_for(side).size() >= 5:
+	if card.type == Card.BACKUP and game.field.get_back_cards_for(side).size() >= 5:
 		return false
-	if card.type == "Forward" and game.field.get_front_cards_for(side).size() >= 5:
+	if card.type == Card.FORWARD and game.field.get_front_cards_for(side).size() >= 5:
 		return false
 	# Skip anything whose enter-the-field effect asks for a target: ETB targeting
 	# runs while the card resolves, and a miss there is not recoverable yet.

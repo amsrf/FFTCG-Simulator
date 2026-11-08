@@ -233,7 +233,7 @@ runs at that same chain end.
 `matches_criteria` will treat them as card predicates and refuse every candidate.
 
 `Field._target_candidates()` is the one place that picks the list; `set_viable_targets` and `has_viable_target` both
-go through it. A stack card's click reaches `StackCardState.handle_grabbed()`, which forwards to
+go through it. A stack card's click reaches `Stack.on_card_grabbed()`, which forwards to
 `Field.set_target_card()` while the mode is TARGET and the card is legal.
 
 CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards` (so the priority loop never picks
@@ -808,7 +808,8 @@ It prints a `[ArrowProbe]` report with a `RESULT:` line, so pass/fail needs no i
 | `power_display.gd` | The `PowerDisplay` Label3D on each card; shows `power/accumulated_damage`. |
 | `scripts/hand.gd` (`Hand`) | Hand layout, mana selection, choose-card mode, `charge()`/`discard_card()`. |
 | `scripts/player_side.gd` (`PlayerSide`) | Player-level zones; `take_damage()` moves deck cards into the Damage Zone. |
-| `scripts/hand_card_state.gd`, `scripts/field_card_state.gd` | Drag/release behavior per zone; swapped in `Card._update_state()`. |
+| `scripts/card_teleport.gd`, `card_damage_fx.gd`, `card_status_overlays.gd`, `card_edge.gd` | Card presentation split out of `card.gd`: `card.teleport` (cast shine/materialise), `card.damage_fx` (recoil + Earth launch), `card.overlays` (silence bubble + frozen rim), `CARD_EDGE.install()` (side wall). Pure visuals, preloaded by path; game rules stay in `card.gd`. |
+| Card input (`on_card_grabbed` / `on_card_released` / `on_card_hovered`) | Card forwards click, release and hover to its parent zone (Hand, Field, Stack, Graveyard, DamageZone), which decides what it means there. |
 | `area_3d.gd`, `big_button.gd` | 3D button primitives (signals, hover, enable/disable, autofit). |
 | `assets/card_database.json`, `assets/card_effects.json` | Data loaded by the `CardDatabase` autoload. |
 

@@ -34,6 +34,9 @@ func _ready() -> void:
 	_check_mesh(arrow)
 	_check_origin_follows(arrow)
 
+	_check_ice_cluster()
+	_check_ice_projectile()
+	_check_demo_browser()
 	_report()
 	get_tree().quit()
 
@@ -138,3 +141,94 @@ func _report() -> void:
 	for f in _failures:
 		print("[ArrowProbe]   x %s" % f)
 	print("")
+
+## Basic asset/replay smoke check, kept in the allowed isolated visual harness.
+func _check_ice_cluster() -> void:
+	var preset = load("res://assets/vfx/elements/ice.tres")
+	_expect(preset.impact_scene != null and preset.board_impact_scene != null, "Ice single and board cues load")
+	var cue = preset.impact_scene.instantiate()
+	add_child(cue)
+	cue.queue_free()
+	var cluster = load("res://assets/effects/ice/ice_cluster.tscn").instantiate()
+	add_child(cluster)
+	cluster.show_raised()
+	_expect(cluster.get_child_count() == 7, "Ice enclosure has six crystals and ground")
+	for piece in cluster.get_children():
+		_expect(piece.mesh.get_surface_count() == 1 and piece.visible, "Ice piece has visible geometry")
+	var motion: Tween = cluster.play()
+	_expect(motion.is_valid(), "Ice growth starts")
+	cluster.reset()
+	_expect(not motion.is_valid(), "Ice reset cancels previous animation")
+	cluster.queue_free()
+
+func _check_ice_projectile() -> void:
+	var projectile = load("res://assets/effects/ice/ice_projectile.tscn").instantiate()
+	add_child(projectile)
+	var ice_meshes: Array[Mesh] = [projectile._spike.mesh]
+	for fragment in projectile._fragments:
+		ice_meshes.append(fragment.mesh)
+	var rounded_vertices := 0
+	for mesh in ice_meshes:
+		var arrays := mesh.surface_get_arrays(0)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		for i in range(0, vertices.size(), 3):
+			var face_normal := (vertices[i + 1] - vertices[i]).cross(vertices[i + 2] - vertices[i]).normalized()
+			if face_normal.length_squared() < 0.5:
+				continue
+			for corner in range(3):
+				if absf(face_normal.dot(normals[i + corner])) < 0.999:
+					rounded_vertices += 1
+	_expect(rounded_vertices == 0, "Ice faces retain flat normals instead of rounding across edges (%d rounded vertices)" % rounded_vertices)
+	projectile.sample(0.0)
+	var start_height: float = projectile._spike.position.y
+	_expect(projectile._spike.visible and projectile._spike.scale.is_equal_approx(Vector3.ONE * projectile.crystal_scale), "Complete full-size crystal is visible from the start")
+	projectile.sample(projectile.rise_seconds)
+	_expect(projectile._spike.position.y > start_height + 0.4, "Intact crystal ascends before holding")
+	var hold_position: Vector3 = projectile._spike.position
+	projectile.sample(projectile.rise_seconds + projectile.hover_seconds * 0.9)
+	_expect(projectile._spike.position.is_equal_approx(hold_position), "Complete crystal freezes before falling")
+	for fragment in projectile._fragments:
+		_expect(not fragment.visible, "Fracture pieces remain hidden before impact")
+	var impact: float = projectile.impact_time()
+	projectile.sample(impact - 0.001)
+	_expect(projectile._spike.visible and projectile._spike.position.y < 0.02, "Intact crystal reaches the card before breaking")
+	projectile.sample(impact)
+	_expect(not projectile._spike.visible and projectile._fragments.size() == 64, "Impact keeps the sixty-four fitted shards")
+	_expect(projectile._fragments[0].material_override.get_shader_parameter("show_interior") == true, "Impact reveals fracture interiors")
+	var spread := 0.0
+	projectile.sample(impact + 0.35)
+	for fragment in projectile._fragments:
+		_expect(fragment.visible and fragment.position.y >= 0.0, "Ice debris stays above impact plane")
+		spread = maxf(spread, Vector2(fragment.position.x, fragment.position.z).length())
+	_expect(spread > 0.30, "Ice fragments splatter beyond card edges")
+	projectile.sample(projectile.duration())
+	_expect(not projectile._spike.visible and not projectile._fragments[0].visible, "Ice presentation ends with no visible debris")
+	projectile.play()
+	projectile.reset()
+	_expect(not projectile._playing and not projectile._spike.visible, "Ice replay can be cancelled cleanly")
+	projectile.queue_free()
+
+func _check_demo_browser() -> void:
+	var entries: Array = preload("res://scripts/demo_catalog.gd").entries()
+	var paths: Array = []
+	for entry in entries:
+		paths.append(entry.path)
+		_expect(not "probe" in entry.path, "Demo browser excludes automated probes")
+	_expect(paths.has("res://tools/ice_projectile_demo.tscn") and paths.has("res://CardShatterPreview.tscn"), "Demo browser finds tool demos and root previews")
+	var menu = load("res://demo_menu.tscn").instantiate()
+	add_child(menu)
+	_expect(menu._rows.size() == entries.size(), "Every discovered demo gets a menu button")
+	menu._filter("ice projectile")
+	var visible_count := 0
+	for button in menu._rows:
+		if button.visible:
+			visible_count += 1
+	_expect(visible_count == 1, "Search narrows list to Ice Projectile")
+	menu._filter("no such demo qqq")
+	_expect(menu._empty.visible, "Empty searches show a clear message")
+	menu.queue_free()
+	var navigation = preload("res://scripts/demo_navigation.gd").new()
+	add_child(navigation)
+	_expect(navigation.process_mode == Node.PROCESS_MODE_ALWAYS, "Demo navigation remains usable while paused")
+	navigation.queue_free()

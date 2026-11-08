@@ -74,7 +74,7 @@ func _ready() -> void:
 	_expect(_hand.hovered_card == card, "the card is hovered before the drag")
 	card.is_dragging = true
 	card.global_position = Vector3(3.2, 0.5, -1.5)
-	card.current_state.handle_released()
+	_hand.on_card_released(card)
 	await get_tree().process_frame
 	_expect(_hand.charging_card == card,
 		"releasing over the front-right of the playmat starts the cast")

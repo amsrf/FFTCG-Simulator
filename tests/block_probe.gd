@@ -156,9 +156,9 @@ func _ready() -> void:
 func _check_earth_launch(game: Node) -> void:
 	var card: Card = _field.get_front_cards_for("player").front()
 	var root_pose := card.global_transform
-	var motion := card.play_earth_launch(3000, 42)
+	var motion := card.damage_fx.play_earth_launch(3000, 42)
 	motion.pause()
-	motion.custom_step(card.earth_launch_seconds(3000) * 0.5)
+	motion.custom_step(card.damage_fx.earth_launch_seconds(3000) * 0.5)
 	var weak_height := card.hand_mesh.global_position.y - card.global_position.y
 	_expect(card.get_node("CardEdge").transform.is_equal_approx(card.hand_mesh.transform) and not card.power_label.visible,
 		"earth waver carries the thickness edge and hides the stationary power readout")
@@ -166,37 +166,37 @@ func _check_earth_launch(game: Node) -> void:
 		"earth launch follows its gravity arc while leaving the field-owned card root unchanged")
 	var landed: Array = []
 	var record_landing := func(): landed.append(true)
-	card.earth_landed.connect(record_landing)
-	motion.custom_step(card.earth_contact_seconds - card.earth_launch_seconds(3000) * 0.5 - 0.001)
+	card.damage_fx.earth_landed.connect(record_landing)
+	motion.custom_step(card.damage_fx.earth_contact_seconds - card.damage_fx.earth_launch_seconds(3000) * 0.5 - 0.001)
 	_expect(not card.hand_mesh.basis.is_equal_approx(Basis.IDENTITY) and landed.is_empty(),
 		"earth target approaches the ground with only a small residual tilt")
 	motion.custom_step(0.002)
 	_expect(landed.size() == 1 and not card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
 		"survivor makes first contact with a small residual pose before settling")
 	motion.custom_step(0.08)
-	_expect(card._earth_lowest_offset(card.hand_mesh.transform) >= card._earth_lowest_offset(Transform3D.IDENTITY) - 0.001,
+	_expect(card.damage_fx._earth_lowest_offset(card.hand_mesh.transform) >= card.damage_fx._earth_lowest_offset(Transform3D.IDENTITY) - 0.001,
 		"post-contact settling keeps all card corners above the resting plane")
-	card.earth_landed.disconnect(record_landing)
-	motion.custom_step(card.earth_launch_seconds(3000))
+	card.damage_fx.earth_landed.disconnect(record_landing)
+	motion.custom_step(card.damage_fx.earth_launch_seconds(3000))
 	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
 		"earth launch lands exactly in its original mesh pose")
-	motion = card.play_earth_launch(10000, 42)
+	motion = card.damage_fx.play_earth_launch(10000, 42)
 	motion.pause()
-	motion.custom_step(card.earth_launch_seconds(10000) * 0.5)
+	motion.custom_step(card.damage_fx.earth_launch_seconds(10000) * 0.5)
 	_expect(card.hand_mesh.global_position.y - card.global_position.y > weak_height * 2.0
-		and card.earth_launch_seconds(10000) > card.earth_launch_seconds(3000),
+		and card.damage_fx.earth_launch_seconds(10000) > card.damage_fx.earth_launch_seconds(3000),
 		"higher Earth damage produces greater launch height and longer airtime")
-	card.normalize_damage_reaction()
-	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY) and not card.is_damage_reacting(),
+	card.damage_fx.normalize()
+	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY) and not card.damage_fx.is_reacting(),
 		"interrupting an earth launch clears its tumbling pose")
 	for amount in [3000, 6000, 8000, 10000]:
 		for seed_value in [11, 42, 173, 901]:
 			var contact_poses: Array[Transform3D] = []
 			var save_contact := func(): contact_poses.append(card.hand_mesh.transform)
-			card.earth_landed.connect(save_contact)
-			motion = card.play_earth_launch(amount, seed_value)
+			card.damage_fx.earth_landed.connect(save_contact)
+			motion = card.damage_fx.play_earth_launch(amount, seed_value)
 			motion.pause()
-			var contact_time := card.earth_contact_seconds
+			var contact_time := card.damage_fx.earth_contact_seconds
 			var bounded_waver := true
 			var visible_waver := false
 			for _sample in range(24):
@@ -212,20 +212,20 @@ func _check_earth_launch(game: Node) -> void:
 				and Vector2(world_offset.x, world_offset.z).length() < 0.01,
 				"planned Earth landing is within 3 degrees and 1 cm (damage %d, seed %d)" % [amount, seed_value])
 			motion.custom_step(0.13)
-			card.earth_landed.disconnect(save_contact)
-			motion = card.play_earth_launch(amount, seed_value)
+			card.damage_fx.earth_landed.disconnect(save_contact)
+			motion = card.damage_fx.play_earth_launch(amount, seed_value)
 			motion.pause()
-			_expect(is_equal_approx(card.earth_contact_seconds, contact_time),
+			_expect(is_equal_approx(card.damage_fx.earth_contact_seconds, contact_time),
 				"Earth contact timing repeats deterministically for the same damage and seed")
-			card.normalize_damage_reaction()
+			card.damage_fx.normalize()
 	var cue = preload("res://assets/effects/earth/earth_totem_cue.tscn").instantiate()
 	game.add_child(cue)
 	cue.play(preload("res://scripts/vfx/vfx_event.gd").new(VfxEvent.Kind.DAMAGE, [card], "土", 6000))
 	var totem: Node3D = cue.get_child(0)
 	var dust_bursts: Array = []
 	totem.dust_emitted.connect(func(): dust_bursts.append(true))
-	await get_tree().create_timer(0.08 + card.earth_launch_seconds(6000) * 0.5 + 0.05).timeout
-	_expect(totem.get_node("AnimationPlayer").current_animation == "retreat" and card.is_damage_reacting(),
+	await get_tree().create_timer(0.08 + card.damage_fx.earth_launch_seconds(6000) * 0.5 + 0.05).timeout
+	_expect(totem.get_node("AnimationPlayer").current_animation == "retreat" and card.damage_fx.is_reacting(),
 		"earth totem starts withdrawing while the launched card is still falling")
 	await get_tree().create_timer(0.19).timeout
 	_expect(dust_bursts.size() >= 2,
@@ -241,7 +241,7 @@ func _check_earth_launch(game: Node) -> void:
 	game.add_child(source)
 	var ctx = preload("res://scripts/effects/effect_context.gd").new(game, source, "test")
 	ctx.damage([card], 1000)
-	_expect(card.is_damage_reacting() and Vfx.get_events().back().element == "土",
+	_expect(card.damage_fx.is_reacting() and Vfx.get_events().back().element == "土",
 		"normal EffectContext Earth damage starts the configured launch presentation")
 	await get_tree().create_timer(2.5).timeout
 	_expect(card.hand_mesh.transform.is_equal_approx(Transform3D.IDENTITY),
@@ -254,7 +254,7 @@ func _check_earth_launch(game: Node) -> void:
 		for effect in cue_node.get_children():
 			if effect is Node3D and effect.has_node("GroundCrack"):
 				area_totems.append(effect)
-	_expect(area_totems.size() == 2 and card.is_damage_reacting() and second_target.is_damage_reacting(),
+	_expect(area_totems.size() == 2 and card.damage_fx.is_reacting() and second_target.damage_fx.is_reacting(),
 		"real area Earth damage launches every target with its own staggered totem")
 	if area_totems.size() == 2:
 		var crack_a := area_totems[0].get_node("GroundCrack") as MeshInstance3D
@@ -279,7 +279,7 @@ func _check_earth_launch(game: Node) -> void:
 		"lethal Earth damage creates no airborne Card proxy")
 	_expect(game.find_children("CardShards*", "Node3D", true, false).size() == shards_before + 1,
 		"lethal Earth hit uses exactly one normal immediate break effect")
-	_expect(card.visible and not card.is_damage_reacting(),
+	_expect(card.visible and not card.damage_fx.is_reacting(),
 		"broken card stays visible in the Break Zone without airborne motion")
 	var totem_at_hit := false
 	for cue_node in Vfx.get_children():
@@ -296,7 +296,7 @@ func _check_earth_launch(game: Node) -> void:
 	await get_tree().process_frame
 	_expect(demo.target != null, "earth damage demo selects a real field card for preview")
 	demo._hit()
-	_expect(demo.target.is_damage_reacting(), "earth damage demo replays the production launch cue")
+	_expect(demo.target.damage_fx.is_reacting(), "earth damage demo replays the production launch cue")
 	demo._area = true
 	demo._hit()
 	await get_tree().create_timer(0.25).timeout
@@ -307,7 +307,7 @@ func _check_earth_launch(game: Node) -> void:
 	demo._hit()
 	demo._hit()
 	await get_tree().process_frame
-	_expect(not demo.target.visible and not demo.target.is_damage_reacting() and demo._preview_shards.size() == 1,
+	_expect(not demo.target.visible and not demo.target.damage_fx.is_reacting() and demo._preview_shards.size() == 1,
 		"lethal preview immediately shatters the target without launching it")
 	demo._reset()
 	await get_tree().process_frame

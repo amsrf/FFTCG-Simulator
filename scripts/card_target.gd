@@ -101,13 +101,13 @@ static func _controller_matches(card: Card, wanted: String, source: Card) -> boo
 		# to the literal P1 seat when we do not (snapshots and probes), which is what it used to mean everywhere.
 		"player":
 			if source == null:
-				return card.controller == "player"
+				return card.controller == Card.PLAYER
 			return card.controller == mine
 		"theirs", "their":
 			return source != null and card.controller == theirs
 		"opponent", "opponents", "enemy":
 			if source == null:
-				return card.controller == "opponent"
+				return card.controller == Card.OPPONENT
 			return card.controller == theirs
 		"self":
 			return card == source

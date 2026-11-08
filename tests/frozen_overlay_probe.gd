@@ -23,7 +23,7 @@ func _expect(ok: bool, what: String) -> void:
 
 
 func _spread(card: Card) -> float:
-	var overlay: MeshInstance3D = card.get("_frozen_overlay")
+	var overlay: MeshInstance3D = card.overlays.frozen_overlay
 	if overlay == null or overlay.material_override == null:
 		return -1.0
 	return float(overlay.material_override.get_shader_parameter("spread"))
@@ -44,12 +44,12 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	_expect(card.current_zone == Card.Zone.FIELD, "the test card is on the field")
-	_expect(card.get("_frozen_overlay") == null,
+	_expect(card.overlays.frozen_overlay == null,
 		"an unfrozen card pays nothing for the overlay")
 
 	card.add_status_effect("frozen", 1)
 	await get_tree().process_frame
-	var overlay: MeshInstance3D = card.get("_frozen_overlay")
+	var overlay: MeshInstance3D = card.overlays.frozen_overlay
 	_expect(card.is_frozen() and overlay != null and overlay.visible,
 		"freezing the card creates and shows the frost overlay")
 	_expect(overlay != null and overlay.get_parent() == card.get_node("HandMesh"),

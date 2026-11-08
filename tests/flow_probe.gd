@@ -594,7 +594,7 @@ func _check_demo_stack_fan() -> void:
 	stack._commit_summon_to_stack()
 	_expect(stack.cards.has(local_summon) and local_summon.get_parent() == local_hand,
 		"confirmed local Summon commits while its printed preview fades in place")
-	local_summon._teleport_tween.custom_step(0.30)
+	local_summon.teleport.tween.custom_step(0.30)
 	var printed_summon := local_summon
 	local_summon = stack.cards.back()
 	_expect(local_summon != printed_summon and printed_summon.is_queued_for_deletion(),

@@ -23,6 +23,8 @@ const DECK_PICKER_SCENE := "res://deck_picker.tscn"
 
 ## Config for the match about to start. Empty = fall back to the debug preset.
 var config: Dictionary = {}
+var _demo_navigation: CanvasLayer
+var _demo_config_backup: Dictionary = {}
 
 ## Which saved deck the "custom" preset plays. The editor's Play button sets it, so playing from the
 ## editor reads back the file you just saved rather than the default one.
@@ -115,6 +117,9 @@ func start_match(preset: String, overrides: Dictionary = {}) -> void:
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 func go_to_menu() -> void:
+	if is_instance_valid(_demo_navigation):
+		go_to_demo_menu()
+		return
 	config = {}
 	get_tree().change_scene_to_file(MENU_SCENE)
 
@@ -359,3 +364,30 @@ func _debug() -> Dictionary:
 			],
 		"first_phase": "first_main",
 	}
+
+
+func start_demo(path: String) -> void:
+	var catalog := preload("res://scripts/demo_catalog.gd")
+	var allowed := false
+	for entry in catalog.entries():
+		if entry.path == path:
+			allowed = true
+			break
+	if not allowed:
+		return
+	_demo_config_backup = config.duplicate(true)
+	var error := get_tree().change_scene_to_file(path)
+	if error != OK:
+		push_error("Could not open demo: " + path)
+		return
+	_demo_navigation = preload("res://scripts/demo_navigation.gd").new()
+	add_child(_demo_navigation)
+
+func go_to_demo_menu() -> void:
+	if is_instance_valid(_demo_navigation):
+		_demo_navigation.queue_free()
+		_demo_navigation = null
+		config = _demo_config_backup
+	get_tree().paused = false
+	Engine.time_scale = 1.0
+	get_tree().change_scene_to_file("res://demo_menu.tscn")

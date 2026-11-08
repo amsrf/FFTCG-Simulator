@@ -36,5 +36,5 @@ func _ready() -> void:
 	await get_tree().process_frame
 	if cam != null:
 		print("[SilencePreview] card_screen=", cam.unproject_position(card.global_position),
-			" icon_screen=", cam.unproject_position(card.silence_icon.global_position),
-			" icon_pos=", card.silence_icon.position, " icon_scale=", card.silence_icon.scale)
+			" icon_screen=", cam.unproject_position(card.overlays.silence_icon.global_position),
+			" icon_pos=", card.overlays.silence_icon.position, " icon_scale=", card.overlays.silence_icon.scale)

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://btstpe47bqolk"]
+
+[ext_resource type="Script" path="res://tools/opponent_summon_keyframe_editor.gd" id="1"]
+
+[node name="OpponentSummonKeyframeEditor" type="Node" unique_id=101176600]
+script = ExtResource("1")

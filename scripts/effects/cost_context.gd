@@ -20,7 +20,7 @@ func _init(p_subject: Card, p_purpose: String = "cast", p_field: Node = null) ->
 	field = p_field
 	if p_subject != null:
 		controller = p_subject.controller
-		owner_id = 1 if controller == "player" else 2
+		owner_id = 1 if controller == Card.PLAYER else 2
 		source = p_subject
 
 

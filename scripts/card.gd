@@ -1,6 +1,14 @@
 extends Node3D
 
 class_name Card
+## Who controls a card. Plain strings (they come from the data and the match setup), named so a typo
+## fails to parse instead of silently comparing false.
+const PLAYER := "player"
+const OPPONENT := "opponent"
+## Card types, spelled as the card database spells them.
+const FORWARD := "Forward"
+const BACKUP := "Backup"
+const SUMMON := "Summon"
 const CRYSTAL_SCENE_PATH = "res://crystal.tscn"
 const ELEMENTS := preload("res://scripts/elements.gd")
 @export var id: int = 0  # Make this editable in the Inspector
@@ -17,7 +25,6 @@ var code: String
 @export var accumulated_damage: int = 0
 var crystal_scene
 var crystal_instance
-var current_state
 var _stack_face: SubViewport
 var _printed_texture: Texture2D
 var mat: ShaderMaterial
@@ -36,7 +43,7 @@ var _drag_input_active := false
 @export var type: String
 @export var card_name: String
 @export var index = 0
-@export var controller = 'player'
+@export var controller = PLAYER
 @export var element = ''
 @export var status_effects = {}
 @export var power_array = []
@@ -147,43 +154,15 @@ var hand_tween: Tween
 ## if the card leaves the stack while the fan is still moving, the old tween must
 ## be stopped or it keeps writing stack-local positions into the new zone.
 var stack_tween: Tween
-## The current teleport presentation tween (source fade or destination materialise).
-var _teleport_tween: Tween
-## Additive halo around the card during the teleport. It is created lazily and
-## only shown while `teleport_glow` is non-zero.
-const TELEPORT_HALO_SHADER := preload("res://shaders/card_teleport_halo.gdshader")
-const TELEPORT_HALO_SCALE := 1.55
-var _teleport_halo: MeshInstance3D = null
-var _teleport_halo_material: ShaderMaterial = null
-## The card's border surface and power label are not part of the materialising
-## face. Hide them until the texture is fully revealed, then restore the label's
-## previous visibility.
-var _teleport_chrome_hidden: bool = false
-var _teleport_power_was_visible: bool = false
-var _teleport_hidden_material: ShaderMaterial = null
-## FROSTBITE-STYLE FROZEN OVERLAY. A card-aligned additive quad, built lazily
-## only while a card is actually Frozen on the field. It composites two original
-## alpha masks so the artwork stays readable under the cracked icy rim.
-const FROZEN_OVERLAY_SHADER := preload("res://shaders/frozen_overlay.gdshader")
-const FROZEN_CRACKS_PATH := "res://assets/effects/frost/frost_cracks.png"
-const FROZEN_OUTLINE_PATH := "res://assets/effects/frost/frost_outline.png"
-const FROZEN_OVERLAY_SCALE := 1.01
-## How long the frost takes to grow from the card edge to its full mask, and
-## how long it takes to recede when Freeze is consumed.
-const FROZEN_SPREAD_SECONDS := 1.60
-const FROZEN_RECEDE_SECONDS := FROZEN_SPREAD_SECONDS
-var _frozen_overlay: MeshInstance3D = null
-var _frozen_overlay_material: ShaderMaterial = null
-var _frozen_spread_tween: Tween = null
-var _frozen_spread: float = 0.0
-var _frozen_visual_on: bool = false
+## TELEPORT CAST presentation (source shine/fade, destination materialise). See card_teleport.gd.
+const CARD_TELEPORT := preload("res://scripts/card_teleport.gd")
+var teleport: CARD_TELEPORT = CARD_TELEPORT.new(self)
+## Silence bubble + Frozen rim. See card_status_overlays.gd.
+const CARD_STATUS_OVERLAYS := preload("res://scripts/card_status_overlays.gd")
+var overlays: CARD_STATUS_OVERLAYS = CARD_STATUS_OVERLAYS.new(self)
 ## Last status set reported to Vfx. `refresh_status_visuals()` is the one sync
 ## point, so direct dictionary erases still produce a status_removed event.
 var _vfx_status_snapshot: Dictionary = {}
-# DEBUG VARIABLES
-var debug_step: int = 0
-var debug_log: Array = []
-
 @onready var power_label: Label3D =  $PowerDisplay
 signal card_dragged(card)
 signal focus_card(card)
@@ -209,81 +188,11 @@ func _ready():
 	camera = get_viewport().get_camera_3d()
 	crystal_scene = load(CRYSTAL_SCENE_PATH)
 	_build_target_border()
-	_install_card_edge()
+	CARD_EDGE.install(self, _card_face_size())
 
-## CARDS HAVE THICKNESS. The art mesh is a single flat quad (its AABB is ~0 in y), which reads as
-## a decal as soon as the camera is tilted. This builds a rounded-rectangle prism ONCE and shares
-## it across every card, so the silhouette gets a real side wall without paying for a mesh per card.
-##
-## The prism matches the face's corner radius, so its outline cannot poke out past the rounded
-## corners, and its top face is left open because the card art covers it.
-const CARD_EDGE_THICKNESS := 0.02
-const CARD_EDGE_RADIUS := 0.03
-const CARD_EDGE_CORNER_STEPS := 5
-static var _edge_mesh_cache: ArrayMesh = null
-static var _edge_material_cache: StandardMaterial3D = null
+## Card thickness (a shared rounded-prism side wall). See card_edge.gd.
+const CARD_EDGE := preload("res://scripts/card_edge.gd")
 
-func _install_card_edge() -> void:
-	if has_node("CardEdge"):
-		return
-	if _edge_mesh_cache == null:
-		_edge_mesh_cache = _build_card_edge_mesh(
-			_card_face_size(), CARD_EDGE_THICKNESS, CARD_EDGE_RADIUS)
-	if _edge_material_cache == null:
-		_edge_material_cache = StandardMaterial3D.new()
-		_edge_material_cache.albedo_color = Color(0.055, 0.06, 0.075)
-		_edge_material_cache.metallic = 0.15
-		_edge_material_cache.roughness = 0.55
-		_edge_material_cache.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var edge := MeshInstance3D.new()
-	edge.name = "CardEdge"
-	edge.mesh = _edge_mesh_cache
-	edge.material_override = _edge_material_cache
-	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(edge)
-
-static func _build_card_edge_mesh(face: Vector2, thickness: float, radius: float) -> ArrayMesh:
-	var hx: float = face.x * 0.5
-	var hz: float = face.y * 0.5
-	var r: float = minf(radius, minf(hx, hz))
-	# Counter-clockwise in the XZ plane, starting at the top-right corner.
-	var corners: Array = [
-		[Vector2(hx - r, hz - r), 0.0],
-		[Vector2(-(hx - r), hz - r), PI * 0.5],
-		[Vector2(-(hx - r), -(hz - r)), PI],
-		[Vector2(hx - r, -(hz - r)), PI * 1.5],
-	]
-	var outline: Array[Vector2] = []
-	for corner in corners:
-		var centre: Vector2 = corner[0]
-		var start: float = corner[1]
-		for step in range(CARD_EDGE_CORNER_STEPS + 1):
-			var angle: float = start + (PI * 0.5) * (float(step) / CARD_EDGE_CORNER_STEPS)
-			outline.append(centre + Vector2(cos(angle), sin(angle)) * r)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var count: int = outline.size()
-	for i in range(count):
-		var a: Vector2 = outline[i]
-		var b: Vector2 = outline[(i + 1) % count]
-		var side: Vector2 = (b - a).normalized()
-		var normal := Vector3(side.y, 0.0, -side.x)
-		st.set_normal(normal); st.add_vertex(Vector3(a.x, 0.0, a.y))
-		st.set_normal(normal); st.add_vertex(Vector3(b.x, 0.0, b.y))
-		st.set_normal(normal); st.add_vertex(Vector3(b.x, -thickness, b.y))
-		st.set_normal(normal); st.add_vertex(Vector3(a.x, 0.0, a.y))
-		st.set_normal(normal); st.add_vertex(Vector3(b.x, -thickness, b.y))
-		st.set_normal(normal); st.add_vertex(Vector3(a.x, -thickness, a.y))
-	# Bottom cap, so the edge still reads on a card seen from below.
-	var bottom_centre := Vector3(0.0, -thickness, 0.0)
-	for i in range(count):
-		var a: Vector2 = outline[i]
-		var b: Vector2 = outline[(i + 1) % count]
-		st.set_normal(Vector3.DOWN); st.add_vertex(bottom_centre)
-		st.set_normal(Vector3.DOWN); st.add_vertex(Vector3(b.x, -thickness, b.y))
-		st.set_normal(Vector3.DOWN); st.add_vertex(Vector3(a.x, -thickness, a.y))
-	return st.commit()
-	
 func initialize(card_id: int, card_controller: String):
 	id = card_id
 	string_id = str(card_id)
@@ -413,7 +322,7 @@ func _process(_delta):
 		# through the same state handler the signal uses.
 		release_drag()
 		return
-	if current_zone == Zone.HAND and controller == "player":
+	if current_zone == Zone.HAND and controller == PLAYER:
 		var owner_hand := get_parent()
 		if owner_hand is Hand and owner_hand.update_character_drag(self, get_viewport().get_mouse_position()):
 			return
@@ -421,7 +330,7 @@ func _process(_delta):
 	emit_signal("card_dragged", self)
 	global_transform.origin = _get_mouse_3d_position_on_card_plane() + offset
 
-## Start an interactive drag. Called by HandCardState when the pointer grabs a
+## Start an interactive drag. Called by Hand.on_card_grabbed() when the pointer grabs a
 ## hand card; tests and staging that set is_dragging directly do not arm the
 ## per-frame release fallback.
 func begin_drag() -> void:
@@ -438,8 +347,9 @@ func release_drag() -> void:
 	_drag_release_handled = true
 	_drag_input_active = false
 	is_dragging = false
-	if current_state != null:
-		current_state.handle_released()
+	var zone: Node = get_parent()
+	if zone != null and zone.has_method("on_card_released"):
+		zone.on_card_released(self)
 			
 
 		
@@ -471,8 +381,10 @@ func _get_mouse_3d_position_on_card_plane() -> Vector3:
 
 	
 func _notification(what):
-	if what == NOTIFICATION_PARENTED:
-		_update_state()  # Re-check parent when moved
+	# Arriving on a Field refreshes the power readout and the board's continuous effects.
+	if what == NOTIFICATION_PARENTED and get_parent() is Field:
+		_updateUI()
+		_executeAuraEffects()
 		
 func _updateUI():
 	showPower()
@@ -491,52 +403,13 @@ func _executeAuraEffects():
 	if field_node != null and field_node.has_method("refresh_continuous_effects"):
 		field_node.refresh_continuous_effects()
 
-## Loaded by PATH rather than by its `class_name`: a newly added global class is only registered
-## in Godot's class cache by the editor, so a headless run would fail to parse this file with
-## `Identifier "StackCardState" not declared` until the project is opened once.
-const STACK_CARD_STATE := preload("res://scripts/stack_card_state.gd")
-
-func _update_state():
-	# Assign the new state based on current parent
-	var parent = get_parent()
-	#print('state updated')
-	if parent is Hand:
-		current_state = HandCardState.new(self)
-	elif parent is Field:
-		_updateUI()
-		_executeAuraEffects()
-		current_state = FieldCardState.new(self)
-	elif parent is Stack:
-		# A stack card IS clickable — it selects itself so its own targeting is displayed —
-		# but it is not played by anyone, so this is its only interaction.
-		current_state = STACK_CARD_STATE.new(self)
-	else:
-		current_state = null
-		pass
-		
+## CARD INPUT IS THE ZONE'S BUSINESS. A click, release or hover is forwarded to the card's parent zone (Hand, Field,
+## Stack, Graveyard, DamageZone), which decides what it means there. A parent without the method simply ignores it.
 func _on_card_area_3d_card_grabbed(_card: Variant):
-	# A CARD IN A PILE IS LOOKED AT, NOT PLAYED. Clicking one opens the same fan window the deck search uses, so the
-	# player can check what is in the zone. It returns WITHOUT touching current_state: pile cards have no drag or tap
-	# behaviour to run, and starting one would be a no-op that also swallowed the click.
-	#
-	# The host is two levels up — card -> zone -> Player -> Game — and it is duck-typed, so a card parented
-	# anywhere else simply does nothing rather than erroring.
-	if current_zone == Zone.DAMAGE or current_zone == Zone.GRAVEYARD or current_zone == Zone.REMOVED:
-		var zone: Node = get_parent()
-		var host: Node = null
-		if zone != null and zone.get_parent() != null:
-			host = zone.get_parent().get_parent()
-		if host != null and host.has_method("_show_zone_view"):
-			var title: String = "Graveyard"
-			if current_zone == Zone.DAMAGE:
-				title = "Damage Zone"
-			elif current_zone == Zone.REMOVED:
-				title = "Removed from the Game"
-			host.call("_show_zone_view", zone, title)
-		return
-	if current_state :
-		_drag_release_handled = false
-		current_state.handle_grabbed()
+	_drag_release_handled = false
+	var zone: Node = get_parent()
+	if zone != null and zone.has_method("on_card_grabbed"):
+		zone.on_card_grabbed(self)
 
 ## Hover on the card's own area. The hand's LIFT is driven separately by HandMesh
 ## (mesh_instance_3d.gd); these handlers exist so a zone can react to the pointer being over a
@@ -550,32 +423,24 @@ func _on_card_area_3d_mouse_entered():
 	# what the player is choosing between. The hand's own gate lives in Hand.set_hovered().
 	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
 		return
-	var stack: Stack = get_parent() as Stack
-	if stack != null:
-		stack.set_hovered(self, true)
-		return
-	var host: Node = get_parent()
-	if host != null and current_zone == Zone.FIELD and host.has_method("show_card_preview"):
-		host.show_card_preview(self)
+	var zone: Node = get_parent()
+	if zone != null and zone.has_method("on_card_hovered"):
+		zone.on_card_hovered(self, true)
 
 func _on_card_area_3d_mouse_exited():
-	var stack: Stack = get_parent() as Stack
-	if stack != null:
-		stack.set_hovered(self, false)
-		return
-	var host: Node = get_parent()
-	if host != null and current_zone == Zone.FIELD and host.has_method("hide_card_preview"):
-		host.hide_card_preview()
+	var zone: Node = get_parent()
+	if zone != null and zone.has_method("on_card_hovered"):
+		zone.on_card_hovered(self, false)
 	
 func can_be_played():
 	var player_mode = GlobalVariables.get_player_mode()
 	if player_mode == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-		return type == 'Summon'
+		return type == SUMMON
 	if player_mode == GlobalVariables.Player_Mode.FREE:
 		# Summons are always playable; a Character is only legal for the turn
 		# player and only with an empty stack. Card keeps no game reference, so
 		# ask the Hand it is in (its parent while in hand).
-		if type == 'Summon':
+		if type == SUMMON:
 			return true
 		var owner_hand = get_parent()
 		if owner_hand != null and owner_hand.has_method("can_play_character"):
@@ -589,7 +454,7 @@ func is_on_field():
 func showPower():
 	if(power_label == null):
 		return
-	if(type == 'Forward'):
+	if(type == FORWARD):
 		power_label.visible = true
 		mat.set_shader_parameter("effect_enabled", true)
 	else:
@@ -726,11 +591,11 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# A zone change is not a teleport in progress: normal cards must always be
 	# fully opaque. The teleport path sets progress back to 1 immediately after
 	# entering the field, while the card is still invisible.
-	reset_teleport_visual()
+	teleport.reset()
 	# A hit reaction must not survive a zone change. It is a mesh-local tween,
 	# so without this the card could arrive in the hand/Graveyard still lifted
 	# and tilted.
-	normalize_damage_reaction()
+	damage_fx.normalize()
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
 	# while the card was parked keeps writing Stack-local positions after the card
 	# has been reparented to the hand or the field, and the new zone's layout
@@ -819,174 +684,9 @@ func stop_stack_layout() -> void:
 		stack_tween.kill()
 	stack_tween = null
 
-## Source half of a teleport: shine in place, then dissolve away. The card does
-## not move. Returns the tween so the caller can await it.
-func teleport_out(shine_seconds: float = 0.45, fade_seconds: float = 0.20) -> Tween:
-	_kill_teleport_tween()
-	# The source must stay where it is. Either row could still be settling
-	# (Characters fade from the hand now, Summons from the Stack), so stop both
-	# layout tweens rather than letting the card drift while it shines.
-	stop_hand_layout()
-	stop_stack_layout()
-	visible = true
-	set_teleport_visual(0.0, 0.0)
-	var tween := create_tween()
-	# Reveal stays 0 so the card itself turns into a white silhouette as the
-	# glow rises. allow_halo=false: no additive quad around the source — the
-	# reference glows INSIDE the card and then fades, it does not grow a halo.
-	tween.tween_method(
-		func(v: float): set_teleport_visual(0.0, v, 0.0, false),
-		0.0, 1.0, maxf(shine_seconds, 0.01))
-	tween.tween_method(
-		func(v: float): set_teleport_visual(v, 1.0 - 0.35 * v, 0.0, false),
-		0.0, 1.0, maxf(fade_seconds, 0.01))
-	tween.tween_callback(func():
-		set_teleport_visual(1.0, 0.0)
-		visible = false)
-	_teleport_tween = tween
-	return tween
-
-## Destination half: build the glowing silhouette from the bottom up, brighten
-## it once complete, then fade the glow while revealing the actual artwork.
-func teleport_in(build_seconds: float = 0.65, glow_seconds: float = 0.18,
-		reveal_seconds: float = 0.30) -> Tween:
-	_kill_teleport_tween()
-	visible = true
-	set_teleport_visual(1.0, 0.35, 0.0)
-	var tween := create_tween()
-	# 1. Add the glow squares from bottom to top. Reveal stays 0: the texture
-	#    is never visible while the silhouette is incomplete.
-	tween.tween_method(
-		func(v: float): set_teleport_visual(1.0 - v, 0.35 + 0.45 * v, 0.0),
-		0.0, 1.0, maxf(build_seconds, 0.01))
-	# 2. The completed silhouette brightens.
-	tween.tween_method(
-		func(v: float): set_teleport_visual(0.0, 0.80 + 0.20 * v, 0.0),
-		0.0, 1.0, maxf(glow_seconds, 0.01))
-	# 3. The glow fades away as the card texture is revealed.
-	tween.tween_method(
-		func(v: float): set_teleport_visual(0.0, 1.0 - v, v),
-		0.0, 1.0, maxf(reveal_seconds, 0.01))
-	tween.tween_callback(func(): set_teleport_visual(0.0, 0.0, 1.0))
-	_teleport_tween = tween
-	return tween
-
-func set_teleport_visual(progress: float, glow: float, reveal: float = 1.0,
-		allow_halo: bool = true) -> void:
-	if mat == null:
-		return
-	mat.set_shader_parameter("teleport_progress", clampf(progress, 0.0, 1.0))
-	mat.set_shader_parameter("teleport_glow", clampf(glow, 0.0, 1.0))
-	mat.set_shader_parameter("teleport_reveal", clampf(reveal, 0.0, 1.0))
-	# The border and power readout are not part of the glow silhouette. They
-	# appear only after the texture is fully revealed.
-	_set_teleport_chrome_hidden(reveal < 0.999)
-	# The halo belongs only to the DESTINATION's completed silhouette. The source
-	# passes allow_halo=false for both its shine and fade, so the card brightens
-	# inside its own rectangle and never grows an overflow outline.
-	var halo_on: bool = allow_halo and glow > 0.001 and progress <= 0.001
-	if halo_on:
-		_ensure_teleport_halo()
-	if _teleport_halo != null:
-		_teleport_halo.visible = halo_on
-		if _teleport_halo_material != null:
-			_teleport_halo_material.set_shader_parameter("intensity", clampf(glow * 1.25, 0.0, 1.5))
-
-func _set_teleport_chrome_hidden(hidden: bool) -> void:
-	if hidden == _teleport_chrome_hidden:
-		return
-	_teleport_chrome_hidden = hidden
-	if _teleport_hidden_material == null:
-		var shader := Shader.new()
-		shader.code = "shader_type spatial;
-render_mode unshaded;
-void fragment() { discard; }
-"
-		_teleport_hidden_material = ShaderMaterial.new()
-		_teleport_hidden_material.shader = shader
-	for mesh in [get_node_or_null("HandMesh"), get_node_or_null("FieldMesh")]:
-		if mesh is MeshInstance3D:
-			# Surface 0 is the face; 1 is the printed border; 2 is the back.
-			# Hide both non-face surfaces or the card still reads as a full
-			# rectangle before the build has produced anything.
-			for surface in [1, 2]:
-				mesh.set_surface_override_material(surface, _teleport_hidden_material if hidden else null)
-	if hidden:
-		_teleport_power_was_visible = power_label != null and power_label.visible
-		if power_label != null:
-			power_label.visible = false
-	elif power_label != null and _teleport_power_was_visible:
-		power_label.visible = true
-	_teleport_power_was_visible = false
-
-
-func _ensure_teleport_halo() -> void:
-	if _teleport_halo != null and is_instance_valid(_teleport_halo):
-		return
-	var face: Vector2 = _card_face_size()
-	var quad := PlaneMesh.new()
-	quad.size = face * TELEPORT_HALO_SCALE
-	_teleport_halo_material = ShaderMaterial.new()
-	_teleport_halo_material.shader = TELEPORT_HALO_SHADER
-	var half: float = 1.0 / TELEPORT_HALO_SCALE
-	_teleport_halo_material.set_shader_parameter("card_half", Vector2(half, half))
-	_teleport_halo = MeshInstance3D.new()
-	_teleport_halo.mesh = quad
-	_teleport_halo.material_override = _teleport_halo_material
-	_teleport_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_teleport_halo.extra_cull_margin = 4.0
-	_teleport_halo.position = Vector3(0.0, 0.004, 0.0)
-	_teleport_halo.visible = false
-	add_child(_teleport_halo)
-
-func reset_teleport_visual() -> void:
-	_kill_teleport_tween()
-	set_teleport_visual(0.0, 0.0, 1.0)
-
-func _kill_teleport_tween() -> void:
-	if _teleport_tween != null and _teleport_tween.is_valid():
-		_teleport_tween.kill()
-	_teleport_tween = null
-
-
-'''func _log_state(context: String):
-	var entry = {
-		"step": debug_step,
-		"context": context,
-		"time": Time.get_ticks_msec(),
-		"rotation": rotation,
-		"rotation_degrees": rotation_degrees,
-		"global_rotation": global_rotation if has_method("global_rotation") else Vector3.ZERO,
-		"transform_basis": transform.basis,
-		"scale": scale,
-		"position": position
-	}
-	debug_log.append(entry)
-	
-	print("\n[", context, "]")
-	print("  rotation: ", rotation, " (", rotation_degrees, "°)")
-	print("  scale: ", scale)
-	print("  position: ", position)
-# Call this before/after animations	'''
-	
-## Effect damage makes the card physically react: a quick pop off the table,
-## a scale-up and a tilt, then a damped settle. It is deliberately on the
-## HandMesh rather than the Card, because the Card's transform belongs to the
-## field layout. The curves are built once per card.
-const DAMAGE_REACTION_SECONDS := 0.62
-const DAMAGE_REACTION_LIFT := [0.055, 0.085, 0.115, 0.148]
-const DAMAGE_REACTION_SCALE := [0.035, 0.060, 0.085, 0.110]
-const DAMAGE_REACTION_YAW_DEG := [2.4, 3.6, 5.0, 6.4]
-const DAMAGE_REACTION_ROLL_DEG := [1.0, 1.4, 2.0, 2.8]
-const DAMAGE_REACTION_SIDE := [0.006, 0.012, 0.018, 0.025]
-var _damage_reaction_tween: Tween = null
-var _damage_bounce_curve: Curve = null
-var _damage_wiggle_curve: Curve = null
-var _damage_peak_lift: float = 0.0
-var _damage_peak_scale: float = 0.0
-var _damage_peak_yaw: float = 0.0
-var _damage_peak_roll: float = 0.0
-var _damage_peak_side: float = 0.0
+## Damage presentation (recoil + Earth launch). See card_damage_fx.gd.
+const CARD_DAMAGE_FX := preload("res://scripts/card_damage_fx.gd")
+var damage_fx: CARD_DAMAGE_FX = CARD_DAMAGE_FX.new(self)
 
 ## WHO/WHAT dealt the most recent damage. The state-based break happens later, in a sweep that cannot see the source,
 ## so the damage records it here and the sweep asks the same protection question an explicit break does.
@@ -1012,219 +712,13 @@ func suffer_damage(damage: int, source_kind: String = "", source_controller: Str
 	# combat has its own clash presentation.
 	if damage > 0 and is_on_field() and not source_kind.is_empty():
 		if not Vfx.owns_damage_reaction(source_card):
-			play_damage_reaction(damage, reaction_delay)
+			damage_fx.play_reaction(damage, reaction_delay)
 
 func take_damage(damage: int, source_kind: String = "", source_controller: String = "",
 		source_card: Card = null, reaction_delay: float = 0.0):
 	# Alias kept for effect data that uses the "take_damage" instruction.
 	suffer_damage(damage, source_kind, source_controller, source_card, reaction_delay)
 
-
-## Quick physical recoil on the visible mesh. The Card root is left alone: that
-## transform is the Field's layout, so animating it would fight the board.
-func play_damage_reaction(damage: int, delay: float = 0.0) -> void:
-	if damage <= 0 or hand_mesh == null or not is_on_field():
-		return
-	_ensure_damage_curves()
-	var tier: int = VfxEvent.damage_tier_for(damage)
-	_damage_peak_lift = float(DAMAGE_REACTION_LIFT[tier])
-	_damage_peak_scale = float(DAMAGE_REACTION_SCALE[tier])
-	_damage_peak_yaw = float(DAMAGE_REACTION_YAW_DEG[tier])
-	_damage_peak_roll = float(DAMAGE_REACTION_ROLL_DEG[tier])
-	_damage_peak_side = float(DAMAGE_REACTION_SIDE[tier])
-
-	if _damage_reaction_tween != null and _damage_reaction_tween.is_valid():
-		_damage_reaction_tween.kill()
-	_damage_reaction_tween = null
-	_reset_damage_pose()
-
-	var tween := create_tween()
-	if delay > 0.0:
-		tween.tween_interval(delay)
-	tween.tween_method(_set_damage_reaction_pose, 0.0, 1.0, DAMAGE_REACTION_SECONDS)
-	tween.tween_callback(_finish_damage_reaction)
-	_damage_reaction_tween = tween
-
-
-## Earth launch follows gravity and returns exactly to the mesh's resting pose.
-const EARTH_LAUNCH_HEIGHTS: Array[float] = [1.0, 1.6, 2.2, 2.9]
-const EARTH_LAUNCH_GRAVITY := 9.8
-signal earth_landed
-var earth_contact_seconds := 0.0
-var _earth_chrome_active := false
-var _earth_edge_home := Transform3D.IDENTITY
-var _earth_power_was_visible := false
-
-func earth_launch_seconds(damage: int) -> float:
-	return sqrt(8.0 * EARTH_LAUNCH_HEIGHTS[VfxEvent.damage_tier_for(damage)] / EARTH_LAUNCH_GRAVITY)
-
-func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> Tween:
-	if hand_mesh == null or not is_on_field():
-		return null
-	normalize_damage_reaction()
-	var duration := earth_launch_seconds(damage)
-	var velocity := EARTH_LAUNCH_GRAVITY * duration * 0.5
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
-	# Small bounded wavering replaces full turns. The envelope fades away
-	# before touchdown, preserving the planned landing pose.
-	var frequencies := Vector3(rng.randf_range(5.0, 7.0), rng.randf_range(3.0, 5.0), rng.randf_range(4.0, 6.0))
-	var phases := Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
-	var excursion := Vector3(rng.randf_range(-0.045, 0.045), 0.0, rng.randf_range(-0.035, 0.035))
-	var landing_offset := Vector3(rng.randf_range(-0.006, 0.006), 0.0, rng.randf_range(-0.006, 0.006))
-	var landing_tilt := Vector3(rng.randf_range(-0.015, 0.015), rng.randf_range(-0.020, 0.020), rng.randf_range(-0.015, 0.015))
-	var pose_at := func(time: float) -> Transform3D:
-		var p := clampf(time / duration, 0.0, 1.0)
-		var height := velocity * time - 0.5 * EARTH_LAUNCH_GRAVITY * time * time
-		var lateral := excursion * pow(sin(PI * p), 2.0) + landing_offset * smoothstep(0.45, 0.94, p)
-		var position_local := global_basis.inverse() * (Vector3.UP * height + lateral)
-		var envelope := pow(sin(PI * p), 2.0)
-		var angles := Vector3(
-			sin(time * frequencies.x + phases.x) * deg_to_rad(7.5),
-			sin(time * frequencies.y + phases.y) * deg_to_rad(3.0),
-			sin(time * frequencies.z + phases.z) * deg_to_rad(6.0)) * envelope
-		angles += landing_tilt * smoothstep(0.65, 0.94, p)
-		var orientation := Basis(Vector3.RIGHT, angles.x) * Basis(Vector3.UP, angles.y) * Basis(Vector3.BACK, angles.z)
-		return Transform3D(orientation, position_local)
-	# First corner contact ends the free fall. The centre need not reach zero:
-	# a tilted card touches the ground earlier than a flat one.
-	var resting_bottom := _earth_lowest_offset(Transform3D.IDENTITY)
-	var low := duration * 0.5
-	var high := duration + 0.2
-	for i in range(1, 81):
-		var sample_time := lerpf(duration * 0.5, duration + 0.2, float(i) / 80.0)
-		if _earth_lowest_offset(pose_at.call(sample_time)) <= resting_bottom:
-			high = sample_time
-			break
-		low = sample_time
-	for _iteration in range(18):
-		var middle := (low + high) * 0.5
-		if _earth_lowest_offset(pose_at.call(middle)) > resting_bottom:
-			low = middle
-		else:
-			high = middle
-	earth_contact_seconds = high
-	var contact_pose: Transform3D = pose_at.call(earth_contact_seconds)
-	var edge := get_node_or_null("CardEdge") as Node3D
-	_earth_edge_home = edge.transform if edge != null else Transform3D.IDENTITY
-	_earth_power_was_visible = power_label.visible if power_label != null else false
-	_earth_chrome_active = true
-	if power_label != null:
-		power_label.visible = false
-	var apply_pose := func(pose: Transform3D) -> void:
-		if not is_on_field():
-			return
-		hand_mesh.transform = pose
-		if is_instance_valid(edge):
-			edge.transform = pose * _earth_edge_home
-	var tween := create_tween()
-	if delay > 0.0:
-		tween.tween_interval(delay)
-	tween.tween_method(func(time: float): apply_pose.call(pose_at.call(time)), 0.0, earth_contact_seconds, earth_contact_seconds)
-	tween.tween_callback(func(): earth_landed.emit())
-	# A small damped rebound and short roll/slide bring a survivor back to its
-	# slot after contact, instead of steering it upright while still airborne.
-	tween.tween_method(func(p: float) -> void:
-		var settle := 1.0 - pow(1.0 - p, 3.0)
-		var pose := contact_pose.interpolate_with(Transform3D.IDENTITY, settle)
-		var penetration := resting_bottom - _earth_lowest_offset(pose)
-		pose.origin += global_basis.inverse() * Vector3.UP * (maxf(0.0, penetration) + sin(PI * p) * 0.012 * (1.0 - p))
-		apply_pose.call(pose)
-	, 0.0, 1.0, 0.12)
-	tween.tween_callback(_finish_damage_reaction)
-	_damage_reaction_tween = tween
-	return tween
-
-func _earth_lowest_offset(pose: Transform3D) -> float:
-	var half := _card_face_size() * 0.5
-	var lowest := INF
-	for corner in [Vector3(-half.x, 0, -half.y), Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
-		lowest = minf(lowest, (global_basis * (pose * corner)).y)
-	return lowest
-
-func normalize_damage_reaction() -> void:
-	if _damage_reaction_tween != null and _damage_reaction_tween.is_valid():
-		_damage_reaction_tween.kill()
-	_damage_reaction_tween = null
-	_reset_damage_pose()
-
-
-func is_damage_reacting() -> bool:
-	return _damage_reaction_tween != null and _damage_reaction_tween.is_valid() \
-		and _damage_reaction_tween.is_running()
-
-
-func _ensure_damage_curves() -> void:
-	if _damage_bounce_curve != null:
-		return
-	# The non-negative envelope is the actual jump: fast attack, a short hang,
-	# then a small damped bounce back to rest.
-	_damage_bounce_curve = Curve.new()
-	_damage_bounce_curve.min_value = -0.12
-	_damage_bounce_curve.max_value = 1.05
-	_damage_bounce_curve.add_point(Vector2(0.00, 0.00))
-	_damage_bounce_curve.add_point(Vector2(0.07, 1.00))
-	_damage_bounce_curve.add_point(Vector2(0.20, 0.82))
-	_damage_bounce_curve.add_point(Vector2(0.34, 0.90))
-	_damage_bounce_curve.add_point(Vector2(0.49, 0.36))
-	_damage_bounce_curve.add_point(Vector2(0.62, 0.20))
-	_damage_bounce_curve.add_point(Vector2(0.74, -0.05))
-	_damage_bounce_curve.add_point(Vector2(0.86, 0.04))
-	_damage_bounce_curve.add_point(Vector2(0.94, -0.02))
-	_damage_bounce_curve.add_point(Vector2(1.00, 0.00))
-
-	# Signed curve for yaw/roll/side motion: the card rocks one way, then the
-	# other, shrinking to zero. Separate from the lift so the settle can shake
-	# without the card sinking through the board.
-	_damage_wiggle_curve = Curve.new()
-	_damage_wiggle_curve.min_value = -1.0
-	_damage_wiggle_curve.max_value = 1.0
-	_damage_wiggle_curve.add_point(Vector2(0.00, 0.00))
-	_damage_wiggle_curve.add_point(Vector2(0.07, 1.00))
-	_damage_wiggle_curve.add_point(Vector2(0.18, 0.45))
-	_damage_wiggle_curve.add_point(Vector2(0.30, -0.55))
-	_damage_wiggle_curve.add_point(Vector2(0.43, 0.34))
-	_damage_wiggle_curve.add_point(Vector2(0.56, -0.20))
-	_damage_wiggle_curve.add_point(Vector2(0.68, 0.12))
-	_damage_wiggle_curve.add_point(Vector2(0.80, -0.06))
-	_damage_wiggle_curve.add_point(Vector2(0.90, 0.03))
-	_damage_wiggle_curve.add_point(Vector2(1.00, 0.00))
-
-
-func _set_damage_reaction_pose(progress: float) -> void:
-	if hand_mesh == null or not is_instance_valid(hand_mesh):
-		return
-	if not is_on_field():
-		_reset_damage_pose()
-		return
-	var bounce: float = _damage_bounce_curve.sample(progress)
-	var wiggle: float = _damage_wiggle_curve.sample(progress)
-	var yaw: float = deg_to_rad(_damage_peak_yaw * wiggle)
-	var roll: float = deg_to_rad(_damage_peak_roll * wiggle)
-	var pitch: float = deg_to_rad(-_damage_peak_yaw * 0.22 * bounce)
-	hand_mesh.position = Vector3(_damage_peak_side * wiggle, _damage_peak_lift * bounce, 0.0)
-	hand_mesh.rotation = Vector3(pitch, yaw, roll)
-	hand_mesh.scale = Vector3.ONE * (1.0 + _damage_peak_scale * bounce)
-
-
-func _finish_damage_reaction() -> void:
-	_damage_reaction_tween = null
-	_reset_damage_pose()
-
-
-func _reset_damage_pose() -> void:
-	if hand_mesh == null or not is_instance_valid(hand_mesh):
-		return
-	hand_mesh.position = Vector3.ZERO
-	hand_mesh.rotation = Vector3.ZERO
-	hand_mesh.scale = Vector3.ONE
-	if _earth_chrome_active:
-		var edge := get_node_or_null("CardEdge") as Node3D
-		if edge != null:
-			edge.transform = _earth_edge_home
-		if power_label != null:
-			power_label.visible = _earth_power_was_visible and current_zone == Zone.FIELD
-		_earth_chrome_active = false
 
 func is_broken() -> bool:
 	# Break rule: accumulated damage equal to or greater than current power.
@@ -1251,7 +745,7 @@ func clear_damage():
 func reset_for_field_arrival() -> void:
 	# A card returning from a non-field zone is a new object. Drop every modifier, then recompute once; there is no
 	# arithmetic to reverse because `power` is only a cache.
-	normalize_damage_reaction()
+	damage_fx.normalize()
 	_continuous_power.clear()
 	power_array.clear()
 	_manual_power_delta = 0
@@ -1560,62 +1054,12 @@ func declare_blocker():
 func abilities_enabled() -> bool:
 	return not status_effects.has("abilities_nullified")
 
-## Show or hide the silence bubble. It belongs to the FIELD only; a card that loses its abilities and then
-## leaves the field must not carry the icon into the hand, Break Zone or deck.
-func _refresh_silence_icon() -> void:
-	var wanted: bool = current_zone == Zone.FIELD and status_effects.has("abilities_nullified")
-	if not wanted:
-		if silence_icon != null and is_instance_valid(silence_icon):
-			silence_icon.call("set_active", false)
-		return
-	if silence_icon == null or not is_instance_valid(silence_icon):
-		silence_icon = SILENCE_ICON_SCENE.instantiate()
-		add_child(silence_icon)
-	var face: Vector2 = _card_face_size()
-	var icon_width: float = face.x * 0.45
-	silence_icon.call("set_icon_width", icon_width)
-	var go_left: bool = _silence_icon_belongs_left()
-	var gap: float = face.x * 0.015
-	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam != null:
-		# Place by the CAMERA's screen axes. The card's local +x is not a reliable "right" here: field cards are
-		# rotated, and the same local axis can appear on either side. This puts the bubble on screen-right by
-		# default, screen-left when the card is near the right edge, and lifts it slightly up the screen.
-		var card_scale: float = global_transform.basis.get_scale().x
-		var horizontal: float = (face.x * 0.5 + icon_width * 0.5 + gap) * card_scale
-		var vertical: float = face.y * 0.15 * card_scale
-		var origin_px: Vector2 = cam.unproject_position(global_position)
-		# `basis.x` is not guaranteed to project to screen-right for this board camera; test it.
-		var right_dir: Vector3 = cam.global_transform.basis.x.normalized()
-		if cam.unproject_position(global_position + right_dir * 0.10).x < origin_px.x:
-			right_dir = -right_dir
-		var up_dir: Vector3 = cam.global_transform.basis.y.normalized()
-		if cam.unproject_position(global_position + up_dir * 0.10).y > origin_px.y:
-			up_dir = -up_dir
-		var target_world: Vector3 = global_position
-		target_world += right_dir * (-horizontal if go_left else horizontal)
-		target_world += up_dir * vertical
-		silence_icon.global_position = target_world
-	else:
-		silence_icon.position = Vector3((-1.0 if go_left else 1.0) * (face.x * 0.5 + icon_width * 0.5 + gap), 0.02, 0.0)
-	silence_icon.call("set_mirrored", go_left)
-	silence_icon.call("set_active", true)
-
-
-func _silence_icon_belongs_left() -> bool:
-	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null:
-		return false
-	var screen_x: float = cam.unproject_position(global_position).x
-	return screen_x > get_viewport().get_visible_rect().size.x * 0.70
-
 ## Every card-space status visual in one place. Callers that mutate
 ## `status_effects` directly (or erase a status in place, as the Active Phase
 ## does for Freeze) use this to re-sync the visuals.
 func refresh_status_visuals() -> void:
 	_sync_status_vfx()
-	_refresh_silence_icon()
-	refresh_frozen_overlay()
+	overlays.refresh()
 
 ## Report status additions/removals through the presentation director. This is
 ## the one place that notices direct dictionary erases too, because every
@@ -1638,79 +1082,6 @@ func _status_duration(status: String) -> int:
 	if value is int or value is float:
 		return int(value)
 	return 0
-
-## Show the cracked-ice rim only while this card is Frozen on the field. The
-## overlay is built lazily, so ordinary cards pay nothing for it.
-func refresh_frozen_overlay() -> void:
-	var wanted: bool = current_zone == Zone.FIELD and is_frozen()
-	if wanted:
-		_ensure_frozen_overlay()
-		if _frozen_overlay == null:
-			return
-		_frozen_overlay.visible = true
-		if not _frozen_visual_on:
-			_frozen_visual_on = true
-			_tween_frozen_spread(1.0, FROZEN_SPREAD_SECONDS, Tween.EASE_IN)
-		return
-	if _frozen_visual_on:
-		_frozen_visual_on = false
-		_tween_frozen_spread(0.0, FROZEN_RECEDE_SECONDS, Tween.EASE_OUT)
-	elif _frozen_overlay != null and is_instance_valid(_frozen_overlay):
-		# A settled hide, or a status that disappeared before the overlay was
-		# ever shown. Do not cut a recede tween short.
-		if _frozen_spread_tween == null or not _frozen_spread_tween.is_valid():
-			_frozen_overlay.visible = false
-
-func _ensure_frozen_overlay() -> void:
-	if _frozen_overlay != null and is_instance_valid(_frozen_overlay):
-		return
-	var face: Vector2 = _card_face_size()
-	var quad := PlaneMesh.new()
-	quad.size = face * FROZEN_OVERLAY_SCALE
-	_frozen_overlay_material = ShaderMaterial.new()
-	_frozen_overlay_material.shader = FROZEN_OVERLAY_SHADER
-	_frozen_overlay_material.set_shader_parameter("frost_cracks", load(FROZEN_CRACKS_PATH))
-	_frozen_overlay_material.set_shader_parameter("frost_outline", load(FROZEN_OUTLINE_PATH))
-	_frozen_overlay_material.set_shader_parameter("spread", _frozen_spread)
-	_frozen_overlay = MeshInstance3D.new()
-	_frozen_overlay.name = "FrozenOverlay"
-	_frozen_overlay.mesh = quad
-	_frozen_overlay.material_override = _frozen_overlay_material
-	_frozen_overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_frozen_overlay.extra_cull_margin = 2.0
-	# A hair above the face, like the target ring, so it cannot z-fight.
-	_frozen_overlay.position = Vector3(0.0, 0.003, 0.0)
-	_frozen_overlay.visible = false
-	# Same parent as the target ring: the hand's hover moves/scales HandMesh,
-	# and the frost must follow the visible card rather than a sibling.
-	var overlay_parent: Node3D = (hand_mesh as Node3D) if hand_mesh != null else (self as Node3D)
-	overlay_parent.add_child(_frozen_overlay)
-
-## Grow the frost inward from the card edge, or let it recede when Freeze is
-## consumed. `spread` is consumed by shaders/frozen_overlay.gdshader.
-func _tween_frozen_spread(to: float, seconds: float, ease: Tween.EaseType) -> void:
-	if _frozen_overlay == null or not is_instance_valid(_frozen_overlay):
-		return
-	if _frozen_spread_tween != null and _frozen_spread_tween.is_valid():
-		_frozen_spread_tween.kill()
-	_frozen_overlay.visible = true
-	if not is_inside_tree():
-		_set_frozen_spread(to)
-		_frozen_overlay.visible = to > 0.001
-		return
-	_frozen_spread_tween = create_tween()
-	_frozen_spread_tween.set_trans(Tween.TRANS_CUBIC).set_ease(ease)
-	_frozen_spread_tween.tween_method(_set_frozen_spread, _frozen_spread, to,
-		maxf(seconds, 0.01))
-	_frozen_spread_tween.tween_callback(func() -> void:
-		if to <= 0.001 and not _frozen_visual_on and _frozen_overlay != null:
-			_frozen_overlay.visible = false
-	)
-
-func _set_frozen_spread(value: float) -> void:
-	_frozen_spread = clampf(value, 0.0, 1.0)
-	if _frozen_overlay_material != null:
-		_frozen_overlay_material.set_shader_parameter("spread", _frozen_spread)
 
 ## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
 ## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
@@ -1774,7 +1145,7 @@ func can_attack():
 	# and every consumer — the click handler, the AI's attacker pick, the attack button — already goes through this.
 	if status_effects.has("cannot_attack"):
 		return false
-	if(type != 'Forward'):
+	if(type != FORWARD):
 		return false
 	return true
 
@@ -1850,10 +1221,6 @@ func _on_card_area_3d_card_released(_card: Variant) -> void:
 ## editor to tune colours, thickness and pulse from the Inspector. Card itself
 ## only supplies `card_size` (read from the mesh) and drives `intensity`.
 const TARGET_BORDER_MATERIAL := preload("res://shaders/target_border_material.tres")
-## The silence icon is a screen-facing status bubble, not part of the card face. Built lazily so a normal card
-## pays nothing for it.
-const SILENCE_ICON_SCENE := preload("res://silence_icon.tscn")
-var silence_icon: Node3D = null
 var target_border: MeshInstance3D = null
 var _border_material: ShaderMaterial = null
 var _border_tween: Tween = null
@@ -2444,7 +1811,7 @@ func get_effect_kind() -> String:
 	# Explicit effect_kind wins; otherwise derive from the card itself.
 	if effect_kind != "":
 		return effect_kind
-	if type == "Summon":
+	if type == SUMMON:
 		return "Summon"
 	if is_effect_card():
 		return "Ability"

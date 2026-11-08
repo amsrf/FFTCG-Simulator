@@ -48,6 +48,12 @@ func _ready() -> void:
 	test_button.pressed.connect(func(): MatchSetup.go_to_test_grounds())
 	box.add_child(test_button)
 
+	var demo_button := Button.new()
+	demo_button.text = "Demos & Previews"
+	demo_button.custom_minimum_size = Vector2(460, 44)
+	demo_button.pressed.connect(MatchSetup.go_to_demo_menu)
+	box.add_child(demo_button)
+
 	var deck_button := Button.new()
 	deck_button.text = "Deck Editor"
 	deck_button.custom_minimum_size = Vector2(460, 44)

@@ -26,12 +26,12 @@ func _ready() -> void:
 	field.play_card(card, false, false)
 	await get_tree().process_frame
 
-	_expect(card.silence_icon == null or not card.silence_icon.visible,
+	_expect(card.overlays.silence_icon == null or not card.overlays.silence_icon.visible,
 		"an ordinary card shows no silence icon")
 
 	card.add_status_effect("abilities_nullified", 1)
 	await get_tree().process_frame
-	var icon: Node3D = card.silence_icon
+	var icon: Node3D = card.overlays.silence_icon
 	_expect(icon != null and is_instance_valid(icon), "nullification builds the icon")
 	_expect(icon.visible and bool(icon.call("is_active")), "and it is active on the field")
 	# Reset the loop explicitly: a real frame may already have advanced it by the time the probe resumes.

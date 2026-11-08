@@ -2,7 +2,7 @@ extends Node
 ## Interactive demo for the card damage reaction.
 ##
 ## Run it directly (F6, or `Godot --path . res://tools/damage_reaction_demo.tscn`).
-## It uses the same HandMesh-local recoil as `Card.play_damage_reaction()` and
+## It uses the same HandMesh-local recoil as `card.damage_fx.play_reaction()` and
 ## exercises the real `Card.suffer_damage()` path. Damage is cleared afterwards
 ## so repeated high-tier hits do not break the demo cards.
 

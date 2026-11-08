@@ -171,8 +171,8 @@ func _choreograph() -> void:
 		lift_time, Tween.TRANS_SINE, Tween.EASE_OUT)
 
 	# Pitch around each card's own right axis while drawing it back.
-	var a_windup := (Basis.from_euler(a_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_a.controller == "opponent" else windup_pitch_degrees))).get_euler()
-	var b_windup := (Basis.from_euler(b_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_b.controller == "opponent" else windup_pitch_degrees))).get_euler()
+	var a_windup := (Basis.from_euler(a_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_a.controller == Card.OPPONENT else windup_pitch_degrees))).get_euler()
+	var b_windup := (Basis.from_euler(b_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_b.controller == Card.OPPONENT else windup_pitch_degrees))).get_euler()
 	# Wind-up: retreat away from the midpoint.
 	await _move_both(a0 + lift + a_away * windup_distance,
 		b0 + lift + b_away * windup_distance,

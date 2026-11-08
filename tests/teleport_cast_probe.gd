@@ -78,7 +78,7 @@ func _ready() -> void:
 		"the source glow is rising")
 	_expect(_param(card, "teleport_reveal") <= 0.001,
 		"the source card itself is turning into the white silhouette")
-	var source_halo = card.get("_teleport_halo")
+	var source_halo = card.teleport.halo
 	_expect(source_halo == null or not source_halo.visible,
 		"the source has no overflow halo")
 	_expect(card.visible, "the source has not disappeared too early")
@@ -93,11 +93,11 @@ func _ready() -> void:
 		"the destination starts partially built")
 	_expect(_param(card, "teleport_reveal") <= 0.001,
 		"the texture is hidden while the silhouette is incomplete")
-	_expect(card.get("_teleport_chrome_hidden") == true,
+	_expect(card.teleport.chrome_hidden == true,
 		"the border and power readout are hidden during the build")
 	_expect(_param(card, "teleport_glow") > 0.05,
 		"the destination silhouette is glowing")
-	var destination_halo = card.get("_teleport_halo")
+	var destination_halo = card.teleport.halo
 	_expect(destination_halo == null or not destination_halo.visible,
 		"the destination does not draw a full-card halo during the build")
 
@@ -108,7 +108,7 @@ func _ready() -> void:
 		"the texture stays hidden through the build")
 	_expect(_param(card, "teleport_glow") > 0.001,
 		"the completed card is still in its glow beat")
-	var glow_halo = card.get("_teleport_halo")
+	var glow_halo = card.teleport.halo
 	_expect(glow_halo != null and glow_halo.visible,
 		"the full-card halo appears only after the build is complete")
 
@@ -121,11 +121,11 @@ func _ready() -> void:
 	await get_tree().create_timer(0.50).timeout
 	_expect(_param(card, "teleport_reveal") >= 0.999,
 		"the card texture is fully revealed at the end")
-	_expect(card.get("_teleport_chrome_hidden") == false,
+	_expect(card.teleport.chrome_hidden == false,
 		"the border and power readout come back at the end")
 	_expect(_param(card, "teleport_glow") <= 0.001,
 		"the glow has faded away")
-	var final_halo = card.get("_teleport_halo")
+	var final_halo = card.teleport.halo
 	_expect(final_halo == null or not final_halo.visible,
 		"the halo is gone once the card is revealed")
 	_expect(card.visible, "the fully materialised card is visible")

@@ -319,7 +319,7 @@ func add_card_to_mana_conversion(card:Card, element: String = ""):
 	selected_mana_elements[card] = chosen
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
 	card.show_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(1, chosen)
+	selected_cards_for_mana_has_changed.emit(CARD_CHARGE, chosen)
 
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
@@ -327,7 +327,7 @@ func remove_card_from_mana_conversion(card:Card):
 	var chosen: String = str(selected_mana_elements.get(card, card.mana_element()))
 	selected_mana_elements.erase(card)
 	card.clear_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(-1, chosen)
+	selected_cards_for_mana_has_changed.emit(-CARD_CHARGE, chosen)
 
 
 ## Apply every static `on_character_enter` rule currently on the board to a card that just entered. This is a BOARD
@@ -390,7 +390,7 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	var target_node
 	var target_array
 	
-	if card.type == 'Forward':
+	if card.type == Card.FORWARD:
 		target_array = opponent_front_cards if is_opponent else front_cards
 		target_node = $OpponentFrontrowCard if is_opponent else $FrontrowCard
 	else:  # Backup
@@ -427,8 +427,8 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 		# directly on its slot while it is fully dithered, then resolve it there.
 		card.position = target_position
 		card.visible = true
-		card.set_teleport_visual(1.0, 0.35, 0.0)
-		var materialize: Tween = card.teleport_in(
+		card.teleport.set_visual(1.0, 0.35, 0.0)
+		var materialize: Tween = card.teleport.play_in(
 			teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
 		materialize.finished.connect(_on_tween_finished.bind(card, suppress_auto))
 	elif animate:
@@ -631,7 +631,7 @@ func _as_event_context(event_id: int, context) -> EVENT_CONTEXT:
 		ctx.cause = str(context.get("cause", ""))
 		ctx.player_id = int(context.get("player_id", 0))
 	if ctx.player_id == 0 and ctx.card != null and is_instance_valid(ctx.card):
-		ctx.player_id = 1 if ctx.card.controller == "player" else 2
+		ctx.player_id = 1 if ctx.card.controller == Card.PLAYER else 2
 	return ctx
 
 
@@ -646,7 +646,7 @@ func _event_filter_holds(source: Card, filter, context: Dictionary) -> bool:
 	var wanted: String = str(filter.get("controller", ""))
 	if wanted == "":
 		return true
-	var owner_id: int = 1 if source.controller == "player" else 2
+	var owner_id: int = 1 if source.controller == Card.PLAYER else 2
 	var event_id: int = int(context.get("player_id", 0))
 	if wanted in ["your", "self", "mine", "player"]:
 		return event_id == owner_id
@@ -717,7 +717,7 @@ func ability_x_max(card: Card) -> int:
 	if card == null:
 		return -1
 	var game_node: Node = get_parent()
-	var owner_id: int = 1 if card.controller == "player" else 2
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
 	var owner_hand: Hand = game_node.hand_for(owner_id) if game_node != null else null
 	var useful: int = -1
 	if owner_hand != null:
@@ -744,7 +744,7 @@ func ability_x_max(card: Card) -> int:
 ## driven from it, so the cue and the action can never disagree. Any condition added here
 ## therefore tightens both at once.
 func can_activate_now(card: Card) -> bool:
-	if card == null or card.controller != "player":
+	if card == null or card.controller != Card.PLAYER:
 		return false
 	if not has_priority():
 		return false
@@ -767,7 +767,7 @@ func can_activate_now(card: Card) -> bool:
 	for def in skills:
 		# "You can only use this ability during your turn" (Devout 48). Checked PER ABILITY, because a card may have
 		# one time-restricted skill and one that is always available.
-		var owner_id_now: int = 1 if card.controller == "player" else 2
+		var owner_id_now: int = 1 if card.controller == Card.PLAYER else 2
 		if bool(def.get("only_your_turn", false)) and int(get_parent().turn_owner) != owner_id_now:
 			continue
 		# "You can only use this ability while <card> is blocking." A per-ability gate, like only_your_turn:
@@ -810,7 +810,7 @@ func _damage_received_by(card: Card) -> int:
 	var game: Node = get_parent()
 	if game == null:
 		return 0
-	var side = game.side_for(1 if card.controller == "player" else 2)
+	var side = game.side_for(1 if card.controller == Card.PLAYER else 2)
 	return side.damage_count() if side != null else 0
 
 ## Cards that could be paid for a `"sacrifice": {...}` skill cost. Criteria are read from the SOURCE's perspective, so
@@ -856,7 +856,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			var usable: Array = []
 			for def in skills:
 				var turn_ok: bool = (not bool(def.get("only_your_turn", false)) \
-					or int(get_parent().turn_owner) == (1 if card.controller == "player" else 2)) \
+					or int(get_parent().turn_owner) == (1 if card.controller == Card.PLAYER else 2)) \
 					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking")) \
 					and (not bool(def.get("tap", false)) or card.can_tap()) \
 					and (not def.has("only_if_damage_received")
@@ -869,7 +869,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 				if can_pay and int(def.get("discard", 0)) > 0:
 					can_pay = hand != null and hand.cards.size() >= int(def.get("discard", 0))
 				usable.append(can_pay)
-			var chooser_id: int = 1 if card.controller == "player" else 2
+			var chooser_id: int = 1 if card.controller == Card.PLAYER else 2
 			var agent: Agent = get_parent().agent_for(chooser_id)
 			if agent == null:
 				return
@@ -889,7 +889,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		var x_max: int = ability_x_max(card)
 		if x_max < 0:
 			return
-		var x_owner: int = 1 if card.controller == "player" else 2
+		var x_owner: int = 1 if card.controller == Card.PLAYER else 2
 		var x_agent: Agent = get_parent().agent_for(x_owner)
 		if x_agent == null:
 			return
@@ -918,7 +918,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	# PUT-INTO-THE-BREAK-ZONE COST (Mystic 96). Paid at activation like the S discard, and chosen by the owner through
 	# the agent seam, so the human gets a picker and the AI picks for itself. A cancelled pick aborts the whole
 	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
-	var owner_id: int = 1 if card.controller == "player" else 2
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
 	var sacrifice: Dictionary = def.get("sacrifice", {})
 	if not sacrifice.is_empty() and not bool(def.get("defer_sacrifice", false)):
 		var picked: Card = null
@@ -1165,7 +1165,7 @@ func _begin_target_block(index: int) -> void:
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
 	# set_viable_targets() clears every ring; give the picks already recorded theirs back. The colour follows the
 	# CHOOSER, not the card's owner: when you are the one picking, your picks are orange even on the opponent's board.
-	var local_chooser: bool = source_card == null or source_card.controller == "player"
+	var local_chooser: bool = source_card == null or source_card.controller == Card.PLAYER
 	for taken in targeting_picked:
 		taken.set_valid_target(false, false)
 		if local_chooser:
@@ -1173,7 +1173,7 @@ func _begin_target_block(index: int) -> void:
 		else:
 			taken.set_targeted_highlight(true)
 	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
-	var owner_id: int = 1 if source_card != null and source_card.controller == "player" else 2
+	var owner_id: int = 1 if source_card != null and source_card.controller == Card.PLAYER else 2
 	var agent: Agent = get_parent().agent_for(owner_id)
 	if agent != null and not (agent is LocalAgent):
 		agent.choose_target(owner_id, source_card, targeting_criteria_now)
@@ -1237,7 +1237,7 @@ func _drop_pick(at: int) -> void:
 		taken.set_valid_target(false, false)
 		# ...and the picks that are STILL picked keep their rings, for the same reason as in set_target_card(): the call
 		# above clears them all.
-		if taken.controller == "opponent":
+		if taken.controller == Card.OPPONENT:
 			taken.set_targeted_highlight(true)
 		else:
 			taken.set_selected_highlight(true)
@@ -1258,7 +1258,7 @@ func set_target_card(card: Card):
 	# Blue and orange are the LOCAL player's vocabulary: "legal" and "you picked this".
 	# When the opponent is the one choosing, the picked card is shown in RED instead —
 	# along with their arc, so an incoming effect is readable while it is on the stack.
-	var local_chooser: bool = source_card == null or source_card.controller == "player"
+	var local_chooser: bool = source_card == null or source_card.controller == Card.PLAYER
 	# Clicking another valid target MOVES the selection — and the ring with it — rather
 	# than being ignored, so either player can change their mind.
 	#
@@ -1309,7 +1309,7 @@ func set_target_card(card: Card):
 		# AND GIVE EVERY PICKED CARD ITS RING BACK. The set_viable_targets() call just above clears the pick highlight on
 		# EVERY card — that is how a session is supposed to start — so using it to refresh the legal set after each pick
 		# wiped the ring off all the earlier picks and left only the newest one lit.
-		if taken.controller == "opponent":
+		if taken.controller == Card.OPPONENT:
 			taken.set_targeted_highlight(true)
 		else:
 			taken.set_selected_highlight(true)
@@ -1381,7 +1381,7 @@ func set_viable_targets(target_criteria, source: Card = null, source_kind: Strin
 	# their legal options are not our business. The flag still goes on — their agent selects
 	# by it — but the glow stays off, so the only thing we see is the card they pick, which
 	# set_target_card() marks red.
-	var glow: bool = source == null or source.controller == "player"
+	var glow: bool = source == null or source.controller == Card.PLAYER
 	var candidates: Array = _target_candidates()
 	var legal: Array = []
 	for card in candidates:
@@ -1844,7 +1844,7 @@ func reset_attacker():
 ## Select/deselect a blocker for the current combat (human input only).
 ## Game.set_blocker() is what *declares* it (via the set_blocker instruction).
 func set_blocker_card(card: Card) -> void:
-	if card == null or card.controller != "player" or not card.can_attack():
+	if card == null or card.controller != Card.PLAYER or not card.can_attack():
 		return
 	if blocker_card == card:
 		card.set_blocker_status(false)
@@ -1923,7 +1923,7 @@ func cause_damage(target: Card, amount: int, source: Card = null, source_kind: S
 		source = null
 	var dealt: int = modify_damage(source, target, amount, source_kind, source_controller, damage_kind)
 	target.suffer_damage(dealt, source_kind, source_controller, source, reaction_delay)
-	if source != null and dealt > 0 and target.is_on_field() and target.type == "Forward":
+	if source != null and dealt > 0 and target.is_on_field() and target.type == Card.FORWARD:
 		_apply_damage_caused_riders(source, target)
 	return dealt
 
@@ -2011,7 +2011,7 @@ func forced_blocker_for(attacker: Card) -> Card:
 	var attackers: Array = party_members()
 	if attackers.is_empty():
 		attackers = [attacker]
-	var defender: String = "opponent" if attacker.controller == "player" else "player"
+	var defender: String = "opponent" if attacker.controller == Card.PLAYER else "player"
 	for card in get_front_cards_for(defender):
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
@@ -2198,3 +2198,42 @@ func finish_targeting_state() -> void:
 	source_card = null
 	targeting_allow_cancel = false
 	reset_targets()
+
+## CARD INPUT. Card forwards a click and a hover to whichever zone it sits in; these are the Field's.
+func on_card_grabbed(card: Card) -> void:
+	match GlobalVariables.get_player_mode():
+		GlobalVariables.Player_Mode.PAYING_COST:
+			if card.type == Card.BACKUP and card.tapped == false and card.controller == Card.PLAYER:
+				# The Field owns the "selected for mana" marker (Card.show_mana_crystal).
+				if selected_cards_for_mana_conversion.has(card):
+					remove_card_from_mana_conversion(card)
+				else:
+					# The CARD decides whether it needs to ask. A one-colour card answers immediately; an
+					# any-colour card opens the circle through EffectContext.
+					begin_mana_choice(card)
+		GlobalVariables.Player_Mode.ATTACKING:
+			if phase == GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
+				if card.controller == Card.PLAYER and card.can_attack():
+					set_attacker(card)
+		GlobalVariables.Player_Mode.FREE, GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			try_activate_from_field(card)
+		GlobalVariables.Player_Mode.TARGET:
+			set_target_card(card)
+		GlobalVariables.Player_Mode.BLOCKING:
+			# Blocking is the local player's call: any of your own untapped
+			# Forwards may block, even one that would break — the AI's "only
+			# trade up" heuristic is a policy, not a rule.
+			#
+			# THROUGH can_block(), not can_attack(): the two differed, and the ring already used the former, so a card with
+			# block_disabled would not have glowed but was still clickable.
+			if card.controller == Card.PLAYER and can_block(card):
+				set_blocker_card(card)
+
+## A battlefield card is small, and at board scale its text cannot be read at all: hovering shows a readable preview.
+func on_card_hovered(card: Card, entered: bool) -> void:
+	if card.current_zone != Card.Zone.FIELD:
+		return
+	if entered:
+		show_card_preview(card)
+	else:
+		hide_card_preview()

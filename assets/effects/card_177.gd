@@ -5,6 +5,6 @@ extends "res://scripts/effects/card_effect.gd"
 func modify_cost_for(ctx: COST_CONTEXT, subject: Card, cost: Dictionary) -> Dictionary:
 	if ctx.source == null or subject.controller != ctx.source.controller:
 		return cost
-	if subject.type != "Summon" or not subject.is_element("水"):
+	if subject.type != Card.SUMMON or not subject.is_element("水"):
 		return cost
 	return ctx.adjust(cost, -1, 1)

@@ -18,3 +18,7 @@ thumbs.db
 # Screenshot harness output (from tools/shot.gd). Regenerable diagnostics, kept out so a run's PNGs cannot
 # quietly pile up in history. The TOOLS are committed; only their output is ignored.
 tools/shots/
+# Editor backups, logs and layered art sources (export the PNG; the source stays local)
+*.blend1
+*.log
+*.psd

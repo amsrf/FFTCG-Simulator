@@ -7,7 +7,7 @@ extends Node3D
 ## animation is over; the director frees it afterwards.
 ##
 ## Persistent status visuals should NOT be VfxCue: they are owned by the card
-## status lifecycle instead (see Card.refresh_frozen_overlay()).
+## status lifecycle instead (see Card.refresh_status_visuals()).
 
 
 func play(_event: VfxEvent) -> void:

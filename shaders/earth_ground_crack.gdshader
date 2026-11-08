@@ -41,7 +41,8 @@ void fragment() {
     float cross_core = 1.0 - smoothstep(width * 0.8, width * 0.8 + aa, cross_distance);
     float distance_to_crack = min(radial_distance, cross_distance);
     float soft_edge = (1.0 - smoothstep(width, width + 0.018, distance_to_crack)) * 0.20;
-    float edge_fade = 1.0 - smoothstep(0.78, 0.99, length(p));
+    // Lose contrast across the entire exposed ground, not just at the perimeter.
+    float edge_fade = pow(1.0 - smoothstep(0.22, 0.99, length(p)), 1.3);
     ALBEDO = crack_color.rgb;
     ALPHA = max(max(core, cross_core) * 0.78, soft_edge) * edge_fade * opacity * crack_color.a;
 }

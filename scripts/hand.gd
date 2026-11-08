@@ -151,9 +151,6 @@ func _land_returned(card: Card) -> void:
 		return
 	cards.append(card)
 	card.index = cards.size() - 1
-	var area = card.get_node_or_null("CardArea3D")
-	if area != null and area.has_signal("card_released") and not area.card_released.is_connected(Callable(self, "_on_card_released")):
-		area.connect("card_released", Callable(self, "_on_card_released"))
 	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
 	card.enter_zone(Card.Zone.HAND)
@@ -280,9 +277,6 @@ func _tilt_into_hand(card: Card) -> void:
 func add_card_to_tree(card):
 	cards.append(card)
 	card.index = cards.size()-1
-	var area = card.get_node("CardArea3D")
-	if area.has_signal("card_released") and not area.card_released.is_connected(Callable(self, "_on_card_released")):
-		area.connect("card_released", Callable(self, "_on_card_released"))
 	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
 	# Store the card's global transform before reparenting. A fresh card has no parent and therefore no meaningful
@@ -1104,7 +1098,7 @@ func remove_card(card):
 ## hand's card list but stays parented to the hand in its cast stance; both get
 ## the thin gold cast-pending aura and are blocked from mana selection.
 func charge(card) -> bool:
-	if card.type == 'Summon':
+	if card.type == Card.SUMMON:
 		# Summons can be cast with a stack on it — they are the instant-speed
 		# plays. They cannot be cast unless a legal target exists (when the card
 		# requires one). The card leaves the hand and is parked on the stack
@@ -1116,11 +1110,11 @@ func charge(card) -> bool:
 			return false
 		# Put the opponent's cast at the middle of their face-down fan BEFORE it leaves,
 		# so the animation starts from a card already visible in the hand.
-		if card.controller == "opponent":
+		if card.controller == Card.OPPONENT:
 			stage_cast_card_at_middle(card)
 			card.global_position += stack.opponent_launch_offset(self)
 		remove_card(card)
-		if card.controller == "opponent":
+		if card.controller == Card.OPPONENT:
 			update_card_positions()
 		charging_card = card
 		charge_start.emit(card)
@@ -1187,7 +1181,7 @@ func _on_player_mode_change(pm: GlobalVariables.Player_Mode) -> void:
 func refresh_highlights() -> void:
 	var mode: GlobalVariables.Player_Mode = GlobalVariables.get_player_mode()
 	for card in cards:
-		if card.controller != "player":
+		if card.controller != Card.PLAYER:
 			card.set_prompt_glow(false)
 			continue
 		match mode:
@@ -1304,13 +1298,13 @@ func add_card_to_mana_conversion(card:Card):
 		selected_cards_for_mana_conversion.push_back(card)
 	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
 	card.show_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(2,card.mana_element())
+	selected_cards_for_mana_has_changed.emit(CARD_CHARGE, card.mana_element())
 	
 func remove_card_from_mana_conversion(card:Card):
 	if selected_cards_for_mana_conversion.has(card):
 		selected_cards_for_mana_conversion.erase(card)
 	card.clear_mana_crystal()
-	selected_cards_for_mana_has_changed.emit(-2,card.mana_element())
+	selected_cards_for_mana_has_changed.emit(-CARD_CHARGE, card.mana_element())
 			
 func animate_card(card, target_position, target_tilt: float = 0.0):
 	# POSITION AND TILT. It used to tween the scale to 1.0 as well, which quietly made 1.0 the hand's REAL resting size:
@@ -1393,3 +1387,57 @@ func _on_assistant_charge_cancelled() -> void:
 		cards.insert(clampi(_character_drag_original_index, 0, cards.size()), charging_card)
 	charging_card = null
 	update_card_positions()
+
+## CARD INPUT. Card forwards a click and a release to whichever zone it sits in; these are the Hand's.
+## Only the player's own hand is interactive. Opponent cards use the same Hand scene but must never be
+## draggable or selectable.
+func on_card_grabbed(card: Card) -> void:
+	if card.controller != Card.PLAYER:
+		return
+	match GlobalVariables.get_player_mode():
+		GlobalVariables.Player_Mode.PAYING_COST:
+			# The Hand owns the "selected for mana" marker (Card.show_mana_crystal).
+			if selected_cards_for_mana_conversion.has(card):
+				remove_card_from_mana_conversion(card)
+			else:
+				add_card_to_mana_conversion(card)
+		GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+			# Triggered "may" choice: only criteria-matching cards can be
+			# selected, and selecting one unselects the previous one.
+			if card.matches_criteria(choose_card_criteria):
+				toggle_effect_card_selection(card)
+		_:
+			card.begin_drag()
+			begin_character_drag(card)
+
+func on_card_released(card: Card) -> void:
+	if card.controller != Card.PLAYER:
+		return
+	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
+		# Selection happens on grab; release just ends any drag state.
+		card.is_dragging = false
+		update_card_positions()
+		card.apply_zone_scale()
+		return
+	# RELEASING A HAND CARD FROM THE CAST STANCE STARTS PAYMENT.
+	# The stance itself is the drop confirmation: the pointer has already left
+	# the hand band, so there is no extra "is the pointer over the mat" check.
+	if character_drag_latched():
+		if card.can_be_played() and charge(card):
+			begin_character_charge(card)
+			card.is_dragging = false
+			return
+		# Illegal or failed charge: put the card back in the hand.
+		end_character_drag(card)
+		card.is_dragging = false
+		update_card_positions()
+		card.apply_zone_scale()
+		return
+	# Below the ready boundary, release only reorders the hand.
+	var new_index = find_index(card)
+	end_character_drag(card)
+	move_element(cards, card.index, new_index)
+	card.index = new_index
+	card.is_dragging = false
+	update_card_positions()
+	card.apply_zone_scale()

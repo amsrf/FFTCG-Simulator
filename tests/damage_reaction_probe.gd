@@ -44,13 +44,13 @@ func _ready() -> void:
 
 	card.suffer_damage(5000, "Ability", "player")
 	await get_tree().create_timer(0.04).timeout
-	_expect(card.is_damage_reacting(), "effect damage starts a hit reaction")
+	_expect(card.damage_fx.is_reacting(), "effect damage starts a hit reaction")
 	_expect(card.hand_mesh.position.y > 0.005, "the card pops upward off the table")
 	_expect(card.hand_mesh.scale.x > 1.005, "the card scales up during the hit")
 	_expect(absf(card.hand_mesh.rotation.y) > 0.005, "the card tilts during the hit")
 
 	await get_tree().create_timer(0.72).timeout
-	_expect(not card.is_damage_reacting(), "the hit reaction finishes")
+	_expect(not card.damage_fx.is_reacting(), "the hit reaction finishes")
 	_expect(card.hand_mesh.position.is_equal_approx(Vector3.ZERO)
 		and card.hand_mesh.scale.is_equal_approx(Vector3.ONE)
 		and card.hand_mesh.rotation.is_equal_approx(Vector3.ZERO),
@@ -60,7 +60,7 @@ func _ready() -> void:
 	card.clear_damage()
 	card.suffer_damage(1000, "", "player")
 	await get_tree().create_timer(0.04).timeout
-	_expect(not card.is_damage_reacting()
+	_expect(not card.damage_fx.is_reacting()
 		and card.hand_mesh.position.is_equal_approx(Vector3.ZERO),
 		"combat damage does not play the effect-damage reaction")
 	card.clear_damage()
@@ -78,7 +78,7 @@ func _ready() -> void:
 	_expect(second.hand_mesh.position.is_equal_approx(Vector3.ZERO),
 		"the second target waits for the stagger")
 	await get_tree().create_timer(0.24).timeout
-	_expect(second.is_damage_reacting() and second.hand_mesh.position.y > 0.005,
+	_expect(second.damage_fx.is_reacting() and second.hand_mesh.position.y > 0.005,
 		"the second target reacts after the stagger")
 
 	await get_tree().create_timer(0.80).timeout
@@ -87,7 +87,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.04).timeout
 	card.enter_zone(Card.Zone.GRAVEYARD)
 	await get_tree().process_frame
-	_expect(not card.is_damage_reacting()
+	_expect(not card.damage_fx.is_reacting()
 		and card.hand_mesh.position.is_equal_approx(Vector3.ZERO)
 		and card.hand_mesh.rotation.is_equal_approx(Vector3.ZERO),
 		"leaving the field normalizes the reaction pose")

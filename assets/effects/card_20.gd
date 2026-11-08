@@ -11,7 +11,7 @@ func handlers() -> Dictionary:
 func modify_cost_for(ctx: COST_CONTEXT, subject: Card, cost: Dictionary) -> Dictionary:
 	if ctx.source == null or subject.controller != ctx.source.controller:
 		return cost
-	if subject.type != "Summon" or subject.card_name != "Bahamut":
+	if subject.type != Card.SUMMON or subject.card_name != "Bahamut":
 		return cost
 	return ctx.adjust(cost, -2)
 

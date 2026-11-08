@@ -64,11 +64,11 @@ func _reset() -> void:
 	_cue = null
 	for victim in _preview_targets:
 		if is_instance_valid(victim):
-			victim.normalize_damage_reaction()
+			victim.damage_fx.normalize()
 			victim.set_hidden(false)
 	_preview_targets.clear()
 	if is_instance_valid(target):
-		target.normalize_damage_reaction()
+		target.damage_fx.normalize()
 		target.set_hidden(false)
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -94,4 +94,4 @@ func _update_help() -> void:
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
 	if is_instance_valid(target):
-		target.normalize_damage_reaction()
+		target.damage_fx.normalize()

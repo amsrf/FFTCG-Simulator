@@ -60,7 +60,7 @@ func _init(p_game: Node, p_source: Card, p_event = "static", p_data: Dictionary 
 	event_data = p_data.duplicate(true)
 	if p_source != null:
 		controller = p_source.controller
-		owner_id = 1 if controller == "player" else 2
+		owner_id = 1 if controller == Card.PLAYER else 2
 	if game != null:
 		field = game.get("field")
 
@@ -97,7 +97,7 @@ func cards_in(region: String, criteria: CARD_QUERY = null, owner: String = "any"
 				pools.append(side.damage_zone.cards)
 		"removed":
 			for side in _sides(owner):
-				var zone = game.get("player_removed" if side.controller == "player" else "opponent_removed")
+				var zone = game.get("player_removed" if side.controller == Card.PLAYER else "opponent_removed")
 				if zone != null:
 					pools.append(zone.graveyard_cards)
 		"stack":
@@ -254,12 +254,12 @@ func choose_hand_card(cards: Array, prompt: String = "Choose a card") -> Card:
 func play_from_hand_card(card: Card, enter_dull: bool = false) -> void:
 	if card == null or not is_instance_valid(card) or game == null:
 		return
-	var owner_hand: Hand = game.hand_for(1 if card.controller == "player" else 2)
+	var owner_hand: Hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
 	if owner_hand == null:
 		return
 	owner_hand.remove_for_play(card)
 	card.reset_for_field_arrival()
-	game.field.play_card(card, card.controller == "opponent", true)
+	game.field.play_card(card, card.controller == Card.OPPONENT, true)
 	if enter_dull:
 		card.tap()
 
@@ -619,13 +619,13 @@ func return_to_hand(cards: Array, source_kind: String = "") -> void:
 	var tweens: Array = []
 	var kind: String = source_kind
 	if kind.is_empty():
-		kind = "Summon" if source != null and source.type == "Summon" else "Ability"
+		kind = "Summon" if source != null and source.type == Card.SUMMON else "Ability"
 	for card in cards:
 		if card == null or not is_instance_valid(card) or not card.is_on_field():
 			continue
 		if not card.can_be_returned_to_hand_by(source, kind):
 			continue
-		var owner_hand = game.hand_for(1 if card.controller == "player" else 2)
+		var owner_hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
 		if owner_hand == null:
 			continue
 		var tween = game.move_card_from_field(card, Card.Zone.HAND, "RETURN",
