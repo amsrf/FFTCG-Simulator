@@ -209,6 +209,10 @@ func _ready() -> void:
 	# --- E. Leon: the OPPONENT decides and plays from THEIR hand -------------------------------------------
 	_opponent.hand_pick = DARK_KNIGHT
 	_opponent.yes = true
+	# Let the previous section's decisions land first: they wait for the presentation queue (Agent._settle).
+	await Vfx.idle()
+	for _i in range(5):
+		await get_tree().process_frame
 	var player_prompts_before: int = _player.prompts.size()
 	_game.set("_current_controller", "player")
 	_field.execute_card_effect(leon, "when_enter_field")
@@ -219,7 +223,7 @@ func _ready() -> void:
 	_expect(theirs != null, "the opponent's Character is played from their hand")
 	_expect(not _opponent_hand.cards.has(theirs), "and leaves it")
 	_expect(_opponent.prompts.has("Play a Character"), "the OPPONENT was the one asked")
-	_expect(_player.prompts.size() == player_prompts_before, "the controller was not asked")
+	_expect(_player.prompts.size() == player_prompts_before, "the controller was not asked (%s)" % str(_player.prompts.slice(player_prompts_before)))
 
 	_opponent.yes = false
 	var opp_hand_before: int = _opponent_hand.cards.size()
@@ -278,6 +282,8 @@ func _ready() -> void:
 
 
 func _wait_for_card_in_play(id: int) -> Card:
+	# Decisions wait for the presentation queue (Agent._settle -> Vfx.idle), so let it drain before counting frames.
+	await Vfx.idle()
 	for _i in range(300):
 		await get_tree().process_frame
 		for c in _field.get_all_cards():
@@ -287,6 +293,8 @@ func _wait_for_card_in_play(id: int) -> Card:
 
 
 func _wait_for_opponent_card(id: int) -> Card:
+	# Decisions wait for the presentation queue (Agent._settle -> Vfx.idle), so let it drain before counting frames.
+	await Vfx.idle()
 	for _i in range(300):
 		await get_tree().process_frame
 		for c in _field.get_all_cards():

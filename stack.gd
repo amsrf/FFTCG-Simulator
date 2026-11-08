@@ -270,6 +270,8 @@ func _update_stack_shadows() -> void:
 
 func calculate_card_position(i: int) -> Vector3:
 	var list := layout_cards()
+	if list.is_empty():
+		return Vector3.ZERO
 	var top := list.size() - 1
 	var pose := _stack_card_local_basis(list[top])
 	var spacing := _stack_spacing(list.size())
@@ -866,6 +868,9 @@ func _fly_local_summon_translation(card: Card, launch: Vector3) -> void:
 	var screen_height := get_viewport().get_visible_rect().size.y
 	var sample := func(p: float) -> void:
 		if not is_instance_valid(card) or card.get_parent() != self:
+			return
+		# The rules may have moved on while this flight waited its turn (the card already resolved): stop following it.
+		if not layout_cards().has(card):
 			return
 		var destination := to_global(calculate_card_position(card.index))
 		var destination_screen := camera.unproject_position(destination)

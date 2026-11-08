@@ -59,6 +59,8 @@ func _trigger_and_resolve(event_name: String, context: Dictionary) -> void:
 	# filter later ignores, so one event can leave more than one object on the stack.
 	while _game.stack.stack_length() > 0:
 		await _game.stack.resolve_top_effect()
+	# A "may" trigger is a decision, and decisions wait for the presentation queue (Agent._settle -> Vfx.idle).
+	await Vfx.idle()
 	await _wait(0.2)
 
 

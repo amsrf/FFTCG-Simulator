@@ -72,7 +72,8 @@ func _ready() -> void:
 
 	_field.call("begin_skill_activation", summoner, 0)
 	await get_tree().process_frame
-	_expect(not summoner.is_on_field(), "activating it puts Summoner into the Break Zone")
+	# FFTCG pays every cost together: Summoner leaves when the activation commits (target confirmed), not here.
+	_expect(summoner.is_on_field(), "activating it does not pay the self-sacrifice yet")
 	_assistant.call("charge", 1, "氷")
 	_expect(_assistant.call("can_pay_cost"), "the ice cost is paid")
 	_assistant.call("on_charge_complete")
@@ -90,6 +91,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_assistant.call("on_target_complete")
 	await get_tree().process_frame
+	_expect(not summoner.is_on_field(), "confirming the target commits it: Summoner goes to the Break Zone")
 	await _stack.resolve_top_effect()
 	await get_tree().process_frame
 

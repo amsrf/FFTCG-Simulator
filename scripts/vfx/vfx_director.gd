@@ -162,6 +162,28 @@ func present(presenter: Callable) -> void:
 	event.timestamp_ms = Time.get_ticks_msec()
 	_emit(event)
 
+## A presentation may NEVER stall the game. Decisions wait for this queue (Agent._settle), so one cue that errors
+## mid-play or never returns would freeze every later decision of the match. The watchdog gives each entry a generous
+## cap; past it, the queue warns and moves on (the animation may still finish on its own).
+const MAX_PRESENT_SECONDS := 8.0
+
+func _await_with_watchdog(job: Callable, label: String) -> void:
+	var state := {"done": false}
+	# A METHOD, not a lambda: a lambda left suspended mid-await when the game shuts down can crash the engine on exit.
+	_run_job(job, state)
+	var waited := 0.0
+	while not state["done"]:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+		if waited > MAX_PRESENT_SECONDS:
+			push_warning("[Vfx] %s did not finish within %.0f s; the queue moves on so the game cannot freeze" % [
+				label, MAX_PRESENT_SECONDS])
+			return
+
+func _run_job(job: Callable, state: Dictionary) -> void:
+	await job.call()
+	state["done"] = true
+
 func is_idle() -> bool:
 	return not _playing and _pending.is_empty()
 
@@ -198,7 +220,7 @@ func _present(event: VfxEvent) -> void:
 	event_started.emit(event)
 	if event.kind == VfxEvent.Kind.PRESENT:
 		if event.presenter.is_valid():
-			await event.presenter.call()
+			await _await_with_watchdog(event.presenter, "presentation")
 		event_finished.emit(event)
 		return
 	var preset: VfxPreset = preset_for(event)
@@ -207,7 +229,7 @@ func _present(event: VfxEvent) -> void:
 		var cue: Node = scene.instantiate()
 		add_child(cue)
 		if cue.has_method("play"):
-			await cue.play(event)
+			await _await_with_watchdog(cue.play.bind(event), "cue %s" % cue.name)
 		else:
 			await get_tree().process_frame
 		if is_instance_valid(cue):

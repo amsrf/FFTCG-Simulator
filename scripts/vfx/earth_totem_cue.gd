@@ -6,9 +6,12 @@ var _active: Array[Dictionary] = []
 func play(event: VfxEvent) -> void:
 	var longest := 0.0
 	for i in range(event.targets.size()):
-		var target: Card = event.targets[i]
-		if not is_instance_valid(target):
+		# Untyped first: assigning a FREED card to a `Card` variable is itself an error, and it would abort this cue
+		# mid-play (and with it the presentation queue that awaits it).
+		var entry = event.targets[i]
+		if not is_instance_valid(entry):
 			continue
+		var target: Card = entry
 		var visual: Dictionary = event.target_visuals.get(target.get_instance_id(), {})
 		if not target.is_drawn_on_field() and visual.is_empty():
 			continue
