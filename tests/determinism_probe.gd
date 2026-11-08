@@ -18,7 +18,7 @@ func _config() -> Dictionary:
 	return MatchSetup.build_config("ai", {"player_type": "ai", "seed": SEED})
 
 func _names(cards: Array) -> Array:
-	return cards.map(func(c): return "%s|dmg=%d|tap=%s" % [c.card_name, c.accumulated_damage, c.tapped] if is_instance_valid(c) else "<freed>")
+	return cards.map(func(c): return "%s#%d|dmg=%d|tap=%s" % [c.card_name, c.uid, c.accumulated_damage, c.tapped] if is_instance_valid(c) else "<freed>")
 
 func _snapshot(game: Node) -> Dictionary:
 	var field = game.get("field")
@@ -31,7 +31,7 @@ func _snapshot(game: Node) -> Dictionary:
 	}
 	for id in [1, 2]:
 		var side = game.side_for(id)
-		d["p%d.hand" % id] = side.hand.cards.map(func(c): return c.card_name)
+		d["p%d.hand" % id] = side.hand.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
 		d["p%d.deck" % id] = side.deck.deck_cards.size()
 		d["p%d.damage" % id] = side.damage_count()
 		d["p%d.break_zone" % id] = side.graveyard.graveyard_cards.size()

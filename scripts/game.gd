@@ -1168,9 +1168,28 @@ func _unhandled_input(event):
 		if($FocusCard):
 			$FocusCard.visible = false
 
+## STABLE CARD IDENTITY. Every card the rules can refer to gets a uid: seat * 100000 + that seat's creation count.
+## Each seat's cards are created in the same order on every machine (setup: hand, deck, piles, field; then whatever the
+## rules create, identically everywhere), so the numbering matches across an online match regardless of which side is
+## drawn at the bottom. Seat is 1 for "player" and 2 for "opponent" until a perspective mapping exists.
+var _uid_counters: Dictionary = {1: 0, 2: 0}
+var _cards_by_uid: Dictionary = {}
+
+func assign_uid(card: Card) -> void:
+	var seat: int = 1 if card.controller == Card.PLAYER else 2
+	_uid_counters[seat] += 1
+	card.uid = seat * 100000 + int(_uid_counters[seat])
+	_cards_by_uid[card.uid] = card
+
+## The card with this uid, or null if there is none (or it has been freed).
+func card_by_uid(uid: int) -> Card:
+	var card = _cards_by_uid.get(uid)
+	return card if is_instance_valid(card) else null
+
 func create_card(id, controller):
 	var card = card_scene.instantiate()  
 	card.initialize(id,controller) 
+	assign_uid(card)
 	if card.has_signal("execute_instructions"):
 		card.execute_instructions.connect(_execute_instructions)
 	return card

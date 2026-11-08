@@ -13,6 +13,10 @@ const SUMMON := "Summon"
 const CRYSTAL_SCENE_PATH = "res://crystal.tscn"
 const ELEMENTS := preload("res://scripts/elements.gd")
 @export var id: int = 0  # Make this editable in the Inspector
+## WHICH COPY this is, as opposed to `id` (which printing). Assigned by Game.assign_uid(): seat * 100000 + that seat's
+## creation count, so both machines in an online match number every card identically. 0 = a presentation-only
+## proxy that the rules never refer to. Use this — never get_instance_id() — for anything that leaves the machine.
+var uid: int = 0
 var string_id: String = '0'
 # Scale factor when hovered
 # Original scale of the card

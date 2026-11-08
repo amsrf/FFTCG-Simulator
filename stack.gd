@@ -995,6 +995,8 @@ func _on_field_add_card_effect_to_stack(card_id: int, keyword: String, source: C
 func create_card(id, controller, keyword, source, wording: String = "") -> Card:
 	var card: Card = card_scene.instantiate()  
 	card.initialize(id,controller)
+	# A stack object is something the rules can target (a counter), so it gets a stable uid like any card.
+	game.assign_uid(card)
 	card.key_word_effect = keyword
 	card.effect_source = source
 	card.effect_kind = "Ability"
