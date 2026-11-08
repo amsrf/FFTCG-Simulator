@@ -586,9 +586,11 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 			found.append(c)
 	return found
 
-## Reveal the top `count` cards of the acting player's deck, one at a time. The card is lifted, turned face-up,
-## held, then hidden and made inert; its Card object stays in `revealed_cards` for the following instruction. The
-## animation is deliberately sequential: the next card only starts after the previous one has vanished.
+## Reveal the top `count` cards of the acting player's deck.
+##
+## RULES, at once: the cards leave the deck and wait in `revealed_cards` for the following instruction.
+## PRESENTATION, queued one entry per card: lifted, turned face-up, held, turned back and hidden. The queue is serial,
+## so the next card only starts after the previous one has vanished — and nobody is asked to decide until it has.
 func reveal_top(count: int = 1, player_id: int = 0) -> void:
 	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
 	var d = opponent_deck if owner_id == 2 else deck
@@ -601,41 +603,47 @@ func reveal_top(count: int = 1, player_id: int = 0) -> void:
 		var card: Card = d.deck_cards.pop_front()
 		if card == null or not is_instance_valid(card):
 			continue
-		if card.get_parent() != self:
-			card.reparent(self, true)
-		card.set_hidden(false)
-		card.set_revealed(true)
-		var start: Transform3D = card.global_transform
-		var lifted_origin: Vector3 = start.origin + Vector3.UP * reveal_lift_m
-		var lifted := Transform3D(start.basis, lifted_origin)
-		if reveal_lift_seconds > 0.0:
-			var lift_tween: Tween = create_tween()
-			lift_tween.tween_property(card, "global_transform", lifted, reveal_lift_seconds)
-			await PRESENTATION.wait(lift_tween)
-		else:
-			card.global_transform = lifted
-		var face := Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * reveal_scale), lifted_origin)
-		if reveal_flip_seconds > 0.0:
-			var flip_tween: Tween = create_tween()
-			flip_tween.tween_property(card, "global_transform", face, reveal_flip_seconds)
-			await PRESENTATION.wait(flip_tween)
-		else:
-			card.global_transform = face
-		if reveal_hold_seconds > 0.0:
-			await PRESENTATION.wait(get_tree().create_timer(reveal_hold_seconds))
-		# TURN IT BACK FACE-DOWN before it disappears: the player has read it, and the vanish should not look like
-		# a card being discarded face-up.
-		var back := Transform3D(start.basis, lifted_origin)
-		if reveal_flip_back_seconds > 0.0:
-			var back_tween: Tween = create_tween()
-			back_tween.tween_property(card, "global_transform", back, reveal_flip_back_seconds)
-			await PRESENTATION.wait(back_tween)
-		else:
-			card.global_transform = back
-		if reveal_back_hold_seconds > 0.0:
-			await PRESENTATION.wait(get_tree().create_timer(reveal_back_hold_seconds))
-		card.set_hidden(true)
 		revealed_cards.append(card)
+		Vfx.present(func() -> void: await _show_revealed(card))
+
+func _show_revealed(card: Card) -> void:
+	if not is_instance_valid(card):
+		return
+	if card.get_parent() != self:
+		card.reparent(self, true)
+	card.set_hidden(false)
+	card.set_revealed(true)
+	var start: Transform3D = card.global_transform
+	var lifted_origin: Vector3 = start.origin + Vector3.UP * reveal_lift_m
+	var lifted := Transform3D(start.basis, lifted_origin)
+	if reveal_lift_seconds > 0.0:
+		var lift_tween: Tween = create_tween()
+		lift_tween.tween_property(card, "global_transform", lifted, reveal_lift_seconds)
+		await lift_tween.finished
+	else:
+		card.global_transform = lifted
+	var face := Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * reveal_scale), lifted_origin)
+	if reveal_flip_seconds > 0.0:
+		var flip_tween: Tween = create_tween()
+		flip_tween.tween_property(card, "global_transform", face, reveal_flip_seconds)
+		await flip_tween.finished
+	else:
+		card.global_transform = face
+	if reveal_hold_seconds > 0.0:
+		await get_tree().create_timer(reveal_hold_seconds).timeout
+	# TURN IT BACK FACE-DOWN before it disappears: the player has read it, and the vanish should not look like
+	# a card being discarded face-up.
+	var back := Transform3D(start.basis, lifted_origin)
+	if reveal_flip_back_seconds > 0.0:
+		var back_tween: Tween = create_tween()
+		back_tween.tween_property(card, "global_transform", back, reveal_flip_back_seconds)
+		await back_tween.finished
+	else:
+		card.global_transform = back
+	if reveal_back_hold_seconds > 0.0:
+		await get_tree().create_timer(reveal_back_hold_seconds).timeout
+	if is_instance_valid(card):
+		card.set_hidden(true)
 
 ## Check one revealed card against criteria and publish the answer through the instruction latch. The next
 ## instruction can use condition "if_last_succeeded" or "if_last_did_not_succeed".
@@ -676,10 +684,17 @@ func put_chosen_into_hand(_argument = null) -> void:
 	for card in _chosen_cards.duplicate():
 		if card == null or not is_instance_valid(card) or not revealed_cards.has(card):
 			continue
+		# RULES at once; the flight into the hand is queued behind the reveal that showed it.
 		revealed_cards.erase(card)
-		card.set_hidden(false)
-		owner_hand.add_card(card)
 		_chosen_cards.erase(card)
+		owner_hand.take_returned_card(card)
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			card.set_hidden(false)
+			var t: Tween = owner_hand.fly_returned_card(card)
+			if t != null and t.is_valid() and t.is_running():
+				await t.finished)
 
 ## Play the chosen revealed cards. Characters use the normal play path; this is also the hook for Selh'teus-style
 ## reveal-to-play effects.
@@ -692,13 +707,18 @@ func put_revealed_on_bottom(_argument = null) -> void:
 			continue
 		if _chosen_cards.has(card):
 			continue
+		# RULES at once; the card goes back under the deck when the queue reaches it (after its reveal has played).
 		revealed_cards.erase(card)
-		card.set_hidden(false)
-		card.enter_zone(Card.Zone.DECK)
-		card.reparent(d, false)
-		card.position = Vector3.ZERO
 		d.deck_cards.append(card)
-		d.update_card_positions()
+		card.current_zone = Card.Zone.DECK
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			card.set_hidden(false)
+			card.enter_zone(Card.Zone.DECK)
+			card.reparent(d, false)
+			card.position = Vector3.ZERO
+			d.update_card_positions())
 	if revealed_cards.is_empty():
 		revealed_owner_id = 0
 
@@ -712,8 +732,8 @@ func remove_revealed_from_game(index: int = 0) -> void:
 		return
 	var card: Card = revealed_cards.pop_at(index)
 	if card != null and is_instance_valid(card):
-		card.set_hidden(false)
-		_send_card_to_removed(card)
+		# Rules at once; the pile shows it once the reveal animation has played (see Graveyard.receive).
+		(player_removed if card.controller == Card.PLAYER else opponent_removed).receive(card)
 	if revealed_cards.is_empty():
 		revealed_owner_id = 0
 

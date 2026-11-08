@@ -118,6 +118,23 @@ func _fly_discards(moves: Array) -> void:
 			await t.finished
 
 
+## A card arriving from somewhere OTHER than the field (a revealed card removed from the game, say): it joins the
+## pile at once for the rules, and settles onto it when the presentation queue reaches it. No "from the field"
+## trigger can fire, so none is checked.
+func receive(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	graveyard_cards.append(card)
+	card.broken = false
+	card.current_zone = zone
+	Vfx.present(func() -> void:
+		if not is_instance_valid(card):
+			return
+		card.set_hidden(false)
+		card.reparent(self, false)
+		card.enter_zone(zone)
+		update_card_positions())
+
 func add_card(card):
 	# READ THE ORIGIN BEFORE MOVING IT. These two triggers are specifically "put FROM THE FIELD into the Break Zone",
 	# so a card discarded from hand or milled from the deck must not fire them, and the pile is the only place that

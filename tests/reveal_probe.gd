@@ -112,6 +112,16 @@ func _check_reveal_and_move() -> void:
 	_expect(_game.revealed_cards.is_empty(), "remove_revealed_from_game clears the revealed card")
 	_expect(_game.player_removed.graveyard_cards.any(func(c): return c.id == 31),
 		"and the card lands in the removed-from-game zone")
+	# REVEAL THEN REMOVE WITH NO DECISION IN BETWEEN (Gilgamesh 129). The reveal animation is still queued when the
+	# removal happens; once the queue has played, the card must be drawn in the removed pile, face visible — not left
+	# hidden wherever the reveal animation put it.
+	await Vfx.idle()
+	var removed_card: Card = null
+	for c in _game.player_removed.graveyard_cards:
+		if c.id == 31:
+			removed_card = c
+	_expect(removed_card != null and removed_card.get_parent() == _game.player_removed and removed_card.visible,
+		"after the queue plays, the removed card is drawn (visible) in the removed pile")
 
 
 func _run_gilgamesh(top_id: int) -> Dictionary:
