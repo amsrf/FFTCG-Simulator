@@ -1240,22 +1240,15 @@ func discard_card(card: Card) -> void:
 	graveyard.call("discard", card)
 	update_card_positions()
 	
-## Starts every selected mana card's discard flight and WAITS for all of them.
-## The cards join the Graveyard immediately (rules still see the payment at
-## once), but the visual flight is allowed to finish before a Character starts
-## fading out of the hand.
+## The selected mana cards join the Break Zone at once (rules see the payment immediately); their flights are queued
+## on the presentation director as one batch.
 func send_selected_cards_to_graveyard() -> void:
 	var spent: Array = selected_cards_for_mana_conversion.duplicate()
 	cards = cards.filter(func(item): return not selected_cards_for_mana_conversion.has(item))
 	selected_cards_for_mana_conversion = []
-	var flights: Array = []
 	for c in spent:
 		c.reset()
-		var flight = graveyard.call("discard", c)
-		if flight is Tween:
-			flights.append(flight)
-	for flight in flights:
-		await PRESENTATION.wait(flight)
+	graveyard.call("discard_many", spent)
 	
 
 func add_card_to_mana_conversion(card:Card):
@@ -1318,7 +1311,10 @@ func _on_assistant_charge_complete() -> void:
 	# The payment cards fly to the graveyard FIRST. Stack awaits
 	# `await_mana_discard()` before it fades a Character out of hand.
 	_mana_discard_in_progress = true
-	await send_selected_cards_to_graveyard()
+	send_selected_cards_to_graveyard()
+	# STOPGAP: the Character fade is not a queued event yet, so it must not start until the discard flights have
+	# played. Once it is queued, queue order does this and the mana_discard_finished handshake can go.
+	await PRESENTATION.wait_for_queue()
 	# Re-lay the hand BEFORE waking Stack: it may resume the fade immediately
 	# on the signal, and a hand-layout tween started afterwards would move the
 	# card while it is already dissolving.

@@ -28,3 +28,10 @@ static func wait(waitable: Variant) -> void:
 		await waitable.timeout
 	elif waitable is Signal:
 		await waitable
+
+## Wait until the presentation queue (Vfx) has drained. A STOPGAP for rules that still need a queued animation to have
+## finished before they continue; every caller is a conversion still to do (grep wait_for_queue).
+static func wait_for_queue() -> void:
+	if fast_mode:
+		return
+	await Vfx.idle()

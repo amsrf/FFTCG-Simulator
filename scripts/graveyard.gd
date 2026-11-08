@@ -71,33 +71,51 @@ func _fly_milled(card: Card, start: Vector3, index: int) -> void:
 	await t.finished
 	update_card_positions()
 
-## Discard from a hand. The card joins the pile at once and the tween moves its visual from wherever it was to
-## the slot the pile already gave it. That ordering matters: discard effects, S costs and AI choices all proceed
-## immediately, while the player still sees the card travel instead of teleporting.
+## Discard from a hand: one card, or a whole mana payment.
 ##
-## Returns the flight Tween so a caller that needs the visual to finish (the
-## Character payment, which fades the card only after its mana is discarded) can
-## await it. Callers that do not care simply ignore the return value.
-func discard(card: Card) -> Tween:
-	if card == null or not is_instance_valid(card):
-		return null
-	var start: Vector3 = card.global_position
-	if card.get_parent() != self:
-		card.reparent(self, false)
-		card.global_position = start
-	graveyard_cards.append(card)
-	card.broken = false
-	card.enter_zone(zone)
+## RULES, at once: the cards are in the pile from this moment, so discard effects, S costs and AI choices all see
+## them immediately. PRESENTATION, queued: every card flies from where it was to its slot, ALL TOGETHER (one queue
+## entry for the batch), so a three-card payment is one gesture rather than three in a row.
+func discard(card: Card) -> void:
+	discard_many([card])
+
+func discard_many(cards: Array) -> void:
+	var moves: Array = []
+	for card in cards:
+		if card == null or not is_instance_valid(card):
+			continue
+		moves.append({"card": card, "start": card.global_position})
+		graveyard_cards.append(card)
+		card.broken = false
+		card.current_zone = zone
+	if not moves.is_empty():
+		Vfx.present(func() -> void: await _fly_discards(moves))
+
+func _fly_discards(moves: Array) -> void:
+	var live: Array = moves.filter(func(m): return is_instance_valid(m["card"]))
+	for m in live:
+		var card: Card = m["card"]
+		if card.get_parent() != self:
+			card.reparent(self, false)
+		card.enter_zone(zone)
+	# Lay the pile out to find each card's slot, then start every card back where it was and fly it there.
 	update_card_positions()
-	var destination: Vector3 = card.global_position
-	card.global_position = start
-	var peak: Vector3 = (start + destination) * 0.5 + Vector3.UP * discard_arc_height
-	var t: Tween = create_tween()
-	t.set_trans(Tween.TRANS_SINE).set_ease(discard_ease)
-	t.tween_method(func(k: float) -> void:
-		card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
-	, 0.0, 1.0, discard_seconds)
-	return t
+	var tweens: Array = []
+	for m in live:
+		var card: Card = m["card"]
+		var start: Vector3 = m["start"]
+		var destination: Vector3 = card.global_position
+		card.global_position = start
+		var peak: Vector3 = (start + destination) * 0.5 + Vector3.UP * discard_arc_height
+		var t: Tween = create_tween()
+		t.set_trans(Tween.TRANS_SINE).set_ease(discard_ease)
+		t.tween_method(func(k: float) -> void:
+			card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
+		, 0.0, 1.0, discard_seconds)
+		tweens.append(t)
+	for t in tweens:
+		if t.is_valid() and t.is_running():
+			await t.finished
 
 
 func add_card(card):
@@ -139,6 +157,9 @@ func update_card_positions():
 	var rng := RandomNumberGenerator.new()
 	for i in range(graveyard_cards.size()):
 		var card = graveyard_cards[i]
+		# A card the rules already put here but whose flight is still queued is not DRAWN here yet: leave it alone.
+		if card.get_parent() != self:
+			continue
 		var is_top: bool = i == graveyard_cards.size() - 1
 		var scatter := Vector3.ZERO
 		if not is_top:
