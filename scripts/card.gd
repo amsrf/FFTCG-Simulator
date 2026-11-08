@@ -1,6 +1,7 @@
 extends Node3D
 
 class_name Card
+const LOG := preload("res://scripts/log.gd")
 ## Who controls a card. Plain strings (they come from the data and the match setup), named so a typo
 ## fails to parse instead of silently comparing false.
 const PLAYER := "player"
@@ -20,8 +21,7 @@ var code: String
 @export var power: int
 @export var base_power: int
 ## Damage the card has accumulated this turn. The card breaks once this
-## reaches its current power; it is reset to 0 during the End Phase. (Replaces
-## the old "life" counter, which counted down from power.)
+## reaches its current power; it is reset to 0 during the End Phase.
 @export var accumulated_damage: int = 0
 var crystal_scene
 var crystal_instance
@@ -218,7 +218,7 @@ func load_card_data():
 		element = card_data.get("element",'invalid')[0]
 		
 	else:
-		print("Card with ID '%s' not found in database." % id)
+		push_warning("Card with ID '%s' not found in database." % id)
 		
 
 func load_card_effects():
@@ -314,12 +314,9 @@ func _process(_delta):
 	if not is_dragging or not _drag_input_active:
 		return
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		# THE MOUSE-RELEASE SIGNAL IS NOT GUARANTEED. It comes from CardArea3D,
-		# which only sees the event while the pointer is over the card. A fast
-		# release, or one just off the card's edge, missed it — and the old code
-		# merely cleared is_dragging here, leaving the card wherever it was
-		# dropped until some unrelated hand re-layout moved it. End the drag
-		# through the same state handler the signal uses.
+		# THE MOUSE-RELEASE SIGNAL IS NOT GUARANTEED. It comes from CardArea3D, which only sees the event while the
+		# pointer is over the card, so a fast release or one just off the edge never arrives. End the drag here through
+		# the same path the signal uses.
 		release_drag()
 		return
 	if current_zone == Zone.HAND and controller == PLAYER:
@@ -389,14 +386,8 @@ func _notification(what):
 func _updateUI():
 	showPower()
 
-## THERE USED TO BE A SECOND AURA REGISTRATION PATH HERE, and it was a bug. It added this card's auras keyed by the
-## card's instance id and applied the field's auras to itself — but it never called activate_aura_in_field(), so an aura
-## arriving through THIS path was recorded and never given to the cards already on the field. That is precisely the
-## report that "cards that were already on the field are not affected by the new born aura": the wiring in Field had it
-## right, this competing path did not, and both of them ran.
-##
-## There is one path now: Field.refresh_continuous_effects() scans the board and collects this card's auras. No aura
-## is registered on the card or the field, so there is nothing to unregister when it leaves.
+## Auras have one path: Field.refresh_continuous_effects() scans the board and collects this card's auras. Nothing is
+## registered on the card or the field, so there is nothing to unregister when it leaves.
 
 func _executeAuraEffects():
 	var field_node: Node = get_parent()
@@ -478,9 +469,8 @@ enum Zone { NONE, DECK, HAND, FIELD, STACK, GRAVEYARD, DAMAGE, REMOVED }
 ## to the identity frame. The Hand, Stack, Graveyard, Deck and FocusCard scene
 ## nodes all supply that themselves with a flipped basis (-1 on X and Z), so their
 ## cards keep a zero local rotation. **The Field does not** — it is a plain
-## identity node — which is why Field.play_card() used to inherit the half turn
-## implicitly by preserving the card's global transform, and why zeroing the
-## rotation put every field card upside down.
+## identity node — so its cards carry the half turn themselves; zeroing their
+## rotation would put every field card upside down.
 const READABLE_ROTATION := Vector3(0, PI, 0)
 
 ## The size a card is drawn at once it is legally ON THE STACK.
@@ -491,13 +481,12 @@ const READABLE_ROTATION := Vector3(0, PI, 0)
 ##
 ## 1.0 is a SIZE CHOICE for the perspective board. The stack sits closer to the lens than the field,
 ## so 1.0 world renders around 1.25x a field card — big enough to read, small enough to sit in the
-## board instead of reading as a UI overlay. The old 2.8 was tuned for orthographic, where the stack
-## and the hand were the same size on screen; under the tilted camera it drew ~345 x 444 px. The hand
-## hover has its own HOVER_CARD_SCALE, and the stack's pose lives in the Stack node's "Stack Rotation" exports.
+## board instead of reading as a UI overlay. The hand hover has its own HOVER_CARD_SCALE, and the stack's
+## pose lives in the Stack node's "Stack Rotation" exports.
 const STACK_CARD_SCALE := 1.0
 
-## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so writing a world size
-## into it multiplies by this — which is what a stack card used to do, coming out 2.3x bigger than the number said.
+## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so a world size written
+## straight into it would come out 2.3x bigger than the number says.
 ## Every zone entry below means the WORLD size its cards are drawn at, and STACK divides this back out to keep that
 ## promise. The other containers are at or near 1 (Hand 1.0, DamageZone 1.0, Field 1.005). Deck (1.4), Graveyard (1.2)
 ## and FocusCard (4.5) have the same latent inconsistency; left alone because nothing has asked for their world size.
@@ -523,12 +512,8 @@ const PILE_LOCAL_SCALE := 1.2 / 1.4
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.DECK:      {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
-	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it.
-	#
-	# 2.0 was tuned for the ORTHOGRAPHIC board, where the hand sat 1.5 m below the camera and
-	# apparent size ignored distance. Under the perspective rig the hand is 6.2 m away and is
-	# magnified by proximity, so 2.0 produced a ~350 px card. 1.2 keeps the resting hand at
-	# roughly the old on-screen band while still reading as larger than a field card.
+	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. Under the perspective rig the hand is
+	# 6.2 m from the camera and magnified by proximity; this keeps it readable while still larger than a field card.
 	Zone.HAND:      {"scale": 1.35, "rotation": Vector3.ZERO,     "power_ui": false},
 	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
 	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
@@ -653,11 +638,10 @@ func tap():
 	if tween != null and tween.is_valid():
 		tween.kill()
 	
-	# AN ABSOLUTE ANGLE, NOT "the tap angle from wherever it happens to be". Both tweens used to be relative, so killing
-	# one mid-flight — which is exactly what an activation that gets undone immediately does — left the card part-way
-	# round, and every later tap started from a worse angle than the last. Repeated tap/untap cycles walked the card
-	# around. The angle itself is a SMALL tilt (15°), not the old quarter turn: a tapped card only needs to read as
-	# "resting", and a full 90° turned its art and stats sideways on a board that is now seen in perspective.
+	# AN ABSOLUTE ANGLE, NOT "the tap angle from wherever it happens to be": a relative tween killed mid-flight (an
+	# activation undone immediately) would leave the card part-way round, and repeated tap/untap would walk it around.
+	# The angle is a SMALL tilt (15°): a tapped card only needs to read as "resting", and a quarter turn would put its
+	# art and stats sideways on a board seen in perspective.
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y + tap_angle, tap_speed)
 
@@ -1019,7 +1003,7 @@ func get_card_effect_instructions() -> Array[Instruction]:
 			return create_instruction_from_json(skill_def_override.get("instructions", []))
 		if skill_activation_index >= 0:
 			if not "skill" in card_effects:
-				print("Error: no skill entry for card ", id)
+				push_error(str("No skill entry for card ", id))
 				return []
 			var skills = card_effects["skill"]
 			if skill_activation_index >= skills.size():
@@ -1034,7 +1018,7 @@ func get_card_effect_instructions() -> Array[Instruction]:
 			var first = entry[0]
 			if first is Dictionary and first.has("instructions"):
 				return create_instruction_from_json(first["instructions"])
-	print("Error no keyword %s in card effects" % key_word_effect)
+	push_error("No keyword %s in card effects" % key_word_effect)
 	return []
 func is_key_word_in_card_effect(keyword:String):
 	return keyword in card_effects
@@ -1251,8 +1235,7 @@ const TARGETED_GLOW_COLOR := Color(0.85, 0.03, 0.03)
 const AVAILABLE_BORDER_COLOR := Color(0.15, 0.95, 0.3)
 const AVAILABLE_GLOW_COLOR := Color(0.04, 0.7, 0.12)
 ## A Character committed to be played, waiting for its mana payment. Gold and
-## narrow, the old "this is the play" aura: not a prompt, and not a marker on a
-## mana source.
+## narrow: not a prompt, and not a marker on a mana source.
 const CAST_PENDING_BORDER_COLOR := Color(1.0, 0.82, 0.28)
 const CAST_PENDING_GLOW_COLOR := Color(0.92, 0.61, 0.10)
 ## The material's own colours, captured when it is built so deselecting restores
@@ -1277,13 +1260,9 @@ var _cast_pending_highlight_on: bool = false
 var _energized_highlight_on: bool = false
 var _energized_colour: Color = Color.WHITE
 
-## WHAT THE RING IS SHOWING — the public way to ask, so that callers and tests do not have to know which private flags
-## the card happens to keep. That matters more than tidiness here: the probes used to read `card._selected_highlight_on`
-## directly, which is a test measuring the LAYOUT rather than the behaviour — and worse, `card.get("_selected_highlight_on")`
-## silently returns null once a flag moves, so `not <that>` is true and the check PASSES for the wrong reason.
-##
-## The ring is also the thing being extracted next, and it cannot move while the tests are holding onto its fields.
-## The ring's own flags live just below and remain private; these are the observable behaviour.
+## WHAT THE RING IS SHOWING — the public way to ask, so callers and tests do not depend on the card's private flags.
+## Reading a private flag through `card.get(...)` silently returns null once the flag is renamed, so a `not <that>`
+## check would pass for the wrong reason. The ring's own flags live just below and stay private.
 func ring_selected() -> bool:
 	return _selected_highlight_on
 
@@ -1519,7 +1498,7 @@ func _report_target_border_look(size: Vector2, margin: float) -> void:
 	if _border_look_reported:
 		return
 	_border_look_reported = true
-	print("[TargetBorder] card=%s quad=%s border_width=%.3f border_color=%s glow_width=%.3f glow_color=%s" % [
+	LOG.info("TargetBorder", "card=%s quad=%s border_width=%.3f border_color=%s glow_width=%.3f glow_color=%s" % [
 		size,
 		size + Vector2.ONE * margin * 2.0,
 		float(_border_material.get_shader_parameter("border_width")),
@@ -1585,10 +1564,7 @@ func _card_face_size() -> Vector2:
 			return Vector2(aabb.size.x, aabb.size.z)
 	return Vector2(0.429, 0.6)
 
-## does_card_match_target() used to live here: a second, narrower matcher that understood only {type, controller,
-## element} and was called by the aura path alone. Everything now goes through the shared TARGET BLOCK evaluator, which
-## speaks the canonical is_* criteria plus a direct controller comparison — so the second matcher was deleted rather than
-## left to drift out of step with the first. See scripts/card_target.gd.
+## Target matching lives in the shared TARGET BLOCK evaluator — see scripts/card_target.gd.
 
 func is_type(ntype:String) -> bool:
 	return self.type == ntype
@@ -1685,8 +1661,8 @@ func make_effect_context(event = "static", data: Dictionary = {}, effect_card: C
 	# the ability resolves, so walking up from this card reaches the Break Zone's PlayerSide, not the Game. The effect
 	# copy is on the Stack, whose parent IS the Game, and that is the stable path for every resolving ability.
 	var anchor: Node = effect_card if effect_card != null and is_instance_valid(effect_card) and effect_card.is_inside_tree() else self
-	# WALK UP TO THE GAME. The old two-step assumption (card -> owner -> Game) breaks for a card that has moved to
-	# hand/deck before resolution. Identify Game by the seam methods it owns instead.
+	# WALK UP TO THE GAME, identified by the seam methods it owns: a card may have moved to hand/deck before
+	# resolution, so a fixed card -> owner -> Game path is not reliable.
 	var game: Node = null
 	var node: Node = anchor.get_parent()
 	while node != null:
@@ -1855,8 +1831,7 @@ func can_be_returned_to_hand_by(source: Card, source_kind: String = "") -> bool:
 	return not effect_obj.prevents_return_to_hand(TARGET_CONTEXT.new(self, source, source_kind, self))
 
 ## Criteria predicates. A criteria key becomes a Card method called with the block's value, so
-## {"is_tapped": false} and {"is_tapped": true} must both mean what they say — the old version ignored its argument
-## and returned tapped-ness either way, which would silently pick the opposite set.
+## {"is_tapped": false} and {"is_tapped": true} must both mean what they say.
 func is_tapped(want: bool = true) -> bool:
 	return self.tapped == want
 

@@ -1,5 +1,6 @@
 extends Node3D
 class_name Field
+const LOG := preload("res://scripts/log.gd")
 ## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
 ## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
 var game: Game:
@@ -10,10 +11,9 @@ var game: Game:
 const CARD_CHARGE = 1
 ## Horizontal centre-to-centre distance between neighbouring cards in a field row.
 ##
-## A row holds at most five cards, so it does NOT need the old 0.8 m pitch to fill the board.
-## 0.65 halves the visible gap (0.8 - 0.49 card width = 0.31 m, down to 0.16 m) and frees the
-## outer columns, which is what makes room for the deck and graveyard beside the rows under the
-## perspective camera. Cards still do not overlap.
+## A row holds at most five cards, so 0.65 is enough: it leaves a 0.16 m gap between 0.49 m cards and frees the
+## outer columns, which is what makes room for the deck and graveyard beside the rows under the perspective
+## camera. Cards still do not overlap.
 const ROW_CARD_STEP := 0.65
 const RULES := preload("res://scripts/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
@@ -310,7 +310,7 @@ func add_card_to_mana_conversion(card:Card, element: String = ""):
 	# RULES: the CP cost is exact. Once it is fulfilled, further selections are ignored; only the one hand-card
 	# overpay exception is allowed, and that already happened when the fulfilling card was selected.
 	if assistant != null and assistant.payment_is_full():
-		print("[Mana] cost already fulfilled; ignoring extra charge")
+		LOG.info("Mana", "cost already fulfilled; ignoring extra charge")
 		return
 	if selected_cards_for_mana_conversion.has(card):
 		return
@@ -360,13 +360,13 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	if animate and card != null and card.is_character():
 		if game != null and game.has_method("would_be_unique_name_conflict") \
 				and game.would_be_unique_name_conflict(card):
-			print("[Unique] %s is already on the field; the new copy goes to the Break Zone" % card.card_name)
+			LOG.info("Unique", "%s is already on the field; the new copy goes to the Break Zone" % card.card_name)
 			game.send_off_field_card_to_break_zone(card)
 			return
 		# RULE 7.7.5: normally one Light or Dark card per side. Cosmos/Chaos carry the printed exception.
 		if game != null and game.has_method("would_break_light_dark_limit") \
 				and game.would_break_light_dark_limit(card):
-			print("[Light/Dark] %s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
+			LOG.info("Light/Dark", "%s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
 			game.send_off_field_card_to_break_zone(card)
 			return
 	var trans = card.global_transform
@@ -683,7 +683,7 @@ func end_phase_cleanup():
 		if c == null or not is_instance_valid(c) or not c.status_effects.has("break_at_end_of_turn"):
 			continue
 		c.status_effects.erase("break_at_end_of_turn")
-		print("[EndPhase] %s is broken by its delayed-break effect" % c.card_name)
+		LOG.info("EndPhase", "%s is broken by its delayed-break effect" % c.card_name)
 		if game != null and game.has_method("break_card"):
 			game.break_card(c)
 	for c in get_all_cards():
@@ -696,7 +696,7 @@ func try_activate_from_field(card: Card) -> void:
 	if skills.is_empty():
 		return
 	# ONE ENTRY POINT. A single ability activates immediately; two or more open the skill picker modal, which shows
-	# each ability's text (see scripts/skill_choice.gd). The old 3D "Skill" buttons are no longer used for this.
+	# each ability's text (see scripts/skill_choice.gd).
 	begin_skill_activation(card, -1)
 
 ## True while the LOCAL player holds the window. Holding a card you *could* activate is not the
@@ -901,13 +901,9 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 	assistant.clear_payment_accumulator()
 	def = stack.skill_activation_proxy.skill_def_override
 	# TAP THE SOURCE NOW, BEFORE THE MANA STEP. Tapping is part of the ability's cost, so it belongs at the moment
-	# of activation rather than at stack commit.
-	#
-	# It used to be applied by Stack._apply_skill_source_tap_from_proxy(), reached only from
-	# commit_skill_activation_costs_if_pending() — which runs AFTER the mana has been chosen. So for the whole
-	# payment step the source was still untapped and could be selected as mana for its own ability: paying the Red
-	# Mage's skill with the Red Mage. Tapping it here removes it from the pool by the same rule that already keeps
-	# every other tapped Backup out of it.
+	# of activation rather than at stack commit — and an untapped source during payment could be selected as mana
+	# for its own ability (paying the Red Mage's skill with the Red Mage). Tapped, it is out of the pool by the same
+	# rule that keeps every other tapped Backup out.
 	#
 	# Stack._clear_skill_proxy() undoes this when the player backs out, so the tap is only really spent once the
 	# activation commits.
@@ -930,7 +926,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 		if picked == null:
 			stack.call("_clear_skill_proxy")
 			return
-		print("[Sacrifice] %s -> Break Zone" % picked.card_name)
+		LOG.info("Sacrifice", "%s -> Break Zone" % picked.card_name)
 		game.put_card_into_graveyard(picked)
 	# DISCARD AS A COST (Ninja 78). The owner picks which cards leave their hand, through the same agent seam the
 	# discard effects use — so the human gets the hand picker and the AI chooses for itself. A refused pick aborts the
@@ -947,7 +943,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1) -> void:
 			if discarded == null:
 				stack.call("_clear_skill_proxy")
 				return
-			print("[Discard] %s (cost)" % discarded.card_name)
+			LOG.info("Discard", "%s (cost)" % discarded.card_name)
 			owner_hand.discard_card(discarded)
 	if def.get("s_cost", false):
 		# Special ability (S): first discard a card sharing a name with the
@@ -1074,12 +1070,12 @@ func untap_cards_for(controller_name: String) -> void:
 		# the untap it denies, never counted down at End Phase.
 		if card.status_effects.has("skip_next_active"):
 			card.status_effects.erase("skip_next_active")
-			print("[Skip] %s does not activate" % card.card_name)
+			LOG.info("Skip", "%s does not activate" % card.card_name)
 			continue
 		if card.status_effects.has("frozen"):
 			card.status_effects.erase("frozen")
 			card.refresh_status_visuals()
-			print("[Freeze] %s does not activate" % card.card_name)
+			LOG.info("Freeze", "%s does not activate" % card.card_name)
 			continue
 		card.untap()
 		
@@ -1118,7 +1114,7 @@ func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, 
 	var stack_node = game.get("stack")
 	if stack_node != null:
 		stack_node.release_target_display()
-	print("[Targeting] request_target source=%s stages=%d" % [card.card_name, targeting_blocks.size()])
+	LOG.info("Targeting", "request_target source=%s stages=%d" % [card.card_name, targeting_blocks.size()])
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
 	_begin_target_block(0)
 	if allow_cancel:
@@ -1206,9 +1202,8 @@ func _aim_with_current() -> void:
 
 ## Drop one pick: its ring, its arc, and its claim on being the current target.
 ##
-## THE ARC AT `at` IS THAT PICK'S, by the invariant above — so exactly ONE arrow leaves the board. `at + 1` was wrong,
-## and freeing the aiming arc separately in the caller was wrong too: between them the array collected dead arcs, its
-## indexes stopped matching the picks, and a single step back could take two arrows off at once.
+## THE ARC AT `at` IS THAT PICK'S, by the invariant above — so exactly ONE arrow leaves the board, and the caller
+## must not free the aiming arc separately, or the array collects dead arcs and its indexes stop matching the picks.
 func _drop_pick(at: int) -> void:
 	var picked: Card = targeting_picked[at]
 	targeting_picked.remove_at(at)
@@ -1246,9 +1241,8 @@ func set_target_card(card: Card):
 	if not card.is_valid_target:
 		push_warning("[Targeting] %s is not a valid target" % card.card_name)
 		return
-	# A FULL SESSION IGNORES FURTHER PICKS. It is complete at `count`, and a click after that used to be taken anyway —
-	# leaving one more pick than the session had arcs for, which is a state nothing downstream could match back up.
-	# Confirm and a right-click are the two ways on from here.
+	# A FULL SESSION IGNORES FURTHER PICKS. It is complete at `count`; one more pick than the session has arcs for is a
+	# state nothing downstream could match back up. Confirm and a right-click are the two ways on from here.
 	if targeting_count > 1 and targeting_picked.size() >= targeting_count:
 		return
 	# Blue and orange are the LOCAL player's vocabulary: "legal" and "you picked this".
@@ -1277,7 +1271,7 @@ func set_target_card(card: Card):
 		card.set_selected_highlight(true)
 	else:
 		card.set_targeted_highlight(true)
-	print("[Targeting] target selected: ", card.card_name)
+	LOG.info("Targeting", str("target selected: ", card.card_name))
 	arrow.lock_arc(card.get_global_face_centre())
 	if replaces_single_pick:
 		targeting_picked[stage_pick_index] = card
@@ -1286,7 +1280,7 @@ func set_target_card(card: Card):
 	# THIS STAGE IS FULL: either the next stage takes over (Hades: Forward, then Backup) or the session is complete.
 	var stage_full: bool = targeting_picked.size() >= targeting_block_start + targeting_count
 	if stage_full and targeting_block_index + 1 < targeting_blocks.size():
-		print("[Targeting] stage %d done — asking for stage %d" % [
+		LOG.info("Targeting", "stage %d done — asking for stage %d" % [
 			targeting_block_index + 1, targeting_block_index + 2])
 		_begin_target_block(targeting_block_index + 1)
 		return
@@ -1296,7 +1290,7 @@ func set_target_card(card: Card):
 	# MORE PICKS TO COME. The arc stays where it landed — that IS the record of the pick — a new one takes over the
 	# aiming, and the card just taken leaves the legal set so the same Backup cannot be chosen twice. Its orange ring
 	# stays: set_valid_target() only owns the blue prompt glow.
-	print("[Targeting] %d of %d picked — aiming for the next" % [targeting_picked.size(), targeting_count])
+	LOG.info("Targeting", "%d of %d picked — aiming for the next" % [targeting_picked.size(), targeting_count])
 	target_card = null
 	_spawn_aiming_arrow(source_card)
 	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
@@ -1317,11 +1311,8 @@ func set_target_card(card: Card):
 
 ## ONE STEP BACK, for a right-click, and it works from ANY point in the session.
 ##
-## ANY pick steps back — INCLUDING THE LAST ONE ONCE THE COUNT IS FULL. The first version only stepped back while fewer
-## than `count` had been picked, so once three of three were chosen the guard failed, control fell through to the
-## single-target path below, and that path found `target_card` already null and returned without doing anything. The
-## picks were never taken off the list, which is the "it cancels the last target and then the button stops working"
-## report. Stepping back re-opens the session: a new aiming arc appears and the picks that remain are still picks.
+## ANY pick steps back — INCLUDING THE LAST ONE ONCE THE COUNT IS FULL. Stepping back re-opens the session: a new
+## aiming arc appears and the picks that remain are still picks.
 func clear_target_selection() -> void:
 	# A ONE-TARGET STAGE HAS ONE SLOT. Dropping the pick is what makes right-click
 	# cancellation real: leaving it in `targeting_picked` let the next click append a
@@ -1337,10 +1328,9 @@ func clear_target_selection() -> void:
 		return
 	if targeting_count > 1 and not targeting_picked.is_empty():
 		# ONE call. `_drop_pick` removes that pick's arc AND re-establishes the aiming one (see _aim_with_current).
-		# Also freeing the aiming arc here, as this used to, is what let a single step back take TWO arrows off the
-		# board — and left a dead arc in the array, so the indexes stopped matching the picks.
+		# Freeing the aiming arc here as well would take TWO arrows off the board and leave a dead arc in the array.
 		_drop_pick(targeting_picked.size() - 1)
-		print("[Targeting] back to %d of %d" % [targeting_picked.size(), targeting_count])
+		LOG.info("Targeting", "back to %d of %d" % [targeting_picked.size(), targeting_count])
 		if not targeting_picked.is_empty():
 			# Picks remain, so finishing early is still allowed: Confirm stays on offer next to the aiming arc.
 			target_card = targeting_picked.back()
@@ -1358,7 +1348,7 @@ func clear_target_selection() -> void:
 		return
 	target_card.set_selected_highlight(false)
 	target_card.set_targeted_highlight(false)
-	print("[Targeting] selection cleared — aiming again")
+	LOG.info("Targeting", "selection cleared — aiming again")
 	target_card = null
 	if arrow != null and is_instance_valid(arrow):
 		# `locked` is what froze the arc on the pick (see lock_arc); dropping it and re-aiming puts the arc back on the
@@ -1670,9 +1660,9 @@ func _condition_met(condition: Dictionary, source: Card = null) -> bool:
 ## AURAS — continuous effects a card grants to OTHERS while it is on the field ("your Fire Forwards gain +1000 power",
 ## card 1-030R). Not the same thing as `conditional_power`, which a card applies to ITSELF when a condition holds.
 ##
-## THE LEGACY AURA REGISTRY IS GONE. Auras are no longer stored on Field and applied/revoked manually: every
-## continuous effect — auras, conditional power, dynamic power, granted statuses — is collected by one board scan in
-## refresh_continuous_effects() and diffed against _continuous_ledger.
+## Auras are not stored on Field or applied/revoked manually: every continuous effect — auras, conditional power,
+## dynamic power, granted statuses — is collected by one board scan in refresh_continuous_effects() and diffed
+## against _continuous_ledger.
 
 func get_breakable_cards():
 	# Forwards whose accumulated damage is equal to or greater than their
@@ -1742,7 +1732,7 @@ func add_party_member(card: Card) -> bool:
 		return false
 	attacking_party.append(card)
 	card.set_attacker_status(true)
-	print("[Party] %s joins %s (%d members)" % [card.card_name, attacker_card.card_name, attacking_party.size()])
+	LOG.info("Party", "%s joins %s (%d members)" % [card.card_name, attacker_card.card_name, attacking_party.size()])
 	return true
 
 func remove_party_member(card: Card) -> void:
@@ -1751,7 +1741,7 @@ func remove_party_member(card: Card) -> void:
 	attacking_party.erase(card)
 	if is_instance_valid(card):
 		card.set_attacker_status(false)
-	print("[Party] %s leaves (%d members)" % [card.card_name, attacking_party.size()])
+	LOG.info("Party", "%s leaves (%d members)" % [card.card_name, attacking_party.size()])
 
 func same_element_as_primary(card: Card) -> bool:
 	if attacker_card == null:
@@ -1823,7 +1813,7 @@ func drop_party_member(card: Card) -> void:
 func _disband_if_too_small() -> void:
 	if attacking_party.size() >= 2:
 		return
-	print("[Party] disbands (%d member(s) left)" % attacking_party.size())
+	LOG.info("Party", "disbands (%d member(s) left)" % attacking_party.size())
 	if attacking_party.is_empty():
 		attacker_card = null
 	elif not attacking_party.has(attacker_card):
@@ -1949,12 +1939,11 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller}
 		if rule.has("on_enter_break_zone"):
 			payload["on_enter_break_zone"] = rule["on_enter_break_zone"]
-		print("[Damage] %s marks %s (%s)" % [source.card_name, target.card_name, status])
+		LOG.info("Damage", "%s marks %s (%s)" % [source.card_name, target.card_name, status])
 		target.add_status_effect(status, payload)
 
-## The actual playmat bounds in world space. Drop detection belongs to the board,
-## not to a hand-written rectangle in the hand: the old rectangle was 3 x 1.25 m
-## inside an 8 x 4 m mat, so most of the visible board rejected the drop.
+## The actual playmat bounds in world space. Drop detection belongs to the board, not to a hand-written rectangle in
+## the hand, so the drop area follows the mat if it moves or scales.
 func play_area_bounds() -> AABB:
 	var mat: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
 	if mat == null or mat.mesh == null:
@@ -2161,7 +2150,7 @@ func notify_targets_chosen() -> void:
 			continue
 		if not card.is_key_word_in_card_effect("when_chosen") and not card.effect_handles_event(EVENTS.Event.CHOSEN):
 			continue
-		print("[Chosen] %s was chosen by the opponent's %s" % [card.card_name, kind])
+		LOG.info("Chosen", "%s was chosen by the opponent's %s" % [card.card_name, kind])
 		execute_card_effect(card, EVENTS.Event.CHOSEN)
 
 func _on_stack_execute_card_effect(card: Card) -> void:

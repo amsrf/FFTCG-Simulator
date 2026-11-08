@@ -1,5 +1,6 @@
 extends Node3D
 class_name Hand
+const LOG := preload("res://scripts/log.gd")
 ## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
 ## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
 var game: Game:
@@ -31,11 +32,8 @@ var _character_drag_restore_scale := 1.0
 var _character_drag_stance := Transform3D()
 var _character_drag_start := Transform3D()
 var _character_drag_start_pointer_y := 0.0
-## The size a hovered hand card grows to. This used to be Card.STACK_CARD_SCALE (2.8), which was chosen for
-## the ORTHOGRAPHIC board where a hand card and a stack card were the same size on screen. Under the
-## perspective camera the hand sits much closer to the lens, so 2.8 drew a ~340 x 480 px card that covered
-## half the board. 1.85 keeps the hover around 225 x 315 px: bigger than the resting hand, readable, and
-## still clear of the field. The stack keeps its own 2.8 world size.
+## The size a hovered hand card grows to: about 225 x 315 px under the perspective camera — bigger than the resting
+## hand, readable, and still clear of the field.
 const HOVER_CARD_SCALE := 1.85
 ## How dark the artificial overlap shadow gets, and how far it fades across the covered card. These
 ## are art knobs, exported so they can be dialled in the Inspector without touching the shader.
@@ -45,9 +43,8 @@ const HOVER_CARD_SCALE := 1.85
 @export_range(0.0, 0.10, 0.001) var card_corner_radius_m: float = 0.03
 ## How far a hovered card is lifted toward the camera is NOT a constant: it has to clear the whole stacking ramp, which
 ## depends on how many cards are in the hand. See _hover_lift() below.
-## How much clean board a hovered card keeps BELOW it, in screen pixels. The fit used to target the viewport's bottom
-## edge exactly, which is technically "fully on screen" and useless: the card's bottom border and the power box sit right
-## on the last pixel row. A short strip of board underneath is what makes the bottom of the card readable.
+## How much clean board a hovered card keeps BELOW it, in screen pixels. Fitting to the window's edge exactly would put
+## the card's bottom border and power box on the last pixel row; a short strip of board underneath keeps them readable.
 const HOVER_BOTTOM_MARGIN := 34.0
 
 var cards = []
@@ -59,8 +56,7 @@ var selected_card_for_effect: Card = null
 ## LAID OUT for the size the cards actually are, so raising that one scale would otherwise make them silently overlap.
 var hand_scale: float = float(Card.ZONE_PRESENTATION[Card.Zone.HAND]["scale"])
 var card_width = GlobalVariables.get_card_width() * hand_scale;
-## Centre-to-centre distance between neighbours, derived from the card's WIDTH rather than from the old absolute
-## spacing: that spacing was tuned for a card less than half this size, and the overlap it gives is not the reference's.
+## Centre-to-centre distance between neighbours, derived from the card's WIDTH so the overlap scales with the card.
 var card_spacing = card_width * (FAN_STEP_FRACTION - 1.0);
 var charging_card
 var start_x;
@@ -171,10 +167,7 @@ func draw(card):
 	var curve = Curve3D.new()
 	var target_position = calculate_card_position(cards.size() - 1)
 	
-	# A SINGLE ARC — one cubic from the deck to the hand.
-	#
-	# This used to be a chain of FIVE control points, which made the card accelerate, kink, re-accelerate and finally
-	# hook — a sequence of separate moves, which is what read as snappy.
+	# A SINGLE ARC — one cubic from the deck to the hand, so the card moves in one smooth motion.
 	#
 	# THE CLIMB IS IN -Z, NOT IN Y. This camera looks almost straight down, so a path that rises in world Y is
 	# foreshortened to nothing and the card appears to travel flat across the board. In this rig "up the screen" is -Z.
@@ -242,10 +235,9 @@ func draw(card):
 	tween.tween_property(path_follow, "progress_ratio", 1.0, 1.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	# THE FLIP STARTS AT ONCE AND IS DONE WELL BEFORE THE CARD ARRIVES.
 	#
-	# Sharing the flight's duration and its default easing was wrong in two ways. The flip was on EASE_IN_OUT, which
-	# holds a turn almost still for its first third — so while the flight ran ahead at full speed the card looked like
-	# it was not turning at all, and the turn only became visible mid-arc. And it finished exactly as the card landed,
-	# so there was no approach left.
+	# It has its own duration and easing, not the flight's: EASE_IN_OUT would hold the turn almost still for its first
+	# third, so the card would look unturned while the flight ran at full speed, and finishing exactly on landing would
+	# leave no approach.
 	#
 	# 0.9 s of the 1.7 s flight lands the last degree of the turn at ~78% of the PATH — the flight is QUAD EASE_OUT, so
 	# 53% of the TIME is 78% of the DISTANCE. That is the draw5 frame, and what follows is the approach into the hand.
@@ -284,8 +276,8 @@ func add_card_to_tree(card):
 	card.index = cards.size()-1
 	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
-	# Store the card's global transform before reparenting. A fresh card has no parent and therefore no meaningful
-	# global transform — reading it there is the source of the old "!is_inside_tree()" spam during match setup.
+	# Store the card's global transform before reparenting — only when it has a parent: a fresh card has no meaningful
+	# global transform, and reading it outside the tree spams "!is_inside_tree()".
 	if card.get_parent() != null:
 		var trans: Transform3D = card.global_transform
 		card.reparent(self, false)
@@ -396,10 +388,9 @@ const FAN_VISIBLE_FRACTION := 0.62
 ## `r * r`, where `r` is the card's offset from the middle over half the row — so it is a `t * t` curve, symmetric by
 ## construction, and it can never exceed this fraction however big the hand gets. THE MIDDLE IS HIGHEST.
 ##
-## IT HAS TO BEAT THE LEAN'S CORNER LIFT, which is the whole reason it is 0.12 and not smaller. A card leaning outward
-## about its own centre lifts its outer corner — at 2 degrees and 161 px that is about 10 px — so the old 0.06 gave a
-## 14 px drop that was almost exactly cancelled by it. The row then read as FLAT, and as "the edges are higher" once the
-## two landed either side of each other. These two are calibrated so an EIGHT-card hand drops its ends about 27 px.
+## IT HAS TO BEAT THE LEAN'S CORNER LIFT. A card leaning outward about its own centre lifts its outer corner — at
+## 2 degrees and 161 px that is about 10 px — so a smaller sag is cancelled by it and the row reads as FLAT, or as
+## "the edges are higher". These two are calibrated so an EIGHT-card hand drops its ends about 27 px.
 ##
 ## FAN_SAG_CURVE is metres of drop per metre of lateral offset SQUARED (see fan_sag_for), so the fan's depth follows the
 ## width of the row instead of being normalised to it. FAN_SAG_MAX caps the drop, in fractions of a card's height.
@@ -422,11 +413,8 @@ const FAN_STEP_FRACTION := 0.86
 ## orthographic camera projected along exactly this direction, so the card does not move a pixel.
 ##
 ## It MUST stay bigger than the glow quad's offset above the card face (2 mm, see Card._build_target_border()), or the
-## prompt glow of a card behind shines through the card lying in front of it — that is what the old "height stagger"
-## comment was about, and it is why this is not simply the smallest number that sorts correctly.
-##
-## 20 mm, up from 8. It was 8 while the ramp was in world Y, where every millimetre is also a millimetre of screen
-## height. Along the camera axis there is no such cost, and a stacking order is worth making unambiguous.
+## prompt glow of a card behind shines through the card lying in front of it — which is why this is not simply the
+## smallest number that sorts correctly. Extra depth costs nothing on screen, so 20 mm keeps the order unambiguous.
 const CARD_STACK_HEIGHT := 0.02
 
 ## The dialled maximum spacing. EXPORTED so it can be dialled in by eye in the Inspector instead of by editing and
@@ -456,9 +444,8 @@ func spacing() -> float:
 ## Pixels per metre at `world_pos`, for a displacement PERPENDICULAR to the view axis.
 ##
 ## Orthographic: constant, so `view_h / cam.size` is the whole story. Perspective: it goes as
-## 1/depth, so every screen-to-world conversion has to be evaluated at the depth it is used at.
-## The hand used to hard-code the orthographic version in three places, which is exactly why a
-## perspective camera made the fan explode: `cam.size` is 0 in perspective.
+## 1/depth, so every screen-to-world conversion has to be evaluated at the depth it is used at
+## (`cam.size` is 0 in perspective). Every conversion in the hand goes through this.
 func _px_per_metre_at(world_pos: Vector3) -> float:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam == null:
@@ -521,9 +508,8 @@ func fan_sag_for(i: int) -> float:
 
 func _sink_offset() -> Vector3:
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	# PROJECTION-AGNOSTIC. This used to bail out unless the camera was orthographic, because the
-	# old conversion assumed a constant pixels-per-metre. The conversion below now asks the camera
-	# at the hand's own depth, so perspective works with the same code.
+	# PROJECTION-AGNOSTIC: the conversion below asks the camera at the hand's own depth, so orthographic and
+	# perspective share the same code.
 	if cam == null or cards.is_empty():
 		return Vector3.ZERO
 	var half: Vector2 = cards[0]._card_face_size() * 0.5
@@ -596,11 +582,9 @@ func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 	# THE ARC DOES NOT TURN OVER. It was mirrored along with everything else, and it should not be: on screen the
 	# opponent's row curves the SAME way up as ours — the ends lower than the middle — and only the LEAN is mirrored.
 	#
-	# That is genuinely what was reported and re-reported ("the curve is upside down"), and it disagrees with the numbers
-	# this file can print: measured through the camera, the mirrored arc put their ends 27 px HIGHER than their middle.
-	# Both cannot be true, the eyes looking at the screen are the authority, and the thing that has to stay consistent is
-	# the screen — so the sag is no longer flipped. If it ever looks wrong the other way, this is the line, and the
-	# measurement that disagrees with it is in hand_hover_probe's per-card table.
+	# This follows what the screen shows, even though the printed numbers disagree (measured through the camera, a
+	# mirrored arc put their ends 27 px HIGHER than their middle). If it ever looks wrong the other way, this is the
+	# line, and the measurement that disagrees with it is in hand_hover_probe's per-card table.
 	# The camera's own back-to-front axis, in this hand's local space. Camera.basis.z points BACK toward the viewer, so
 	# this is "one step nearer the camera" — depth and nothing else, because the projection is orthographic.
 	var toward_cam: Vector3 = Vector3.UP
@@ -794,10 +778,9 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var lift: Vector3 = Vector3.UP * _hover_lift()
 	if cam != null:
-		# WORLD camera axis -> LOCAL offset. The old version added the world vector straight into
-		# `base`, which is local; on the 180-degree-yawed player hand that tilted the lift away from
-		# the view axis. Under ortho it was close enough to clear the ramp; under perspective only
-		# ~70% of it landed on the depth axis, so the leftmost card stopped clearing its neighbours.
+		# WORLD camera axis -> LOCAL offset. `base` is local and the player hand is yawed 180 degrees, so adding the
+		# world vector directly would tilt the lift away from the view axis and the leftmost card would stop clearing
+		# its neighbours.
 		lift = global_transform.basis.inverse() \
 			* (cam.global_transform.basis.z.normalized() * _hover_lift())
 	if cam == null:
@@ -819,10 +802,8 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 	# At the CARD's depth, after the lift. Moving along the camera's up axis is perpendicular to the
 	# view axis, so the fit does not change its own scale while it solves.
 	var px_per_metre: float = _px_per_metre_at(placement.origin)
-	# AND IT FITS TO A LINE ABOVE THE EDGE, NOT TO THE EDGE ITSELF. This used to target `view_h` exactly, which put the
-	# hovered card's bottom on the LAST PIXEL ROW of the window: every corner is on screen, so the check passed, but the
-	# card's bottom border and the power box just above it were pressed against the window edge and read as cut off —
-	# "I can't see the power number". A card is not fully visible when the thing you want to read is on the boundary.
+	# AND IT FITS TO A LINE ABOVE THE EDGE, NOT TO THE EDGE ITSELF: on the last pixel row every corner is on screen, but
+	# the bottom border and the power box are pressed against the window edge and read as cut off.
 	var want_bottom: float = view_h - HOVER_BOTTOM_MARGIN
 	# Screen Y grows DOWNWARD, so a positive (want_bottom - lowest) means the card sits too high and must come down.
 	var world_move: Vector3 = -cam.global_transform.basis.y.normalized() * ((want_bottom - lowest) / px_per_metre)
@@ -1016,9 +997,8 @@ func _build_character_drag_stance(pointer_x: float) -> Transform3D:
 		viewport_size.y * character_drag_screen_y)
 	var ray_origin := camera.project_ray_origin(screen)
 	var ray := camera.project_ray_normal(screen)
-	# ABOVE THE HAND, not below it. The old plane sat at the mat surface, so the
-	# fan (at hand height) drew over the stance card. Lifting from the hand's own
-	# Y guarantees the card is in front of every fan card as well as larger.
+	# ABOVE THE HAND, not at the mat surface — otherwise the fan (at hand height) draws over the stance card. Lifting
+	# from the hand's own Y keeps the card in front of every fan card as well as larger.
 	var plane_y: float = global_position.y + character_drag_lift_y
 	var hit = Plane(Vector3.UP, plane_y).intersects_ray(ray_origin, ray)
 	var position := ray_origin + ray * 6.0
@@ -1287,7 +1267,7 @@ func add_card_to_mana_conversion(card:Card):
 	# 1-CP gap) is still allowed because the guard is checked BEFORE the card that fulfils the cost is recorded.
 	var assistant = game.get("assistant") if game != null else null
 	if assistant != null and assistant.payment_is_full():
-		print("[Mana] cost already fulfilled; ignoring extra charge")
+		LOG.info("Mana", "cost already fulfilled; ignoring extra charge")
 		return
 	# A card being cast (e.g. a Summon awaiting payment) cannot be used as
 	# its own mana payment.
@@ -1311,10 +1291,8 @@ func remove_card_from_mana_conversion(card:Card):
 	selected_cards_for_mana_has_changed.emit(-CARD_CHARGE, card.mana_element())
 			
 func animate_card(card, target_position, target_tilt: float = 0.0):
-	# POSITION AND TILT. It used to tween the scale to 1.0 as well, which quietly made 1.0 the hand's REAL resting size:
-	# whatever Card.ZONE_PRESENTATION said, every layout pass wrote 1.0 back over it. Size belongs to the zone table
-	# and to the hover (Hand._size_card) — and leaving that here also meant a layout during a hover shrank the card the
-	# pointer was on.
+	# POSITION AND TILT ONLY. Size belongs to the zone table and to the hover (Hand._size_card); tweening scale here
+	# would override Card.ZONE_PRESENTATION and shrink a hovered card during a layout.
 	#
 	# The TILT is tweened here rather than assigned by the caller so that straightening up on hover, and leaning back
 	# as the pointer leaves, both GLIDE. Assigning it made the straightening snap.

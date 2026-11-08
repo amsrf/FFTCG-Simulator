@@ -1,5 +1,6 @@
 extends Node3D
 class_name Stack
+const LOG := preload("res://scripts/log.gd")
 ## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
 ## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
 var game: Game:
@@ -11,8 +12,8 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 var cards = []
 ## Layout pitch in STACK-LOCAL units. It has to follow the card's VISUAL width, not a separate
 ## hand-picked number: the container is scaled 2.305, so the local face width is
-## 0.429 * (STACK_CARD_SCALE / STACK_CONTAINER_SCALE). The old 0.822 was more than three times the
-## card's local width once the stack was shrunk, which spread the fan into separate cards.
+## 0.429 * (STACK_CARD_SCALE / STACK_CONTAINER_SCALE). A fixed pitch would spread the fan into
+## separate cards whenever the stack is resized.
 var card_width = 0.429 * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
 var player_mode = GlobalVariables.get_player_mode();
 var start_x: float = 0.0
@@ -360,7 +361,7 @@ func add_created_card_to_tree(card: Card, wording: String):
 	var trans := card.transform
 	add_child(card)
 	if(card.key_word_effect):
-		print("Adding effect to the stack")
+		LOG.info("Stack", "adding effect to the stack")
 	card.global_transform = trans
 	card.enter_zone(Card.Zone.STACK, wording)
 	
@@ -384,9 +385,8 @@ func cast_card():
 		#
 		# THE CARD IS PARKED IN THE FAKE STACK. It stayed there through the
 		# payment with the thin gold aura, so this is the "marked" card the player
-		# can see. Break the crystals concurrently — the payment effect no longer
-		# has an orb flight to wait for — then fade the card out where it sits and
-		# rebuild it on the field.
+		# can see. Break the crystals concurrently, then fade the card out where
+		# it sits and rebuild it on the field.
 		var landing: Card = casting_card
 		if landing == null or not is_instance_valid(landing):
 			return
@@ -617,7 +617,7 @@ func commit_skill_activation_costs_if_pending() -> void:
 			if bool(sacrifice.get("is_source", false)):
 				var sac_src: Card = skill_activation_proxy.effect_source
 				if sac_src != null and is_instance_valid(sac_src) and sac_src.is_on_field():
-					print("[Sacrifice] %s -> Break Zone (deferred)" % sac_src.card_name)
+					LOG.info("Sacrifice", "%s -> Break Zone (deferred)" % sac_src.card_name)
 					game.put_card_into_graveyard(sac_src)
 	# Special ability (S) cost: discard the card chosen from hand.
 	if s_cost_selected_card != null:
@@ -708,8 +708,7 @@ func _on_hand_charge_start(card: Card) -> void:
 		if card.controller == Card.PLAYER:
 			# THE CHARACTER IS NOT A STACK CARD. It stays parented to the hand,
 			# in the latched cast stance, through payment; the Stack only holds the
-			# reference that cast_card() will fade from. Reparenting it here was
-			# the old fake-stack presentation.
+			# reference that cast_card() will fade from.
 			card.stop_hand_layout()
 		else:
 			park_card(card)
@@ -1023,7 +1022,7 @@ func cancel_stack_card(card: Card) -> void:
 		return
 	if not cards.has(card):
 		return
-	print("[Counter] %s is cancelled" % card.card_name)
+	LOG.info("Counter", "%s is cancelled" % card.card_name)
 	cards.erase(card)
 	if summon_casting_card == card:
 		summon_casting_card = null
@@ -1052,7 +1051,7 @@ func resolve_top_effect() -> void:
 	if card == skill_activation_proxy:
 		skill_activation_proxy = null
 		skill_mana_deferred_until_target_confirm = false
-	print('Resolve ', card.card_name)
+	LOG.info("Stack", str("resolve ", card.card_name))
 	resolution_pending = true
 	execute_card_effect.emit(card)
 	if resolution_pending:

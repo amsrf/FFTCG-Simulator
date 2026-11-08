@@ -1,5 +1,6 @@
 extends Node3D
 class_name Game
+const LOG := preload("res://scripts/log.gd")
 
 @onready var player: PlayerSide = $Player
 @onready var opponent: PlayerSide = $Opponent
@@ -69,7 +70,7 @@ var _chosen_cards: Array = []
 ##
 ## The instruction carries NO argument, because the effect's TARGETS are the argument: `_targets` is filled from the
 ## effect card's own list when its instructions run (see _on_stack_execute_card_effect). It deliberately does NOT read
-## `Field.targeting_picked` any more — that is the targeting UI's state, and another session can overwrite it before the
+## `Field.targeting_picked` — that is the targeting UI's state, and another session can overwrite it before the
 ## effect resolves. The effect carries what it was given; nothing has to go looking for it afterwards.
 ## THE ONE LOOP. Every "do X to all of them" instruction is the same walk over _targets, so the walk lives here
 ## once and the instructions below are just verbs. Adding a verb is one line, not another copy of the loop.
@@ -79,10 +80,8 @@ var _chosen_cards: Array = []
 ##
 ## is_on_field() is required rather than defensive: an effect that resolves after a card died must not call into it.
 ##
-## STATE-BASED ACTIONS RUN AFTER ALL TARGETS, ALWAYS. There used to be a `settle` flag, on the assumption that only
-## damage could kill. That is wrong: conditional_power already exists and is_tapped is already a criteria method, so
-## a card like "tapped cards lose 3000 power" makes TAPPING lethal. Every verb has to settle; the flag only invited
-## someone to add a verb and forget it.
+## STATE-BASED ACTIONS RUN AFTER ALL TARGETS, ALWAYS — not just after damage. conditional_power and criteria like
+## is_tapped mean any verb can be lethal ("tapped cards lose 3000 power" makes TAPPING lethal), so every verb settles.
 ##
 ## Once, outside the loop — never inside: a card destroyed by the first target must still receive the effect as
 ## that target, not vanish mid-iteration and change what the rest take.
@@ -110,7 +109,7 @@ func mill_player(player_id: int, count: int = 1) -> void:
 		if d.deck_cards.is_empty():
 			return
 		var card = d.deck_cards.pop_front()
-		print("[Mill] P%d mills %s" % [player_id, card.card_name])
+		LOG.info("Mill", "P%d mills %s" % [player_id, card.card_name])
 		await side.graveyard.call("draw", card)
 
 ## The caster's opponent mills. Same seat logic as opponent_discards(): the victim is the other player.
@@ -136,14 +135,14 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 		candidates.append(card)
 		ids.append(card.id)
 	if ids.is_empty():
-		print("[Hand] no legal card to play")
+		LOG.info("Hand", "no legal card to play")
 		return
 	var agent: Agent = agent_for(owner_id)
 	if agent == null:
 		return
 	var chosen: int = await agent.choose_hand_card_to_play(owner_id, ids, criteria)
 	if chosen < 0:
-		print("[Hand] the free play was declined")
+		LOG.info("Hand", "the free play was declined")
 		return
 	var picked: Card = null
 	for card in candidates:
@@ -152,7 +151,7 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 			break
 	if picked == null:
 		return
-	print("[Hand] P%d plays %s for free" % [owner_id, picked.card_name])
+	LOG.info("Hand", "P%d plays %s for free" % [owner_id, picked.card_name])
 	owner_hand.remove_for_play(picked)
 	picked.reset_for_field_arrival()
 	field.play_card(picked, owner_id == 2, true)
@@ -180,14 +179,14 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 		candidates.append(card)
 		ids.append(card.id)
 	if ids.is_empty():
-		print("[BreakZone] nothing in the pile matches")
+		LOG.info("BreakZone", "nothing in the pile matches")
 		return
 	var agent: Agent = agent_for(owner_id)
 	if agent == null:
 		return
 	var chosen: int = await agent.choose_break_zone_card(owner_id, ids, criteria)
 	if chosen < 0:
-		print("[BreakZone] the choice was declined")
+		LOG.info("BreakZone", "the choice was declined")
 		return
 	var picked: Card = null
 	for card in candidates:
@@ -196,7 +195,7 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 			break
 	if picked == null:
 		return
-	print("[BreakZone] plays %s from the Break Zone" % picked.card_name)
+	LOG.info("BreakZone", "plays %s from the Break Zone" % picked.card_name)
 	pile.graveyard_cards.erase(picked)
 	picked.reset_for_field_arrival()
 	field.play_card(picked, owner_id == 2, true)
@@ -212,7 +211,7 @@ func discard_from(player_id: int, count: int = 1) -> int:
 	var discarded: int = 0
 	for _i in range(count):
 		if owner_hand.cards.is_empty():
-			print("[Discard] P%d has no cards to discard" % player_id)
+			LOG.info("Discard", "P%d has no cards to discard" % player_id)
 			return discarded
 		# ASK THE OWNER, whoever they are. Game does not know or care whether that player is the human at this
 		# keyboard, an AI, or a remote opponent — LocalAgent draws a UI, AIAgent picks heuristically, and a future
@@ -225,7 +224,7 @@ func discard_from(player_id: int, count: int = 1) -> int:
 		if picked == null:
 			# Cancelled locally, or an agent with no opinion. Nothing more to do.
 			return discarded
-		print("[Discard] P%d discards %s" % [player_id, picked.card_name])
+		LOG.info("Discard", "P%d discards %s" % [player_id, picked.card_name])
 		owner_hand.discard_card(picked)
 		discarded += 1
 	return discarded
@@ -292,7 +291,7 @@ func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", _pro
 	if chosen == null:
 		return
 	_chosen_cards.append(chosen)
-	print("[Choose] P%d chose %s from the Break Zone" % [chooser_id, chosen.card_name])
+	LOG.info("Choose", "P%d chose %s from the Break Zone" % [chooser_id, chosen.card_name])
 
 ## Put every card chosen by earlier choose_break_zone_card instructions into its owner's hand.
 func put_card_into_hand(_argument = null) -> void:
@@ -308,7 +307,7 @@ func put_card_into_hand(_argument = null) -> void:
 		pile.update_card_positions()
 		var owner_hand: Hand = hand_for(owner_id)
 		if owner_hand != null:
-			print("[Hand] P%d returns %s from the Break Zone" % [owner_id, card.card_name])
+			LOG.info("Hand", "P%d returns %s from the Break Zone" % [owner_id, card.card_name])
 			owner_hand.add_card(card)
 	_last_action_succeeded = true
 
@@ -332,7 +331,7 @@ func choose_card(criteria: Dictionary, chooser: String = "self", prompt: String 
 	if chosen == null or not candidates.has(chosen):
 		chosen = candidates[0]
 	_chosen_cards.append(chosen)
-	print("[Choose] P%d chose %s" % [chooser_id, chosen.card_name])
+	LOG.info("Choose", "P%d chose %s" % [chooser_id, chosen.card_name])
 
 ## Generic "set _targets from a criteria block" instruction. `exclude_chosen` removes cards selected by earlier
 ## choose_card instructions (Cloud of Darkness 158).
@@ -350,7 +349,7 @@ func look_top_may_bottom() -> void:
 		_last_action_succeeded = false
 		return
 	var top: Card = d.deck_cards[0]
-	print("[Deck] P%d looks at the top card: %s" % [owner_id, top.card_name])
+	LOG.info("Deck", "P%d looks at the top card: %s" % [owner_id, top.card_name])
 	var agent: Agent = agent_for(owner_id)
 	var put_bottom: bool = true
 	if agent != null:
@@ -434,7 +433,7 @@ func divide_damage(_total: int = 0) -> void:
 		var amount: int = int(amounts[i]) if i < amounts.size() else 0
 		if amount <= 0:
 			continue
-		print("[Divide] %s takes %d" % [card.card_name, amount])
+		LOG.info("Divide", "%s takes %d" % [card.card_name, amount])
 		# Through the damage choke point, not suffer_damage directly: 160/171/165 are replacements and must see
 		# every damage event, including divided damage.
 		field.cause_damage(card, amount, _current_source_card, _effect_kind(), _current_controller)
@@ -465,11 +464,11 @@ func copy_skill(_argument = null) -> void:
 		return
 	var target: Card = _targets[0] if not _targets.is_empty() else null
 	if target == null or not is_instance_valid(target) or not target.is_on_field():
-		print("[CopySkill] no valid target")
+		LOG.info("CopySkill", "no valid target")
 		return
 	var specials: Array = target.special_ability_skills()
 	if specials.is_empty():
-		print("[CopySkill] %s has no Special Ability" % target.card_name)
+		LOG.info("CopySkill", "%s has no Special Ability" % target.card_name)
 		return
 	var chosen: int = 0
 	if specials.size() > 1:
@@ -478,11 +477,11 @@ func copy_skill(_argument = null) -> void:
 		if agent != null:
 			chosen = await agent.choose_skill(owner_id, target, specials)
 		if chosen < 0 or chosen >= specials.size():
-			print("[CopySkill] choice cancelled")
+			LOG.info("CopySkill", "choice cancelled")
 			return
 	source.set_copied_skill(specials[chosen], target.card_name)
 	_last_action_succeeded = true
-	print("[CopySkill] %s copies %s from %s" % [source.card_name, target.card_name, str(specials[chosen].get("text", ""))])
+	LOG.info("CopySkill", "%s copies %s from %s" % [source.card_name, target.card_name, str(specials[chosen].get("text", ""))])
 
 
 func untap_targets(index: int = -1) -> void:
@@ -510,7 +509,7 @@ const ANIMATION_BATCH := preload("res://scripts/animation_batch.gd")
 ##
 ## MULTIPLE CARDS ANIMATE AT THE SAME TIME. Every card's tween is STARTED in the loop and the batch is awaited once
 ## afterwards — the Godot spelling of Promise.all(). Awaiting inside the loop would put five 0.6 s animations end to
-## end, which is what this used to do.
+## end.
 ##
 ## The logical changes still happen immediately (field.remove_card before the loop moves on), so a follow-up
 ## instruction and a state-based check both see the correct board while the cards are still flying. Only the
@@ -537,7 +536,7 @@ func draw_cards(count: int = 1, player_id: int = 0) -> void:
 	for _i in range(maxi(0, count)):
 		if d.deck_cards.is_empty():
 			return
-		print("[Draw] P%d draws 1" % owner_id)
+		LOG.info("Draw", "P%d draws 1" % owner_id)
 		h.draw(d.deck_cards.pop_front())
 
 ## Buff EVERY member of the attacking party — "Chocobo and all the Forwards forming a party with it gain +3000 power".
@@ -550,7 +549,7 @@ func power_change_party(amount: int = 0, duration: int = 1) -> void:
 		return
 	for card in field.party_members():
 		if card != null and is_instance_valid(card) and card.is_on_field():
-			print("[Party] %s gains %+d power (until end of turn)" % [card.card_name, amount])
+			LOG.info("Party", "%s gains %+d power (until end of turn)" % [card.card_name, amount])
 			card.power_change(amount, duration)
 	enforce_game_state_rules()
 
@@ -824,7 +823,7 @@ func start_match(config: Dictionary) -> void:
 		var board_cam: Camera3D = node as Camera3D
 		board_cam.current = true
 		_board_camera = board_cam
-		print("[Camera] board view is '%s'" % board_cam.name)
+		LOG.info("Camera", "board view is '%s'" % board_cam.name)
 		break
 
 	player_agent = LocalAgent.new()
@@ -955,14 +954,13 @@ func _input(event):
 			var here: int = cams.find(get_viewport().get_camera_3d())
 			var next_cam: Camera3D = cams[(here + 1) % cams.size()]
 			next_cam.current = true
-			print("[Camera] looking through '%s' | fov %.0f | pos %s" % [
+			LOG.info("Camera", "looking through '%s' | fov %.0f | pos %s" % [
 				next_cam.name, next_cam.fov, str(next_cam.global_position)])
 			if $PhaseText:
 				$PhaseText.text = "CAMERA: %s  (C to cycle)" % next_cam.name
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_T:
 		# DEBUG: the REAL damage path. take_damage() is what emits `damaged` and therefore what fires the damage
-		# zoom. The old version called the zone directly, so a card appeared in the damage zone but nothing
-		# counted it as damage and the camera never moved — which is exactly how it looked when the AI attacked.
+		# zoom; putting a card in the damage zone directly would neither count as damage nor move the camera.
 		opponent.take_damage(1)
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_Y:
 		# DEBUG: the same, on OURSELVES. T damages the opponent (their zone, their camera); Y damages the player,
@@ -1011,9 +1009,9 @@ func _debug_break_first_forward(opponent_side: bool = false) -> void:
 			victim = candidate
 			break
 	if victim == null:
-		print("[Debug] no %s Forward to break" % side_name)
+		LOG.info("Debug", "no %s Forward to break" % side_name)
 		return
-	print("[Debug] breaking %s's %s" % [side_name, victim.card_name])
+	LOG.info("Debug", "breaking %s's %s" % [side_name, victim.card_name])
 	break_card(victim)
 
 
@@ -1058,7 +1056,7 @@ func _debug_clash(scenario: int, reset_ground: bool = true) -> void:
 				blocker = card
 				break
 	if attacker == null or blocker == null:
-		print("[DebugClash] no attacker/blocker on the ground")
+		LOG.info("DebugClash", "no attacker/blocker on the ground")
 		return
 
 	field.reset_attacker()
@@ -1093,7 +1091,7 @@ func _debug_clash(scenario: int, reset_ground: bool = true) -> void:
 	field.set_attacker(attacker)
 	field.blocker_card = blocker
 	blocker.set_blocker_status(true)
-	print("[DebugClash] scenario %d: %s (%d) vs %s (%d)" % [
+	LOG.info("DebugClash", "scenario %d: %s (%d) vs %s (%d)" % [
 		scenario, attacker.card_name, attacker.power, blocker.card_name, blocker.power])
 	await resolve_blocked_clash()
 	# The debug scenario may have forced a power value to choose the outcome. Put the printed values back so
@@ -1120,14 +1118,14 @@ func _show_zone_view(zone: Node, title: String) -> void:
 			ids.append(int(c.id))
 	if ids.is_empty():
 		# An empty zone has nothing to show, and an empty window would look broken rather than empty.
-		print("[ZoneView] %s is empty" % title)
+		LOG.info("ZoneView", "%s is empty" % title)
 		if $PhaseText:
 			$PhaseText.text = "%s — empty" % title
 		return
 	var window = DECK_SEARCH.instantiate()
 	add_child(window)
 	window.call("open_view", ids, "%s — %d card%s" % [title, ids.size(), "" if ids.size() == 1 else "s"])
-	print("[ZoneView] %s: %d cards" % [title, ids.size()])
+	LOG.info("ZoneView", "%s: %d cards" % [title, ids.size()])
 
 
 func _unhandled_input(event):
@@ -1184,7 +1182,7 @@ var turn_history: Dictionary = {}
 ## key, so a new turn starts with a clean slate without any reset pass.
 var _event_triggers_fired: Dictionary = {}
 ## Break shatter is suppressed for the two cards currently being shown by the clash cinematic. The cinematic
-## launches its own shatter on the defeated proxy AFTER the exchange, so the old instant burst never fires.
+## launches its own shatter on the defeated proxy AFTER the exchange, so the instant burst must not also fire.
 var _clash_suppressed_cards: Dictionary = {}
 ## Break-zone triggers wait for the clash presentation. The card has already reached the Break Zone, but its
 ## "when it enters the Break Zone / when it breaks" effects must not appear on the stack while the cinematic is
@@ -1209,7 +1207,7 @@ func record_action(activity: String, targets: Array = [], actor: int = 0) -> voi
 		"activity": activity,
 		"targets": targets.duplicate(),
 	})
-	print("[History] T%d P%s: %s" % [turn_number, who, activity])
+	LOG.info("History", "T%d P%s: %s" % [turn_number, who, activity])
 
 func actions_this_turn() -> Array:
 	return turn_history.get(turn_number, [])
@@ -1274,7 +1272,7 @@ func _condition_holds(condition: String) -> bool:
 			if member != null and is_instance_valid(member) and member.card_name == wanted_name:
 				return true
 		return false
-	print("[Condition] unknown condition '%s' — treated as true" % condition)
+	LOG.info("Condition", "unknown condition '%s' — treated as true" % condition)
 	return true
 
 ## Whose perspective a condition is judged from: the controller of the ability being resolved. `_current_controller`
@@ -1330,8 +1328,8 @@ func _process_next_instruction() -> void:
 	# whatever the previous instruction left behind.
 	var next_instruction = _current_instructions[0]
 	if not _condition_holds(next_instruction.condition):
-		print("[Instruction] skipped ", next_instruction.action,
-			" (condition '%s' is false)" % next_instruction.condition)
+		LOG.info("Instruction", str("skipped ", next_instruction.action,
+			" (condition '%s' is false)" % next_instruction.condition))
 		_current_instructions.pop_front()
 		# A SKIPPED INSTRUCTION DID NOT SUCCEED. This is what makes `if_last_did_not_succeed` usable as the
 		# else-branch of the guarded instruction above it; without it the negation would read a stale `true`.
@@ -1353,7 +1351,7 @@ func _process_next_instruction() -> void:
 		if deciding_agent != null:
 			use_it = await deciding_agent.confirm_optional(decider, instruction.may_prompt)
 		if not use_it:
-			print("[May] P%d declined %s" % [decider, instruction.action])
+			LOG.info("May", "P%d declined %s" % [decider, instruction.action])
 			_last_action_succeeded = false
 			_process_next_instruction()
 			return
@@ -1522,8 +1520,8 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	var which: String = "player" if side == player else "opponent"
 	# THE CAMERA LIVES IN THE ZONE, and its NAME DOES NOT MATTER: whatever Camera3D sits inside this side's damage
 	# zone IS this side's damage camera. That is the arrangement the game uses, and position is something a scene
-	# cannot get wrong by typing the name differently. The old names remain as a fallback so a camera left at the
-	# scene root keeps working.
+	# cannot get wrong by typing the name differently. The named lookup below is a fallback for a camera left at
+	# the scene root.
 	var cam: Camera3D = null
 	for child in zone.find_children("*", "Camera3D", true, false):
 		cam = child as Camera3D
@@ -1545,7 +1543,7 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 				break
 		if _board_camera == null:
 			_board_camera = get_viewport().get_camera_3d()
-		print("[DamageZoom] board view captured as '%s'" % (
+		LOG.info("DamageZoom", "board view captured as '%s'" % (
 			str(_board_camera.name) if _board_camera != null else "<none>"))
 	if _board_camera == null or _board_camera == cam:
 		return
@@ -1577,7 +1575,7 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	# Tweening the DAMAGE camera rather than the board one means the board's own transform is never touched.
 	cam.global_transform = board_pose
 	cam.current = true
-	print("[DamageZoom] %s -> %s (slot %d)" % [which, cam.name, next_index])
+	LOG.info("DamageZoom", "%s -> %s (slot %d)" % [which, cam.name, next_index])
 
 	_damage_tween = create_tween()
 	_damage_tween.set_trans(Tween.TRANS_SINE)
@@ -1608,7 +1606,7 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	var effect: Dictionary = card.card_effects.get(event_key, {})
 	if not code_event and effect.is_empty():
 		return
-	print("[ExBurst] %s -> '%s' (P%s)" % [card.card_name, event_key, 1 if side == player else 2])
+	LOG.info("ExBurst", "%s -> '%s' (P%s)" % [card.card_name, event_key, 1 if side == player else 2])
 
 	# THE FAKE STACK CARD, and it is the user's design, which is better than the one it replaces.
 	#
@@ -1646,7 +1644,7 @@ func _end_match(winner_id: int) -> void:
 	if match_over:
 		return
 	match_over = true
-	print("Match over — P%s wins" % winner_id)
+	LOG.info("Turn", "Match over — P%s wins" % winner_id)
 	if $PhaseText:
 		$PhaseText.text = "YOU WIN" if winner_id == 1 else "YOU LOSE"
 	assistant.hide_buttons()
@@ -1671,10 +1669,8 @@ func set_blocker(card):
 	# on Game would already be gone by then.
 	field.blocker_card = card
 	# AND MARK THE CARD ITSELF. is_blocking — the criteria behind "choose a blocking Forward" — reads the card's own
-	# status, and only Field.set_blocker_card() (the human's CLICK selection) used to set it. So a blocker declared
-	# by anyone other than a clicking human, the AI included, was never "blocking" to any card effect, and effects
-	# that target a blocking Forward found nothing. The declaration is the moment the block becomes true for both
-	# sides, so it belongs here. Field.reset_blocker() clears it at the end of combat.
+	# status. Marking it here, at the declaration, makes a block true for any blocker (human click, AI, remote), so
+	# effects that target a blocking Forward can find it. Field.reset_blocker() clears it at the end of combat.
 	if card != null and is_instance_valid(card):
 		card.set_blocker_status(true)
 		# "When this blocks or is blocked" (Squall 41). Declaring the block is the single moment both events become
@@ -1757,7 +1753,7 @@ func clash_attacker_blocker() -> void:
 	var blocker: Card = field.blocker_card
 	if blocker == null or field.party_members().is_empty():
 		return
-	# A PARTY has First Strike only if EVERY member does; a party of one is just the old single-attacker rule.
+	# A PARTY has First Strike only if EVERY member does; a party of one behaves like a single attacker.
 	var party_fs: bool = field.party_has_first_strike()
 	var blocker_fs: bool = blocker.is_first_strike()
 	if party_fs == blocker_fs:
@@ -1767,7 +1763,7 @@ func clash_attacker_blocker() -> void:
 		var party_total: int = field.party_power()
 		var at_once: Array = await _blocker_split(blocker)
 		if party_total > 0 and blocker.is_on_field():
-			print("[Combat] party deals %d to %s" % [party_total, blocker.card_name])
+			LOG.info("Combat", "party deals %d to %s" % [party_total, blocker.card_name])
 			# No single source card: the party deals its SUMMED power, so damage doubling must not apply. The
 			# prevention replacements (160/171) still need to see this event, hence the choke point.
 			field.cause_damage(blocker, party_total, null, "", "", DAMAGE_CONTEXT.Kind.COMBAT)
@@ -1807,7 +1803,7 @@ func _apply_party_damage(blocker: Card) -> void:
 	var total: int = field.party_power()
 	if total <= 0:
 		return
-	print("[Combat] party deals %d to %s" % [total, blocker.card_name])
+	LOG.info("Combat", "party deals %d to %s" % [total, blocker.card_name])
 	var leader: Card = field.attacker_card
 	field.cause_damage(blocker, total, leader, "", leader.controller if leader != null else "", DAMAGE_CONTEXT.Kind.COMBAT)
 	enforce_game_state_rules()
@@ -1825,7 +1821,7 @@ func _blocker_split(blocker: Card) -> Array:
 		return [blocker.power]
 	var owner_id: int = 1 if blocker.controller == Card.PLAYER else 2
 	var split: Array = await agent_for(owner_id).choose_party_damage_split(owner_id, members, blocker.power)
-	print("[Combat] %s distributes %d across %d: %s" % [
+	LOG.info("Combat", "%s distributes %d across %d: %s" % [
 		blocker.card_name, blocker.power, members.size(), str(split)])
 	return split
 
@@ -1851,7 +1847,7 @@ func _apply_blocker_split(split: Array) -> void:
 ## parametrised by "should I advance".
 func priority_round_only() -> void:
 	if _priority_lock:
-		print("[Priority] between-steps round skipped: one is already running")
+		LOG.info("Priority", "between-steps round skipped: one is already running")
 		return
 	_priority_lock = true
 	var holder: int = turn_owner
@@ -1874,7 +1870,7 @@ func priority_round_only() -> void:
 			continue
 		break
 	_priority_lock = false
-	print("[Priority] between-steps round over")
+	LOG.info("Priority", "between-steps round over")
 	
 	
 
@@ -1921,13 +1917,13 @@ func next_phase():
 		# THE TURN BOUNDARY, and the only place turn_number moves. `actions_this_turn()` is a filter on
 		# turn_number, so this is what makes "this turn" mean this turn.
 		turn_number += 1
-		print("Turn completed — now P%s (%s)" % [turn_owner, controller_for(turn_owner)])
+		LOG.info("Turn", "Turn completed — now P%s (%s)" % [turn_owner, controller_for(turn_owner)])
 
 	# Enter new phase
 	_enter_phase(phases[phase_index])
 
 func _enter_phase(phase_enum: GlobalVariables.Phase):
-	print("Entering: ", phase_enum) # This will print the integer value
+	LOG.info("Phase", str("Entering: ", phase_enum))
 	# Phase is match state: Game owns it and derives the input mode's base from
 	# it, so every phase starts from its default (modals are pushed on top).
 	phase = phase_enum
@@ -1946,7 +1942,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			next_phase()
 		GlobalVariables.Phase.FIRST_MAIN_PHASE:
 			await priority()
-			print('PASSED PRIORITY')
+			LOG.info("Priority", "passed")
 			pass
 		GlobalVariables.Phase.ATTACK_PREPARATION_STEP:
 			# "When your Attack Phase starts" is checked here, before priority. A code effect can queue its stack object
@@ -2068,11 +2064,11 @@ func priority() -> void:
 		# comes back round to its own checks — so a request arriving while the loop is parked on a player is picked up
 		# only if that player then does something. A stall here is otherwise completely silent, which is what makes this
 		# printed rather than reasoned about.
-		print("[Priority] a round is ALREADY RUNNING — request absorbed (stack=%d, mode=%s)" % [
+		LOG.info("Priority", "a round is ALREADY RUNNING — request absorbed (stack=%d, mode=%s)" % [
 			stack.stack_length(), GlobalVariables.get_player_mode()])
 		return
 	_priority_lock = true
-	print("[Priority] round begins — turn_owner=P%s | stack=%d | mode=%s" % [
+	LOG.info("Priority", "round begins — turn_owner=P%s | stack=%d | mode=%s" % [
 		turn_owner, stack.stack_length(), GlobalVariables.get_player_mode()])
 
 	# Priority model (FF TCG): the turn player receives priority first in a phase
@@ -2088,7 +2084,7 @@ func priority() -> void:
 		# WHO IS BEING ASKED, and in what state. With the two lines at the top of this function and the mode log, a stall can
 		# be read off the console: the last "asking" line names the player the game is waiting on, and if it is never followed
 		# by a line for the other player, that one never answered.
-		print("[Priority] asking P%s | stack=%d | mode=%s" % [
+		LOG.info("Priority", "asking P%s | stack=%d | mode=%s" % [
 			holder, stack.stack_length(), GlobalVariables.get_player_mode()])
 		var acted: bool = await agent_for(holder).take_priority(holder)
 		if acted:
@@ -2143,7 +2139,7 @@ func enforce_game_state_rules() -> void:
 ## the event has a real destination.
 func _send_card_to_graveyard(card: Card) -> int:
 	if card.status_effects.has("fragile"):
-		print("[Fragile] %s is removed from the game instead" % card.card_name)
+		LOG.info("Fragile", "%s is removed from the game instead" % card.card_name)
 		card.status_effects.erase("fragile")
 		_send_card_to_removed(card)
 		return Card.Zone.REMOVED
@@ -2152,7 +2148,7 @@ func _send_card_to_graveyard(card: Card) -> int:
 	# from the field before sending it; that is what keeps the rule off cards that never entered (a hand/stack
 	# duplicate).
 	if card.current_zone == Card.Zone.FIELD and card.is_character() and _yuna_exiles_break_zone():
-		print("[Yuna] %s is removed from the game instead of the Break Zone" % card.card_name)
+		LOG.info("Yuna", "%s is removed from the game instead of the Break Zone" % card.card_name)
 		_send_card_to_removed(card)
 		return Card.Zone.REMOVED
 	if card.controller == Card.PLAYER:
@@ -2221,7 +2217,7 @@ func _send_card_to_removed(card: Card) -> void:
 func remove_card_from_game(card: Card) -> void:
 	if card == null or not is_instance_valid(card):
 		return
-	print("[RemoveFromGame] ", card.card_name)
+	LOG.info("RemoveFromGame", str("", card.card_name))
 	if card.is_on_field():
 		move_card_from_field(card, Card.Zone.REMOVED, "REMOVE")
 	else:
@@ -2232,7 +2228,7 @@ func remove_targets_from_game(_argument = null) -> void:
 	for card in _targets:
 		if card == null or not is_instance_valid(card):
 			continue
-		print("[RemoveFromGame] ", card.card_name)
+		LOG.info("RemoveFromGame", str("", card.card_name))
 		if card.is_on_field():
 			move_card_from_field(card, Card.Zone.REMOVED, "REMOVE")
 		else:
@@ -2308,7 +2304,7 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 	if 'unbreakable' in card.status_effects:
 		return
 	if field.is_protected_from_break(card, source_controller, source_kind):
-		print("[Protect] %s cannot be broken by that effect" % card.card_name)
+		LOG.info("Protect", "%s cannot be broken by that effect" % card.card_name)
 		return
 	# MARK IT, then move it. The flag is what distinguishes a BREAK from an ordinary removal, and it is set here
 	# because this is the only function that knows the damage reached the power.
@@ -2352,15 +2348,15 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 		# THE CARD IS ALREADY IN THE BREAK ZONE; ONLY THE TRIGGER WAITS. Keeping the queue here, rather than
 		# creating stack objects earlier, is what stops the effect appearing while the cards are still fighting.
 		_deferred_break_zone_triggers.append([card, was_broken])
-		print("[Clash] deferring Break Zone trigger for ", card.card_name)
+		LOG.info("Clash", str("deferring Break Zone trigger for ", card.card_name))
 		return
 	# execute_card_effect() is the single gate: it knows both code effects and JSON keywords. Emitting the signal
 	# directly here skipped every code-defined Break Zone trigger.
 	if card.card_effects.has("when_enter_break_from_field") or card.effect_handles_event(EVENTS.Event.ENTER_BREAK_FROM_FIELD):
-		print("[BreakZone] ", card.card_name, " -> when_enter_break_from_field")
+		LOG.info("BreakZone", str("", card.card_name, " -> when_enter_break_from_field"))
 		field.execute_card_effect(card, EVENTS.Event.ENTER_BREAK_FROM_FIELD)
 	if was_broken and (card.card_effects.has("when_break") or card.effect_handles_event(EVENTS.Event.BREAK)):
-		print("[BreakZone] ", card.card_name, " -> when_break")
+		LOG.info("BreakZone", str("", card.card_name, " -> when_break"))
 		field.execute_card_effect(card, EVENTS.Event.BREAK)
 	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
 	# damaged card, so it fires here — the same choke point as the printed keywords, and only for cards arriving FROM
@@ -2390,7 +2386,7 @@ func _trigger_status_break_zone_effects(card: Card) -> void:
 		if payload_source is Card and is_instance_valid(payload_source):
 			_current_source_card = payload_source
 		_current_controller = str(payload.get("controller", previous))
-		print("[BreakZone] ", card.card_name, " -> status trigger ", status)
+		LOG.info("BreakZone", str("", card.card_name, " -> status trigger ", status))
 		_execute_instructions(instructions)
 		_current_controller = previous
 		_current_source_card = previous_source
@@ -2552,7 +2548,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	var applied_from: Dictionary = _apply_effect_block(card)
 	if not applied_from.is_empty():
 		targets = _cards_matching(applied_from)
-		print("[ApplyEffect] ", card.card_name, " applies to ", targets.size(), " card(s)")
+		LOG.info("ApplyEffect", str("", card.card_name, " applies to ", targets.size(), " card(s)"))
 	_current_source_card = card.effect_source if card.effect_source != null else card
 	_current_controller = card.controller
 	_targets = targets
@@ -2761,9 +2757,8 @@ func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool 
 	if deck_node.deck_cards.is_empty():
 		return
 
-	# FILTER FIRST, then hand only the matches to the agent. The window used to filter for display while the
-	# selection came back by id; a filter with is_named (older data) is a Card predicate, not a CardFilter key,
-	# so the two vocabularies are bridged in one helper.
+	# FILTER FIRST, then hand only the matches to the agent. A filter with is_named (older data) is a Card predicate,
+	# not a CardFilter key, so the two vocabularies are bridged in one helper.
 	var candidates: Array = []
 	for card in deck_node.deck_cards:
 		if _matches_search_filter(card, filter):
@@ -2793,7 +2788,7 @@ func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool 
 	deck_node.deck_cards.erase(found)
 	match destination:
 		"removed":
-			print("[Search] ", found.card_name, " is removed from the game")
+			LOG.info("Search", str("", found.card_name, " is removed from the game"))
 			_send_card_to_removed(found)
 		"graveyard":
 			_send_card_to_graveyard(found)
@@ -2843,7 +2838,7 @@ func return_from_break_zone(tapped: bool = true) -> void:
 		home = opponent_graveyard
 	if home != null and home.graveyard_cards.has(card):
 		home.graveyard_cards.erase(card)
-	print("[ReturnFromBreakZone] ", card.card_name)
+	LOG.info("ReturnFromBreakZone", str("", card.card_name))
 	field.play_card(card, card.controller != Card.PLAYER)
 	card.broken = false
 	if tapped:
