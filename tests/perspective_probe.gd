@@ -57,29 +57,6 @@ func _mirrored(cfg: Dictionary) -> Dictionary:
 	out["local_seat"] = 2
 	return out
 
-func _cards(cards: Array) -> Array:
-	return cards.map(func(c): return "%s#%d|dmg=%d|tap=%s" % [c.card_name, c.uid, c.accumulated_damage, c.tapped] if is_instance_valid(c) else "<freed>")
-
-func _by_seat(game: Node) -> Dictionary:
-	var field = game.get("field")
-	var ls: int = game.local_seat
-	var d := {
-		"turn": game.turn_number,
-		"turn_seat": ls if game.turn_owner == 1 else 3 - ls,
-		"match_over": game.match_over,
-	}
-	for seat in [1, 2]:
-		var controller: String = game.controller_of_seat(seat)
-		var mine: bool = controller == Card.PLAYER
-		var side = game.side_for(1 if mine else 2)
-		d["s%d.front" % seat] = _cards(field.front_cards if mine else field.opponent_front_cards)
-		d["s%d.back" % seat] = _cards(field.back_cards if mine else field.opponent_back_cards)
-		d["s%d.hand" % seat] = side.hand.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
-		d["s%d.deck" % seat] = side.deck.deck_cards.size()
-		d["s%d.damage" % seat] = side.damage_count()
-		d["s%d.break_zone" % seat] = side.graveyard.graveyard_cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
-	return d
-
 func _play(cfg: Dictionary, label: String) -> Dictionary:
 	MatchSetup.config = cfg
 	var game: Node = GAME_SCENE.instantiate()
@@ -90,7 +67,8 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 		if (Time.get_ticks_msec() - start) / 1000.0 > TIME_LIMIT:
 			print("[Perspective] %s hit the time limit at turn %d" % [label, game.turn_number])
 			break
-	var snap := _by_seat(game)
+	var snap: Dictionary = game.snapshot_by_seat()
+	snap["_turn_hashes"] = game.turn_hashes.duplicate()
 	print("[Perspective] %s: turn %d after %.1fs" % [label, game.turn_number, (Time.get_ticks_msec() - start) / 1000.0])
 	game.queue_free()
 	await get_tree().process_frame
@@ -105,13 +83,25 @@ func _ready() -> void:
 	var as_seat_1: Dictionary = await _play(base, "as seat 1")
 	var as_seat_2: Dictionary = await _play(_mirrored(base), "as seat 2")
 	PRESENTATION.fast_mode = false
+	# 1. THE DESYNC CHECK ITSELF: the hash each machine would send at every turn boundary must match.
+	var h1: Dictionary = as_seat_1["_turn_hashes"]
+	var h2: Dictionary = as_seat_2["_turn_hashes"]
 	var diffs := 0
-	for key in as_seat_1:
-		if str(as_seat_1[key]) != str(as_seat_2.get(key)):
+	for turn in h1:
+		var same: bool = str(h1[turn]) == str(h2.get(turn, ""))
+		print("[Perspective] turn %d hash  seat1-view %s  seat2-view %s  %s" % [turn, h1[turn], h2.get(turn, "-"), "ok" if same else "MISMATCH"])
+		if not same:
 			diffs += 1
-			print("[Perspective] DIFF %s\n    as seat 1: %s\n    as seat 2: %s" % [key, as_seat_1[key], as_seat_2.get(key)])
-	print("[Perspective] %d field(s) compared at turn %d" % [as_seat_1.size(), as_seat_1["turn"]])
-	for key in as_seat_2:
-		print("[Perspective]   %s = %s" % [key, as_seat_2[key]])
+	if h1.size() != h2.size() or h1.is_empty():
+		diffs += 1
+		print("[Perspective] hashes recorded: %d vs %d" % [h1.size(), h2.size()])
+	# 2. The final boards, field by field (what a desync report would print).
+	as_seat_1.erase("_turn_hashes")
+	as_seat_2.erase("_turn_hashes")
+	var report: Array = GAME_SCENE.instantiate().get_script().diff_snapshots(as_seat_1, as_seat_2)
+	for line in report:
+		print("[Perspective] DIFF " + line)
+	diffs += report.size()
+	print("[Perspective] %d turn hashes and %d final fields compared" % [h1.size(), as_seat_1.size()])
 	print("[Perspective] RESULT: %s" % ("all checks passed" if diffs == 0 else "%d FAILED" % diffs))
 	get_tree().quit()

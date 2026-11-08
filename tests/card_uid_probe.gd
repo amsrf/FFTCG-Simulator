@@ -53,6 +53,26 @@ func _ready() -> void:
 	_expect(cards.all(func(c): return a.card_by_uid(c.uid) == c), "card_by_uid() finds each card again")
 	_expect(cards.all(func(c): return (c.uid / 100000) == (1 if c.controller == Card.PLAYER else 2)),
 		"the uid's seat matches the card's side")
+	# THE DESYNC CHECK MUST FIRE. Record this turn's hash, change one thing the rules track, and the comparison has
+	# to fail and name exactly what differs.
+	var snap_before: Dictionary = a.snapshot_by_seat()
+	a.turn_hashes[a.turn_number] = a.state_hash()
+	var recorded: String = a.turn_hashes[a.turn_number]
+	_expect(a.compare_remote_hash(a.turn_number, recorded), "matching hashes compare equal")
+	var fired := [false]
+	a.desync_detected.connect(func(_t, _l, _r): fired[0] = true)
+	var victim: Card = a.get("field").back_cards.front() if not a.get("field").back_cards.is_empty() else null
+	_expect(victim != null, "a field card to change")
+	if victim != null:
+		victim.tapped = not victim.tapped
+		var other_machine: String = a.state_hash()
+		_expect(other_machine != recorded, "one tapped card changes the hash")
+		_expect(not a.compare_remote_hash(a.turn_number, other_machine) and fired[0],
+			"compare_remote_hash reports the mismatch and emits desync_detected")
+		var report: Array = a.diff_snapshots(snap_before, a.snapshot_by_seat())
+		_expect(report.size() == 1 and str(report[0]).begins_with("s1.back"),
+			"the diff names exactly what differs (%s)" % (str(report[0]).get_slice("\n", 0) if not report.is_empty() else "nothing"))
+		victim.tapped = not victim.tapped
 	# A LOCAL SUMMON MOVES TO A SEPARATE STACK CARD; that stack card is the same card, so it keeps the uid and no
 	# new number is consumed (the opponent's machine never makes that extra card, so a new number would desync).
 	var stack = a.get("stack")

@@ -57,6 +57,15 @@ var revealed_owner_id: int = 0
 ## that suspends on an animation or a modal leaves the queue empty while it is still running.
 signal instructions_finished
 
+## DESYNC CHECK (online lockstep). At every turn boundary the board is hashed from the SEATS' point of view, so both
+## machines of a match produce the same hash if — and only if — they agree on the game. The networking layer sends
+## its hash to the other machine and calls compare_remote_hash(); a mismatch stops the match with a report of exactly
+## which part differs (via the full snapshots) instead of letting two different games carry on silently.
+signal turn_state_recorded(turn: int, state_hash: String)
+signal desync_detected(turn: int, local_hash: String, remote_hash: String)
+## turn number -> hash of the board as that turn began.
+var turn_hashes: Dictionary = {}
+
 var _current_instructions: Array[Instruction]
 ## True from the moment a fresh chain starts until its last instruction has actually completed.
 var _instructions_running: bool = false
@@ -1172,6 +1181,64 @@ func _unhandled_input(event):
 		if($FocusCard):
 			$FocusCard.visible = false
 
+## THE BOARD FROM THE SEATS' POINT OF VIEW: identical text on both machines when they agree. Everything the rules
+## track is in it (uids, zones, damage, tapped, hands, decks, piles, whose turn) and nothing presentational is: it reads
+## the zone lists, never the node tree.
+func snapshot_by_seat() -> Dictionary:
+	var describe := func(cards: Array) -> Array:
+		return cards.map(func(c): return "%s#%d|dmg=%d|tap=%s" % [c.card_name, c.uid, c.accumulated_damage, c.tapped] if is_instance_valid(c) else "<freed>")
+	var d := {
+		"turn": turn_number,
+		"turn_seat": local_seat if turn_owner == 1 else 3 - local_seat,
+		"match_over": match_over,
+	}
+	for seat in [1, 2]:
+		var controller: String = controller_of_seat(seat)
+		var mine: bool = controller == Card.PLAYER
+		var side: PlayerSide = side_for(1 if mine else 2)
+		d["s%d.front" % seat] = describe.call(field.front_cards if mine else field.opponent_front_cards)
+		d["s%d.back" % seat] = describe.call(field.back_cards if mine else field.opponent_back_cards)
+		d["s%d.hand" % seat] = side.hand.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+		d["s%d.deck" % seat] = side.deck.deck_cards.map(func(c): return c.uid)
+		d["s%d.damage" % seat] = side.damage_zone.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+		d["s%d.break_zone" % seat] = side.graveyard.graveyard_cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+		d["s%d.stack" % seat] = stack.cards.filter(func(c): return is_instance_valid(c) and c.controller == controller) \
+			.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+	return d
+
+static func state_hash_of(snapshot: Dictionary) -> String:
+	return JSON.stringify(snapshot, "", true).sha256_text().substr(0, 16)
+
+func state_hash() -> String:
+	return state_hash_of(snapshot_by_seat())
+
+## The keys whose values differ between two snapshots, each with both values: what a desync report prints.
+static func diff_snapshots(a: Dictionary, b: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for key in a:
+		if str(a[key]) != str(b.get(key)):
+			out.append("%s\n    here:  %s\n    there: %s" % [key, a[key], b.get(key)])
+	for key in b:
+		if not a.has(key):
+			out.append("%s missing here" % key)
+	return out
+
+func _record_turn_hash() -> void:
+	var h := state_hash()
+	turn_hashes[turn_number] = h
+	turn_state_recorded.emit(turn_number, h)
+
+## Called by the networking layer with the other machine's hash for `turn`. Returns true when they agree; on a
+## mismatch it reports, emits desync_detected (so the match can be stopped and the snapshots exchanged), and returns
+## false.
+func compare_remote_hash(turn: int, remote_hash: String) -> bool:
+	var local: String = str(turn_hashes.get(turn, ""))
+	if local == remote_hash:
+		return true
+	push_error("[Desync] turn %d: this machine %s, the other %s" % [turn, local, remote_hash])
+	desync_detected.emit(turn, local, remote_hash)
+	return false
+
 ## ONLINE PERSPECTIVE. Every machine runs the match as "player" = itself and "opponent" = the other person, so the code
 ## reads the way the game is played. `local_seat` (1 or 2) is which SEAT this machine is; seats are what both machines
 ## agree on, so anything that crosses the network (uids, decisions, who goes first) is translated through these.
@@ -1993,6 +2060,7 @@ func next_phase():
 		# turn_number, so this is what makes "this turn" mean this turn.
 		turn_number += 1
 		LOG.info("Turn", "Turn completed — now P%s (%s)" % [turn_owner, controller_for(turn_owner)])
+		_record_turn_hash()
 
 	# Enter new phase
 	_enter_phase(phases[phase_index])
