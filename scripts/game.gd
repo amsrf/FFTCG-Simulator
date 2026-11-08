@@ -751,6 +751,9 @@ var opponent_agent: Agent
 var phase: GlobalVariables.Phase
 ## Set when someone has won; stops the phase machine and sends us to the menu.
 var match_over: bool = false
+## The match's ONE random generator. Seeded from config["seed"] in start_match(), so a seeded match replays
+## exactly — nothing that affects the rules may use Godot's global RNG.
+var rng := RandomNumberGenerator.new()
 var priority_holder: int = 0
 
 ## How long an opponent's chosen blocker is shown before the damage step. The pick is drawn
@@ -798,6 +801,11 @@ func _warm_up_effect_shaders() -> void:
 		quad.queue_free()
 
 func start_match(config: Dictionary) -> void:
+	var match_seed: int = int(config.get("seed", 0))
+	if match_seed != 0:
+		rng.seed = match_seed
+	else:
+		rng.randomize()
 	# Everything a match needs comes from its config (see MatchSetup presets);
 	# the same scene serves the menu, the practice board, and future self-play.
 	priority_holder = 0
@@ -827,7 +835,8 @@ func start_match(config: Dictionary) -> void:
 		LOG.info("Camera", "board view is '%s'" % board_cam.name)
 		break
 
-	player_agent = LocalAgent.new()
+	# "player_type": "ai" seats an AI as player 1 too — AI-vs-AI simulations and the determinism probe.
+	player_agent = AIAgent.new() if str(config.get("player_type", "local")) == "ai" else LocalAgent.new()
 	player_agent.bind(self)
 	match str(config.get("opponent_type", "mock")):
 		"ai":
@@ -2846,13 +2855,11 @@ func return_from_break_zone(tapped: bool = true) -> void:
 	if tapped:
 		card.tap()
 
-## Fisher-Yates with a dedicated RNG. NOT `Array.shuffle()`, which uses the global generator and so cannot be
+## Fisher-Yates with the match RNG. NOT `Array.shuffle()`, which uses the global generator and so cannot be
 ## reproduced from a seed — the same reason MatchSetup hand-rolls its own.
 ##
 ## Untyped parameter for the same reason as search_deck: `Deck` has no class_name.
 func shuffle_deck(deck_node) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
 	var cards: Array = deck_node.deck_cards
 	for i in range(cards.size() - 1, 0, -1):
 		var j: int = rng.randi_range(0, i)
