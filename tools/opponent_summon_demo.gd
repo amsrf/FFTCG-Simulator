@@ -150,8 +150,9 @@ func _toggle_pause() -> void:
 func _step_frame() -> void:
 	if not _paused:
 		return
-	var card := stack._local_summon_presentation
-	if card != null and card.teleport.tween != null and card.teleport.tween.is_valid():
+	# The printed card's fade first, then the stack card's entrance flight.
+	var card: Card = stack._local_summon_fading
+	if card != null and is_instance_valid(card) and card.teleport.tween != null and card.teleport.tween.is_valid():
 		card.teleport.tween.custom_step(1.0 / 60.0)
 	elif stack._opponent_summon_flight != null:
 		stack._opponent_summon_flight.custom_step(1.0 / 60.0)

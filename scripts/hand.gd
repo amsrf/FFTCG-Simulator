@@ -72,10 +72,6 @@ const SHADOW_TRACK_SECONDS := 0.35
 signal charge_start(card:Card)
 signal selected_cards_for_mana_has_changed(amount:int, element:String)
 signal effect_card_selection_changed(has_selection: bool)
-## Emitted after the mana cards selected for a payment have finished their
-## discard flight. Stack awaits this before fading a Character out of hand.
-signal mana_discard_finished
-var _mana_discard_in_progress: bool = false
 @onready var graveyard: Node = get_parent().get_node("Graveyard")
 # Relative, not get_tree().current_scene — see damage_zone.gd. This also resolves the same
 # way for Opponent/Hand, which shares this script.
@@ -1309,27 +1305,12 @@ func _on_assistant_charge_complete() -> void:
 	# out; only the hand's drag bookkeeping is finished here.
 	if charging_card != null:
 		end_character_drag(charging_card)
-	# The payment cards fly to the graveyard FIRST. Stack awaits
-	# `await_mana_discard()` before it fades a Character out of hand.
-	_mana_discard_in_progress = true
+	# The payment cards join the Break Zone now; their flights are queued (Stack flushes them before queueing a cast
+	# dissolve, so they always play first).
 	send_selected_cards_to_graveyard()
-	# STOPGAP: the Character fade is not a queued event yet, so it must not start until the discard flights have
-	# played. Once it is queued, queue order does this and the mana_discard_finished handshake can go.
-	await PRESENTATION.wait_for_queue()
-	# Re-lay the hand BEFORE waking Stack: it may resume the fade immediately
-	# on the signal, and a hand-layout tween started afterwards would move the
-	# card while it is already dissolving.
 	if stack.summon_casting_card == null:
 		charging_card = null
 	update_card_positions()
-	_mana_discard_in_progress = false
-	mana_discard_finished.emit()
-
-## Stack calls this before the Stack fade. If the mana cards are still flying to
-## the Graveyard, the fade waits for them; otherwise it starts immediately.
-func await_mana_discard() -> void:
-	if _mana_discard_in_progress:
-		await mana_discard_finished
 
 func apply_deferred_skill_mana_payment() -> void:
 	send_selected_cards_to_graveyard()

@@ -19,6 +19,8 @@ var card_width = 0.429 * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
 var player_mode = GlobalVariables.get_player_mode();
 var start_x: float = 0.0
 var _local_summon_presentation: Card
+## The printed local Summon while it fades out in the hand (presentation only; already off the stack list).
+var _local_summon_fading: Card
 signal local_summon_landed
 var casting_card: Card
 ## Stack copy for skill activation. The node exists early for UI; the activation is not
@@ -475,7 +477,7 @@ func _commit_summon_to_stack() -> void:
 	cards.append(card)
 	card.index = cards.size() - 1
 	if local_preview:
-		_present_local_summon(card)
+		_queue_local_summon(card)
 	elif not flighting:
 		update_card_positions()
 	# Casting a Summon is a priority action: it is on the stack now, so priority
@@ -774,7 +776,8 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 		card.quaternion = (stack_pose * Basis(Vector3.RIGHT, remaining_pitch)).get_rotation_quaternion()
 		card.global_position = opponent_flight_path.to_global(flight_curve.samplef(segment))
 	, 0.0, 1.0, opponent_flight_seconds)
-	await PRESENTATION.wait(flight)
+	# Presentation only: nothing in the rules awaits this flight (the cast commits at once).
+	await flight.finished
 	_opponent_summon_flight = null
 	_opponent_summon_flight_card = null
 	if is_instance_valid(card) and card.get_parent() == self and layout_cards().has(card):
@@ -782,15 +785,10 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 			reveal_parked(card)
 		update_card_positions()
 
-## Fade the printed Summon and transfer its cast to a new stack card.
-func _present_local_summon(card: Card) -> void:
+## LOCAL SUMMON, RULES half (at commit): the cast moves to a separate stack card that keeps its picks; the printed
+## card only fades. The swap happens NOW, so the stack's contents never change in the middle of an animation.
+func _queue_local_summon(card: Card) -> void:
 	card.set_cast_pending_highlight(false)
-	await PRESENTATION.wait(card.teleport.play_out(0.08, 0.20))
-	if not is_instance_valid(card) or not cards.has(card):
-		_local_summon_presentation = null
-		local_summon_landed.emit()
-		return
-	# Replace the faded printed card with a separate stack card, preserving its cast picks.
 	var effect_card: Card = game.create_card(card.id, card.controller)
 	effect_card.key_word_effect = card.key_word_effect
 	effect_card.effect_kind = card.effect_kind
@@ -800,19 +798,30 @@ func _present_local_summon(card: Card) -> void:
 	effect_card.index = slot_index
 	add_child(effect_card)
 	effect_card.enter_zone(Card.Zone.STACK)
+	# Not drawn until its flight starts; layout leaves it alone meanwhile (_local_summon_presentation).
+	effect_card.visible = false
 	_local_summon_presentation = effect_card
-	card.queue_free()
-	var camera := get_viewport().get_camera_3d()
-	var size := get_viewport().get_visible_rect().size
-	var pixel := size * Vector2(0.5, 1.05)
-	var plane := Plane(Vector3.UP, global_position.y - 0.35)
-	var hit = plane.intersects_ray(camera.project_ray_origin(pixel), camera.project_ray_normal(pixel))
-	var launch := effect_card.global_transform
-	launch.origin = hit if hit != null else camera.project_ray_origin(pixel) + camera.project_ray_normal(pixel) * 6.0
-	# Reserve the incoming top slot now, so the existing fan shifts during flight.
-	# The presentation card is excluded from layout and keeps its own trajectory.
+	# Reserve the incoming top slot now, so the existing fan shifts.
 	update_card_positions()
-	if not PRESENTATION.fast_mode:
+	_local_summon_fading = card
+	Vfx.present(func() -> void: await _present_local_summon(card, effect_card))
+
+## LOCAL SUMMON, PRESENTATION half (queued): fade the printed card where it is, then fly the stack card in.
+func _present_local_summon(printed: Card, effect_card: Card) -> void:
+	if is_instance_valid(printed):
+		await printed.teleport.play_out(0.08, 0.20).finished
+		if is_instance_valid(printed):
+			printed.queue_free()
+	_local_summon_fading = null
+	if is_instance_valid(effect_card) and effect_card.get_parent() == self:
+		var camera := get_viewport().get_camera_3d()
+		var size := get_viewport().get_visible_rect().size
+		var pixel := size * Vector2(0.5, 1.05)
+		var plane := Plane(Vector3.UP, global_position.y - 0.35)
+		var hit = plane.intersects_ray(camera.project_ray_origin(pixel), camera.project_ray_normal(pixel))
+		var launch := effect_card.global_transform
+		launch.origin = hit if hit != null else camera.project_ray_origin(pixel) + camera.project_ray_normal(pixel) * 6.0
+		effect_card.visible = true
 		await _fly_local_summon_translation(effect_card, launch.origin)
 	_local_summon_presentation = null
 	update_card_positions()
@@ -899,7 +908,7 @@ func _fly_local_summon_translation(card: Card, launch: Vector3) -> void:
 	_opponent_summon_flight = flight
 	_opponent_summon_flight_card = card
 	flight.tween_method(sample, 0.0, 1.0, local_summon_flight_seconds())
-	await PRESENTATION.wait(flight)
+	await flight.finished
 	_opponent_summon_flight = null
 	_opponent_summon_flight_card = null
 
@@ -1036,8 +1045,8 @@ func cancel_stack_card(card: Card) -> void:
 	update_card_positions()
 
 func resolve_top_effect() -> void:
-	if _local_summon_presentation != null:
-		await local_summon_landed
+	# No wait for a Summon's flight here: resolution always follows a priority decision, and every decision waits
+	# for the presentation queue (Agent._settle), so the flight has landed before anyone sees it resolve.
 	## Stack resolution: run effect instructions only; costs were applied at
 	## commit for skills. The effect handler may await a modal (e.g. Auron's
 	## "may play a Backup" choice), so resolution waits for the game to signal

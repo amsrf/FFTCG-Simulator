@@ -592,8 +592,10 @@ func _check_demo_stack_fan() -> void:
 	var previous_local_top: Card = stack.cards.back()
 	var previous_local_top_position := previous_local_top.position
 	stack._commit_summon_to_stack()
-	_expect(stack.cards.has(local_summon) and local_summon.get_parent() == local_hand,
-		"confirmed local Summon commits while its printed preview fades in place")
+	# RULES AT ONCE: the stack already holds the separate effect card (same picks); the printed card only fades.
+	_expect(not stack.cards.has(local_summon) and stack.cards.back() != local_summon
+		and stack.cards.back().effect_targets == picked and local_summon.get_parent() == local_hand,
+		"confirmed local Summon commits at once as a new stack card while its printed preview fades in place")
 	local_summon.teleport.tween.custom_step(0.30)
 	var printed_summon := local_summon
 	local_summon = stack.cards.back()
