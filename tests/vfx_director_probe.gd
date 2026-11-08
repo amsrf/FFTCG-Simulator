@@ -75,6 +75,15 @@ func _ready() -> void:
 	_expect(fire != null and fire.tint.is_equal_approx(Color(0.86, 0.09, 0.17)),
 		"element presets are loaded and expose their tint")
 
+	# THE QUEUE CAN NEVER FREEZE. A presentation that never finishes is cut off by the watchdog, so decisions (which
+	# wait for the queue) still happen.
+	await Vfx.idle()  # earlier sections' animations first, so only the hung one is timed
+	var hang_started: int = Time.get_ticks_msec()
+	Vfx.present(func() -> void: await get_tree().create_timer(9999.0).timeout)
+	await Vfx.idle()
+	var hang_ms: int = Time.get_ticks_msec() - hang_started
+	_expect(Vfx.is_idle() and hang_ms >= 7500 and hang_ms < 12000,
+		"a presentation that never finishes is cut off by the watchdog (queue idle after %d ms)" % hang_ms)
 	print("[Vfx] %d checks | failures: %d" % [_checks, _fails])
 	print("[Vfx] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	_game.queue_free()

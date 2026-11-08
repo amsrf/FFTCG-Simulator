@@ -167,22 +167,30 @@ func present(presenter: Callable) -> void:
 ## cap; past it, the queue warns and moves on (the animation may still finish on its own).
 const MAX_PRESENT_SECONDS := 8.0
 
+## Wakes _await_with_watchdog: emitted when a job finishes (synchronously, so the queue moves on in the same instant
+## — frame-stepped tools rely on that) or when its time cap runs out.
+signal _job_settled
+
 func _await_with_watchdog(job: Callable, label: String) -> void:
-	var state := {"done": false}
+	var state := {"done": false, "timed_out": false}
 	# A METHOD, not a lambda: a lambda left suspended mid-await when the game shuts down can crash the engine on exit.
 	_run_job(job, state)
-	var waited := 0.0
-	while not state["done"]:
-		await get_tree().process_frame
-		waited += get_process_delta_time()
-		if waited > MAX_PRESENT_SECONDS:
-			push_warning("[Vfx] %s did not finish within %.0f s; the queue moves on so the game cannot freeze" % [
-				label, MAX_PRESENT_SECONDS])
-			return
+	if state["done"]:
+		return
+	get_tree().create_timer(MAX_PRESENT_SECONDS).timeout.connect(func() -> void:
+		if not state["done"]:
+			state["timed_out"] = true
+			_job_settled.emit())
+	while not state["done"] and not state["timed_out"]:
+		await _job_settled
+	if state["timed_out"] and not state["done"]:
+		push_warning("[Vfx] %s did not finish within %.0f s; the queue moves on so the game cannot freeze" % [
+			label, MAX_PRESENT_SECONDS])
 
 func _run_job(job: Callable, state: Dictionary) -> void:
 	await job.call()
 	state["done"] = true
+	_job_settled.emit()
 
 func is_idle() -> bool:
 	return not _playing and _pending.is_empty()
