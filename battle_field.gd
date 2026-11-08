@@ -1942,23 +1942,6 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 		LOG.info("Damage", "%s marks %s (%s)" % [source.card_name, target.card_name, status])
 		target.add_status_effect(status, payload)
 
-## The actual playmat bounds in world space. Drop detection belongs to the board, not to a hand-written rectangle in
-## the hand, so the drop area follows the mat if it moves or scales.
-func play_area_bounds() -> AABB:
-	var mat: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
-	if mat == null or mat.mesh == null:
-		return AABB(global_position - Vector3(4.0, 0.0, 2.0), Vector3(8.0, 1.0, 4.0))
-	return mat.global_transform * mat.mesh.get_aabb()
-
-## True when a world-space point is over the playmat. `margin` extends the mat
-## slightly outward so a card dropped on the border is not rejected.
-func is_in_play_area(world_point: Vector3, margin: float = 0.02) -> bool:
-	var bounds: AABB = play_area_bounds()
-	return world_point.x >= bounds.position.x - margin \
-		and world_point.x <= bounds.end.x + margin \
-		and world_point.z >= bounds.position.z - margin \
-		and world_point.z <= bounds.end.z + margin
-
 func can_block(card: Card) -> bool:
 	if card == null:
 		return false

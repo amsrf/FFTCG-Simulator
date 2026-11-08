@@ -1,9 +1,9 @@
 extends Node
-## Drop-area checks.
+## Casting from the hand by drag. A card latches into the cast stance once the pointer rises above the hand band;
+## releasing it there starts payment, for Summons and Characters alike. Releasing below the band only reorders.
 ##
-## The hand used to test a hard-coded 3 x 1.25 m rectangle in world space, so
-## most of the visible 8 x 4 m playmat rejected a dragged card. The Field now
-## owns the bounds and the hand asks it.
+## The drag's start pointer is passed explicitly: a headless run has no real mouse, so it would read (0, 0) — the top
+## of the screen — and the card could never rise above its own start.
 
 const GAME_SCENE := preload("res://game.tscn")
 const HAND_CARD := 25  # Squire, cost 2
@@ -45,25 +45,12 @@ func _ready() -> void:
 	_field = _game.get("field")
 	_hand = _game.get("hand")
 	_assistant = _game.get("assistant")
-	# Character drops now check the POINTER (the preview stays in a bottom band), while
-	# Summon drops still check the card itself. Use a no-target Summon for the board-drop
-	# checks below, then the Character for the payment-fade checks.
 	var summon: Card = _game.create_card(SUMMON_CARD, "player")
 	_game.add_child(summon)
 	_hand.add_card(summon)
-
-	var bounds: AABB = _field.play_area_bounds()
-	print("[DropArea] bounds position=%s end=%s" % [bounds.position, bounds.end])
-	_expect(bounds.size.x > 7.9 and bounds.size.z > 3.9,
-		"the playmat is about 8 x 4 m")
-	_expect(_field.is_in_play_area(Vector3(0.0, 0.5, 0.0)),
-		"the centre is inside the drop area")
-	_expect(_field.is_in_play_area(Vector3(3.2, 0.5, -1.5)),
-		"a front-right point is inside, even though the old tiny rectangle rejected it")
-	_expect(_field.is_in_play_area(Vector3(-3.2, 0.5, 1.5)),
-		"a back-left point is inside too")
-	_expect(not _field.is_in_play_area(Vector3(5.0, 0.5, 0.0)),
-		"a point beyond the right edge is outside")
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var grab_y: float = viewport_size.y * 0.95  # inside the hand band
+	var cast_point: Vector2 = viewport_size * Vector2(0.5, 0.2)  # well above it
 
 	var card: Card = summon
 	_expect(card != null, "the test Summon is in hand")
@@ -72,16 +59,19 @@ func _ready() -> void:
 	# offset instead of in the fan.
 	_hand.set_hovered(card, true)
 	_expect(_hand.hovered_card == card, "the card is hovered before the drag")
-	card.is_dragging = true
-	card.global_position = Vector3(3.2, 0.5, -1.5)
-	_hand.on_card_released(card)
+	card.begin_drag()
+	_hand.begin_character_drag(card, grab_y)
+	_expect(_hand.update_character_drag(card, cast_point) and _hand.character_drag_latched(),
+		"a Summon latches into the cast stance above the hand band")
+	card.release_drag()
 	await get_tree().process_frame
 	_expect(_hand.charging_card == card,
-		"releasing over the front-right of the playmat starts the cast")
-	_expect(card.get_parent() == _game.get("stack"),
-		"and the card is parked in the fake Stack")
+		"releasing the latched Summon starts the cast")
+	# A local Summon is paid for in the cast stance like a Character; the stack card is created after payment.
+	_expect(card.get_parent() == _hand and not _game.get("stack").layout_cards().has(card),
+		"and the Summon is paid for in the cast stance, outside the Stack fan")
 	_expect(not _hand.cards.has(card), "and the hand no longer owns it")
-	_expect(not card.ring_cast_pending(), "and a Summon is parked without the Character pending aura")
+	_expect(card.ring_cast_pending(), "and it shows the cast-pending aura while it is paid for")
 	_expect(_hand.hovered_card != card,
 		"and starting the cast clears the stale hover state")
 
@@ -121,10 +111,9 @@ func _ready() -> void:
 	# CHARACTER CAST STANCE. Once the pointer leaves the hand band the card
 	# latches in place; releasing it there starts payment without putting it on
 	# the Stack. Cancelling returns it to the fan and clears the latch.
-	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
 	character.begin_drag()
-	_hand.begin_character_drag(character)
-	_expect((_hand.update_character_drag(character, viewport_size * Vector2(0.5, 0.2))
+	_hand.begin_character_drag(character, grab_y)
+	_expect((_hand.update_character_drag(character, cast_point)
 			and _hand.character_drag_latched()), "a Character latches into the cast stance above the hand band")
 	var stance_pose: Transform3D = character.global_transform
 	character.release_drag()

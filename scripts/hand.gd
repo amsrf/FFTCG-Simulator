@@ -866,7 +866,9 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 ## World-Y lift for the latched card, so it leaves the mat and reads larger.
 @export_range(0.0, 2.0) var character_drag_lift_y: float = 0.45
 
-func begin_character_drag(card: Card) -> void:
+## `start_pointer_y` is where the grab happened, in screen pixels; it defaults to the real mouse. The latch measures
+## how far the pointer has risen from here, so tests pass it explicitly (a headless mouse sits at the top of the screen).
+func begin_character_drag(card: Card, start_pointer_y: float = -1.0) -> void:
 	_character_waver_time = 0.0
 	_character_drag_original_index = cards.find(card)
 	_character_drag_card = card
@@ -884,7 +886,7 @@ func begin_character_drag(card: Card) -> void:
 	if camera != null:
 		var axes := camera.global_basis.orthonormalized()
 		_character_drag_start.basis = Basis(axes.x, axes.z, -axes.y).scaled(card.global_basis.get_scale())
-	_character_drag_start_pointer_y = get_viewport().get_mouse_position().y
+	_character_drag_start_pointer_y = start_pointer_y if start_pointer_y >= 0.0 else get_viewport().get_mouse_position().y
 	_character_drag_start = _fit_character_drag_bottom(card, _character_drag_start, 1.10)
 	card.global_transform = _character_drag_start
 
@@ -1021,12 +1023,6 @@ func _resume_normal_character_drag(card: Card) -> void:
 	card.offset = Vector3.ZERO
 	_character_drag_latched = false
 	_character_drag_stance = Transform3D()
-
-func character_drop_over_board(pointer: Vector2) -> bool:
-	var camera := get_viewport().get_camera_3d()
-	var plane := Plane(Vector3.UP, field.play_area_bounds().end.y)
-	var hit = plane.intersects_ray(camera.project_ray_origin(pointer), camera.project_ray_normal(pointer))
-	return hit != null and field.is_in_play_area(hit)
 
 func _on_card_dragged(card: Variant) -> void:
 	var new_index = find_index(card)
