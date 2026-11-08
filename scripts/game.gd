@@ -2031,14 +2031,16 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.BLOCKING)
 				field.set_blockable(controller_for(defender_id), false)
 			if blocker != null:
-				if not local_defence:
-					# The human is watching the opponent declare. Show the link for their
-					# pick and hold it long enough to be read: the choice happens before the
-					# damage step, and without this the block stays invisible until it
-					# resolves. No blue ring here — that cue means "your choice".
-					field.show_block_arc(blocker)
-					await PRESENTATION.wait(get_tree().create_timer(block_announce_time))
 				blocker.declare_blocker()
+				if not local_defence:
+					# The human is watching the opponent declare. Queue the link for their pick and hold it long enough to
+					# be read; the priority round below waits for the queue, so it is seen before anyone acts. No blue
+					# ring here — that cue means "your choice".
+					var announce_hold: float = block_announce_time
+					Vfx.present(func() -> void:
+						if is_instance_valid(blocker):
+							field.show_block_arc(blocker)
+						await get_tree().create_timer(announce_hold).timeout)
 			await priority()
 			pass
 		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
