@@ -1,4 +1,5 @@
 extends Node3D
+const PRESENTATION := preload("res://scripts/presentation.gd")
 ## The Graveyard / Break Zone pile.
 ##
 ## It is a STACK: the most recent card lies on top of the pile and the older ones
@@ -56,7 +57,7 @@ func draw(card: Card) -> void:
 		# De Casteljau: two lerps along the two control legs, then one between them.
 		card.global_position = start.lerp(peak, k).lerp(peak.lerp(destination, k), k)
 	, 0.0, 1.0, mill_seconds)
-	await t.finished
+	await PRESENTATION.wait(t)
 	add_card(card)
 		
 ## Discard from a hand. The card joins the pile at once and the tween moves its visual from wherever it was to

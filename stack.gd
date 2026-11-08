@@ -1,5 +1,6 @@
 extends Node3D
 class_name Stack
+const PRESENTATION := preload("res://scripts/presentation.gd")
 const LOG := preload("res://scripts/log.gd")
 ## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
 ## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
@@ -408,7 +409,7 @@ func cast_card():
 		var dissolve: Tween = landing.teleport.play_out(
 			field.teleport_shine_seconds, field.teleport_fade_seconds)
 		# A tween is not a signal: awaiting the object itself returns immediately.
-		await dissolve.finished
+		await PRESENTATION.wait(dissolve)
 		field.play_card(landing, landing.controller != Card.PLAYER, true, true, false, true)
 	
 	
@@ -773,7 +774,7 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 		card.quaternion = (stack_pose * Basis(Vector3.RIGHT, remaining_pitch)).get_rotation_quaternion()
 		card.global_position = opponent_flight_path.to_global(flight_curve.samplef(segment))
 	, 0.0, 1.0, opponent_flight_seconds)
-	await flight.finished
+	await PRESENTATION.wait(flight)
 	_opponent_summon_flight = null
 	_opponent_summon_flight_card = null
 	if is_instance_valid(card) and card.get_parent() == self and layout_cards().has(card):
@@ -784,7 +785,7 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 ## Fade the printed Summon and transfer its cast to a new stack card.
 func _present_local_summon(card: Card) -> void:
 	card.set_cast_pending_highlight(false)
-	await card.teleport.play_out(0.08, 0.20).finished
+	await PRESENTATION.wait(card.teleport.play_out(0.08, 0.20))
 	if not is_instance_valid(card) or not cards.has(card):
 		_local_summon_presentation = null
 		local_summon_landed.emit()
@@ -811,7 +812,8 @@ func _present_local_summon(card: Card) -> void:
 	# Reserve the incoming top slot now, so the existing fan shifts during flight.
 	# The presentation card is excluded from layout and keeps its own trajectory.
 	update_card_positions()
-	await _fly_local_summon_translation(effect_card, launch.origin)
+	if not PRESENTATION.fast_mode:
+		await _fly_local_summon_translation(effect_card, launch.origin)
 	_local_summon_presentation = null
 	update_card_positions()
 	local_summon_landed.emit()
@@ -897,7 +899,7 @@ func _fly_local_summon_translation(card: Card, launch: Vector3) -> void:
 	_opponent_summon_flight = flight
 	_opponent_summon_flight_card = card
 	flight.tween_method(sample, 0.0, 1.0, local_summon_flight_seconds())
-	await flight.finished
+	await PRESENTATION.wait(flight)
 	_opponent_summon_flight = null
 	_opponent_summon_flight_card = null
 

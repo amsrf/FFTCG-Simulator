@@ -1,5 +1,6 @@
 extends Node3D
 class_name Hand
+const PRESENTATION := preload("res://scripts/presentation.gd")
 const LOG := preload("res://scripts/log.gd")
 ## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
 ## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
@@ -1254,8 +1255,7 @@ func send_selected_cards_to_graveyard() -> void:
 		if flight is Tween:
 			flights.append(flight)
 	for flight in flights:
-		if flight is Tween and flight.is_valid():
-			await flight.finished
+		await PRESENTATION.wait(flight)
 	
 
 func add_card_to_mana_conversion(card:Card):

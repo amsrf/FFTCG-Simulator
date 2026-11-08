@@ -1,5 +1,6 @@
 extends Node3D
 class_name Game
+const PRESENTATION := preload("res://scripts/presentation.gd")
 const LOG := preload("res://scripts/log.gd")
 
 @onready var player: PlayerSide = $Player
@@ -610,29 +611,29 @@ func reveal_top(count: int = 1, player_id: int = 0) -> void:
 		if reveal_lift_seconds > 0.0:
 			var lift_tween: Tween = create_tween()
 			lift_tween.tween_property(card, "global_transform", lifted, reveal_lift_seconds)
-			await lift_tween.finished
+			await PRESENTATION.wait(lift_tween)
 		else:
 			card.global_transform = lifted
 		var face := Transform3D(Basis(Vector3.UP, PI).scaled(Vector3.ONE * reveal_scale), lifted_origin)
 		if reveal_flip_seconds > 0.0:
 			var flip_tween: Tween = create_tween()
 			flip_tween.tween_property(card, "global_transform", face, reveal_flip_seconds)
-			await flip_tween.finished
+			await PRESENTATION.wait(flip_tween)
 		else:
 			card.global_transform = face
 		if reveal_hold_seconds > 0.0:
-			await get_tree().create_timer(reveal_hold_seconds).timeout
+			await PRESENTATION.wait(get_tree().create_timer(reveal_hold_seconds))
 		# TURN IT BACK FACE-DOWN before it disappears: the player has read it, and the vanish should not look like
 		# a card being discarded face-up.
 		var back := Transform3D(start.basis, lifted_origin)
 		if reveal_flip_back_seconds > 0.0:
 			var back_tween: Tween = create_tween()
 			back_tween.tween_property(card, "global_transform", back, reveal_flip_back_seconds)
-			await back_tween.finished
+			await PRESENTATION.wait(back_tween)
 		else:
 			card.global_transform = back
 		if reveal_back_hold_seconds > 0.0:
-			await get_tree().create_timer(reveal_back_hold_seconds).timeout
+			await PRESENTATION.wait(get_tree().create_timer(reveal_back_hold_seconds))
 		card.set_hidden(true)
 		revealed_cards.append(card)
 
@@ -1718,7 +1719,8 @@ func resolve_blocked_clash() -> void:
 
 	var survives_a: bool = is_instance_valid(attacker) and attacker.is_on_field()
 	var survives_b: bool = is_instance_valid(blocker) and blocker.is_on_field()
-	if is_instance_valid(attacker) and is_instance_valid(blocker):
+	# The cinematic is pure presentation: the clash is already resolved above. Fast mode skips it.
+	if not PRESENTATION.fast_mode and is_instance_valid(attacker) and is_instance_valid(blocker):
 		var cinema = CLASH_CINEMATIC.instantiate()
 		add_child(cinema)
 		await cinema.play(attacker, blocker, snap_a, snap_b, survives_a, survives_b)
@@ -2006,7 +2008,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 					# damage step, and without this the block stays invisible until it
 					# resolves. No blue ring here — that cue means "your choice".
 					field.show_block_arc(blocker)
-					await get_tree().create_timer(block_announce_time).timeout
+					await PRESENTATION.wait(get_tree().create_timer(block_announce_time))
 				blocker.declare_blocker()
 			await priority()
 			pass

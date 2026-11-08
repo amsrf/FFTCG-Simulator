@@ -1,4 +1,5 @@
 extends RefCounted
+const PRESENTATION := preload("res://scripts/presentation.gd")
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")
@@ -633,7 +634,7 @@ func return_to_hand(cards: Array, source_kind: String = "") -> void:
 		if tween is Tween:
 			tweens.append(tween)
 	for tween in tweens:
-		await tween.finished
+		await PRESENTATION.wait(tween)
 
 
 func _sides(owner: String) -> Array:
