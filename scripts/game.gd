@@ -783,7 +783,12 @@ var match_over: bool = false
 ## The match's ONE random generator. Seeded from config["seed"] in start_match(), so a seeded match replays
 ## exactly — nothing that affects the rules may use Godot's global RNG.
 var rng := RandomNumberGenerator.new()
-var priority_holder: int = 0
+## Who holds priority (1 = this machine's player). The pass button follows it: only the holder has one.
+var priority_holder: int = 0:
+	set(value):
+		priority_holder = value
+		if assistant != null and is_instance_valid(assistant):
+			assistant.refresh_pass_button()
 
 ## How long an opponent's chosen blocker is shown before the damage step. The pick is drawn
 ## as soon as it is made; this only paces it so a human can actually read the link.

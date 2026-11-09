@@ -188,11 +188,36 @@ func hide_confirm_button():
 # ------------------------------------------------------------------
 # Priority / pass button
 # ------------------------------------------------------------------
+## ONLY THE PLAYER HOLDING PRIORITY HAS A BUTTON. The other one has nothing to press until priority comes back to them:
+## the situation (input mode, phase, stack) decides WHICH button, priority decides WHETHER there is one.
+func local_holds_priority() -> bool:
+	var game = get_parent()
+	if game == null or bool(game.get("match_over")):
+		return false
+	if int(game.get("priority_holder")) != 1:
+		return false
+	var agent = game.call("agent_for", 1)
+	return agent != null and agent.is_human()
+
+## Re-derive the pass button from who holds priority now (Game.priority_holder calls this whenever it changes).
+func refresh_pass_button() -> void:
+	if local_holds_priority():
+		show_pass_priority_button()
+	else:
+		var phase_now = get_parent().get("phase")
+		# The attack / block declaration button is not a priority button: leave it to set_declare_attack_button().
+		if phase_now != GlobalVariables.Phase.ATTACK_DECLARATION_STEP \
+				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
+			passPhaseButton.hide_button()
+
 func show_pass_priority_button():
 	# Only show the pass button when players actually hold priority. It must
 	# stay hidden during modal flows (targeting, choose-card, paying cost).
 	# ATTACKING is allowed because the attack declaration step runs a priority
 	# window right after the attack button is pressed.
+	if not local_holds_priority():
+		passPhaseButton.hide_button()
+		return
 	var pm = GlobalVariables.get_player_mode()
 	var modal_mode: bool = (
 		pm == GlobalVariables.Player_Mode.PAYING_COST
@@ -204,9 +229,9 @@ func show_pass_priority_button():
 	if modal_mode:
 		passPhaseButton.hide_button()
 	else:
-		# THE LABEL SAYS WHAT PRESSING IT WILL DO. With something waiting on the stack, pressing it hands the game on to
-		# resolve that; with the stack empty, it advances the phase. Two different actions behind one button, so the player
-		# should be able to read which one they are getting.
+		# THE LABEL SAYS WHAT PRESSING IT WILL DO. "Next Phase" on YOUR turn with an EMPTY stack: you are done, and the
+		# phase moves on once the opponent passes too. Everywhere else it is "Pass": something is waiting on the stack,
+		# or it is the opponent's turn and you are only declining to respond.
 		#
 		# SKIPPED IN THE ATTACK STEPS: the same button is the Attack / No Attack declaration there, and
 		# set_declare_attack_button() owns its text. Overwriting it would relabel the attack declaration as a phase pass.
@@ -215,7 +240,8 @@ func show_pass_priority_button():
 				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
 			var stack_now = get_parent().get("stack")
 			var waiting: int = stack_now.stack_length() if stack_now != null else 0
-			passPhaseButton.set_text("Process Stack" if waiting > 0 else "Next Phase")
+			var my_turn: bool = int(get_parent().get("turn_owner")) == 1
+			passPhaseButton.set_text("Next Phase" if my_turn and waiting == 0 else "Pass")
 		passPhaseButton.show_button()
 
 func _pass_priority():
@@ -224,7 +250,8 @@ func _pass_priority():
 
 func _on_player_mode_change(pm: GlobalVariables.Player_Mode):
 	if pm == GlobalVariables.Player_Mode.FREE or pm == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-		passPhaseButton.show_button()
+		# Back to a free moment: the button comes back only for the player holding priority, with the right label.
+		show_pass_priority_button()
 	else:
 		passPhaseButton.hide_button()
 	# The cost readout belongs to the payment modal alone: no crystals are being chosen during

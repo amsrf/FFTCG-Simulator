@@ -408,7 +408,7 @@ const GROUNDS := {
 	},
 	"golbez": {
 		"title": "Ground: Golbez 135 (search, different Elements)",
-		"blurb": "Press B to put Golbez into the Break Zone, then pass priority (the button becomes Process Stack). Confirm the search, then pick cost-2 Forwards with different Elements: same-Element cards dim and cannot be clicked until you deselect. Played cards do not fire their auto-abilities.",
+		"blurb": "Press B to put Golbez into the Break Zone, then pass priority (the button becomes Pass). Confirm the search, then pick cost-2 Forwards with different Elements: same-Element cards dim and cannot be clicked until you deselect. Played cards do not fire their auto-abilities.",
 	},
 }
 
