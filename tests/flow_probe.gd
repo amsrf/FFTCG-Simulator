@@ -83,6 +83,13 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
+	# FIVE BACKUPS AT MOST (7.7.4): the AI board already fields five, so casting this Backup would be refused. Make room.
+	# A plain one: the activatable Backups (Aerith) are what the availability checks below are about.
+	var backups: Array = field.get_back_cards_for(Card.PLAYER).filter(func(b): return b.activation_skills().is_empty())
+	if field.get_back_cards_for(Card.PLAYER).size() >= game.MAX_BACKUPS and not backups.is_empty():
+		game.put_card_into_graveyard(backups[backups.size() - 1])
+		await get_tree().process_frame
+
 	# Character drag has two states: ordinary drag inside the hand band, and the
 	# latched cast stance once the pointer crosses above it.
 	var screen_size := get_viewport().get_visible_rect().size

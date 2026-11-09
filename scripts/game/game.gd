@@ -2069,6 +2069,9 @@ func priority_round_only() -> void:
 	var holder: int = turn_owner
 	var passed_since_action: bool = false
 	while true:
+		await apply_rule_processes()
+		if match_over:
+			break
 		other_player_passed = passed_since_action
 		priority_holder = holder
 		var acted: bool = await agent_for(holder).take_priority(holder)
@@ -2317,6 +2320,10 @@ func priority() -> void:
 	var holder: int = turn_owner
 	var passed_since_action: bool = false
 	while true:
+		# 11.1.3 / 12.3: rule processes are resolved before anyone gains priority.
+		await apply_rule_processes()
+		if match_over:
+			break
 		other_player_passed = passed_since_action
 		priority_holder = holder
 		# WHO IS BEING ASKED, and in what state. With the two lines at the top of this function and the mode log, a stall can
@@ -2526,6 +2533,36 @@ func would_break_light_dark_limit(card: Card) -> bool:
 	if enabled_by_field:
 		return false
 	return same_kind or other_kind
+
+## RULE PROCESSES THAT NEED A DECISION, run before any player gains priority (11.1.3, 12.3). The automatic ones
+## (zero power, lethal damage) stay in enforce_game_state_rules(), which runs right after the change that causes them.
+func apply_rule_processes() -> void:
+	await _enforce_backup_limit()
+
+## 12.4.8 (and 7.7.4): "If one player has six or more Backups under their control, they must place the extra Backup(s)
+## in the Break Zone so that they have five." Casting a sixth is refused at the hand (Hand.can_play_character); this
+## catches the ways an EFFECT can still put one there (Auron's free play, a search onto the field). The CONTROLLER
+## chooses which go, so in practice they may swap an old Backup for the new one. Placed, not broken: no "when broken".
+const MAX_BACKUPS := 5
+
+func _enforce_backup_limit() -> void:
+	for owner_id in [turn_owner, 3 - turn_owner]:
+		var controller_name: String = controller_for(owner_id)
+		while not match_over and field.get_back_cards_for(controller_name).size() > MAX_BACKUPS:
+			var backups: Array = field.get_back_cards_for(controller_name).duplicate()
+			# DULL ONES FIRST: an active Backup is still mana this turn, so it is the worse one to lose. An agent that
+			# takes the first offer (the AI) gives up a dull one; the human's picker lists them first. Board state only,
+			# so both machines of an online match order it the same.
+			var dull: Array = backups.filter(func(b): return b.tapped)
+			var active: Array = backups.filter(func(b): return not b.tapped)
+			backups = dull + active
+			var extra: int = backups.size() - MAX_BACKUPS
+			var chosen: Card = await agent_for(owner_id).choose_field_card(owner_id, backups,
+					"Five Backups at most: put %d into the Break Zone" % extra)
+			if chosen == null or not backups.has(chosen):
+				chosen = backups[backups.size() - 1]   # no answer: the newest one goes
+			LOG.info("Rules", "P%d has %d Backups: %s goes to the Break Zone (12.4.8)" % [owner_id, backups.size(), chosen.card_name])
+			put_card_into_graveyard(chosen)
 
 func put_card_into_graveyard(card: Card) -> void:
 	# Removal that is NOT a break (e.g. power reduced to 0). The "unbreakable" status does not apply, because the

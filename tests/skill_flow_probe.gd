@@ -60,6 +60,11 @@ func _ready() -> void:
 	var assistant_node = game.assistant
 	game.priority_holder = 1
 
+	# FIVE BACKUPS AT MOST (12.4.8): the practice board already fields five, so make room first. Otherwise the rule
+	# process before priority (rightly) asks the player which one to put away, and nothing here answers it.
+	var backups: Array = field.get_back_cards_for(Card.PLAYER)
+	if backups.size() >= game.MAX_BACKUPS:
+		game.put_card_into_graveyard(backups[backups.size() - 1])
 	var source: Card = game.create_card(64, "player")
 	field.add_child(source)
 	field.play_card(source, false, false)

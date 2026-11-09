@@ -637,6 +637,15 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# The pose a tap animates away from and comes back to. Recorded HERE because this is the single place a card's resting
 	# orientation is decided; tap()/untap() aim at this absolute angle instead of offsetting whatever they find.
 	_upright_y = rotation_degrees.y
+	# A CARD THAT IS ALREADY DULL KEEPS ITS TILT, measured from the NEW upright. "Play it onto the field dull" (Auron)
+	# taps the card in the rules at once, but the node only arrives later, when the queued arrival plays: the tap tween
+	# was aiming at the HAND's upright (0°), so it kept dragging the card back there after the field's half turn was
+	# applied — a dull Backup lying upside down. Stop that tween and take the tapped pose of this zone instead.
+	# Field only: nothing clears `tapped` when a card leaves the field, and a pile card must lie straight.
+	if tapped and zone == Zone.FIELD:
+		if tween != null and tween.is_valid():
+			tween.kill()
+		rotation_degrees.y = _upright_y + tap_angle
 	apply_zone_scale()
 	is_dragging = false
 	_drag_input_active = false

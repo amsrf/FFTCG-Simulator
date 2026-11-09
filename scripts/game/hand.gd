@@ -1133,6 +1133,10 @@ func charge(card) -> bool:
 func can_play_character(card: Card) -> bool:
 	if stack.stack_length() > 0:
 		return false
+	# 7.7.4: playing a sixth Backup is prohibited (an EFFECT can still put one there; see Game._enforce_backup_limit).
+	if card.type == Card.BACKUP and game != null and game.field != null \
+			and game.field.get_back_cards_for(card.controller).size() >= game.MAX_BACKUPS:
+		return false
 	return card.controller == active_controller()
 
 ## Controller name of the side whose turn it is.

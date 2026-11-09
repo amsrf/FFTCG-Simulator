@@ -38,6 +38,10 @@ var summon_mana_deferred_until_target_confirm: bool = false
 ## commit can kill it instead of letting it keep writing transforms.
 var _opponent_summon_flight: Tween = null
 var _opponent_summon_flight_card: Card = null
+## TRIGGERED ABILITIES WAITING FOR THEIR ENTRANCE. The rules put the stack card in its slot at once; the node stays
+## hidden there until its queued flight starts (_present_trigger_entry), and the layout, arrows and shadows leave it
+## alone meanwhile — exactly as they do for the card that is flying.
+var _incoming_triggers: Array[Card] = []
 ## True while an effect resolution is still running (it may await a modal).
 var resolution_pending: bool = false
 ## Special ability (S) cost state: a card sharing a name with the source,
@@ -161,7 +165,8 @@ func displayed_card() -> Card:
 func set_hovered(card: Card, entered: bool) -> void:
 	var previous := hovered_card
 	if entered:
-		if hovered_card == card or not cards.has(card) or card == _opponent_summon_flight_card:
+		if hovered_card == card or not cards.has(card) or card == _opponent_summon_flight_card \
+				or _incoming_triggers.has(card):
 			return
 		hovered_card = card
 	elif hovered_card == card:
@@ -184,7 +189,8 @@ func refresh_target_display() -> void:
 	if field == null:
 		return
 	# A card still FLYING IN shows nothing yet: its arrows appear once it has arrived on the stack.
-	if card == null or card == _local_summon_presentation or card == _opponent_summon_flight_card:
+	if card == null or card == _local_summon_presentation or card == _opponent_summon_flight_card \
+			or _incoming_triggers.has(card):
 		_clear_target_display()
 		return
 	var targets: Array = card.effect_targets.duplicate()
@@ -243,7 +249,7 @@ func update_card_positions(previous_hover: Card = null, hover_changed := false):
 	for i in range(list.size()):
 		var card = list[i]
 		card.index = i
-		if card == _opponent_summon_flight_card or card == _local_summon_presentation:
+		if card == _opponent_summon_flight_card or card == _local_summon_presentation or _incoming_triggers.has(card):
 			continue
 		var slot := calculate_card_position(i)
 		if card == hovered_card:
@@ -273,6 +279,8 @@ func _update_stack_shadows() -> void:
 	var settled := layout_cards()
 	settled.erase(_opponent_summon_flight_card)
 	settled.erase(_local_summon_presentation)
+	for card in _incoming_triggers:
+		settled.erase(card)
 	if is_instance_valid(hovered_card) and settled.has(hovered_card):
 		settled.erase(hovered_card)
 		settled.append(hovered_card)
@@ -1070,9 +1078,42 @@ func create_card(id, controller, keyword, source, wording: String = "") -> Card:
 	card.effect_source = source
 	card.effect_kind = "Ability"
 	add_created_card_to_tree(card, wording)
+	# EVERY TRIGGERED ABILITY ENTERS LIKE A PLAY: from below the screen for ours, from the top for the opponent's, all the
+	# way to its slot. The rules are not kept waiting — the card is on the stack now — only the node is.
+	card.visible = false
+	_incoming_triggers.append(card)
+	Vfx.present(func() -> void: await _present_trigger_entry(card))
 	update_card_positions()
 	
 	return card
+
+## TRIGGERED ABILITY, PRESENTATION half (queued): fly the stack card in from its controller's edge of the screen. Ours
+## uses the local Summon's flight from below the screen; the opponent's uses their Summon's flight from the top.
+func _present_trigger_entry(card: Card) -> void:
+	_incoming_triggers.erase(card)
+	# Resolved (or cancelled) before its turn came: nothing to show.
+	if not is_instance_valid(card) or card.get_parent() != self or not layout_cards().has(card):
+		update_card_positions()
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		card.visible = true
+		update_card_positions()
+		return
+	var ours: bool = card.controller == Card.PLAYER
+	var size := get_viewport().get_visible_rect().size
+	var pixel := size * Vector2(0.5, 1.05 if ours else -0.05)
+	var plane := Plane(Vector3.UP, global_position.y - 0.35)
+	var hit = plane.intersects_ray(camera.project_ray_origin(pixel), camera.project_ray_normal(pixel))
+	var launch: Vector3 = hit if hit != null else camera.project_ray_origin(pixel) + camera.project_ray_normal(pixel) * 6.0
+	card.visible = true
+	if ours:
+		await _fly_local_summon_translation(card, launch)
+	else:
+		var start := card.global_transform
+		start.origin = launch
+		await _fly_opponent_summon(card, start)
+	update_card_positions()
 
 ## Enqueue a board-wide event trigger as a normal stack object. It must be a Card so the UI can show it and the
 ## ordinary priority loop can let either player respond; `event_trigger`/`event_context` make it resolve differently.
