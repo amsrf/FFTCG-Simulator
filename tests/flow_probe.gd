@@ -241,30 +241,37 @@ func _ready() -> void:
 		# The AI picks through its agent, which may finish a frame later.
 		await get_tree().process_frame
 		await get_tree().process_frame
+		# THE OPPONENT'S CHOICE IS PRIVATE: while they pay and aim, the Summon stays face down in their hand and none of
+		# their aiming is drawn here.
 		var summon_arc = field.arrow
-		var source_card: Card = summon_arc._source_card if summon_arc != null else null
-		print("[FlowProbe] summon cast: stack.cards=%d | arc source=%s | source parent=%s"
-			% [stack.cards.size(), source_card.card_name if source_card != null else "<none>",
-			source_card.get_parent().name if (source_card != null and source_card.get_parent() != null) else "<none>"])
-		if source_card != null:
-			var source_top: Vector3 = source_card.get_global_top_centre()
-			print("[FlowProbe] source at %s (top centre %s) | arc origin %s | opponent hand at %s"
-				% [source_card.global_position, source_top, summon_arc.start_pos,
-				game.get("opponent_hand").global_position])
-			_expect(source_card.get_parent() == stack,
-				"the arc originates from the card IN THE STACK, not from the opponent's hand")
-			_expect(summon_arc.start_pos.distance_to(Vector3.ZERO) > 0.15,
-				"the origin is not at the world origin (which projects to the screen centre)")
-			# The RIBBON is what the player sees, so assert on the MESH once the card has
-			# settled, not on `start_pos` mid-tween. The AI locks its target a frame or two
-			# after the cast, while the Summon is still travelling from its owner's hand —
-			# so a mesh built only at lock time would stay anchored back there.
-			await get_tree().create_timer(0.6).timeout
-			var shaft_start: Vector3 = summon_arc.line.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX][0]
-			print("[FlowProbe] after 0.6 s: start_pos %s | drawn ribbon starts %s | card top centre %s | locked=%s"
-				% [summon_arc.start_pos, shaft_start, source_card.get_global_top_centre(), summon_arc.locked])
-			_expect(shaft_start.distance_to(source_card.get_global_top_centre()) < 0.1,
-				"the DRAWN ribbon starts at the card's top edge once it has settled")
+		print("[FlowProbe] opponent summon pending: parent=%s | revealed=%s | aiming arc drawn=%s"
+			% [ifrit.get_parent().name, ifrit.revealed,
+			summon_arc.is_visible_in_tree() if summon_arc != null and is_instance_valid(summon_arc) else false])
+		if stack.summon_casting_card == ifrit:
+			_expect(ifrit.get_parent() == opponent_hand and not ifrit.revealed,
+				"while the opponent chooses, their Summon waits face down in their hand")
+			_expect(summon_arc == null or not is_instance_valid(summon_arc) or not summon_arc.is_visible_in_tree(),
+				"and their aiming arc is not drawn on this screen")
+		# ...THEN PUBLIC ON THE STACK. Once it has landed, its arrow is drawn from its top edge to what it targets.
+		var waited: int = 0
+		while (not stack.cards.has(ifrit) or stack._opponent_summon_flight_card == ifrit) and waited < 80:
+			await get_tree().create_timer(0.05).timeout
+			waited += 1
+		await get_tree().create_timer(0.4).timeout
+		var landed_target: Card = ifrit.effect_target
+		print("[FlowProbe] opponent summon landed: on stack=%s | target=%s | review arrow aiming=%s"
+			% [stack.cards.has(ifrit), landed_target.card_name if landed_target != null else "<none>",
+			field.review_arrow.is_aiming if field.review_arrow != null else false])
+		_expect(stack.cards.has(ifrit) and ifrit.get_parent() == stack and ifrit.revealed,
+			"once it commits the Summon is on the stack, face up")
+		if landed_target != null and stack.displayed_card() == ifrit:
+			_expect(field.review_arrow != null and field.review_arrow.is_aiming,
+				"after it lands, the stack shows its arrow")
+			var shaft_start: Vector3 = field.review_arrow.line.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX][0]
+			print("[FlowProbe] landed arrow starts %s | card top centre %s" % [shaft_start, ifrit.get_global_top_centre()])
+			_expect(shaft_start.distance_to(ifrit.get_global_top_centre()) < 0.15,
+				"the DRAWN arrow starts at the stack card's top edge")
+			_expect(landed_target._targeted_highlight_on, "and the card it targets carries the red ring")
 
 		var blue: Array[String] = []
 		for c in field.get_all_cards():
@@ -474,7 +481,7 @@ func _ready() -> void:
 			_expect(not chosen._targeted_highlight_on,
 				"a card changing zone drops the red ring, so none is left in the graveyard")
 
-	_check_opponent_translation(game)
+	await _check_opponent_translation(game)
 	await _check_demo_stack_fan()
 
 	_report()
@@ -492,6 +499,11 @@ func _check_demo_stack_fan() -> void:
 		var previous_top: Card = stack.cards.back() if not stack.cards.is_empty() else null
 		var previous_slot: Vector3 = previous_top.global_position if previous_top != null else Vector3.ZERO
 		demo._cast()
+		# The flight is queued at the commit: it starts once the presentation queue reaches it.
+		var frames: int = 0
+		while stack._opponent_summon_flight == null and frames < 60:
+			await get_tree().process_frame
+			frames += 1
 		var flight := stack._opponent_summon_flight
 		if flight == null:
 			_expect(false, "demo starts flight %d" % (i + 1))
@@ -858,30 +870,40 @@ func _check_opponent_translation(game) -> void:
 	var card: Card = game.create_card(62, "opponent")
 	hand.add_card(card)
 	var original = card.mat.get_shader_parameter("texture_albedo")
+	# CHARGING IS PRIVATE: the Summon waits face down in the opponent's hand; a cancel leaves it there.
 	if hand.charge(card):
-		var face = card.get_node_or_null("StackAbilityFace")
-		_expect(face != null and card.revealed and card.hand_mesh.get_surface_override_material(0) == card.mat and face.get_node("Ability").text.contains("Forward"),
-			"opponent Summon has its artwork material before its first flight frame")
+		_expect(not card.revealed and card.get_parent() == hand and not card.has_node("StackAbilityFace"),
+			"an opponent Summon being charged stays face down in their hand")
 		game.get_node("Assistant").on_charge_cancelled()
-		_expect(card.current_zone == Card.Zone.HAND and not card.has_node("StackAbilityFace")
-			and card.mat.get_shader_parameter("texture_albedo") == original, "mid-flight cancellation restores the printed hand face")
+		_expect(card.current_zone == Card.Zone.HAND and hand.cards.has(card) and not card.revealed
+			and card.mat.get_shader_parameter("texture_albedo") == original, "a cancelled opponent Summon is back in their hand, unseen")
 	var count_before := hand.cards.size()
 	if not hand.charge(card):
 		_expect(false, "opponent translation probe could start the cast")
 		return
-	_expect(hand.cards.size() == count_before - 1 and not hand.cards.has(card) and card.get_parent() == stack,
-		"the opponent hand loses exactly the flying card at launch")
+	var slot_in_hand: Vector3 = card.global_position
+	_expect(hand.cards.size() == count_before - 1 and not hand.cards.has(card),
+		"the opponent hand loses exactly the cast card")
 	for i in range(hand.cards.size()):
 		_expect(hand.cards[i].index == i, "remaining opponent card has its current fan index")
+	# THE COMMIT MAKES IT PUBLIC: it flies from where it sat in their hand to the stack (queued presentation).
+	stack._commit_summon_to_stack()
+	var waited: int = 0
+	while stack._opponent_summon_flight == null and waited < 60:
+		await get_tree().process_frame
+		waited += 1
 	var flight := stack._opponent_summon_flight
-	_expect(flight != null and stack._opponent_summon_flight_card == card,
-		"the live hand card owns the translation")
+	_expect(flight != null and stack._opponent_summon_flight_card == card and card.get_parent() == stack,
+		"at commit the card leaves the hand and owns the flight to the stack")
 	if flight == null:
 		return
 	flight.pause()
+	var face = card.get_node_or_null("StackAbilityFace")
+	_expect(face != null and card.revealed and card.hand_mesh.get_surface_override_material(0) == card.mat and face.get_node("Ability").text.contains("Forward"),
+		"opponent Summon has its artwork material before its first flight frame")
 	var launch := card.global_transform
 	var path := stack.opponent_flight_path
-	_expect(launch.origin.z < hand.global_position.z, "the launch clears the opponent hand toward the board")
+	_expect(launch.origin.distance_to(slot_in_hand) < 0.05, "the flight launches from where the card sat in the opponent's hand")
 	flight.custom_step(13.0 / 60.0)
 	var launch_local := stack.global_basis.orthonormalized().inverse() * launch.basis.orthonormalized()
 	var neutral := Basis(Vector3.RIGHT, PI + deg_to_rad(stack.stack_pitch_degrees))
@@ -908,7 +930,6 @@ func _check_opponent_translation(game) -> void:
 	_expect(card.position.distance_to(stack.calculate_card_position(card.index)) < 0.001,
 		"translation ends at the real stack slot")
 
-	stack._commit_summon_to_stack()
 	stack.cancel_stack_card(card)
 	_expect(card.current_zone == Card.Zone.GRAVEYARD and card.mat.get_shader_parameter("texture_albedo") == original,
 		"leaving the stack restores the printed Break Zone face")

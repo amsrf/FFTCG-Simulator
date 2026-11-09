@@ -86,18 +86,14 @@ func _cast() -> void:
 	var card: Card = opponent_hand.cards[opponent_hand.cards.size() / 2]
 	_casting = true
 	if opponent_hand.charge(card):
-		# Move the parked card into the persistent preview fan. The normal flight
-		# owns the transform and reveals the card on landing if it is in Stack.cards.
-		stack.summon_casting_card = null
-		stack.summon_mana_deferred_until_target_confirm = false
-		opponent_hand.finish_summon_cast(card)
-		stack.cards.append(card)
-		# Reserve the new top slot immediately so the existing fan moves down as the card flies.
-		stack.update_card_positions()
+		# Charged, it waits face down in the hand; COMMITTING puts it on the stack and starts the flight (queued), which
+		# owns the transform and reveals the card as it launches.
+		stack._commit_summon_to_stack()
+		while stack._opponent_summon_flight == null and stack._opponent_summon_flight_card == card:
+			await get_tree().process_frame
 		var flight := stack._opponent_summon_flight
 		if flight != null:
 			await flight.finished
-		stack.reveal_parked(card)
 		stack.update_card_positions()
 	_casting = false
 	_update_hud()

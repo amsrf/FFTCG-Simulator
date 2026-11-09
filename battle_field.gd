@@ -1231,8 +1231,6 @@ func _begin_target_block(index: int) -> void:
 		taken.set_valid_target(false, false)
 		if local_chooser:
 			taken.set_selected_highlight(true)
-		else:
-			taken.set_targeted_highlight(true)
 	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
 	var owner_id: int = 1 if source_card != null and source_card.controller == Card.PLAYER else 2
 	var agent: Agent = game.agent_for(owner_id)
@@ -1252,9 +1250,28 @@ func _begin_target_block(index: int) -> void:
 func _spawn_aiming_arrow(from: Card) -> void:
 	var fresh = ballistic_arrow_scene.instantiate()
 	arrow = fresh
-	add_child(fresh)
+	# THE OPPONENT'S CHOICE IS PRIVATE until it is on the stack: their session keeps its arcs (the bookkeeping below
+	# relies on one arc per pick) but under a hidden parent, so nothing of where they aim is drawn here.
+	if _session_is_local():
+		add_child(fresh)
+	else:
+		_hidden_arrow_parent().add_child(fresh)
 	fresh.set_is_aiming_from_card(true, from)
 	targeting_arrows.append(fresh)
+
+## The open targeting session is the LOCAL player's (only then is any of it drawn).
+func _session_is_local() -> bool:
+	return source_card == null or not is_instance_valid(source_card) or source_card.controller == Card.PLAYER
+
+var _hidden_arrows: Node3D = null
+
+func _hidden_arrow_parent() -> Node3D:
+	if _hidden_arrows == null or not is_instance_valid(_hidden_arrows):
+		_hidden_arrows = Node3D.new()
+		_hidden_arrows.name = "HiddenTargetingArrows"
+		_hidden_arrows.visible = false
+		add_child(_hidden_arrows)
+	return _hidden_arrows
 
 ## Point the aiming arc at the pointer from `source_card`, spawning one when the picks have caught up with the arcs.
 ## The ONLY place `arrow` is assigned besides a spawn, so the invariant cannot drift out from under it.
@@ -1296,7 +1313,9 @@ func _drop_pick(at: int) -> void:
 	for taken in targeting_picked:
 		taken.set_valid_target(false, false)
 		# ...and the picks that are STILL picked keep their rings, for the same reason as in set_target_card(): the call
-		# above clears them all.
+		# above clears them all. (Only the local player's own picks are drawn.)
+		if not _session_is_local():
+			continue
 		if taken.controller == Card.OPPONENT:
 			taken.set_targeted_highlight(true)
 		else:
@@ -1336,10 +1355,9 @@ func set_target_card(card: Card):
 		previous_pick.set_selected_highlight(false)
 		previous_pick.set_targeted_highlight(false)
 	target_card = card
+	# The opponent's picks are not shown while they choose: only once the play is on the stack.
 	if local_chooser:
 		card.set_selected_highlight(true)
-	else:
-		card.set_targeted_highlight(true)
 	LOG.info("Targeting", str("target selected: ", card.card_name))
 	arrow.lock_arc(card.get_global_face_centre())
 	if replaces_single_pick:
@@ -1369,6 +1387,8 @@ func set_target_card(card: Card):
 		# AND GIVE EVERY PICKED CARD ITS RING BACK. The set_viable_targets() call just above clears the pick highlight on
 		# EVERY card — that is how a session is supposed to start — so using it to refresh the legal set after each pick
 		# wiped the ring off all the earlier picks and left only the newest one lit.
+		if not _session_is_local():
+			continue
 		if taken.controller == Card.OPPONENT:
 			taken.set_targeted_highlight(true)
 		else:
@@ -2076,25 +2096,38 @@ func forced_blocker_for(attacker: Card) -> Card:
 ## exactly what "arrows in random places" was. The Field's frame is identity, as it is for the
 ## other two arrows, so global points are correct here.
 var review_arrow: BallisticArrow = null
+## One link per target of the card being reviewed ("choose up to 3" draws three). review_arrow is the first.
+var _review_arrows: Array = []
 
 func show_review_link(source: Card, target: Card) -> void:
-	if source == null or target == null:
+	show_review_links(source, [target])
+
+func show_review_links(source: Card, targets: Array) -> void:
+	var live: Array = targets.filter(func(t): return t != null and is_instance_valid(t))
+	if source == null or not is_instance_valid(source) or live.is_empty():
 		hide_review_link()
 		return
-	if not is_instance_valid(source) or not is_instance_valid(target):
-		hide_review_link()
-		return
-	if review_arrow == null or not is_instance_valid(review_arrow):
-		review_arrow = ballistic_arrow_scene.instantiate()
-		add_child(review_arrow)
-	# Same convention as the live targeting arrow — from the source's top edge to the target's
-	# centre — so a link being reviewed looks exactly like the one that was drawn.
-	review_arrow.set_is_aiming(true, source.get_global_top_centre())
-	review_arrow.lock_arc(target.get_global_face_centre())
+	_review_arrows = _review_arrows.filter(func(a): return a != null and is_instance_valid(a))
+	while _review_arrows.size() < live.size():
+		var fresh: BallisticArrow = ballistic_arrow_scene.instantiate()
+		add_child(fresh)
+		_review_arrows.append(fresh)
+	for i in range(_review_arrows.size()):
+		var link: BallisticArrow = _review_arrows[i]
+		if i >= live.size():
+			link.set_is_aiming(false)
+			continue
+		# Same convention as the live targeting arrow — from the source's TOP EDGE to the target's centre — so a link
+		# being reviewed looks exactly like the one that was drawn. It FOLLOWS the source, which may still be settling
+		# into its stack slot.
+		link.set_is_aiming_from_card(true, source)
+		link.lock_arc(live[i].get_global_face_centre())
+	review_arrow = _review_arrows[0]
 
 func hide_review_link() -> void:
-	if review_arrow != null and is_instance_valid(review_arrow):
-		review_arrow.set_is_aiming(false)
+	for link in _review_arrows:
+		if link != null and is_instance_valid(link):
+			link.set_is_aiming(false)
 
 ## The link from the blocker to the attacker, drawn CENTRE to CENTRE.
 ##

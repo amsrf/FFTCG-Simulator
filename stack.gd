@@ -181,16 +181,22 @@ func refresh_target_display() -> void:
 			or mode == GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
 		return
 	var card: Card = displayed_card()
-	var target: Card = card.effect_target if card != null else null
 	if field == null:
 		return
-	if target == null or not is_instance_valid(target):
+	# A card still FLYING IN shows nothing yet: its arrows appear once it has arrived on the stack.
+	if card == null or card == _local_summon_presentation or card == _opponent_summon_flight_card:
+		_clear_target_display()
+		return
+	var targets: Array = card.effect_targets.duplicate()
+	if targets.is_empty() and card.effect_target != null:
+		targets = [card.effect_target]
+	if targets.is_empty():
 		_clear_target_display()
 		return
 	# The FIELD draws it, not the stack: BallisticArrow's points are LOCAL, and the stack node is
 	# flipped and lifted, so an arrow parented here and given global points lands wherever that
-	# transform carries it ("arrows in random places").
-	field.show_review_link(card, target)
+	# transform carries it ("arrows in random places"). One arrow per target.
+	field.show_review_links(card, targets)
 	# NOTE: the link draws the ARROW ONLY — it deliberately does NOT paint the target's aura.
 	# The aura already has an owner (the live pick, and the reveal that holds until the stack
 	# resolves). An earlier version painted it here too, and because "clear only what I lit" is
@@ -469,9 +475,6 @@ func _owner_hand(card: Card) -> Hand:
 func _commit_summon_to_stack() -> void:
 	if summon_casting_card == null:
 		return
-	# If an opponent flight is still in the air, do NOT snap it now: the rules commit at once,
-	# but the visual is allowed to finish and settle into the stack when the tween completes.
-	var flighting: bool = _opponent_summon_flight != null and _opponent_summon_flight_card == summon_casting_card
 	var card: Card = summon_casting_card
 	var owner_hand: Hand = _owner_hand(card)
 	var local_preview := card.controller == Card.PLAYER and card.get_parent() == owner_hand
@@ -481,10 +484,6 @@ func _commit_summon_to_stack() -> void:
 	# tap backup mana), then put the summon on the stack.
 	field.apply_deferred_skill_mana_payment()
 	owner_hand.apply_deferred_skill_mana_payment()
-	# Opponent flights install the face at launch. A stationary parked card is
-	# revealed when its cast commits.
-	if not flighting:
-		reveal_parked(card)
 	summon_mana_deferred_until_target_confirm = false
 	summon_casting_card = null
 	card.key_word_effect = "when_cast"
@@ -494,9 +493,23 @@ func _commit_summon_to_stack() -> void:
 	# the stack list and resolves as a normal stack object.
 	cards.append(card)
 	card.index = cards.size() - 1
+	card.set_cast_pending_highlight(false)
 	if local_preview:
+		reveal_parked(card)
 		_queue_local_summon(card)
-	elif not flighting:
+	elif card.get_parent() is Hand:
+		# THE OPPONENT'S SUMMON IS PUBLIC NOW: it leaves their hand, turns face up and flies to the stack (queued, so it
+		# follows whatever is still playing). Until it lands it is the flight card, which the layout leaves alone and
+		# which shows no target arrow.
+		var start: Transform3D = card.global_transform
+		_opponent_summon_flight_card = card   # BEFORE park_card(), whose layout pass would otherwise slide it in now
+		park_card(card)
+		card.global_transform = start
+		Vfx.present(func() -> void:
+			if is_instance_valid(card) and cards.has(card):
+				await _fly_opponent_summon(card, card.global_transform))
+	else:
+		reveal_parked(card)
 		update_card_positions()
 	# Casting a Summon is a priority action: it is on the stack now, so priority
 	# moves to the opponent. (Emitting in the Agent's case is harmless — no one
@@ -735,17 +748,11 @@ func _on_hand_charge_start(card: Card) -> void:
 		# Paid for (and targeted) before it legally enters the stack.
 		summon_casting_card = card
 		summon_mana_deferred_until_target_confirm = true
-		# OPPONENT SUMMONS GET A DEDICATED FLIGHT. Hand.charge() has already staged the cast
-		# card at the middle of the face-down fan, so this transform is already the hand
-		# middle — and the card is visibly leaving the hand rather than appearing there.
-		var opponent_cast: bool = card.controller == Card.OPPONENT
-		var start: Transform3D = card.global_transform
-		if opponent_cast:
-			park_card(card)
-			_fly_opponent_summon(card, start)
-		else:
-			card.stop_hand_layout()
-			card.set_cast_pending_highlight(true)
+		# IT WAITS IN ITS HAND while it is paid for and targeted, for both players: yours in the cast stance, the
+		# opponent's face down where it sits. Nothing of it is public until it COMMITS: then the opponent's flies to the
+		# stack face up (_commit_summon_to_stack), and the stack shows where it points.
+		card.stop_hand_layout()
+		card.set_cast_pending_highlight(true)
 	else:
 		# THE CHARACTER IS NOT A STACK CARD, for either player. It stays parented to its hand through payment (yours in
 		# the latched cast stance, the opponent's where it sits in their face-down hand); the Stack only holds the
@@ -821,7 +828,17 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 	if is_instance_valid(card) and card.get_parent() == self and layout_cards().has(card):
 		if cards.has(card):
 			reveal_parked(card)
+			reveal_targets(card)
 		update_card_positions()
+
+## THE OPPONENT'S CHOICE BECOMES VISIBLE once their play is on the stack: every card it targets gets the red ring, and
+## keeps it until the stack has resolved (Field.clear_targeted_highlights). The arrows come from the stack display.
+func reveal_targets(card: Card) -> void:
+	if card == null or not is_instance_valid(card) or card.controller == Card.PLAYER:
+		return
+	for target in card.effect_targets:
+		if target != null and is_instance_valid(target):
+			target.set_targeted_highlight(true)
 
 ## LOCAL SUMMON, RULES half (at commit): the cast moves to a separate stack card that keeps its picks; the printed
 ## card only fades. The swap happens NOW, so the stack's contents never change in the middle of an animation.
@@ -1007,9 +1024,8 @@ func _on_assistant_charge_cancelled() -> void:
 		_clear_skill_proxy()
 		return
 	if summon_casting_card != null:
-		# It goes back to its owner's hand, so it must be face-up again.
-		_stop_opponent_summon_flight()
-		reveal_parked(summon_casting_card)
+		# Back to its owner's hand. It never left it, and the opponent's was never shown, so nothing is revealed.
+		summon_casting_card.set_cast_pending_highlight(false)
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
 		return
@@ -1260,13 +1276,11 @@ func _on_assistant_target_cancel() -> void:
 		_clear_skill_proxy()
 	elif summon_casting_card != null:
 		# Payment was deferred and is now refunded: nothing is discarded or
-		# tapped, and the summon returns to hand without entering the stack.
-		_stop_opponent_summon_flight()
+		# tapped, and the summon stays in its hand without entering the stack.
 		var cancelled: Card = summon_casting_card
 		summon_casting_card = null
 		summon_mana_deferred_until_target_confirm = false
-		# It is going back to its owner's hand, so reveal it again.
-		reveal_parked(cancelled)
+		cancelled.set_cast_pending_highlight(false)
 		_owner_hand(cancelled).cancel_summon_cast()
 
 ## CARD INPUT. Card forwards a click and a hover to whichever zone it sits in; these are the Stack's.

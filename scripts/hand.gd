@@ -1083,12 +1083,7 @@ func charge(card) -> bool:
 			return false
 		# Put the opponent's cast at the middle of their face-down fan BEFORE it leaves,
 		# so the animation starts from a card already visible in the hand.
-		if card.controller == Card.OPPONENT:
-			stage_cast_card_at_middle(card)
-			card.global_position += stack.opponent_launch_offset(self)
 		remove_card(card)
-		if card.controller == Card.OPPONENT:
-			update_card_positions()
 		charging_card = card
 		charge_start.emit(card)
 		return true
