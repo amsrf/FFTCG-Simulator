@@ -14,6 +14,8 @@ func _ready() -> void:
 		var card: Card = game.create_card(spec[0], spec[1])
 		game.add_child(card)
 		game.field.play_card(card, spec[1] == "opponent", false, false)
+	for id in [4, 12, 64]:
+		game.hand_for(1).add_card(game.create_card(id, "player"))
 	await get_tree().create_timer(1.0).timeout
 	await RenderingServer.frame_post_draw
 	var shot: Image = get_viewport().get_texture().get_image()

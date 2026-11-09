@@ -107,6 +107,8 @@ void fragment() { discard; }
 			# still reads as a full rectangle before the build has produced anything.
 			for surface in [1, 2]:
 				mesh.set_surface_override_material(surface, _hidden_material if hidden else null)
+	if _card.has_method("refresh_cost_badge"):
+		_card.refresh_cost_badge()
 	var power_label = _card.power_label
 	if hidden:
 		_power_was_visible = power_label != null and power_label.visible

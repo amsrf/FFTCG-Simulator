@@ -196,6 +196,18 @@ func _ready():
 
 ## Card thickness (a shared rounded-prism side wall). See card_edge.gd.
 const CARD_EDGE := preload("res://scripts/card_edge.gd")
+## The printed cost crystal, enlarged over the original. See card_cost_badge.gd.
+const CARD_COST_BADGE := preload("res://scripts/card_cost_badge.gd")
+var cost_badge: MeshInstance3D = null
+
+## Show the cost badge only where the printed face is what is on screen: face up, on the field or in the hand, and not
+## while the card is dissolving in or out.
+func refresh_cost_badge() -> void:
+	if cost_badge == null or not is_instance_valid(cost_badge):
+		return
+	var dissolving: bool = teleport != null and bool(teleport.chrome_hidden)
+	cost_badge.visible = revealed and _stack_face == null and not dissolving \
+		and (current_zone == Zone.FIELD or current_zone == Zone.HAND)
 
 func initialize(card_id: int, card_controller: String):
 	id = card_id
@@ -246,6 +258,7 @@ func set_revealed(is_revealed: bool) -> void:
 	var surface_material: Material = (mat as Material) if is_revealed else (_get_card_back_material() as Material)
 	$HandMesh.set_surface_override_material(0, surface_material)
 	$FieldMesh.set_surface_override_material(0, surface_material)
+	refresh_cost_badge()
 
 ## Per-caster full silhouette data used by both hand and stack contact shadows.
 func set_overlap_shadow(slot: int, world_to_caster: Transform3D, face: Vector2,
@@ -298,6 +311,7 @@ func assign_card_texture():
 	mat = ShaderMaterial.new()
 	mat.shader = shader
 	_printed_texture = full_texture
+	cost_badge = CARD_COST_BADGE.install(self, full_texture, _card_face_size())
 	mat.set_shader_parameter("texture_albedo", full_texture)
 	mat.set_shader_parameter("effect_enabled", false)
 	mat.set_shader_parameter("shadow_strength", 0.0)
@@ -646,6 +660,7 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	else:
 		hide_power_display()
 	refresh_status_visuals()
+	refresh_cost_badge()
 		
 @export var tap_speed: float = 0.3
 @export var tap_angle: float = -15.0
