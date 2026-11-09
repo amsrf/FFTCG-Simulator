@@ -2,6 +2,25 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-09
+### Changed
+- River animation now fades to stationary darker water along the visible wooden banks and widening pools; `board_environment.gd` sets the correct river centre for each seat view.
+- Made `board_river.gdshader` flow more visible: speed 0.18, longer brighter advected streaks, and larger irregular foam patches concentrated in the side pools. Added independent streak/foam strength controls.
+### Added
+- Added a broken basalt outcrop, moss-covered gateway remains, larger volcanic masses and substantial river entrance banks through `Blender/build_board_landmarks.py`. Exported both seat views to `assets/board`; the river shader adds localized downstream wakes at the entrance stones. Previews include approximate card layout; full damage-zone/UI clearance remains to be checked in-game.
+- `shaders/board_river.gdshader` adds two moving ripple layers and sparse foam to independent river meshes for both seat views. `board_environment.gd` keeps the baked bank shading and reverses the shader direction for seat two. `Blender/export_board_to_godot.py` now separates water from static scenery; `--geometry-only` avoids an unnecessary seat-two rerender. The flow probe checks river loading and seat directions.
+### Fixed
+- `Game.start_match()` configures `board_environment.gd` with `local_seat`. Seat one sees the rocky side nearby; seat two sees the forest side nearby. The alternate geometry and baked appearance preserve local card/deck recess positions. Added flow-probe assertions for seat selection and switching.
+
+## [Unreleased] — 2026-11-08
+### Added
+- Integrated the approved wooden board, river, forest and volcanic scenery through `board.tscn` / `scripts/board_environment.gd`. `Blender/export_board_to_godot.py` exports actual geometry and fixed-camera baked appearance to `assets/board/` without requiring an editor import. The existing Board node paths are preserved.
+### Changed
+- Hid the placeholder purple surface in `battle_field.tscn`; camera and gameplay zone transforms are unchanged. `tests/flow_probe.gd` checks scenery loading and placeholder visibility.
+### Known Issues
+- Board appearance includes baked lighting projected for the current gameplay camera. Water is static; damage-zone crossings and alternate camera views need further art work.
+- Integration runtime verification is pending: the allowed headless flow invocation returned without a `RESULT:` line on two attempts; no further attempts were made.
+
 ## [Unreleased] — 2026-11-07
 ### Added
 - Added `tools/ice_material_demo.tscn` to the demo browser: actual Godot Compatibility material preview with local blue/frost/roughness/fill/light controls, studio reflection toggle, rotation and comparison with current game values. Captured and inspected `references/ice_material_godot.png` using the rendering screenshot harness; production settings remain unchanged.

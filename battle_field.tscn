@@ -15,6 +15,7 @@ script = ExtResource("1_jgmvv")
 use_tiles_on_field = false
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1049472491]
+visible = false
 mesh = SubResource("PlaneMesh_ryrav")
 
 [node name="FrontrowCard" parent="." unique_id=301689495 instance=ExtResource("2_brqjc")]
