@@ -783,6 +783,11 @@ var match_over: bool = false
 ## The match's ONE random generator. Seeded from config["seed"] in start_match(), so a seeded match replays
 ## exactly — nothing that affects the rules may use Godot's global RNG.
 var rng := RandomNumberGenerator.new()
+## The other player's last move was a PASS: passing now would be the second pass in a row, which resolves the top of
+## the stack or, with the stack empty, ends the phase (rule 11.1.7). Set before each priority question; the pass button
+## reads it to say what passing does.
+var other_player_passed: bool = false
+
 ## Who holds priority (1 = this machine's player). The pass button follows it: only the holder has one.
 var priority_holder: int = 0:
 	set(value):
@@ -839,6 +844,7 @@ func start_match(config: Dictionary) -> void:
 		desync_detected.connect(_halt_out_of_sync)
 	# ONLINE PERSPECTIVE: which seat this machine is. Must be set before any card is created (uids use it).
 	local_seat = int(config.get("local_seat", 1))
+	$Board/MeshInstance3D.configure_seat(local_seat)
 	# Who goes first, in THIS machine's terms (1 = the local player).
 	turn_owner = int(config.get("starting_player", 1))
 	var match_seed: int = int(config.get("seed", 0))
@@ -2051,13 +2057,16 @@ func priority_round_only() -> void:
 	var holder: int = turn_owner
 	var passed_since_action: bool = false
 	while true:
+		other_player_passed = passed_since_action
 		priority_holder = holder
 		var acted: bool = await agent_for(holder).take_priority(holder)
 		if match_over:
 			break   # a win, or the machines fell out of sync: nobody acts any more
 		if acted:
+			# Rules 11.3.8 / 11.6.11 / 11.7.11: the player who acted GAINS PRIORITY AGAIN (a Summon cast, an ability
+			# used). Priority only moves on a pass (11.1.6); two passes in a row resolve the top of the stack or end the
+			# phase (11.1.7); after a resolution the turn player gains priority (11.1.5).
 			passed_since_action = false
-			holder = 3 - holder
 			continue
 		if not passed_since_action:
 			passed_since_action = true
@@ -2295,6 +2304,7 @@ func priority() -> void:
 	var holder: int = turn_owner
 	var passed_since_action: bool = false
 	while true:
+		other_player_passed = passed_since_action
 		priority_holder = holder
 		# WHO IS BEING ASKED, and in what state. With the two lines at the top of this function and the mode log, a stall can
 		# be read off the console: the last "asking" line names the player the game is waiting on, and if it is never followed
@@ -2305,8 +2315,10 @@ func priority() -> void:
 		if match_over:
 			break   # a win, or the machines fell out of sync: nobody acts any more
 		if acted:
+			# Rules 11.3.8 / 11.6.11 / 11.7.11: the player who acted GAINS PRIORITY AGAIN (a Summon cast, an ability
+			# used). Priority only moves on a pass (11.1.6); two passes in a row resolve the top of the stack or end the
+			# phase (11.1.7); after a resolution the turn player gains priority (11.1.5).
 			passed_since_action = false
-			holder = 3 - holder
 			continue
 		if not passed_since_action:
 			# First pass of this round: the other player gets their chance.

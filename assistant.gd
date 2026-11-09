@@ -229,9 +229,9 @@ func show_pass_priority_button():
 	if modal_mode:
 		passPhaseButton.hide_button()
 	else:
-		# THE LABEL SAYS WHAT PRESSING IT WILL DO. "Next Phase" on YOUR turn with an EMPTY stack: you are done, and the
-		# phase moves on once the opponent passes too. Everywhere else it is "Pass": something is waiting on the stack,
-		# or it is the opponent's turn and you are only declining to respond.
+		# THE LABEL SAYS WHAT PRESSING IT WILL DO (rule 11.1.7). "Next Phase" when your pass ENDS the phase: the opponent
+		# has just passed and the stack is empty. Everywhere else it is "Pass": priority goes to the opponent, or (after
+		# their pass) the top of the stack resolves.
 		#
 		# SKIPPED IN THE ATTACK STEPS: the same button is the Attack / No Attack declaration there, and
 		# set_declare_attack_button() owns its text. Overwriting it would relabel the attack declaration as a phase pass.
@@ -240,8 +240,8 @@ func show_pass_priority_button():
 				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
 			var stack_now = get_parent().get("stack")
 			var waiting: int = stack_now.stack_length() if stack_now != null else 0
-			var my_turn: bool = int(get_parent().get("turn_owner")) == 1
-			passPhaseButton.set_text("Next Phase" if my_turn and waiting == 0 else "Pass")
+			var ends_phase: bool = bool(get_parent().get("other_player_passed")) and waiting == 0
+			passPhaseButton.set_text("Next Phase" if ends_phase else "Pass")
 		passPhaseButton.show_button()
 
 func _pass_priority():

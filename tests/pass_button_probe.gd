@@ -1,7 +1,7 @@
 extends Node
-## THE PASS BUTTON: only the player holding priority has one, and its label says what passing does.
-## - "Next Phase": your turn, empty stack (you are done; the phase moves on once the opponent passes too).
-## - "Pass": something on the stack, or the opponent's turn.
+## THE PASS BUTTON: only the player holding priority has one, and its label says what passing does (rule 11.1.7).
+## - "Next Phase": the opponent has just passed and the stack is empty, so this pass ends the phase.
+## - "Pass": otherwise (priority goes to the opponent, or the top of the stack resolves).
 
 const GAME_SCENE := preload("res://game.tscn")
 
@@ -29,10 +29,13 @@ func _ready() -> void:
 	GlobalVariables.refresh_mode()
 
 	game.turn_owner = 1
+	game.other_player_passed = false
 	game.priority_holder = 1
-	assistant.show_pass_priority_button()
-	print("[PassButton] my turn, empty stack: visible=%s text=%s" % [button.visible, _label(button)])
-	_expect(button.visible and _label(button) == "Next Phase", "my turn, empty stack, my priority: Next Phase")
+	print("[PassButton] first pass of the phase: visible=%s text=%s" % [button.visible, _label(button)])
+	_expect(button.visible and _label(button) == "Pass", "my priority, nobody has passed yet: Pass (it goes to the opponent)")
+	game.other_player_passed = true
+	game.priority_holder = 1
+	_expect(button.visible and _label(button) == "Next Phase", "the opponent just passed, empty stack: Next Phase")
 
 	game.priority_holder = 2
 	_expect(not button.visible, "the moment the opponent holds priority, I have no button")
@@ -45,13 +48,14 @@ func _ready() -> void:
 	stack.cards.append(effect)
 	game.priority_holder = 1
 	print("[PassButton] stack waiting: visible=%s text=%s" % [button.visible, _label(button)])
-	_expect(button.visible and _label(button) == "Pass", "something on the stack: Pass")
+	_expect(button.visible and _label(button) == "Pass", "the opponent passed but something is on the stack: Pass (it resolves)")
 	stack.cards.erase(effect)
 	effect.queue_free()
 
 	game.turn_owner = 2
+	game.other_player_passed = false
 	game.priority_holder = 1
-	_expect(button.visible and _label(button) == "Pass", "the opponent's turn, empty stack: Pass (got %s)" % _label(button))
+	_expect(button.visible and _label(button) == "Pass", "the opponent's turn, they acted: Pass (got %s)" % _label(button))
 
 	game.match_over = true
 	game.priority_holder = 1
