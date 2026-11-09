@@ -1311,6 +1311,9 @@ func set_targeted_highlight(enabled: bool) -> void:
 
 ## "You could activate this card's effect right now" (see Field.can_activate_now).
 func set_available_highlight(enabled: bool) -> void:
+	# A card already being cast shows the gold aura, not "you could play this".
+	if _cast_pending_highlight_on:
+		enabled = false
 	if enabled == _available_highlight_on:
 		return
 	_available_highlight_on = enabled
@@ -1325,6 +1328,10 @@ func set_cast_pending_highlight(enabled: bool) -> void:
 	if enabled == _cast_pending_highlight_on:
 		return
 	_cast_pending_highlight_on = enabled
+	# BEING CAST REPLACES "PLAYABLE". The charging card has left the hand's list, so the ring refresh would never turn
+	# its blue off by itself.
+	if enabled:
+		_available_highlight_on = false
 	_refresh_target_ring()
 
 ## "You picked this card to pay a special ability's S cost" — pink, so it can never be confused with the orange

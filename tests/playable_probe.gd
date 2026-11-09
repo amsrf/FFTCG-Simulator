@@ -68,6 +68,17 @@ func _ready() -> void:
 		field.refresh_available_effects()
 		_expect(ifrit._available_highlight_on, "and the castable hand card gets the ring")
 		_expect(field.local_has_any_play(), "so there is something to do: no auto-pass")
+		# CHARGING IT: the blue ring gives way to the gold "being cast" aura, and stays gone while it is paid for.
+		if hand.charge(ifrit):
+			await get_tree().process_frame
+			field.refresh_available_effects()
+			_expect(ifrit._cast_pending_highlight_on and not ifrit._available_highlight_on,
+				"the card being charged shows the gold aura, not the blue ring")
+			_game.get("assistant").on_charge_cancelled()
+			await get_tree().process_frame
+			field.refresh_available_effects()
+			_expect(not ifrit._cast_pending_highlight_on and ifrit._available_highlight_on,
+				"cancelled, it is back in hand with the blue ring")
 	mage_on_field.tap()
 	field.refresh_available_effects()
 	_expect(not field.can_cast_from_hand(ifrit) and not ifrit._available_highlight_on,
