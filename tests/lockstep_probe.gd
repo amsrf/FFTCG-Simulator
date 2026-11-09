@@ -22,6 +22,8 @@ var HUMAN := false
 var _human_casts := 0
 var _human_cancels := 0
 var _human_activations := 0
+## Casts whose message was already sent BEFORE the human passed (the other player sees a cast at once).
+var _sent_before_pass := 0
 var _human_activation_cancels := 0
 var _checks := 0
 var _fails := 0
@@ -124,9 +126,12 @@ func _drive_human(game: Node, holder: Array) -> void:
 				for _i in range(2):
 					if _driver_stop or not is_instance_valid(game) or rec.pending_kind != "take_priority":
 						break
+					var sent_before: int = rec.sent.size()
 					if await _human_cast(game, false) != "cast":
 						break
 					_human_casts += 1
+					if rec.sent.size() > sent_before:
+						_sent_before_pass += 1
 					await get_tree().create_timer(0.2).timeout
 				if not _driver_stop and is_instance_valid(game) and rec.pending_kind == "take_priority":
 					assistant.pressed_pass_priority.emit()
@@ -282,26 +287,32 @@ func _ready() -> void:
 	var a: Dictionary = await _play(cfg_a, "machine A (seat 1, recording)")
 	_human_driver_pending = null
 	var messages: Array = recorder[0].sent if recorder[0] != null else []
+	# Each PLAY is its own message, sent the moment it commits; a window's end is a separate "take_priority".
 	var plays := 0
+	var acts := 0
+	var multi := 0
+	var in_a_row := 0
 	for m in messages:
-		if m.contains("\"take_priority\""):
-			plays += m.count("\"card\"")
-	print("[Lockstep] seat 1 sent %d messages (%d priority windows with a play)" % [messages.size(), plays])
+		if m.contains("\"kind\":\"play\""):
+			plays += 1
+			in_a_row += 1
+			if m.contains("\"ability\":true"):
+				acts += 1
+			if in_a_row == 2:
+				multi += 1
+		elif m.contains("\"kind\":\"take_priority\""):
+			in_a_row = 0
+	print("[Lockstep] seat 1 sent %d messages (%d plays)" % [messages.size(), plays])
 	if HUMAN:
 		print("[Lockstep] scripted human: %d casts, %d cancelled drafts, %d abilities, %d cancelled abilities" % [
 			_human_casts, _human_cancels, _human_activations, _human_activation_cancels])
 		_expect(_human_casts > 0 and _human_cancels > 0, "the human both cast and cancelled (%d / %d)" % [_human_casts, _human_cancels])
 		_expect(_human_activations > 0 and _human_activation_cancels > 0,
 			"the human both activated and cancelled abilities (%d / %d)" % [_human_activations, _human_activation_cancels])
-		var acts := 0
-		for m in messages:
-			acts += m.count("\"activate\"")
 		_expect(acts == _human_activations, "only committed abilities were sent (%d sent, %d activated)" % [acts, _human_activations])
-		var multi := 0
-		for m in messages:
-			if m.contains("\"take_priority\"") and m.count("\"card\"") >= 2:
-				multi += 1
-		_expect(multi > 0, "a Character cast kept priority: one window carried two plays (%d such windows)" % multi)
+		_expect(multi > 0, "a Character cast kept priority: two plays in one window (%d times)" % multi)
+		_expect(_sent_before_pass == _human_casts, "every cast was sent the moment it committed, before the pass (%d / %d)" % [
+			_sent_before_pass, _human_casts])
 		_expect(plays == _human_casts + _human_activations, "only committed plays were sent (%d sent, %d cast + %d activated)" % [
 			plays, _human_casts, _human_activations])
 	_expect(messages.size() > 5, "seat 1 sent decisions to replay (%d)" % messages.size())

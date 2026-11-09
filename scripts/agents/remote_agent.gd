@@ -3,8 +3,9 @@ extends "res://scripts/agents/agent.gd"
 ## RecordingAgent sent, in order. Each message must be the kind of decision this game is asking for; anything else
 ## means the two games have diverged, and it is reported as such (desync_detected on the Game) instead of guessed at.
 ##
-## A priority window replays each play attempt through Game.play_card_for(), answering the payment and the targets
-## asked during it from that attempt's own recorded decisions.
+## A priority window replays each PLAY as it arrives (Game.play_card_for(), or the ability activation), answering the
+## payment and the targets asked during it from that play's own recorded decisions, until the message that ends the
+## window ("take_priority": passed, or acted on the stack).
 const CODEC := preload("res://scripts/agents/lockstep_codec.gd")
 
 signal message_arrived
@@ -51,19 +52,60 @@ func _result(kind: String) -> Variant:
 
 func take_priority(player_id: int) -> bool:
 	await _settle()
-	var message: Dictionary = await _next("take_priority")
-	for attempt in message.get("plays", []):
-		_replay = attempt.get("nested", []).duplicate()
-		var card = CODEC.decode(attempt.get("card"), game)
-		if card is Card and str(attempt.get("kind", "")) == "activate":
-			await _replay_activation(card, int(attempt.get("skill", -1)))
+	while true:
+		var message: Dictionary = await _next_window_message()
+		if message.is_empty():
+			return false
+		if str(message.get("kind", "")) == "take_priority":
+			return bool(message.get("result", false))
+		_replay = message.get("nested", []).duplicate()
+		var card = CODEC.decode(message.get("card"), game)
+		if card is Card and bool(message.get("ability", false)):
+			await _replay_activation(card, int(message.get("skill", -1)))
 		elif card is Card:
 			await game.play_card_for(player_id, card)
+		# A question the play started can be asked a little AFTER the play call returns: a Summon's target is chosen once
+		# the presentation has caught up. Give those questions their recorded answers before checking for leftovers.
+		var waited: float = 0.0
+		while not _replay.is_empty() and not diverged and waited < UNCLAIMED_LIMIT:
+			await game.get_tree().process_frame
+			waited += game.get_process_delta_time()
 		if not _replay.is_empty():
-			push_error("[Lockstep] %d recorded decision(s) were not asked for during a replayed play" % _replay.size())
+			push_error("[Lockstep] %d recorded decision(s) were not asked for during a replayed play of %s: %s" % [
+				_replay.size(), str(card.card_name if card is Card else card), str(_replay.map(func(e): return e.get("kind")))])
 			diverged = true
 		_replay = []
-	return bool(message.get("result", false))
+		# Let what the play set off (an enter-the-field trigger...) ask its own questions before the next play.
+		await _settle()
+	return false
+
+## Seconds a message may wait at the front of the inbox for the game to ask the question it answers.
+const UNCLAIMED_LIMIT := 30.0
+
+## The next PLAY or end of the window. Any other message at the front answers a question the game is about to ask
+## (an effect set off by the last play), so it is left for that question to take. If nothing claims it, the games
+## have diverged.
+func _next_window_message() -> Dictionary:
+	var waited: float = 0.0
+	while true:
+		if diverged or game == null:
+			return {}
+		if not _inbox.is_empty():
+			var front: Dictionary = CODEC.from_wire(_inbox[0])
+			var kind: String = str(front.get("kind", ""))
+			if kind == "play" or kind == "take_priority":
+				_inbox.pop_front()
+				return front
+			waited += game.get_process_delta_time()
+			if waited > UNCLAIMED_LIMIT:
+				diverged = true
+				push_error("[Lockstep] a '%s' decision arrived that this game never asked for" % kind)
+				game.desync_detected.emit(game.turn_number, "expected a play or a pass", kind)
+				return {}
+		else:
+			waited = 0.0
+		await game.get_tree().process_frame
+	return {}
 
 ## An ability activated from the field: the same activation, decided by this agent from the recorded answers. It
 ## returns once the activation has committed (or was abandoned), i.e. when the costs are no longer pending.

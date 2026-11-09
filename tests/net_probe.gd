@@ -15,6 +15,7 @@ var ROLE := "host"
 var _spawn_joiner := true
 var PORT := 7790
 var TURNS := 3
+var SEED := 0
 var _checks := 0
 var _fails := 0
 var _peer_done := false
@@ -35,6 +36,8 @@ func _ready() -> void:
 			PORT = int(a.get_slice("=", 1))
 		elif a.begins_with("--turns="):
 			TURNS = int(a.get_slice("=", 1))
+		elif a.begins_with("--seed="):
+			SEED = int(a.get_slice("=", 1))
 	PRESENTATION.fast_mode = true
 	var session: Node = NET_SESSION.new()
 	add_child(session)
@@ -48,6 +51,7 @@ func _ready() -> void:
 	var deck: Array = (board["player_hand"] + board["player_deck"]) if ROLE == "host" \
 		else (board["opponent_hand"] + board["opponent_deck"])
 	if ROLE == "host":
+		session.fixed_seed = SEED
 		session.start_fields = {"1": board["player_field"], "2": board["opponent_field"]}
 	var err: Error = session.host(PORT, deck) if ROLE == "host" else session.join("127.0.0.1", PORT, deck)
 	_expect(err == OK, "%s on port %d" % [ROLE, PORT])
@@ -78,7 +82,8 @@ func _ready() -> void:
 	var wait_start := Time.get_ticks_msec()
 	while not _peer_done and (Time.get_ticks_msec() - wait_start) < 60000:
 		await get_tree().create_timer(0.1).timeout
-	await get_tree().create_timer(0.3).timeout
+	# The host also lets the joiner it launched print its own result before this process ends.
+	await get_tree().create_timer(2.0 if _spawn_joiner else 0.3).timeout
 
 	print("[Net-%s] seat %d, reached turn %d, hashes %s" % [ROLE, session.local_seat, game.turn_number, str(game.turn_hashes)])
 	_expect(game.turn_number > TURNS, "played past turn %d (at %d)" % [TURNS, game.turn_number])

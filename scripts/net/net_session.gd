@@ -14,7 +14,7 @@ extends Node
 const RECORDING_AGENT := preload("res://scripts/agents/recording_agent.gd")
 const REMOTE_AGENT := preload("res://scripts/agents/remote_agent.gd")
 ## Bumped whenever the messages change, so two different builds refuse to play instead of desyncing.
-const PROTOCOL := 1
+const PROTOCOL := 2
 const DEFAULT_PORT := 7777
 
 signal status_changed(text: String)
@@ -33,6 +33,8 @@ var config_overrides: Dictionary = {}
 ## HOST ONLY, for tests: cards each seat starts with on the field, {"1": [{id, tapped}...], "2": [...]}. Sent in the
 ## setup, so both machines place the same board. A real match starts with an empty field.
 var start_fields: Dictionary = {}
+## HOST ONLY, for tests: use this seed instead of rolling one (0 = roll).
+var fixed_seed: int = 0
 
 var game: Node = null
 var remote: Agent = null
@@ -170,7 +172,7 @@ func _on_hello(message: Dictionary) -> void:
 	rng.randomize()
 	var setup := {
 		"t": "setup", "protocol": PROTOCOL,
-		"seed": rng.randi_range(1, 999999),
+		"seed": fixed_seed if fixed_seed != 0 else rng.randi_range(1, 999999),
 		"starting_seat": rng.randi_range(1, 2),
 		"decks": {"1": my_deck, "2": their_deck},
 		"fields": start_fields,
@@ -193,7 +195,8 @@ func _start(setup: Dictionary) -> void:
 		cfg[key] = config_overrides[key]
 	cfg["wrap_agent"] = _wrap_agent
 	cfg["on_match_started"] = _on_match_started
-	status("Match starting - you are seat %d, seat %d goes first." % [local_seat, int(setup.get("starting_seat", 1))])
+	status("Match starting - you are seat %d, seat %d goes first (seed %d)." % [local_seat, int(setup.get("starting_seat", 1)),
+		int(setup.get("seed", 0))])
 	match_ready.emit(cfg)
 
 # --- during the match -------------------------------------------------------

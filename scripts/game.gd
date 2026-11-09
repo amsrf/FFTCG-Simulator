@@ -954,13 +954,21 @@ func hand_for(player_id: int) -> Hand:
 ## clicking the payment modal; any other player pays through its agent.
 ## Returns whether the cost ended up paid.
 func play_card_for(player_id: int, card: Card) -> bool:
+	var agent: Agent = agent_for(player_id)
+	# Online play: a recording agent notes WHICH card this play attempt is about, and sends it once it is over (see
+	# RecordingAgent), so the other machine sees each play as it happens.
+	if agent != null and agent.has_method("note_play"):
+		agent.note_play(card)
+	var played: bool = await _play_card_for(player_id, card)
+	if agent != null and agent.has_method("note_play_done"):
+		agent.note_play_done()
+	return played
+
+func _play_card_for(player_id: int, card: Card) -> bool:
 	var owner_hand: Hand = hand_for(player_id)
 	var agent: Agent = agent_for(player_id)
 	if owner_hand == null or card == null or agent == null:
 		return false
-	# Online play: a recording agent notes WHICH card this play attempt is about (see RecordingAgent).
-	if agent.has_method("note_play"):
-		agent.note_play(card)
 	# charge() emits charge_start and removes the card from hand. A Summon is
 	# parked on the Stack; a Character stays in its hand-side cast stance.
 	# Assistant then opens the payment modal + sets mana_cost from the card. It
