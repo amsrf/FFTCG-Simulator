@@ -1,9 +1,9 @@
 extends Node
 ## B4b: board-wide event triggers.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const AI_AGENT := preload("res://scripts/agents/ai_agent.gd")
-const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 
 
 ## A passive seat that still answers targeting. MockAgent never plays cards, so the probe's board cannot be changed

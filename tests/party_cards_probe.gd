@@ -6,7 +6,7 @@ extends Node
 ## trigger asks for one, then drain the stack. The target step is done by hand because a LocalAgent would wait for a
 ## mouse click.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const MIME := 173           # water Forward: party attacks -> draw 1
 const KNIGHT := 165         # water Forward, no party trigger: a neutral partner

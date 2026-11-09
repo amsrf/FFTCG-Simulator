@@ -1,8 +1,8 @@
 extends Node
 
-const GAME_SCENE := preload("res://game.tscn")
-const SHARDS_SCENE := preload("res://card_shards.tscn")
-const CARD_SCENE := preload("res://card.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const SHARDS_SCENE := preload("res://scenes/cards/card_shards.tscn")
+const CARD_SCENE := preload("res://scenes/cards/card.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

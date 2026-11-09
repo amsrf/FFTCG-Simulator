@@ -1,7 +1,7 @@
 extends Node
 ## Batch 2: event-spec migration for 202, 523, 549, 583 and 719.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const AI := preload("res://scripts/agents/ai_agent.gd")
 
 var _checks: int = 0

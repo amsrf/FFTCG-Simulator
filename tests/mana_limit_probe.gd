@@ -2,7 +2,7 @@ extends Node
 ## Exact CP payment: once the cost is fulfilled, extra selections are ignored. The one legal overpay is a hand card
 ## producing 2 CP against a 1-CP gap (rule 11.2.2.2). This probe drives the two selection APIs directly.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

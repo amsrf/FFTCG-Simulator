@@ -5,7 +5,7 @@ extends Node
 ## The surcharge is baked into the cost dictionary before the payment window opens, so the crystal row, the payment
 ## check and the AI's affordability all read the same number.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const IFRIT := 4            # Summon, fire, cost 2 → base {火:1, neutral:1}
 const TERRA := 46

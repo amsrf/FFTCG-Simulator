@@ -553,12 +553,12 @@ card, and without it the card keeps its DECK zone/rotation.
 ## Element spellings live in scripts/elements.gd
 
 ELEMENT NAMES / CJK / ACCENT and `key_to_element()` are static data in `scripts/elements.gd`, preloaded by path
-(`const ELEMENTS := preload("res://scripts/elements.gd")`). The old ElementBadge scene and all its generated assets are
+(`const ELEMENTS := preload("res://scripts/core/elements.gd")`). The old ElementBadge scene and all its generated assets are
 gone — do not reintroduce a class_name for this table, because a class_name added since Godot last scanned is not in the
 headless cache.
 
 When deleting a script, delete its `.uid` and check `.tscn` ext_resources and instanced nodes too: `godot --headless
-res://game.tscn` will surface a dangling path immediately.
+res://scenes/game/game.tscn` will surface a dangling path immediately.
 
 ## "May" is an instruction flag, decided at resolution
 
@@ -789,7 +789,7 @@ It prints a `[ArrowProbe]` report with a `RESULT:` line, so pass/fail needs no i
 ```
 
 - Use the Godot **4.7.2** binary (nested inside a same-named folder under `~/Downloads`). `Godot_v4.4-stable_win64.exe` on the Desktop is the **wrong** version.
-- Success = 0 `SCRIPT ERROR` / `Compile Error` lines. Add `res://game.tscn` as a positional arg to boot straight into a match (uses the `debug` preset) and also expect `Entering: 2` (FIRST_MAIN_PHASE); the menu boot cannot reach it, since it waits for a button press.
+- Success = 0 `SCRIPT ERROR` / `Compile Error` lines. Add `res://scenes/game/game.tscn` as a positional arg to boot straight into a match (uses the `debug` preset) and also expect `Entering: 2` (FIRST_MAIN_PHASE); the menu boot cannot reach it, since it waits for a button press.
 - Anything about how it **looks** still has to be seen — the probe verifies geometry, wiring and invariants, not taste.
 - `--check-only --script <file>` is unreliable here: autoloads are absent, so it false-errors with `Identifier not found: CardDatabase / GlobalVariables`.
 
@@ -838,7 +838,7 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - Card ids are 1-based ints; `string_id` keys into `card_effects`.
 - Element codes are single chars: 火 氷 風 土 雷 水 光 闇 (+ `neutral`). UI text is English.
 - Only `controller == "player"` cards are interactive; guard opponent cards with `controller != "player"`.
-- **Asset paths must match the on-disk case exactly** (`res://card.tscn`, not `res://Card.tscn`). Windows loads it anyway but exports are case-sensitive — Godot warns with a `Case mismatch opening requested file` line authored to whichever script triggered the load.
+- **Asset paths must match the on-disk case exactly** (`res://scenes/cards/card.tscn`, not `res://Card.tscn`). Windows loads it anyway but exports are case-sensitive — Godot warns with a `Case mismatch opening requested file` line authored to whichever script triggered the load.
 - Keep the tree free of editor junk: Godot's atomic saves leave `<file><random>.tmp` next to the original (e.g. `game.tscn1234.tmp`). They are never read and just clutter the project scan.
 - Fail loudly: use `push_error()` on unknown executors/actions/missing targets rather than silent returns. The same goes for *outcomes*: if a precondition fails and the game silently does nothing, the player just sees a no-op or a hang — emit a signal so a listener can react instead (see Gotchas).
 
@@ -959,7 +959,7 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **`Control.scale` grows about `pivot_offset`.** The deck search fan pivots at the BOTTOM-centre, so a hovered card's base stays on the arc while the rest swells outward and up, which is what reads as coming toward the viewer. It also means the height budget must reserve that growth ABOVE the row, or the enlarged card leaves the box.
 - **Raise a child with `z_index`, never `move_to_front()`.** Reordering a container's children renumbers their indexes, and `_hovered_index` is expressed in exactly those indexes.
 - **The image tool is not dependable here — measure instead.** It hangs on the project's full-size reference PNGs and has returned a confidently wrong description of a file it did read. `tools/row_measure.gd <path>` prints a reference's panel seams and content columns, `tools/ref_shrink.gd <path> <width>` writes a small copy the tool can usually take, and `tools/search_shot.gd` screenshots the built window so the implementation itself can be looked at.
-- **A screen booting proves nothing about `game.gd`.** The menu never loads it, so a parse error there reports 0 errors on a menu boot and only surfaces when a probe boots `res://game.tscn`.
+- **A screen booting proves nothing about `game.gd`.** The menu never loads it, so a parse error there reports 0 errors on a menu boot and only surfaces when a probe boots `res://scenes/game/game.tscn`.
 - **`Tween.parallel()` binds to the tweener added just BEFORE it.** Inserting a second stage between a stage and its parallel turn silently moved the turn onto the wrong step, and the card rotated for the whole flight instead of three quarters of it. Add a `parallel()` tweener immediately after the one it should accompany.
 - **Never take a measurement from a downscaled reference.** `references/draw6.png` shrunk to 460 px made the gap between two hand-drawn arcs read as "25–40 px" when at full size it is ~190 px, and three rounds of tuning went the wrong way before anyone noticed. Read the full-size file first; shrink only if the image tool refuses it, and never read a number off the copy.
 - **The draw's whole shape lives in one block in `scripts/hand.gd`.** One cubic from the deck to the hand whose control point sits above and to the RIGHT of the destination (that offset IS the shape), 1.7 s of `QUAD EASE_OUT`, a 0.9 s flip finishing at ~76% of the path, and the fan tilt applied only after landing. `tests/draw_probe.gd` samples the flight and asserts all of it — read it before touching any of those numbers.

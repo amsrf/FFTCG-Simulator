@@ -5,7 +5,7 @@ extends Node
 ## The doubling is applied BEFORE the damage lands (Field.modify_damage) and only when the DEALING card is the source,
 ## so it must not fire for other attackers, for effect damage from another card, or against a cheaper Forward.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const WOL := 5              # Forward, 5000, cost 2
 const TERRA := 47           # Forward, 7000, cost 4 → doubled

@@ -3,8 +3,8 @@ extends Node
 ## (c) actually produce the board it claims. The last one boots a real game per ground, because a config that looks
 ## right and a board that starts are different things.
 
-const GAME_SCENE := preload("res://game.tscn")
-const GROUNDS := preload("res://scripts/test_grounds.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const GROUNDS := preload("res://scripts/core/test_grounds.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -48,7 +48,7 @@ func _ready() -> void:
 		_expect(not MatchSetup.describe_preset(ground_name).is_empty(), "and it describes itself")
 
 	# The Test Mode screen itself: one button per ground, built from the registry.
-	var menu_scene: PackedScene = load("res://test_grounds_menu.tscn")
+	var menu_scene: PackedScene = load("res://scenes/ui/test_grounds_menu.tscn")
 	_expect(menu_scene != null, "the Test Mode scene loads")
 	if menu_scene != null:
 		var menu: Control = menu_scene.instantiate()

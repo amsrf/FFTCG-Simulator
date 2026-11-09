@@ -1,0 +1,218 @@
+[gd_scene format=3 uid="uid://dyx8g6jrqmwmr"]
+
+[ext_resource type="Script" uid="uid://btcq8a4nyv48y" path="res://scripts/game/game.gd" id="1_80nbo"]
+[ext_resource type="PackedScene" uid="uid://bve4to1ebobje" path="res://scenes/cards/card.tscn" id="2_e2o6t"]
+[ext_resource type="PackedScene" uid="uid://dwb3h78qgftnt" path="res://scenes/game/board.tscn" id="3_feb5d"]
+[ext_resource type="PackedScene" uid="uid://8stvm8j2j0at" path="res://scenes/game/deck.tscn" id="4_fc0e3"]
+[ext_resource type="PackedScene" uid="uid://b3pt0xsaj0d38" path="res://scenes/game/Hand.tscn" id="5_7jktm"]
+[ext_resource type="PackedScene" uid="uid://bdiadu82f7cwg" path="res://scenes/game/battle_field.tscn" id="6_vef74"]
+[ext_resource type="PackedScene" uid="uid://bydqqfvrdrldu" path="res://scenes/game/graveyard.tscn" id="7_mfdv2"]
+[ext_resource type="Script" uid="uid://gexxd2cdhlpo" path="res://scripts/cards/focus_card.gd" id="9_iotsf"]
+[ext_resource type="Script" uid="uid://eur8blk8gur4" path="res://scripts/game/stack.gd" id="9_vef74"]
+[ext_resource type="Script" uid="uid://b8jjysxi0lj74" path="res://scripts/game/assistant.gd" id="10_hve3p"]
+[ext_resource type="PackedScene" path="res://scenes/ui/GemButton.tscn" id="11_mfdv2"]
+[ext_resource type="PackedScene" uid="uid://bh8f5mddl0cbx" path="res://scenes/game/damage_zone.tscn" id="14_215e1"]
+[ext_resource type="PackedScene" uid="uid://ja4kal3yojgu" path="res://scenes/vfx/ballistic_arrow.tscn" id="16_80cx4"]
+[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://assets/fonts/FOT-NewRodin Pro EB.otf" id="17_e8heu"]
+[ext_resource type="Script" uid="uid://de1gjjtkht72i" path="res://scripts/game/player_side.gd" id="18_playerside"]
+[ext_resource type="Script" uid="uid://bfdcrwd72djyu" path="res://scripts/game/camera_rig.gd" id="19_camrig"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_j5wjh"]
+sky_top_color = Color(0.92, 0.95, 1, 1)
+sky_horizon_color = Color(0.62, 0.66, 0.72, 1)
+sky_curve = 0.2
+ground_bottom_color = Color(0.1, 0.11, 0.13, 1)
+ground_horizon_color = Color(0.3, 0.32, 0.36, 1)
+ground_curve = 0.12
+
+[sub_resource type="Sky" id="Sky_vef74"]
+sky_material = SubResource("ProceduralSkyMaterial_j5wjh")
+
+[sub_resource type="Environment" id="Environment_j5wjh"]
+background_mode = 2
+sky = SubResource("Sky_vef74")
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_sky_contribution = 0.6
+ambient_light_energy = 0.3
+reflected_light_source = 2
+ssr_fade_in = 0.0274516
+ssr_fade_out = 168.897
+glow_enabled = true
+glow_intensity = 1.2
+glow_bloom = 0.15
+glow_blend_mode = 0
+glow_hdr_threshold = 0.9
+
+[sub_resource type="GDScript" id="GDScript_e8heu"]
+script/source = "extends Node3D
+
+# Called when the node enters the scene tree for the first time.
+func _ready() -> void:
+	pass # Replace with function body."
+
+[sub_resource type="Curve3D" id="Curve_opponent_flight"]
+_data = {
+"points": PackedVector3Array(0, 0, 0, 0, 0, -0.48, 0, 0.85, 1.43, 0.32, -0.10, 0.44, -0.41, 0.13, -0.57, -0.27, 1.12, 0, 0.48, -0.19, 0, 0, 0, 0, -2.17, 2.36, -1.03),
+"tilts": PackedFloat32Array(0, 0, 0)
+}
+point_count = 3
+
+[node name="Game" type="Node3D" unique_id=880871411]
+script = ExtResource("1_80nbo")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1102712664]
+environment = SubResource("Environment_j5wjh")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=181693429]
+transform = Transform3D(-1, 8.60946e-08, -1.51808e-08, 0, 0.173648, 0.984808, 8.74228e-08, 0.984808, -0.173648, 0, 4.346, -0.86)
+projection = 1
+fov = 60.0
+size = 5.766
+script = ExtResource("19_camrig")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=305865392]
+transform = Transform3D(1, 0, 0, 0, 0.000506119, 1, 0, -1, 0.000506119, 0, 0, 0)
+sky_mode = 1
+metadata/_edit_lock_ = true
+
+[node name="Board" parent="." unique_id=1863623157 instance=ExtResource("3_feb5d")]
+metadata/_edit_lock_ = true
+
+[node name="Player" type="Node3D" parent="." unique_id=256764984]
+script = ExtResource("18_playerside")
+
+[node name="Deck" parent="Player" unique_id=1353674462 instance=ExtResource("4_fc0e3")]
+transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, 2.65, 0.5, -1.3)
+
+[node name="Hand" parent="Player" unique_id=82001648 instance=ExtResource("5_7jktm")]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0.95, -2.15)
+
+[node name="DamageZone" parent="Player" unique_id=747574751 instance=ExtResource("14_215e1")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 3.13, 0.5, -0.5)
+
+[node name="Camera" type="Camera3D" parent="Player/DamageZone" unique_id=1402199374]
+transform = Transform3D(0.9989946, 0.043924663, -0.008969118, 0, 0.20006494, 0.97978264, 0.04483103, -0.97879755, 0.19986379, -0.35699987, 1.0298424, -0.39699882)
+
+[node name="Graveyard" parent="Player" unique_id=1914532016 instance=ExtResource("7_mfdv2")]
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, 3.37, 0.5, -1.3)
+
+[node name="Removed" parent="Player" unique_id=981802536 instance=ExtResource("7_mfdv2")]
+transform = Transform3D(-1.4, 0, -2.11394e-07, 0, 1.4, 0, 2.11394e-07, 0, -1.4, -3.5, 0.25, -1.4)
+zone = 7
+
+[node name="Opponent" type="Node3D" parent="." unique_id=94115156]
+script = ExtResource("18_playerside")
+controller = "opponent"
+
+[node name="Deck" parent="Opponent" unique_id=1663819249 instance=ExtResource("4_fc0e3")]
+transform = Transform3D(1.4, -2.11394e-07, 2.11394e-07, -2.11394e-07, -1.4, -7.11508e-21, 2.11394e-07, -3.19196e-14, -1.4, -2.9, 0.5, 1.45)
+
+[node name="Hand" parent="Opponent" unique_id=945820898 instance=ExtResource("5_7jktm")]
+transform = Transform3D(1, 0, 0, 0, 0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 0.95, 1.75)
+mirror_presentation = true
+
+[node name="DamageZone" parent="Opponent" unique_id=1462438399 instance=ExtResource("14_215e1")]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -3.13, 0.5, 0.5)
+
+[node name="Graveyard" parent="Opponent" unique_id=53191200 instance=ExtResource("7_mfdv2")]
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, -3.62, 0.5, 1.45)
+
+[node name="Removed" parent="Opponent" unique_id=890441146 instance=ExtResource("7_mfdv2")]
+transform = Transform3D(-1.4, 0, -1.22391e-07, 0, 1.4, 0, 1.22391e-07, 0, -1.4, 3.5, 0.25, 1.4)
+zone = 7
+
+[node name="Hand#Card" parent="." unique_id=291750902 instance=ExtResource("2_e2o6t")]
+visible = false
+
+[node name="Card6" parent="." unique_id=776866349 instance=ExtResource("2_e2o6t")]
+transform = Transform3D(1, 0, 0, 0, 0.809017, 0.587785, 0, -0.587785, 0.809017, 0, 1.7, -3.31222)
+visible = false
+id = 66
+
+[node name="Field" parent="." unique_id=1141506722 instance=ExtResource("6_vef74")]
+transform = Transform3D(1.005, 0, 0, 0, 1.005, 0, 0, 0, 1.005, 0, 0, 0.3)
+
+[node name="BallisticArrow" parent="Field" unique_id=153787445 instance=ExtResource("16_80cx4")]
+
+[node name="FocusCard" parent="." unique_id=497932167 instance=ExtResource("2_e2o6t")]
+transform = Transform3D(-4.5, 0, 6.79481e-07, 0, 4.5, 0, -6.79481e-07, 0, -4.5, 3.864, 0.54, 0)
+visible = false
+script = ExtResource("9_iotsf")
+
+[node name="OpponentSummonPath" type="Path3D" parent="."]
+curve = SubResource("Curve_opponent_flight")
+
+[node name="Stack" type="Node3D" parent="." unique_id=290184940 node_paths=PackedStringArray("opponent_flight_path")]
+transform = Transform3D(-2.305, 0, -3.4804535e-07, 0, 2.305, 0, 3.4804535e-07, 0, -2.305, -2.17, 2.36, -1.03)
+script = ExtResource("9_vef74")
+opponent_flight_path = NodePath("../OpponentSummonPath")
+stack_local_yaw_degrees = -3.5
+stack_screen_yaw_degrees = -27.5
+
+[node name="CardStack" parent="Stack" unique_id=401167901 instance=ExtResource("2_e2o6t")]
+transform = Transform3D(-1.4, 3.67082e-08, 2.08183e-07, 0, 1.37873, -0.243107, -2.11394e-07, -0.243107, -1.37873, 0, 0, 0)
+visible = false
+id = 66
+
+[node name="Assistant" type="Node3D" parent="." unique_id=8862097]
+script = ExtResource("10_hve3p")
+
+[node name="ButtonRack" type="Node3D" parent="Assistant" unique_id=1662856920]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0.5, -1.55)
+
+[node name="ConfirmButton" parent="Assistant/ButtonRack" unique_id=1145933718 instance=ExtResource("11_mfdv2")]
+visible = false
+
+[node name="CancelButton" parent="Assistant/ButtonRack" unique_id=1289540422 instance=ExtResource("11_mfdv2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.42)
+visible = false
+slide_in_delay = 0.1
+
+[node name="PassPhaseButton" parent="Assistant/ButtonRack" unique_id=1538725759 instance=ExtResource("11_mfdv2")]
+visible = false
+
+[node name="Player1" type="Node3D" parent="." unique_id=832380184]
+script = SubResource("GDScript_e8heu")
+
+[node name="Opponent2" type="Node3D" parent="." unique_id=216244921]
+
+[node name="PhaseText" type="Label3D" parent="." unique_id=289152130]
+transform = Transform3D(-1, 8.74228e-08, -4.37114e-08, -4.37114e-08, 1.91069e-15, 1, 8.74228e-08, 1, 1.91069e-15, 2.57209, 0.624521, 2.14331)
+text = "No Phase"
+font = ExtResource("17_e8heu")
+
+[connection signal="damaged" from="Player" to="." method="_on_player_side_damaged"]
+[connection signal="charge_start" from="Player/Hand" to="Stack" method="_on_hand_charge_start"]
+[connection signal="charge_start" from="Player/Hand" to="Assistant" method="_on_hand_charge_start"]
+[connection signal="selected_cards_for_mana_has_changed" from="Player/Hand" to="Assistant" method="_on_hand_selected_cards_for_mana_has_changed"]
+[connection signal="damaged" from="Opponent" to="." method="_on_player_side_damaged"]
+[connection signal="charge_start" from="Opponent/Hand" to="Stack" method="_on_hand_charge_start"]
+[connection signal="charge_start" from="Opponent/Hand" to="Assistant" method="_on_hand_charge_start"]
+[connection signal="selected_cards_for_mana_has_changed" from="Opponent/Hand" to="Assistant" method="_on_hand_selected_cards_for_mana_has_changed"]
+[connection signal="add_card_effect_to_stack" from="Field" to="Stack" method="_on_field_add_card_effect_to_stack"]
+[connection signal="attacker_changed" from="Field" to="." method="_on_field_attacker_changed"]
+[connection signal="blocker_changed" from="Field" to="." method="_on_field_blocker_changed"]
+[connection signal="card_activated_ability" from="Field" to="Assistant" method="_on_field_card_activated_ability"]
+[connection signal="request_target_confirmation" from="Field" to="Stack" method="_on_field_request_target_confirmation"]
+[connection signal="request_target_confirmation" from="Field" to="Assistant" method="_on_field_request_target_confirmation"]
+[connection signal="selected_cards_for_mana_has_changed" from="Field" to="Assistant" method="_on_field_selected_cards_for_mana_has_changed"]
+[connection signal="execute_card_effect" from="Stack" to="." method="_on_stack_execute_card_effect"]
+[connection signal="execute_card_effect" from="Stack" to="Field" method="_on_stack_execute_card_effect"]
+[connection signal="request_priority" from="Stack" to="." method="_on_stack_request_priority"]
+[connection signal="charge_cancelled" from="Assistant" to="Player/Hand" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_cancelled" from="Assistant" to="Opponent/Hand" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_cancelled" from="Assistant" to="Field" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_cancelled" from="Assistant" to="Stack" method="_on_assistant_charge_cancelled"]
+[connection signal="charge_complete" from="Assistant" to="Player/Hand" method="_on_assistant_charge_complete"]
+[connection signal="charge_complete" from="Assistant" to="Opponent/Hand" method="_on_assistant_charge_complete"]
+[connection signal="charge_complete" from="Assistant" to="Field" method="_on_assistant_charge_complete"]
+[connection signal="charge_complete" from="Assistant" to="Stack" method="_on_assistant_charge_complete"]
+[connection signal="pressed_next_phase" from="Assistant" to="." method="_on_assistant_pressed_next_phase"]
+[connection signal="pressed_pass_priority" from="Assistant" to="." method="_on_priority_passed"]
+[connection signal="target_cancel" from="Assistant" to="Player/Hand" method="_on_assistant_target_cancel"]
+[connection signal="target_cancel" from="Assistant" to="Opponent/Hand" method="_on_assistant_target_cancel"]
+[connection signal="target_cancel" from="Assistant" to="Field" method="_on_assistant_target_cancel"]
+[connection signal="target_cancel" from="Assistant" to="Stack" method="_on_assistant_target_cancel"]
+[connection signal="target_complete" from="Assistant" to="." method="_on_targets_confirmed"]
+[connection signal="target_complete" from="Assistant" to="Stack" method="_on_assistant_target_complete"]

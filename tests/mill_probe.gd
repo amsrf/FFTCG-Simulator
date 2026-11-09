@@ -4,7 +4,7 @@ extends Node
 ## The animation itself is checked by its EFFECTS rather than by pixels: the card leaves the top of the deck, ends in
 ## the Break Zone, and a mill 3 takes about three animation-lengths because the calls are awaited one at a time.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const THIEF := 69           # Forward: ETB -> opponent mills 1
 

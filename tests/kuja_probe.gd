@@ -7,7 +7,7 @@ extends Node
 ##   * only when the CHOOSER is Kuja's opponent (its own controller picking it does nothing);
 ##   * only for Summon/Ability targeting — an "all the Backups" effect never chooses anything.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const KUJA := 37
 const SQUALL := 41

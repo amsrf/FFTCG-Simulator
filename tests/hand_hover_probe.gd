@@ -13,7 +13,7 @@ extends Node
 ## THE SIZE TEST IS THE ONE THAT MATTERS: a real card is put on the stack and measured, and the hovered hand card has to
 ## match it. Checking that two table entries agree with each other would prove nothing.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _failures: int = 0

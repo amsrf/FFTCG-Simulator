@@ -2,7 +2,7 @@ extends Node
 const EVENTS := preload("res://scripts/effects/events.gd")
 ## B2: damage replacement / prevention (160, 165, 166, 171) and Yuna's break-zone exile (176).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const GORDON := 160
 const KNIGHT := 165

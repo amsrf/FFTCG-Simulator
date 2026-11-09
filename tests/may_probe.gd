@@ -10,7 +10,7 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 ## Also covered: `when_blocks` / `when_blocked` fire when the block is DECLARED, and `play_from_hand` plays a card
 ## from hand for free through the same window used for the Break Zone.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const SQUALL := 41
 const LEON := 60

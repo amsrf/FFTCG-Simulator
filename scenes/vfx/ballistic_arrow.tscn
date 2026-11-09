@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3 uid="uid://ja4kal3yojgu"]
+
+[ext_resource type="Script" uid="uid://uqhpl67hwryg" path="res://scripts/vfx/ballistic_arrow.gd" id="1_n2xuu"]
+
+[sub_resource type="ImmediateMesh" id="ImmediateMesh_65txe"]
+
+[node name="BallisticArrow" type="Node3D"]
+script = ExtResource("1_n2xuu")
+
+[node name="Line" type="MeshInstance3D" parent="."]
+mesh = SubResource("ImmediateMesh_65txe")

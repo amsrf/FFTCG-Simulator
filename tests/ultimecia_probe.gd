@@ -1,7 +1,7 @@
 extends Node
 ## Ultimecia 152: the first static entry rule, plus the unique-name rule it exposed.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const SQUALL := 41
 const CHEMIST := 31

@@ -40,7 +40,7 @@ func _paths(root: Node, prefix: String = "") -> Array[String]:
 
 func _ready() -> void:
 	print("[ButtonProbe] ---- lighting environment ----")
-	var game_scene: PackedScene = load("res://game.tscn")
+	var game_scene: PackedScene = load("res://scenes/game/game.tscn")
 	_expect(game_scene != null, "game.tscn loads (so the ; comments in it parse)")
 	if game_scene != null:
 		var game: Node = game_scene.instantiate()
@@ -75,14 +75,14 @@ func _ready() -> void:
 		game.free()
 
 	print("[ButtonProbe] ---- the preview must represent the game ----")
-	var preview: PackedScene = load("res://GemButtonPreview.tscn")
+	var preview: PackedScene = load("res://scenes/previews/GemButtonPreview.tscn")
 	_expect(preview != null, "GemButtonPreview.tscn loads")
 	if preview != null:
 		var pv: Node = preview.instantiate()
 		var pwe: WorldEnvironment = pv.get_node_or_null("WorldEnvironment")
 		if pwe != null and pwe.environment != null and pwe.environment.sky != null:
 			var pmat: ProceduralSkyMaterial = pwe.environment.sky.sky_material
-			var gscene: PackedScene = load("res://game.tscn")
+			var gscene: PackedScene = load("res://scenes/game/game.tscn")
 			var genv: Environment = null
 			if gscene != null:
 				var g: Node = gscene.instantiate()
@@ -99,7 +99,7 @@ func _ready() -> void:
 		pv.free()
 
 	print("[ButtonProbe] ---- the button scene ----")
-	var gem_scene: PackedScene = load("res://GemButton.tscn")
+	var gem_scene: PackedScene = load("res://scenes/ui/GemButton.tscn")
 	_expect(gem_scene != null, "GemButton.tscn loads")
 	if gem_scene != null:
 		var gem: Node = gem_scene.instantiate()
@@ -187,7 +187,7 @@ func _ready() -> void:
 		g3.free()
 
 	print("[ButtonProbe] ---- swap safety: every BigButton path must exist in GemButton ----")
-	var old_scene: PackedScene = load("res://BigButton.tscn")
+	var old_scene: PackedScene = load("res://scenes/ui/BigButton.tscn")
 	if old_scene != null and gem_scene != null:
 		var old: Node = old_scene.instantiate()
 		var new: Node = gem_scene.instantiate()
@@ -274,7 +274,7 @@ func _ready() -> void:
 	# direction, so flat metal under a smooth sky returns a single uniform colour — and uniform reads
 	# as plastic. It stays metallic (METALLIC = 1 in the shader, so sky reflections and fresnel still
 	# apply) and gains the reference's baked top-to-bottom ramp.
-	var frame: ShaderMaterial = load("res://gem_button_metal.tres")
+	var frame: ShaderMaterial = load("res://shaders/materials/gem_button_metal.tres")
 	_expect(frame != null and frame.shader != null, "gem_button_metal.tres loads with its shader")
 	if frame != null and frame.shader != null:
 		var metalness: float = float(frame.get_shader_parameter("metalness"))
@@ -305,7 +305,7 @@ func _ready() -> void:
 		_expect(r_top <= 0.2 and r_bottom <= 0.5 and r_top < r_bottom,
 			"the frame is polished at the top and slightly satin toward the bottom")
 
-	var stone: ShaderMaterial = load("res://gem_button_stone.tres")
+	var stone: ShaderMaterial = load("res://shaders/materials/gem_button_stone.tres")
 	_expect(stone != null and stone.shader != null, "gem_button_stone.tres loads with its shader")
 	if stone != null and stone.shader != null:
 		var e: float = float(stone.get_shader_parameter("emission_strength"))

@@ -6,7 +6,7 @@ extends Node
 ##   2. Cancelling a charged mana source must re-disable the Confirm button. The selection signal
 ##      carries negative amounts on deselect, and the old handlers only ever ENABLED.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

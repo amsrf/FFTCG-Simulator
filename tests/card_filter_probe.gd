@@ -5,7 +5,7 @@ extends Node
 ##
 ## Run: godot --headless res://tests/card_filter_probe.tscn --quit-after 400
 
-const FILTER := preload("res://scripts/card_filter.gd")
+const FILTER := preload("res://scripts/core/card_filter.gd")
 const CARD_DATABASE := "res://assets/card_database.json"
 
 ## 1-115C, Geomancer: a Backup of category III, job "Standard Unit", element 土.

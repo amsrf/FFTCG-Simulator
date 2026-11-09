@@ -6,8 +6,8 @@ extends Node
 ## Both seats are the AI. Each machine sends its own seat's decisions and replays the other's, and they compare their
 ## state hash at every turn boundary. Passing means: connected, agreed on the match, and stayed identical.
 
-const GAME_SCENE := preload("res://game.tscn")
-const PRESENTATION := preload("res://scripts/presentation.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const PRESENTATION := preload("res://scripts/core/presentation.gd")
 const NET_SESSION := preload("res://scripts/net/net_session.gd")
 const TIME_LIMIT := 150.0
 

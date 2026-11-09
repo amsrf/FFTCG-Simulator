@@ -6,7 +6,7 @@ const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## removed pile, that the Break Zone did not gain it, and that the field -> Break Zone TRIGGER did not fire (which is
 ## the difference between exiling and burying).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -6,7 +6,7 @@ extends Node
 ## ). Two Forwards are placed on the player's field. F toggles Freeze on the
 ## left one, R re-applies it. The right card stays unfrozen for comparison.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _left: Card
 var _right: Card

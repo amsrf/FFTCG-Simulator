@@ -1,8 +1,8 @@
 extends Node
 ## WAKKA 216 — ability nullification and temporary power setting.
 
-const GAME_SCENE := preload("res://game.tscn")
-const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 
 var _checks: int = 0
 var _fails: int = 0

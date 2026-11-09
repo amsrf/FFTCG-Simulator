@@ -2,7 +2,7 @@ extends Node
 ## BLOCKING RESTRICTIONS probe — "cannot be blocked by ..." (Yuffie 85/86) and Lann's power rule (27),
 ## including Advanced Rules 15.1.1.9.6: a party is blocked if the blocker can legally block AT LEAST ONE member.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const LANN := 27            # 7000 power, cannot be blocked by / cannot block a GREATER power Forward
 const YUFFIE_85 := 85       # cost 3, cannot be blocked by a Forward of cost 4+

@@ -1,6 +1,6 @@
 extends Node
 ## Replays the production Earth cue without applying rules damage.
-const GAME := preload("res://game.tscn")
+const GAME := preload("res://scenes/game/game.tscn")
 const CUE := preload("res://assets/effects/earth/earth_totem_cue.tscn")
 const EVENT := preload("res://scripts/vfx/vfx_event.gd")
 var game: Node
@@ -45,7 +45,7 @@ func _hit() -> void:
 			var existing := game.get_children()
 			game._play_break_shatter(victim)
 			for child in game.get_children():
-				if not existing.has(child) and child.get_script() == preload("res://scripts/card_shards.gd"):
+				if not existing.has(child) and child.get_script() == preload("res://scripts/cards/card_shards.gd"):
 					_preview_shards.append(child)
 			victim.set_hidden(true)
 	await cue.play(event)

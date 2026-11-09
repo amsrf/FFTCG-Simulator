@@ -8,7 +8,7 @@ extends Node
 ##   * the chosen Summon is removed WITHOUT resolving (a normal Ifrit would have dealt 4000 to Squall),
 ##   * the card still reaches its owner's Break Zone, because its cost was paid.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const SUMMONER := 53
 const IFRIT := 4

@@ -6,7 +6,7 @@ const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## bug this covers: the AI cast Snow's "dull an opponent's Forward" and dulled its own, because "opponent" was being
 ## compared literally against the P2 side name instead of being resolved relative to the source.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const PLAYER_FORWARD := 41   # Squall, 氷
 const AI_FORWARD := 43       # Snow,   氷

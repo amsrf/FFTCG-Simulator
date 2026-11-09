@@ -2,7 +2,7 @@ extends Node
 ## B1: the small vocabulary batch. One check per primitive, plus data-shape checks for the cards whose shape is the
 ## whole mechanism.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const SQUALL := 41
 const SNOW := 43

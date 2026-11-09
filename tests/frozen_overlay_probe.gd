@@ -5,7 +5,7 @@ extends Node
 ## covers the presentation: applying "frozen" should build a card-space additive
 ## quad from the original frost masks, and consuming the status should hide it.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -4,7 +4,7 @@ extends Node
 ## Field still exposes the same four methods (forwarders), so callers and older probes do not care. This probe asserts
 ## the layer is real: Game owns a bound Rules instance, and the rules answer the same questions when asked DIRECTLY.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const WOL := 5
 const TERRA_47 := 47        # cost 4

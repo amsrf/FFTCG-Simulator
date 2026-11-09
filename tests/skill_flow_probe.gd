@@ -11,7 +11,7 @@ extends Node
 ##
 ##   godot --headless res://tests/skill_flow_probe.tscn --quit-after 2000
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const MOCK_AGENT := preload("res://scripts/agents/mock_agent.gd")
 
 var _checks: int = 0

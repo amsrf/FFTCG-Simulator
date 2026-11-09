@@ -14,7 +14,7 @@ extends Node3D
 #---
 ## It says nothing about how any of it LOOKS.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _failures: Array[String] = []
 var _field = null
@@ -442,7 +442,7 @@ func _check_clash_presentation(game: Node) -> void:
 	var defender: Card = opponent_cards.front()
 	var original_a := attacker.global_transform
 	var original_b := defender.global_transform
-	var cinema = preload("res://clash_cinematic.tscn").instantiate()
+	var cinema = preload("res://scenes/game/clash_cinematic.tscn").instantiate()
 	game.add_child(cinema)
 	cinema.random_seed = 42
 	cinema.play(attacker, defender, original_a, original_b, true, false)

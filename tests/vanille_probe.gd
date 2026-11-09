@@ -4,7 +4,7 @@ extends Node
 ## The deck-search window needs a click, which headless cannot do, so the probe drives the window's own `_finish()`
 ## (the same call its Confirm button makes). That keeps the test on the real code path instead of bypassing it.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -7,7 +7,7 @@ extends Node
 ##
 ## It also prints coverage for 1-100 so progress is measurable rather than remembered.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

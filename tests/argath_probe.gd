@@ -10,7 +10,7 @@ extends Node
 ##
 ## Case 2 is last because its branch waits for a human click that never comes headlessly.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

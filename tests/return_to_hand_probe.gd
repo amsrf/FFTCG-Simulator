@@ -6,7 +6,7 @@ const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## near the hand. The animation itself is not measurable headlessly beyond "it finished", so what is asserted is the
 ## end state plus the promise that the instruction waits for it.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

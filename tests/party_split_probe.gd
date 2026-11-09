@@ -4,7 +4,7 @@ extends Node
 ## Drives `bump()` / `confirm()`, which is exactly what the ▲▼ buttons and the Confirm button call, so the test runs
 ## the real paths. The window is a Control tree, not a game rule, so no Game instance is needed for the first half.
 
-const SPLIT_SCENE := preload("res://party_split.tscn")
+const SPLIT_SCENE := preload("res://scenes/ui/party_split.tscn")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -23,7 +23,7 @@ func _expect(ok: bool, what: String) -> void:
 
 
 func _card(id: int) -> Card:
-	var card: Card = load("res://card.tscn").instantiate()
+	var card: Card = load("res://scenes/cards/card.tscn").instantiate()
 	card.id = id
 	card.card_name = "Card %d" % id
 	return card

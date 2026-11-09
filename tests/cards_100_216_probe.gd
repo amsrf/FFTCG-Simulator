@@ -5,7 +5,7 @@ extends Node
 ## This probe exercises each SHAPE against the real engine, plus a few data-shape assertions for the cards whose
 ## shape is the whole point (skill arrays, apply_effect inside a skill, riders, power_per).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const SQUALL := 41
 const SNOW := 43

@@ -4,7 +4,7 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 ##
 ## Covers one representative card per mechanism actually exercised; the pure data-shape entries are asserted by key.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const MAGUS := 24
 const DARK_KNIGHT := 55

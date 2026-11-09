@@ -2,7 +2,7 @@ extends Node
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## B3: targeting priority, conditional protection, two-player choices, Break-Zone search, and return protection.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const MOCK := preload("res://scripts/agents/mock_agent.gd")
 
 const CECIL := 162

@@ -4,7 +4,7 @@ extends Node3D
 ##   godot --path . res://tools/teleport_frames.tscn
 ## Writes tools/shots/teleport_frames/source_*.png and destination_*.png
 
-const CARD_SCENE := preload("res://card.tscn")
+const CARD_SCENE := preload("res://scenes/cards/card.tscn")
 const OUT_DIR := "res://tools/shots/teleport_frames"
 const CAPTURE_INTERVAL_MS := 33
 

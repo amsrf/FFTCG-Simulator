@@ -10,7 +10,7 @@ extends Node
 ##
 ##   godot --headless res://tests/immunity_probe.tscn --quit-after 900
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

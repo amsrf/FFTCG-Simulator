@@ -2,7 +2,7 @@ extends Node
 ## CHARACTER EX BURST — same fake-stack mechanism as Summons: the revealed card's ETB is copied onto the stack and
 ## resolved immediately. The card stays in the Damage Zone; it does not enter the field.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const SQUALL := 41
 const SNOW := 43
 

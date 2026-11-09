@@ -11,7 +11,7 @@ extends Node
 ##
 ## Run headless; it needs no rendering.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _cam: Camera3D = null
 

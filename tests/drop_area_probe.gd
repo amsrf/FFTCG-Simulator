@@ -5,7 +5,7 @@ extends Node
 ## The drag's start pointer is passed explicitly: a headless run has no real mouse, so it would read (0, 0) — the top
 ## of the screen — and the card could never rise above its own start.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const HAND_CARD := 25  # Squire, cost 2
 const SUMMON_CARD := 62  # Valefor, no target required
 

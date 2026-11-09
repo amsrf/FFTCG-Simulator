@@ -5,7 +5,7 @@ extends Node
 ## and then materialises at its field slot. The card must never travel between
 ## the two, and it is never parked in the Stack.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const HAND_CARD := 25  # Squire, vanilla Forward
 
 var _checks: int = 0

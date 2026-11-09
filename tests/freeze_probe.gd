@@ -10,7 +10,7 @@ extends Node
 ##   4. untap_targets("Activate") still works on a frozen card — Freeze denies the Phase, not activation
 ##   5. dull_targets taps what it is pointed at
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -5,7 +5,7 @@ extends Node
 ## These are continuous grants from one card to another, so they are a FIELD query asked at the targeting gate.
 ## Crucially they do NOT filter set effects: "all the Backups" still hits a shielded card, because it was never chosen.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const DAJH := 17
 const SAZH := 13

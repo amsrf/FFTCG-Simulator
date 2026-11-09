@@ -8,7 +8,7 @@ extends Node
 ## `EffectContext.damage()` path a card effect uses. Nothing here is wired into
 ## normal play; this is only a viewing harness.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const TARGET_IDS: Array[int] = [41, 12, 43]
 const AUTO_REPLAY_SECONDS := 2.15

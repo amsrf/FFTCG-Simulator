@@ -13,7 +13,7 @@ extends Node
 ## a 1.75 s tween may never advance in real time. Custom-step is deterministic and is the only way this can
 ## assert the END of the sequence rather than its start.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

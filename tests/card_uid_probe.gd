@@ -3,7 +3,7 @@ extends Node
 ## back to the same card, and is identical across two boots of the same match — what lets "I block with #100017" mean
 ## the same card on both machines.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks := 0
 var _fails := 0

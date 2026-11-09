@@ -5,7 +5,7 @@ extends Node
 ## their damage changes in `CardEffect.modify_damage(ctx)`. What remains to test
 ## here is the status-payload path used by Gordon and similar cards.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const TARGET := 41       # Squall, 6000 power
 

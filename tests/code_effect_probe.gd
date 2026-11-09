@@ -5,7 +5,7 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 ## The point is not only these cards: it checks that a continuous element query and a triggered event both go through
 ## CardEffect/EffectContext instead of ambient instruction state.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const MOCK := preload("res://scripts/agents/mock_agent.gd")
 
 const KIMAHRI := 103

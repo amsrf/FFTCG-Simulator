@@ -2,10 +2,10 @@ extends Node
 ## SelectionRequest + DeckSearch multi-select. Verifies that "different Elements" is a live constraint:
 ## selecting Fire dims the other Fire cards, deselecting restores them, and Confirm only reports a legal set.
 
-const SEARCH := preload("res://deck_search.tscn")
+const SEARCH := preload("res://scenes/ui/deck_search.tscn")
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const SELECTION_REQUEST := preload("res://scripts/effects/selection_request.gd")
-const CARD_VIEW := preload("res://scripts/card_view.gd")
+const CARD_VIEW := preload("res://scripts/cards/card_view.gd")
 
 const FIRE := 5
 const FIRE_B := 7

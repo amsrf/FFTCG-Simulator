@@ -6,7 +6,7 @@ extends Node
 ##   * the query distinguishes the CAUSE (Summon/Ability vs combat) and the CONTROLLER;
 ##   * an explicit break and a damage-driven state-based break both ask the same question.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const AURON := 2
 const CHEMIST_A := 31        # player Backup

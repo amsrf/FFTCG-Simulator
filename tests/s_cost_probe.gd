@@ -10,7 +10,7 @@ extends Node
 ##
 ##   godot --headless res://tests/s_cost_probe.tscn --quit-after 900
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const AERITH := 64
 
 var _checks: int = 0

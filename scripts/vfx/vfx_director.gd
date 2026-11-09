@@ -15,7 +15,7 @@ signal event_started(event: VfxEvent)
 signal event_finished(event: VfxEvent)
 ## The queue has drained and nothing is playing.
 signal idle_reached
-const PRESENTATION := preload("res://scripts/presentation.gd")
+const PRESENTATION := preload("res://scripts/core/presentation.gd")
 
 const ELEMENT_PRESET_DIR := "res://assets/vfx/elements"
 const STATUS_PRESET_DIR := "res://assets/vfx/status"

@@ -9,7 +9,7 @@ const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## The second one is the risky half: apply_effect is looked up at the TOP level of the card's effects for an ETB,
 ## not inside when_enter_field, and that is easy to get wrong in the JSON without any error appearing.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -6,7 +6,7 @@ extends Node
 ##   80 Bartz      ETB: activate all your Wind Characters
 ##   58 Laguna     "deals damage to your opponent" trigger must not open an EMPTY targeting session
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const CLOUD := 9
 const TIFA := 16

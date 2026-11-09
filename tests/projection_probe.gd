@@ -6,7 +6,7 @@ extends Node
 ## Under perspective it goes as 1/distance, so the real question is not "would it look more 3D" but "how far apart are
 ## the zones", because that distance ratio IS the size difference it would introduce.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _cam: Camera3D = null
 var _reference: float = 1.0

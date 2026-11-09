@@ -4,8 +4,8 @@ extends Node
 ## The split happens BEFORE the ability commits, which is what makes Cancel able to step back to target selection.
 ## That round trip is the main thing this asserts.
 
-const GAME_SCENE := preload("res://game.tscn")
-const PARTY_SPLIT := preload("res://party_split.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const PARTY_SPLIT := preload("res://scenes/ui/party_split.tscn")
 
 const YUFFIE := 85
 const SQUALL := 41

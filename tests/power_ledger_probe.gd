@@ -2,7 +2,7 @@ extends Node
 ## Continuous power is a ledger: the cached power and the label follow recompute_power(), and removing one key
 ## leaves every other contributor intact.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

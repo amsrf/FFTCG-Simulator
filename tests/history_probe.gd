@@ -5,7 +5,7 @@ extends Node
 ## casting a Summon records at the cast, that the setup board records NOTHING, and that "this turn" is a filter on
 ## turn_number rather than a deletion.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

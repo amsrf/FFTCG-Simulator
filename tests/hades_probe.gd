@@ -8,7 +8,7 @@ extends Node
 ##   Both must be legal to CAST: a board with no Backup makes the Summon illegal (mandatory targets).
 ##   Each instruction applies to a specific pick: ctx.dull(targets[0]), ctx.return_to_hand([targets[1]]).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const HADES := 52
 const SQUALL := 41

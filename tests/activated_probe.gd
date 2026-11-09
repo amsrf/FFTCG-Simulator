@@ -6,7 +6,7 @@ extends Node
 ## They are ordinary `skill` entries — the only difference from an S ability is that they carry NO `s_cost`, and one
 ## of them pays with `tap` instead of mana. This probe checks the gate, the data, and that the effects resolve.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const FIRION := 22
 const YSHTOLA := 84
@@ -107,12 +107,12 @@ func _ready() -> void:
 	_game.set("_priority_lock", false)
 
 	# --- a tap-costed ability still needs the card active ---------------------------------------------------
-	yshtola.tap()
-	_expect(not _field.can_activate_now(yshtola), "a dull Y'shtola cannot activate anything")
-	yshtola.untap()
-	# The priority loop moves the holder to the opponent after the ability above; put it back so this checks the
-	# ACTIVATION gate rather than whose turn it is.
+	# Pin priority to the player so these check the ACTIVATION gate, not whose window it is.
 	_game.set("priority_holder", 1)
+	yshtola.tap()
+	_expect(not yshtola.can_tap(), "a dull Y'shtola cannot pay her 《Dull》 ability")
+	_expect(_field.can_activate_now(yshtola), "but her non-tap 《Wind》 ability stays available")
+	yshtola.untap()
 	_expect(_field.can_activate_now(yshtola), "an active one can")
 
 	print("[Activated] %d checks | failures: %d" % [_checks, _fails])

@@ -1,8 +1,8 @@
 extends Node
 ## Lightning 141's must-block marker and the block-declaration gate.
 
-const GAME_SCENE := preload("res://game.tscn")
-const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 const LIGHTNING := 141
 const SQUALL := 41
 const DARK_KNIGHT := 55

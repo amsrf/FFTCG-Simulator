@@ -3,7 +3,7 @@ extends Node
 ## scripted human in lockstep_probe cannot reach on its board: a mana payment, a sacrifice-self cost and a target
 ## (Black Mage 10), and an S cost answered by the agent from the opponent's own hand (Vincent 94).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const REMOTE_AGENT := preload("res://scripts/agents/remote_agent.gd")
 const CODEC := preload("res://scripts/agents/lockstep_codec.gd")
 

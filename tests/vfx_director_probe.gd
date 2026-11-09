@@ -5,7 +5,7 @@ extends Node
 ## director instead of spawning presentation directly:
 ##   status applied/removed, targeted damage, board damage, preset lookup.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0

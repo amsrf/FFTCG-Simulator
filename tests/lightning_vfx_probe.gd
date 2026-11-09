@@ -8,7 +8,7 @@ extends Node
 ##   it strikes the target card once in single-target mode,
 ##   and the director frees it after the one-shot finishes.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0

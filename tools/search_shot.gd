@@ -6,7 +6,7 @@ extends Control
 ##
 ##   godot --resolution 1600x900 res://tools/search_shot.tscn
 
-const SEARCH := preload("res://deck_search.tscn")
+const SEARCH := preload("res://scenes/ui/deck_search.tscn")
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)

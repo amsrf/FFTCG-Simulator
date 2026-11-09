@@ -6,7 +6,7 @@ extends Node
 ## The point of this probe is that the criteria do the work: `is_tapped` picks the legal set, `count` allows "up to 2",
 ## and `ctx.damage` applies to all of them at once.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const TERRA := 47
 const SQUALL := 41          # dulled: legal

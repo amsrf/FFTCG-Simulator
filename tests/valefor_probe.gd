@@ -6,7 +6,7 @@ extends Node
 ##      its board. Without them the card sits in hand forever and looks broken rather than unaffordable.
 ##   2. THE EFFECT. Every Forward — both sides — ends up in its owner's hand, as a real hand card.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

@@ -6,8 +6,8 @@ func is_human() -> bool:
 ## Human playing at this machine: every decision is answered through the
 ## existing UI (pass button, card clicks, modal buttons).
 
-const ELEMENT_CHOICE := preload("res://element_choice.tscn")
-const NUMBER_CHOICE := preload("res://number_choice.tscn")
+const ELEMENT_CHOICE := preload("res://scenes/ui/element_choice.tscn")
+const NUMBER_CHOICE := preload("res://scenes/ui/number_choice.tscn")
 
 
 func choose_mana_color(_owner_id: int, card: Card, options: Array) -> String:
@@ -110,8 +110,8 @@ func decide_blocker(_player_id: int, attacker: Card) -> Card:
 ## layer only awaits the answer, exactly as it awaits decide_blocker().
 ##
 ## Loaded by PATH, not by class name: this scene is new and the headless class cache does not know it.
-const PARTY_SPLIT := preload("res://party_split.tscn")
-const DECK_SEARCH := preload("res://deck_search.tscn")
+const PARTY_SPLIT := preload("res://scenes/ui/party_split.tscn")
+const DECK_SEARCH := preload("res://scenes/ui/deck_search.tscn")
 
 func choose_party_damage_split(_player_id: int, party: Array, total: int) -> Array:
 	if party.is_empty():
@@ -244,7 +244,7 @@ func choose_hand_card_to_bottom(player_id: int, _cards: Array) -> Card:
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	return chosen if play else null
 
-const SKILL_CHOICE := preload("res://skill_choice.tscn")
+const SKILL_CHOICE := preload("res://scenes/ui/skill_choice.tscn")
 
 ## Which ability? A modal listing each ability's text. The human selects a container, Confirm commits, Cancel (-1)
 ## abandons the activation — and nothing has been tapped or paid at that point.

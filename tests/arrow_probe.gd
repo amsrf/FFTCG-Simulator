@@ -15,8 +15,8 @@ extends Node3D
 #---
 ## It asserts nothing about how the arrow LOOKS — colour, glow and taste still need eyes.
 
-const ARROW_SCENE := preload("res://ballistic_arrow.tscn")
-const CARD_SCENE := preload("res://card.tscn")
+const ARROW_SCENE := preload("res://scenes/vfx/ballistic_arrow.tscn")
+const CARD_SCENE := preload("res://scenes/cards/card.tscn")
 
 ## A typical targeting case: two cards level on screen, 1.2 m apart.
 const FROM := Vector3(-0.6, 0.0, 0.0)
@@ -210,13 +210,13 @@ func _check_ice_projectile() -> void:
 	projectile.queue_free()
 
 func _check_demo_browser() -> void:
-	var entries: Array = preload("res://scripts/demo_catalog.gd").entries()
+	var entries: Array = preload("res://scripts/ui/demo_catalog.gd").entries()
 	var paths: Array = []
 	for entry in entries:
 		paths.append(entry.path)
 		_expect(not "probe" in entry.path, "Demo browser excludes automated probes")
-	_expect(paths.has("res://tools/ice_projectile_demo.tscn") and paths.has("res://CardShatterPreview.tscn"), "Demo browser finds tool demos and root previews")
-	var menu = load("res://demo_menu.tscn").instantiate()
+	_expect(paths.has("res://tools/ice_projectile_demo.tscn") and paths.has("res://scenes/previews/CardShatterPreview.tscn"), "Demo browser finds tool demos and root previews")
+	var menu = load("res://scenes/ui/demo_menu.tscn").instantiate()
 	add_child(menu)
 	_expect(menu._rows.size() == entries.size(), "Every discovered demo gets a menu button")
 	menu._filter("ice projectile")
@@ -228,7 +228,7 @@ func _check_demo_browser() -> void:
 	menu._filter("no such demo qqq")
 	_expect(menu._empty.visible, "Empty searches show a clear message")
 	menu.queue_free()
-	var navigation = preload("res://scripts/demo_navigation.gd").new()
+	var navigation = preload("res://scripts/ui/demo_navigation.gd").new()
 	add_child(navigation)
 	_expect(navigation.process_mode == Node.PROCESS_MODE_ALWAYS, "Demo navigation remains usable while paused")
 	navigation.queue_free()

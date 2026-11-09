@@ -10,10 +10,10 @@ extends Node
 ##
 ## Run: godot --headless res://tests/deck_search_probe.tscn --quit-after 400
 
-const SEARCH := preload("res://deck_search.tscn")
+const SEARCH := preload("res://scenes/ui/deck_search.tscn")
 ## The script as well as the scene: CHOOSE_NONE lives on the class, and reaching it through an instance that has
 ## already freed itself is how this probe crashed the first time it ran.
-const SEARCH_SCRIPT := preload("res://scripts/deck_search.gd")
+const SEARCH_SCRIPT := preload("res://scripts/ui/deck_search.gd")
 
 const OVELIA_A := 714
 const OVELIA_B := 156

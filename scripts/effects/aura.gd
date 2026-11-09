@@ -16,7 +16,7 @@ extends RefCounted
 ##   status = "first_strike"
 
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
-const CARD_TARGET := preload("res://scripts/card_target.gd")
+const CARD_TARGET := preload("res://scripts/cards/card_target.gd")
 
 const KIND_POWER := 0
 const KIND_STATUS := 1

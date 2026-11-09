@@ -6,7 +6,7 @@ extends Node
 ## exercises the real `Card.suffer_damage()` path. Damage is cleared afterwards
 ## so repeated high-tier hits do not break the demo cards.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const TARGET_IDS: Array[int] = [41, 12, 43]
 const DEMO_DAMAGE: Array[int] = [3000, 5000, 8000, 12000]

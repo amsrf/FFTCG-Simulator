@@ -7,7 +7,7 @@ extends Node
 ## cost together, so the card leaves the field when the activation COMMITS (target confirmed), not at activation; the
 ## ability still resolves from the stack with its own source already in the Break Zone.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const BLACK_MAGE := 10
 const ARCHER := 88

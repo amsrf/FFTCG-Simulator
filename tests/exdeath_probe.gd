@@ -8,7 +8,7 @@ extends Node
 ## It also checks the integration path, not just the direct call: the attack-damage phase goes through
 ## cause_attacking_damage(), which is the same function the party-damage trigger uses.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const EXDEATH := 122
 const SQUALL := 41

@@ -5,8 +5,8 @@ const EVENTS := preload("res://scripts/effects/events.gd")
 ##   81 Bartz    "Bartz has all the jobs"                                        (job checks always succeed)
 ##   91 Amodar   ETB: search for Lightning OR Snow                               (OR filter)
 
-const GAME_SCENE := preload("res://game.tscn")
-const CARD_FILTER := preload("res://scripts/card_filter.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const CARD_FILTER := preload("res://scripts/core/card_filter.gd")
 const LOCAL_AGENT := preload("res://scripts/agents/local_agent.gd")
 
 const NINJA := 78

@@ -5,8 +5,8 @@ extends Node
 ## normal mode — and compares the board after a few turns. Any difference means some rule reads animation timing,
 ## which a server running the rules headless (online play) could not reproduce. The diff names what differs.
 
-const GAME_SCENE := preload("res://game.tscn")
-const PRESENTATION := preload("res://scripts/presentation.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const PRESENTATION := preload("res://scripts/core/presentation.gd")
 const SEED := 424242
 ## Turns to play. Few enough that normal mode (real-time animations) stays well under a minute or two.
 const TURNS := 3

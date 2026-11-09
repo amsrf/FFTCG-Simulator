@@ -8,7 +8,7 @@ extends Node
 ##
 ## Run: godot --headless res://tests/draw_probe.tscn --quit-after 900
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 ## Where in the flight to trigger the re-layout: about a fifth of the way through the flip, late enough to be
 ## unambiguous and early enough that a snap and a turn are far apart.
 const INTERFERE_AT := 2

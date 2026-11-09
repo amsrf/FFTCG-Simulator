@@ -5,7 +5,7 @@ extends Node
 ## opens the hand-selection UI and cannot be driven headlessly; what is checked here is the other branch — an AI
 ## asked to discard — plus the empty-hand guard, which is the case that would otherwise crash mid-effect.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

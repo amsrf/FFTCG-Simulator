@@ -10,11 +10,11 @@ extends Node
 ## Run it WITHOUT --headless (a real rendering device is the whole point), with the editor closed:
 ##
 ##   godot --resolution 1280x720 res://tools/shot.tscn --quit-after 300 -- \
-##       --scene res://crystal_cost.tscn --cost "fire:1,neutral:1" --studio 0 \
+##       --scene res://scenes/ui/crystal_cost.tscn --cost "fire:1,neutral:1" --studio 0 \
 ##       --out tools/shots/cost_row.png
 ##
 ## Options, all after the bare "--":
-##   --scene <res>    what to shoot (default res://crystal_cost.tscn)
+##   --scene <res>    what to shoot (default res://scenes/ui/crystal_cost.tscn)
 ##   --preset <name>  boot the real GAME through MatchSetup instead (ai / standard / debug)
 ##   --pay <spec>     with --preset: open the crystal payment modal at that cost, e.g. "火:1,neutral:1",
 ##                    so a shot can show the payment UI mid-selection without a human clicking
@@ -30,7 +30,7 @@ extends Node
 ## --quit-after is a BACKSTOP only. The harness quits itself as soon as the PNG is written, so a window
 ## appears for a couple of seconds and closes on its own.
 
-const DEFAULT_SCENE := "res://crystal_cost.tscn"
+const DEFAULT_SCENE := "res://scenes/ui/crystal_cost.tscn"
 const DEFAULT_OUT := "tools/shots/shot.png"
 
 var _args: Dictionary = {}
@@ -45,7 +45,7 @@ func _ready() -> void:
 		# The real game: it brings its own camera, environment and lights, so the harness only boots it
 		# and waits. MatchSetup is an autoload, which is exactly why this is a scene rather than --script.
 		MatchSetup.config = MatchSetup.build_config(preset)
-		var game: Node = load("res://game.tscn").instantiate()
+		var game: Node = load("res://scenes/game/game.tscn").instantiate()
 		add_child(game)
 		# --hover-field <index>: open the field's hover preview on a battlefield card so a shot can show it.
 		# The preview only appears on hover and a screenshot harness cannot hover, which meant every claim about

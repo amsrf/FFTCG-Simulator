@@ -17,7 +17,7 @@ extends Node3D
 #---
 ## It says nothing about how any of it LOOKS.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 ## Card 31 (Chemist) has `when_enter_field` with `choose_target {"is_type": "Forward"}`,
 ## and it is in the debug preset's opening hand. That preset is unshuffled with a fixed
 ## seed, so this is stable run to run.
@@ -829,7 +829,7 @@ func _check_hover_shadow(hand: Hand) -> void:
 	var before_strength: float = lower.mat.get_shader_parameter("shadow_strength")
 	var reversed := hand.cards.duplicate()
 	reversed.reverse()
-	preload("res://scripts/card_overlap_shadow.gd").update(hand, reversed)
+	preload("res://scripts/cards/card_overlap_shadow.gd").update(hand, reversed)
 	_expect(is_equal_approx(before_strength, float(lower.mat.get_shader_parameter("shadow_strength"))),
 		"actual depth determines shadow casting independently of list order")
 
@@ -849,7 +849,7 @@ func _check_hover_shadow(hand: Hand) -> void:
 	upper.stop_hand_layout()
 	upper.global_transform = lower.global_transform
 	upper.global_position += cam.global_basis.x * 0.2 + cam.global_basis.z * 0.05
-	var shadows := preload("res://scripts/card_overlap_shadow.gd")
+	var shadows := preload("res://scripts/cards/card_overlap_shadow.gd")
 	shadows.update(hand, [lower, upper])
 	var tight_width: float = lower.mat.get_shader_parameter("shadow_width")
 	var tight_strength: float = lower.mat.get_shader_parameter("shadow_strength")

@@ -2,8 +2,8 @@ extends Node
 ## Golbez 135 end-to-end: leaving the field to the Break Zone searches the deck for up to four cost-2
 ## Forwards with different Elements, plays them, and suppresses their enter-the-field auto-abilities.
 
-const GAME_SCENE := preload("res://game.tscn")
-const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 
 const GOLBEZ := 135
 const FIRE := 5

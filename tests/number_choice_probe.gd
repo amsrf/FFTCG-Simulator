@@ -1,7 +1,7 @@
 extends Node
 ## The 《X》 declaration window: range, +/- clamping, and Confirm.
 
-const NUMBER_CHOICE := preload("res://number_choice.tscn")
+const NUMBER_CHOICE := preload("res://scenes/ui/number_choice.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

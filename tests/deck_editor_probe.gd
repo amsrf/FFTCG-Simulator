@@ -8,7 +8,7 @@ extends Node
 ## `extends Node`, not SceneTree: this is a scene (see deck_editor_probe.tscn), and a SceneTree
 ## script cannot be attached to a node.
 
-const EDITOR := preload("res://scripts/deck_editor.gd")
+const EDITOR := preload("res://scripts/ui/deck_editor.gd")
 const PROBE_DECK := "probe_deck"
 ## A second name the rename checks move the deck to, so the cleanup list can name it too.
 const PROBE_RENAMED := "probe_renamed"

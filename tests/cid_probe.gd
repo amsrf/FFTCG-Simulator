@@ -7,7 +7,7 @@ extends Node
 ## The rider rides on the VICTIM: Field.cause_damage() applies `on_causing_damage_to_forward` from the dealer, which
 ## stores a one-turn status carrying the trigger. Card.turn_end() expires it; the Break Zone choke point runs it once.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const CID := 72
 const SQUALL := 41

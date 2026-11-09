@@ -2,7 +2,7 @@ extends Node
 ## The stack's arrow for the LOCAL player's Summon (its stack copy) starts where it is DRAWN: at the card's top edge,
 ## measured in screen pixels through the arrow's real transform. `-- --fan` adds three more cards; `-- --shot` saves a
 ## screenshot (needs a renderer: e.g. xvfb-run ... --rendering-driver opengl3).
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 var _game: Node
 
 func _card(id: int, side: String) -> Card:

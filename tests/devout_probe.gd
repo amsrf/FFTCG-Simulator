@@ -10,7 +10,7 @@ extends Node
 ##   * with nothing legal in the pile, no window opens at all;
 ##   * Devout 48's ability is closed on the opponent's turn.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const DEVOUT_ICE := 48
 const DEVOUT_WIND := 77

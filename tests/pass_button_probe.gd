@@ -3,7 +3,7 @@ extends Node
 ## - "Next Phase": the opponent has just passed and the stack is empty, so this pass ends the phase.
 ## - "Pass": otherwise (priority goes to the opponent, or the top of the stack resolves).
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks := 0
 var _fails := 0

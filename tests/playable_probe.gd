@@ -1,8 +1,8 @@
 extends Node
 ## WHAT CAN I PLAY RIGHT NOW? The CP rule (11.2), "can this hand card be cast" (the blue ring), and auto-pass.
 
-const GAME_SCENE := preload("res://game.tscn")
-const COST_CHECK := preload("res://scripts/cost_check.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const COST_CHECK := preload("res://scripts/core/cost_check.gd")
 
 var _checks := 0
 var _fails := 0

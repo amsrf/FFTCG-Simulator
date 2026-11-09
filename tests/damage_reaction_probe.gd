@@ -5,7 +5,7 @@ extends Node
 ## up and tilt, then shake/settle. The reaction must live on HandMesh (not the
 ## Card layout) and must not survive a zone change.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0

@@ -4,7 +4,7 @@
 ; be looked at instead of described. Do not pass --headless: there would be nothing to draw with.
 ;
 ;   godot --resolution 1280x720 res://tools/shot.tscn --quit-after 300 -- \
-;       --scene res://crystal_cost.tscn --cost "fire:1,neutral:1" --studio 0 --out tools/shots/cost.png
+;       --scene res://scenes/ui/crystal_cost.tscn --cost "fire:1,neutral:1" --studio 0 --out tools/shots/cost.png
 
 [ext_resource type="Script" path="res://tools/shot.gd" id="1_shot"]
 

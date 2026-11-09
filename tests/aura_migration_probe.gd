@@ -2,7 +2,7 @@ extends Node
 ## Aura migration: every aura card exposes code definitions, and a source entering/leaving applies and removes the
 ## exact continuous ledger entries.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EXPECTED := {30: 1, 57: 1, 83: 1, 95: 1, 150: 1, 155: 2, 156: 1, 180: 1, 188: 1}
 
 var _checks: int = 0

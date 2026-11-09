@@ -7,8 +7,8 @@ extends Node
 ## the presentation queue), which a real pair of machines does not.
 ##   godot --headless res://tests/lockstep_probe.tscn -- --seed=2 --turns=4
 
-const GAME_SCENE := preload("res://game.tscn")
-const PRESENTATION := preload("res://scripts/presentation.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const PRESENTATION := preload("res://scripts/core/presentation.gd")
 const RECORDING_AGENT := preload("res://scripts/agents/recording_agent.gd")
 const REMOTE_AGENT := preload("res://scripts/agents/remote_agent.gd")
 const TIME_LIMIT := 150.0

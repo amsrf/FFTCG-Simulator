@@ -4,7 +4,7 @@ extends Node
 ## The cost is chosen by the owner through the agent seam, so nothing about it is hard-coded: the probe swaps in a
 ## MockAgent to answer automatically, and the same call opens a card picker for a human.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const MYSTIC := 96
 const CHEMIST := 31

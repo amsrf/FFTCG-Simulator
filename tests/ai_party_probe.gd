@@ -5,7 +5,7 @@ extends Node
 ## Checks the agent's answer rather than the whole turn: decide_attackers() is the seam Game awaits, so a list of two
 ## same-element Forwards from it is exactly what gets applied to the field.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

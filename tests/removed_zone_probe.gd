@@ -4,7 +4,7 @@ extends Node
 ## The distinction matters mechanically — nothing that looks in the Break Zone may find a card here — so the checks
 ## are about the two zones staying separate, not just about a node existing.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

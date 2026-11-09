@@ -9,7 +9,7 @@ extends Node
 ## The last two checks drive Card._on_card_area_3d_mouse_entered/exited directly — the same functions the
 ## card's Area3D calls — so the wiring from a hovering pointer to the preview is covered too.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

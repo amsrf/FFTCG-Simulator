@@ -9,7 +9,7 @@ extends Node
 ## which is Sazh 1-013H ("deal 4000 instead if you cast Brynhildr"). It only works if a SKIPPED instruction writes
 ## false to the latch, and a RUNNING one writes true — both are checked here.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0

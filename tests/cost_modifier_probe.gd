@@ -2,7 +2,7 @@ extends Node
 ## Cost modifiers are continuous queries. These checks cover the two hooks, the floor, counted self costs and a source
 ## entering/leaving without mutating the printed cost.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

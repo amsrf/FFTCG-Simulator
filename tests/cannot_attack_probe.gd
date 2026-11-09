@@ -7,7 +7,7 @@ const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ##   * it can still be DULLED — the restriction is on declaring an attack, not on tapping
 ## and that the restriction wears off with the turn.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

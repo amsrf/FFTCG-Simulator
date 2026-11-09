@@ -1,0 +1,2399 @@
+extends Node3D
+class_name Field
+const LOG := preload("res://scripts/core/log.gd")
+## The Game this zone belongs to. Every call into the game goes through this one declared dependency rather
+## than through get_parent() calls scattered around. A getter, not @onready, so it also works during _ready().
+var game: Game:
+	get:
+		return get_parent()
+
+
+const CARD_CHARGE = 1
+## Horizontal centre-to-centre distance between neighbouring cards in a field row.
+##
+## A row holds at most five cards, so 0.65 is enough: it leaves a 0.16 m gap between 0.49 m cards and frees the
+## outer columns, which is what makes room for the deck and graveyard beside the rows under the perspective
+## camera. Cards still do not overlap.
+const ROW_CARD_STEP := 0.65
+const RULES := preload("res://scripts/game/rules.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
+const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
+const CARD_TARGET := preload("res://scripts/cards/card_target.gd")
+const SLAM_PULSE := preload("res://scenes/vfx/slam_pulse.tscn")
+## TELEPORT CAST. A Character is paid for in the Stack row, then dissolves in
+## place and materialises at its field slot instead of travelling there.
+@export var teleport_shine_seconds: float = 0.45
+@export var teleport_fade_seconds: float = 0.20
+@export var teleport_materialize_seconds: float = 0.65
+## After the silhouette is complete: brighten it, then fade the glow while the
+## actual card texture is revealed.
+@export var teleport_glow_seconds: float = 0.18
+@export var teleport_reveal_seconds: float = 0.30
+## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
+## work as soon as the board exists and never depend on the parent's initialisation order.
+var rules = null
+
+func _ready() -> void:
+	rules = RULES.new()
+	rules.bind(self)
+
+var front_cards: Array[Card] = []
+var back_cards: Array[Card] = []
+var opponent_front_cards: Array[Card] = []
+var opponent_back_cards: Array[Card] = []
+var target_card: Card = null
+var source_card: Card = null
+var attacker_card: Card = null
+## The blocker declared for the current combat. Persisted on the Field because the
+## instruction chain ends before DAMAGE_RESOLUTION reads it, so a transient copy
+## on Game would already be gone by then.
+var blocker_card: Card = null
+var arrow: BallisticArrow
+## SEPARATE arrows for the combat's block links. The targeting arrow above belongs to a targeting session and follows
+## the mouse; sharing instances would let either one re-aim or hide the other. A block against a PARTY needs one arc
+## per member, so this is a list rather than a single arrow.
+var block_arrows: Array = []
+## If false (e.g. ETB), targeting cannot be cancelled and stack effect is mandatory.
+var targeting_allow_cancel: bool = false
+## MULTI-TARGET SESSIONS. `choose_target` may carry a "count" (default 1). At 1 nothing below changes: one pick, one arc,
+## straight to Confirm. Above 1 the session keeps a list — each pick leaves its own arc locked on the card, a fresh aiming
+## arc appears for the next, picked cards come out of the legal set, and Confirm only appears once the last pick is made.
+##
+## `target_card` stays the LAST pick, so every existing consumer (instruction resolution, the agents, the stack) is
+## untouched; `targeting_picked` is the whole list, in order.
+var targeting_count: int = 1
+var targeting_picked: Array[Card] = []
+var targeting_arrows: Array = []
+var targeting_criteria_now: Variant = {}
+var targeting_source_kind: String = ""
+## Where this session's candidates come from: "field" (default) or "stack". Set from the effect's
+## `"choose_target": {"in": "stack"}` — Summoner 53 picks a Summon that has not resolved yet.
+var targeting_domain: String = "field"
+## SEQUENTIAL STAGES. "Choose 1 Forward and 1 Backup" is one criteria block per pick stage:
+## `"choose_target": [ {...Forward...}, {...Backup...} ]`. A single block (the normal case) is a one-element list,
+## and `count` keeps its old meaning WITHIN a stage (Aerith's "up to 3 Backups").
+var targeting_blocks: Array = []
+var targeting_block_index: int = 0
+var targeting_block_start: int = 0
+## "When Kuja is chosen by an opponent's Summon or ability" fires ONCE per targeting session, on CONFIRM — not on
+## every ring-click, and not when a pick is replaced before confirming. Reset by request_target.
+var _chosen_notified: bool = false
+signal selected_cards_for_mana_has_changed(amount:int, element:String)
+signal add_card_effect_to_stack(card_id:int, keyword:String, source:Card)
+signal request_target_confirmation(target_card: Card, allow_cancel: bool)
+signal attacker_changed
+signal blocker_changed
+## A target pick was accepted (in pick order). Online play records picks from this, whoever made them.
+signal target_picked(card: Card)
+## A targeting session began for `source` (whose controller makes the picks). Online play uses it to tell the local
+## player's sessions from the remote seat's.
+signal targeting_started(source: Card)
+signal card_activated_ability(cost:Dictionary)
+## The local human started activating `card`'s ability (online play records it as a draft until it commits).
+signal skill_activation_begun(card: Card)
+## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
+var phase: GlobalVariables.Phase:
+	get:
+		return game.phase
+@export var selected_cards_for_mana_conversion: Array[Card] = []
+## The colour each selected source actually generated. A source can offer several colours, so a refund
+## must return the chosen one rather than re-deriving it from the card.
+var selected_mana_elements: Dictionary = {}
+const MANA_CHOICE := preload("res://scenes/ui/mana_choice.tscn")
+var mana_choice = null
+@onready var ballistic_arrow_scene = preload("res://scenes/vfx/ballistic_arrow.tscn")
+@onready var assistant: Assistant = game.get_node("Assistant")
+@onready var stack: Stack = game.get_node("Stack") as Stack
+@onready var hand: Hand = game.get_node("Player/Hand") as Hand
+
+# ------------------------------------------------------------------
+# Field card preview (hover)
+# ------------------------------------------------------------------
+## A field card is drawn small — that is the whole point of a board — so its rules text cannot be read
+## there. Hovering one shows the full scan at a readable size, the same idea (and the same placement
+## rule) as the deck editor's and the search window's hover previews, so hovering reads the same way
+## everywhere in the game.
+##
+## The preview is deliberately screen-space: a CanvasLayer over the board, not a mesh in it. It must
+## not be pickable, must not cast anything, and must never take part in targeting — it is a reading
+## aid, not a game object.
+##
+## It is built on first hover, so a match where nobody hovers a field card never pays for it.
+
+## Height of the preview as a fraction of the viewport. 0.38 is a ~410 px card at 1080p: comfortable to
+## read without covering the board. The first value tried was 0.62, which is a ~670 px card and far too
+## much — it read as a takeover rather than a preview. Tune in the Inspector while the game runs.
+@export var preview_height_fraction: float = 0.38
+## Gap between the hovered card and the preview, in screen pixels.
+@export var preview_gap: float = 16.0
+@export var preview_grow_seconds: float = 0.12
+
+## Card scans are 2:3 — the preview's width follows from its height through this.
+const PREVIEW_ASPECT: float = 0.667
+const CARD_VIEW := preload("res://scripts/cards/card_view.gd")
+
+var _preview_layer: CanvasLayer = null
+var _preview: TextureRect = null
+var _preview_tween: Tween = null
+## The card the preview is currently showing, so a hide can be ignored when it belongs to a different
+## card than the one being left (a gap between two cards fires enter/exit in a fiddly order).
+var _preview_card: Card = null
+
+
+func _preview_size() -> Vector2:
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var h: float = view.y * preview_height_fraction
+	return Vector2(h * PREVIEW_ASPECT, h)
+
+
+func _ensure_preview() -> void:
+	if _preview != null and is_instance_valid(_preview):
+		return
+	_preview_layer = CanvasLayer.new()
+	# Above the board but below the DeckSearch window (10) and the buttons' own canvas, so a modal
+	# still covers it rather than being covered by it.
+	_preview_layer.layer = 5
+	add_child(_preview_layer)
+	_preview = TextureRect.new()
+	# ROUNDED CORNERS AND THE THIN BLACK BOTTOM LINE, from the same shader the deck editor's and the search
+	# window's previews use. Reusing it rather than redrawing the effect here means a hovered card looks the
+	# same everywhere in the game, and the corner radius stays a single number to change.
+	#
+	# THE LINE IS SET IN PIXELS. The shader's default edge_depth is 0.004 in UV — a FRACTION of the image — which
+	# on a preview this size comes out at about 1.6 px. It was drawing all along and was simply too fine to
+	# notice, which is why it looked absent. A pixel width over the preview's height gives the UV figure the
+	# shader wants, and keeps the number in the units a person actually thinks in.
+	const PREVIEW_LINE_PIXELS: float = 3.0
+	var preview_material: ShaderMaterial = CARD_VIEW.round_material()
+	var preview_size: Vector2 = _preview_size()
+	if preview_size.y > 0.0:
+		preview_material.set_shader_parameter("edge_depth", PREVIEW_LINE_PIXELS / preview_size.y)
+	_preview.material = preview_material
+	_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	# Never takes the mouse: the preview must not steal hover from the card that opened it.
+	_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_preview.visible = false
+	_preview_layer.add_child(_preview)
+
+
+## Show the full scan of `card`. Placed to the RIGHT of it, or to the LEFT when there is no room,
+## then clamped into the viewport — the same rule the deck editor uses.
+func show_card_preview(card: Card) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	# The radial mana picker is itself the focus: a large hover preview would cover the crystals and the card
+	# they belong to.
+	if mana_choice != null and is_instance_valid(mana_choice):
+		return
+	_ensure_preview()
+	if _preview == null:
+		return
+	# CardView owns "where does this card's art live, and is there any" — one definition, checked in
+	# one place, rather than a second copy of the path convention here.
+	var path: String = CARD_VIEW.art_path(card.id)
+	var tex: Texture2D = null
+	if not path.is_empty():
+		tex = load(path) as Texture2D
+	if tex == null:
+		hide_card_preview()
+		return
+
+	_preview_card = card
+	_preview.texture = tex
+	var size: Vector2 = _preview_size()
+	_preview.size = size
+	_preview.pivot_offset = size * 0.5
+
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	# PLACE IT OUTSIDE THE CARD, NOT BESIDE ITS CENTRE. Offsetting from the centre put the preview's left edge
+	# ~16 px right of the middle of the card, so the thing meant to help you read the card covered its right half.
+	# The edges come from projecting the card's four face corners, which is what makes this survive the field's
+	# rotation and the card's own tilt instead of assuming an upright card of a known size.
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var rect: Rect2 = Rect2()
+	if cam != null:
+		# A card face is 0.429 wide by 0.6 tall in its own space: x is the width axis, z the height. The
+		# transform scale is not 1 (a zone sets it), so it is read rather than assumed.
+		var s: Vector3 = card.global_transform.basis.get_scale()
+		var across: Vector3 = card.global_transform.basis.x.normalized() * (0.429 * 0.5 * s.x)
+		var along: Vector3 = card.global_transform.basis.z.normalized() * (0.6 * 0.5 * s.z)
+		var corners: Array[Vector3] = [
+			card.global_position + across + along, card.global_position + across - along,
+			card.global_position - across + along, card.global_position - across - along]
+		var mn: Vector2 = Vector2(INF, INF)
+		var mx: Vector2 = Vector2(-INF, -INF)
+		for p in corners:
+			var sp: Vector2 = cam.unproject_position(p)
+			mn = mn.min(sp)
+			mx = mx.max(sp)
+		rect = Rect2(mn, mx - mn)
+	var anchor: Vector2 = rect.position + rect.size * 0.5
+	var edge_right: float = rect.position.x + rect.size.x
+	var edge_left: float = rect.position.x
+	if rect.size.x <= 0.0:
+		# No camera, or a degenerate projection: fall back to the middle of the screen, still preferring the right.
+		anchor = view * 0.5
+		edge_right = anchor.x
+		edge_left = anchor.x
+	var x: float = edge_right + preview_gap
+	if x + size.x > view.x - 8.0:
+		# No room to the right of the card, so put it to the LEFT of the card instead.
+		x = edge_left - preview_gap - size.x
+	x = clampf(x, 8.0, maxf(8.0, view.x - size.x - 8.0))
+	var y: float = anchor.y - size.y * 0.5
+	y = clampf(y, 8.0, maxf(8.0, view.y - size.y - 8.0))
+	_preview.position = Vector2(x, y)
+	_preview.visible = true
+
+	# Grow in from small rather than popping, exactly like the deck editor's preview.
+	if _preview_tween != null and _preview_tween.is_valid():
+		_preview_tween.kill()
+	_preview.scale = Vector2.ONE * 0.1
+	_preview_tween = create_tween()
+	_preview_tween.tween_property(_preview, "scale", Vector2.ONE, preview_grow_seconds)
+
+
+func hide_card_preview() -> void:
+	_preview_card = null
+	if _preview != null and is_instance_valid(_preview):
+		_preview.visible = false
+
+
+## Which card the preview is showing, or null. Exposed for tests and for anything that needs to know
+## whether the preview is up without reading a private field.
+func preview_card() -> Card:
+	return _preview_card
+
+
+func preview_visible() -> bool:
+	return _preview != null and is_instance_valid(_preview) and _preview.visible
+
+func begin_mana_choice(card: Card) -> void:
+	# Sync entry point: the actual choice is a coroutine, and calling it directly from a click handler would raise
+	# "Trying to call an async function without await". The deferred call starts it safely.
+	call_deferred("_begin_mana_choice_async", card)
+
+
+func _begin_mana_choice_async(card: Card) -> void:
+	# The card decides which colours it can offer; the context supplies the means to ask. A normal Backup returns
+	# immediately; a multi-colour card awaits the circle.
+	if card == null or not is_instance_valid(card):
+		return
+	if assistant != null and assistant.payment_is_full():
+		return
+	var chosen: String = await card.generate_mana(card.make_effect_context("mana"))
+	if not chosen.is_empty():
+		add_card_to_mana_conversion(card, chosen)
+
+
+## The UI half of the choice. Called by EffectContext.choose_crystal_in_circle(), so card code never knows which
+## scene implements the picker. A one-element list is answered immediately; that is what makes the default Backup
+## path free of a popup.
+func open_mana_choice(card: Card, elements: Array) -> String:
+	if card == null or elements.is_empty():
+		return ""
+	if elements.size() == 1:
+		return str(elements[0])
+	if mana_choice != null and is_instance_valid(mana_choice):
+		mana_choice.queue_free()
+	hide_card_preview()
+	mana_choice = MANA_CHOICE.instantiate()
+	game.add_child(mana_choice)
+	var state: Dictionary = {"picked": "", "done": false}
+	mana_choice.chosen.connect(func(element: String) -> void:
+		state["picked"] = element
+		state["done"] = true)
+	mana_choice.cancelled.connect(func() -> void:
+		state["done"] = true)
+	mana_choice.open(card, elements)
+	while not bool(state["done"]):
+		await get_tree().process_frame
+	mana_choice = null
+	return str(state["picked"])
+
+
+func add_card_to_mana_conversion(card:Card, element: String = ""):
+	# RULES: the CP cost is exact. Once it is fulfilled, further selections are ignored; only the one hand-card
+	# overpay exception is allowed, and that already happened when the fulfilling card was selected.
+	if assistant != null and assistant.payment_is_full():
+		LOG.info("Mana", "cost already fulfilled; ignoring extra charge")
+		return
+	if selected_cards_for_mana_conversion.has(card):
+		return
+	# Already picked to pay another cost of this activation (a sacrificed Backup cannot also produce its mana).
+	if stack != null and stack.is_reserved_for_cost(card):
+		return
+	var chosen: String = element
+	if chosen.is_empty():
+		chosen = card.mana_element()
+	var options: Array = card.mana_elements()
+	if chosen != "any" and not options.has(chosen):
+		chosen = card.mana_element()
+	selected_cards_for_mana_conversion.push_back(card)
+	selected_mana_elements[card] = chosen
+	# Owns the marker, so an agent paying a cost gets the same feedback as a click.
+	card.show_mana_crystal()
+	selected_cards_for_mana_has_changed.emit(CARD_CHARGE, chosen)
+
+func remove_card_from_mana_conversion(card:Card):
+	if selected_cards_for_mana_conversion.has(card):
+		selected_cards_for_mana_conversion.erase(card)
+	var chosen: String = str(selected_mana_elements.get(card, card.mana_element()))
+	selected_mana_elements.erase(card)
+	card.clear_mana_crystal()
+	selected_cards_for_mana_has_changed.emit(-CARD_CHARGE, chosen)
+
+
+## Apply every static `on_character_enter` rule currently on the board to a card that just entered. This is a BOARD
+## QUERY, not a registered listener: the rule lives on its source card and is read while that source is on the field,
+## so a source that leaves stops contributing with no teardown at all.
+func _apply_entry_rules(entering: Card) -> void:
+	if entering == null or not is_instance_valid(entering):
+		return
+	for source in get_all_cards():
+		if source == null or not is_instance_valid(source) or not source.is_on_field():
+			continue
+		if not source.abilities_enabled():
+			continue
+		var effect_obj = source.effect()
+		if effect_obj != null and effect_obj.has_method("on_character_enter"):
+			effect_obj.on_character_enter(entering, source.make_effect_context("static"))
+
+
+func play_card(card, is_opponent: bool = false, animate = true, record: bool = true,
+		suppress_auto: bool = false, teleport: bool = false) -> void:
+	# UNIQUE NAMES. A player may not control two Characters with the same name. Checked BEFORE the reparent, so the
+	# duplicate never touches the field: it did not enter, so no enter-the-field trigger and no entry animation run.
+	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
+	# Setup boards (animate == false) are exempt, like summoning sickness, so test grounds may place a board directly.
+	if animate and card != null and card.is_character():
+		if game != null and game.has_method("would_be_unique_name_conflict") \
+				and game.would_be_unique_name_conflict(card):
+			LOG.info("Unique", "%s is already on the field; the new copy goes to the Break Zone" % card.card_name)
+			game.send_off_field_card_to_break_zone(card)
+			return
+		# RULE 7.7.5: normally one Light or Dark card per side. Cosmos/Chaos carry the printed exception.
+		if game != null and game.has_method("would_break_light_dark_limit") \
+				and game.would_break_light_dark_limit(card):
+			LOG.info("Light/Dark", "%s would exceed the one-Light-or-Dark limit and goes to the Break Zone" % card.card_name)
+			game.send_off_field_card_to_break_zone(card)
+			return
+	# RULES: record the zone FIRST — everything below (statuses, the continuous-effect refresh) asks is_on_field(),
+	# which reads current_zone. Moving the NODE (reparent + enter_zone's look) is presentation: see _arrive() below.
+	card.current_zone = Card.Zone.FIELD
+
+	# HISTORY. Recorded here because this is where a Character actually reaches the field — the "was played" event —
+	# and `record` is false for the SETUP BOARD, where pre-placed cards were not played at all. Returning a card to
+	# the field (Vanille) also lands here; it is logged as played, which is a known simplification.
+	if record:
+		var controller_name: String = card.controller
+		var owner_id: int = 1 if controller_name == Card.PLAYER else 2
+		game.record_action("%s %s was played" % [card.type, card.card_name], [], owner_id)
+
+	# SUMMONING SICKNESS. A card that just entered the field cannot tap until its controller's next turn: it cannot
+	# attack, a Backup cannot be tapped for mana, and a tap-costed skill is closed. Haste — printed or granted —
+	# ignores it, and that single rule lives in Card.can_tap().
+	#
+	# SKIPPED FOR A SETUP BOARD (animate == false): pre-placed cards are meant to be playable from the first frame,
+	# and they were not "just played". Card.turn_end() decrements the status, so one turn is the right duration.
+	if animate:
+		card.add_status_effect("summoning_sickness", 1)
+	
+	var target_node
+	var target_array
+	
+	if card.type == Card.FORWARD:
+		target_array = opponent_front_cards if is_opponent else front_cards
+		target_node = $OpponentFrontrowCard if is_opponent else $FrontrowCard
+	else:  # Backup
+		target_array = opponent_back_cards if is_opponent else back_cards
+		target_node = $OpponentBackrowCard if is_opponent else $BackrowCard
+	
+	var n = target_array.size()
+	target_array.append(card)
+	refresh_continuous_effects()
+	
+	# Calculate position
+	var target_position = target_node.position
+	if n % 2 == 0:
+		target_position -= (n/2) * Vector3(ROW_CARD_STEP, 0, 0)
+	else:
+		target_position += ((n+1)/2) * Vector3(ROW_CARD_STEP, 0, 0)
+	
+
+	# ENTRY RULES (Ultimecia 152: "all Forwards other than Ultimecia enter the field dull"). Read from the board at
+	# the moment of entry — nothing is registered, so a source that leaves the field simply stops being found. O(field)
+	# per entry; a registry would be the optimisation if entry rules ever become numerous.
+	if animate:
+		_apply_entry_rules(card)
+
+	# PRESENTATION, queued: move the node onto the board (keeping its on-screen transform, so whatever was queued
+	# before — a cast dissolve, say — has already played where the player saw the card), then the arrival (teleport
+	# materialise, or the hop into the slot) and the landing pulse. A non-animated placement (the setup board) is
+	# drawn at once.
+	if animate and teleport:
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			_arrive(card)
+			# NO TRAVEL. The source has already dissolved in place; the card appears directly on its slot.
+			card.position = target_position
+			card.visible = true
+			card.teleport.set_visual(1.0, 0.35, 0.0)
+			var materialize: Tween = card.teleport.play_in(
+				teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
+			await materialize.finished
+			_play_arrival_pulse(card))
+	elif animate:
+		Vfx.present(func() -> void:
+			if not is_instance_valid(card):
+				return
+			_arrive(card)
+			var tween = create_tween().set_ease(Tween.EASE_OUT)
+			tween.set_parallel(true)
+			tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)
+			tween.set_trans(Tween.TRANS_BACK)
+			tween.tween_property(card, "scale", Vector3.ONE*1.2, 0.5)
+			tween.set_parallel(false)
+			tween.tween_property(card, "position", target_position + Vector3(0, 2, 0), 0.6).set_delay(0.2)
+			tween.tween_property(card, "position", target_position, 0.4)
+			await tween.finished
+			_play_arrival_pulse(card))
+	else:
+		_arrive(card)
+		card.position = target_position
+	GlobalVariables.refresh_mode()
+	# RULES: the card has entered the field, so its ENTER_FIELD abilities trigger now — at the end of this frame, not
+	# when its arrival animation lands. A trigger that needs a decision (a target) still waits for the queue
+	# (Agent._settle), so the player sees the card arrive before being asked.
+	if animate and not suppress_auto:
+		execute_card_effect.call_deferred(card, EVENTS.Event.ENTER_FIELD)
+
+## Cost bands for the field-arrival pulse: 0-4 has no pulse, 5-7 is mild, and
+## 8+ is the big impact.
+## Draw a card that the rules already put on the field: reparent it here keeping its global transform, and give it
+## the field look (enter_zone normalises rotation, scale and the power readout).
+func _arrive(card: Card) -> void:
+	if card.get_parent() != self:
+		var trans: Transform3D = card.global_transform
+		card.reparent(self, false)
+		card.global_transform = trans
+	card.enter_zone(Card.Zone.FIELD)
+
+func slam_tier(card: Card) -> int:
+	if card == null:
+		return 0
+	var total: int = 0
+	for value in card.get_cost().values():
+		total += int(value)
+	if total >= 8:
+		return 2
+	if total >= 5:
+		return 1
+	return 0
+
+func _play_arrival_pulse(card: Card) -> void:
+	var tier: int = slam_tier(card)
+	if tier <= 0 or card == null or not is_instance_valid(card):
+		return
+	var pulse = SLAM_PULSE.instantiate()
+	add_child(pulse)
+	pulse.global_position = card.global_position + Vector3.UP * 0.02
+	pulse.call("play", tier)
+
+func execute_card_attack():
+	# DEFENCE IN DEPTH. Every caller already asks can_attack() — the human's click, the AI's choice, the blocker
+	# gate — but this is the one function that turns an attacker into an attack, so summoning sickness must not be
+	# bypassable by a future caller that forgets to ask. can_attack() is can_tap() plus "is a Forward".
+	if attacker_card == null or not attacker_card.can_attack():
+		return
+	# A PARTY attacks with every member. Each one dulls unless it is Brave, and each one's "when attacks" triggers —
+	# they attacked, even if only the party as a whole deals damage.
+	var members: Array[Card] = attacking_party.duplicate()
+	if members.is_empty():
+		members.append(attacker_card)
+	var attacking: Array[Card] = []
+	for card in members:
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		# A member that became unable to attack after formation simply does not attack; it cannot veto the party.
+		if not card.can_attack():
+			continue
+		# BRAVE does not dull to attack, which is what lets a Brave Forward attack and still block — and attack again
+		# on a later combat step the same turn. This is PER MEMBER, not per party.
+		#
+		# EXTRA ATTACKS: "Gilgamesh can attack twice this turn." The allowance is consumed here, and while it lasts the
+		# card stays untapped, so the next attack step can declare it again. The LAST allowed attack taps normally.
+		if card.extra_attacks > 0:
+			card.extra_attacks -= 1
+		elif not card.is_brave():
+			card.tap()
+		attacking.append(card)
+		execute_card_effect(card, EVENTS.Event.ATTACK)
+		# Board-wide "when a Forward you control attacks" watchers (Cloud 187). The event card is the attacker.
+		trigger_event(EVENTS.Event.FORWARD_ATTACKS, {"card": card})
+
+	# "When <card> FORMS A PARTY AND ATTACKS..." — a different trigger from when_attack, and it needs a REAL party:
+	# two or more members actually attacked (a party of one is just an ordinary attack, and the card text says
+	# "forms a party"). Fired per member so each card's own effect resolves for itself; the effect acts on the whole
+	# party through power_change_party().
+	if attacking.size() >= 2:
+		for card in attacking:
+			execute_card_effect(card, EVENTS.Event.PARTY_ATTACK)
+		# AND the wider trigger: "when A PARTY YOU CONTROL attacks" — for cards that are watching the party rather
+		# than riding in it (Celestia and Gippal are Backups/Forwards that may not be members at all).
+		trigger_party_attacks(attacker_card.controller)
+
+## Fire "a party you control attacked" for every card that side controls. Members already got their own
+## `when_party_attack`; this is the watcher form, so both shapes exist and neither has to guess.
+func trigger_party_attacks(controller: String) -> void:
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller != controller:
+			continue
+		if card.is_key_word_in_card_effect("when_party_attacks") or card.effect_handles_event(EVENTS.Event.PARTY_ATTACKS):
+			execute_card_effect(card, EVENTS.Event.PARTY_ATTACKS)
+
+## Trigger-level conditions are evaluated by Game, because that is where the condition vocabulary lives
+## (controls:, cast_this_turn:, party_has_named:). Field forwards rather than keeping a second copy of the rules.
+func _trigger_condition_holds(condition: String) -> bool:
+	if game == null or not game.has_method("_condition_holds"):
+		return true
+	return bool(game.call("_condition_holds", condition))
+
+## Fire "a party you control dealt damage to the opponent" (Andoria, Boko).
+func trigger_party_deals_damage(controller: String) -> void:
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller != controller:
+			continue
+		if card.is_key_word_in_card_effect("when_party_deals_damage") or card.effect_handles_event(EVENTS.Event.PARTY_DEALS_DAMAGE):
+			execute_card_effect(card, EVENTS.Event.PARTY_DEALS_DAMAGE)
+
+## Fire a board-wide event. Unlike the printed `when_*` keywords, these triggers live in a card's `triggers` array
+## and watch something happening to the game rather than to that card:
+##
+##   damage_received   a player took damage                 context: {player_id}
+##   card_left_field   a card was put into the Break Zone   context: {card}
+##   summon_cast       a Summon was cast                    context: {card}
+##   forward_attacks   a Forward attacked                   context: {card}
+##
+## A TRIGGERED ABILITY GOES ON THE STACK. The event only MATCHES and ENQUEUES here; `may`, target selection and the
+## instructions all happen at resolution (Game._resolve_event_trigger), so either player can respond first and a
+## "may" choice is made when the ability resolves, not when it triggers.
+func trigger_event(event_name, context = null) -> void:
+	if game == null:
+		return
+	var event_id: int = EVENTS.normalize(event_name)
+	var event_key: String = EVENTS.name_of(event_id)
+	if event_id == EVENTS.Event.NONE:
+		return
+	var event_ctx: EVENT_CONTEXT = _as_event_context(event_id, context)
+	var event_data: Dictionary = event_ctx.to_data()
+	var cards: Array = get_all_cards().duplicate()
+	for source in cards:
+		if source == null or not is_instance_valid(source):
+			continue
+		var triggers = source.card_effects.get("triggers", [])
+		if triggers is Dictionary:
+			triggers = [triggers]
+		if not (triggers is Array):
+			continue
+		# A CODE EFFECT OWNS THIS EVENT FOR THIS CARD. Do not also run its JSON trigger for the same event; a migrated
+		# hook and a leftover JSON entry would fire the ability twice.
+		if source.abilities_enabled() and source.effect_handles_event(event_id):
+			var source_effect = source.effect()
+			if source_effect != null and source_effect.has_method("trigger_specs"):
+				var specs: Array = source_effect.trigger_specs()
+				if not specs.is_empty():
+					for spec in specs:
+						if spec != null and spec.accepts(source, event_ctx):
+							stack.enqueue_code_trigger(source, event_id, event_data)
+							break
+					continue
+			if source_effect != null and source_effect.handlers().has(event_id):
+				stack.enqueue_code_trigger(source, event_id, event_data)
+			continue
+		for index in range(triggers.size()):
+			var trigger = triggers[index]
+			if not (trigger is Dictionary):
+				continue
+			if str(trigger.get("on", "")) != event_key:
+				continue
+			if not _event_filter_holds(source, trigger.get("filter", {}), event_data):
+				continue
+			var once: bool = bool(trigger.get("once_per_turn", false))
+			var turn: int = int(game.get("turn_number"))
+			var fire_key: String = "%d:%d:%d" % [source.get_instance_id(), index, turn]
+			if once and game.has_method("event_trigger_already_fired") \
+					and bool(game.call("event_trigger_already_fired", fire_key)):
+				continue
+			if once and game.has_method("mark_event_trigger_fired"):
+				game.call("mark_event_trigger_fired", fire_key)
+			stack.enqueue_event_trigger(source, trigger, event_data)
+
+func _as_event_context(event_id: int, context) -> EVENT_CONTEXT:
+	if context is EVENT_CONTEXT:
+		var given: EVENT_CONTEXT = context
+		given.event = event_id
+		return given
+	var ctx: EVENT_CONTEXT = EVENT_CONTEXT.new()
+	ctx.event = event_id
+	if context is Dictionary:
+		ctx.data = context.duplicate(true)
+		ctx.card = context.get("card", null)
+		ctx.from_zone = int(context.get("from_zone", Card.Zone.NONE))
+		ctx.to_zone = int(context.get("to_zone", Card.Zone.NONE))
+		ctx.cause = str(context.get("cause", ""))
+		ctx.player_id = int(context.get("player_id", 0))
+	if ctx.player_id == 0 and ctx.card != null and is_instance_valid(ctx.card):
+		ctx.player_id = 1 if ctx.card.controller == Card.PLAYER else 2
+	return ctx
+
+
+## A trigger's filter is criteria on the event card, except for events with no card (damage_received), where only the
+## controller comparison makes sense. "your"/"opponent" are relative to the trigger owner.
+func _event_filter_holds(source: Card, filter, context: Dictionary) -> bool:
+	if not (filter is Dictionary) or filter.is_empty():
+		return true
+	var event_card: Card = context.get("card", null)
+	if event_card != null and is_instance_valid(event_card):
+		return event_card.matches_criteria(filter, source)
+	var wanted: String = str(filter.get("controller", ""))
+	if wanted == "":
+		return true
+	var owner_id: int = 1 if source.controller == Card.PLAYER else 2
+	var event_id: int = int(context.get("player_id", 0))
+	if wanted in ["your", "self", "mine", "player"]:
+		return event_id == owner_id
+	if wanted in ["opponent", "enemy", "theirs"]:
+		return event_id != owner_id and event_id != 0
+	return false
+
+func _event_targets(trigger: Dictionary, source: Card, context: Dictionary) -> Array:
+	var mode: String = str(trigger.get("target", "source"))
+	if mode == "event":
+		var event_card: Card = context.get("card", null)
+		return [event_card] if event_card != null and is_instance_valid(event_card) else []
+	if mode == "none":
+		return []
+	return [source]
+
+## "The Forwards forming a party you control gain Brave" (Gippal). Asked by Card.is_brave(), because that is the
+## predicate the attack path already reads per member.
+func party_grants_brave(card: Card) -> bool:
+	if card == null or attacking_party.size() < 2 or not attacking_party.has(card):
+		return false
+	for c in get_all_cards():
+		if c != null and is_instance_valid(c) and c.abilities_enabled() and c.controller == card.controller and c.grants_party_brave():
+			return true
+	return false
+	
+func end_phase_cleanup():
+	# End Phase cleanup: resolve "break it at the end of the turn" first, then remove all damage from every card
+	# on the field and expire "until end of turn" effects. (No end-of-turn priority window exists yet, so this runs
+	# immediately on entering the End Phase.)
+	for c in get_all_cards().duplicate():
+		if c == null or not is_instance_valid(c) or not c.status_effects.has("break_at_end_of_turn"):
+			continue
+		c.status_effects.erase("break_at_end_of_turn")
+		LOG.info("EndPhase", "%s is broken by its delayed-break effect" % c.card_name)
+		if game != null and game.has_method("break_card"):
+			game.break_card(c)
+	for c in get_all_cards():
+		c.turn_end()
+	# Expiring abilities_nullified can make a source's auras/conditionals live again. Recompute after the statuses
+	# are actually gone; otherwise the board would keep the suppressed numbers until the next unrelated change.
+	refresh_continuous_effects()
+func try_activate_from_field(card: Card) -> void:
+	var skills: Array = card.activation_skills()
+	if skills.is_empty():
+		return
+	# ONE ENTRY POINT. A single ability activates immediately; two or more open the skill picker modal, which shows
+	# each ability's text (see scripts/skill_choice.gd).
+	begin_skill_activation(card, -1)
+
+## True while the LOCAL player holds the window. Holding a card you *could* activate is not the
+## same as being allowed to activate it: while the OPPONENT holds priority the input mode is
+## still FREE/INSTANT_SPEED_TIME, so the mode alone cannot answer this question. A finished
+## match is not a window either.
+func has_priority() -> bool:
+	if game == null:
+		return false
+	if bool(game.get("match_over")):
+		return false
+	return int(game.get("priority_holder")) == 1
+
+## The largest useful X an 《X》 ability can declare. It is bounded by what can actually be paid AND by the most
+## expensive Character in hand, because paying more than the card's cost buys nothing. Returns -1 when there is no
+## Character in hand to play at all, which makes the ability unavailable instead of offering a pointless X=0.
+func ability_x_max(card: Card) -> int:
+	if card == null:
+		return -1
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
+	var owner_hand: Hand = game.hand_for(owner_id) if game != null else null
+	var useful: int = -1
+	if owner_hand != null:
+		for c in owner_hand.cards:
+			if c != null and is_instance_valid(c) and c.is_character():
+				useful = maxi(useful, int(c.cost))
+	if useful < 0:
+		return -1
+	var affordable: int = 0
+	for b in get_back_cards_for(card.controller):
+		if b != null and is_instance_valid(b) and b != card and not b.tapped:
+			affordable += 1
+	if owner_hand != null:
+		# A hand card is worth 2 CP when discarded to pay (see Hand.add_card_to_mana_conversion).
+		affordable += owner_hand.cards.size() * 2
+	return clampi(useful, 0, affordable)
+
+
+## The authoritative "this card's effect can be activated right now" gate: your card, YOUR
+## WINDOW, untapped, with an activatable skill, in a moment where acting is allowed (FREE or
+## INSTANT_SPEED_TIME — no targeting, payment or declaration modal open).
+##
+## begin_skill_activation() uses this as its precondition AND the green availability ring is
+## driven from it, so the cue and the action can never disagree. Any condition added here
+## therefore tightens both at once.
+## `by_agent`: the activation is decided by the card's owner's AGENT (a replayed online opponent, a probe), not clicked
+## here. Then the rules are checked for that owner's seat — they hold priority, their hand pays — and the local UI
+## mode is irrelevant. A click keeps the local checks: your card, your priority, a free moment on screen.
+## `check_payment`: also require that the ability's CP cost can be paid right now (the "you can use this" ring and
+## auto-pass). A click or a replay does not ask for it: the payment step is where a short payment shows.
+func can_activate_now(card: Card, by_agent: bool = false, check_payment: bool = false) -> bool:
+	if card == null or game == null:
+		return false
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
+	if by_agent:
+		if bool(game.get("match_over")) or int(game.get("priority_holder")) != owner_id:
+			return false
+	else:
+		if card.controller != Card.PLAYER:
+			return false
+		if not has_priority():
+			return false
+		var mode = GlobalVariables.get_player_mode()
+		if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			return false
+	var owner_hand: Hand = game.hand_for(owner_id)
+	# A TAPPED CARD CAN STILL USE A NON-TAP ABILITY. The tap rule belongs to the cost, not to the card: Gilgamesh's
+	# 《雷》《雷》 power pump has no dull cost, so it must stay available after he has attacked. The same reasoning
+	# applies to summoning sickness: can_tap() is asked per ability, below, only when the ability asks to tap.
+	var skills: Array = card.activation_skills()
+	if skills.is_empty():
+		return false
+	# AN S COST THAT CANNOT BE PAID IS NOT AN AVAILABLE ABILITY. Without this the activation TAPPED the source and then
+	# aborted silently — and because the abort untaps again, every further click re-tapped it, which reads as "the card
+	# just taps and nothing happens". Checking here means the card is simply not offered (no green ring), and
+	# begin_skill_activation() refuses it for the same reason, so the tap never happens.
+	#
+	# ONE USABLE ABILITY IS ENOUGH for the card to be offered. With several abilities the card is available if ANY of
+	# them can be paid; the unpayable ones are shown disabled in the picker rather than hiding the card entirely.
+	for def in skills:
+		# "You can only use this ability during your turn" (Devout 48). Checked PER ABILITY, because a card may have
+		# one time-restricted skill and one that is always available.
+		var owner_id_now: int = 1 if card.controller == Card.PLAYER else 2
+		if bool(def.get("only_your_turn", false)) and int(game.turn_owner) != owner_id_now:
+			continue
+		# "You can only use this ability while <card> is blocking." A per-ability gate, like only_your_turn:
+		# the same card may have another ability that is always available.
+		if bool(def.get("only_if_blocking", false)) and not card.status_effects.has("blocking"):
+			continue
+		# A tap cost needs a card that can actually tap; a non-tap ability does not.
+		if bool(def.get("tap", false)) and not card.can_tap():
+			continue
+		# "You can only use this ability if you have received 4 points of damage or more" (Gilgamesh 207).
+		if def.has("only_if_damage_received") \
+				and _damage_received_by(card) < int(def["only_if_damage_received"]):
+			continue
+		# An 《X》 ability is only useful if there is a Character in hand it could play.
+		if bool(def.get("x_cost", false)) and ability_x_max(card) < 0:
+			continue
+		if bool(def.get("s_cost", false)) and not owner_hand.has_card_matching_criteria({"is_named": card.card_name}):
+			continue
+		# A sacrifice cost with nothing to sacrifice is not an available ability either.
+		if def.has("sacrifice") and _sacrifice_candidates(def["sacrifice"], card).is_empty():
+			continue
+		# Same for a discard cost with too few cards in hand.
+		if int(def.get("discard", 0)) > 0 and (owner_hand == null or owner_hand.cards.size() < int(def.get("discard", 0))):
+			continue
+		# An ability that chooses a target is only worth offering when a legal target exists. This
+		# covers FIELD targets (Black Belt needs a Forward with "blocking") as well as STACK targets.
+		# Other domains are left alone: has_viable_target() only searches field/stack.
+		var ct = def.get("choose_target", {})
+		if ct is Dictionary and not ct.is_empty():
+			var target_domain: String = str(ct.get("in", "field"))
+			if (target_domain == "field" or target_domain == "stack") \
+					and not has_viable_target(ct, card, "Ability", target_domain):
+				continue
+		if check_payment and not _skill_payable(card, def, owner_hand):
+			continue
+		return true
+	return false
+
+const COST_CHECK := preload("res://scripts/core/cost_check.gd")
+
+## Untapped Backups `controller_name` could dull for CP right now.
+func _mana_backups(controller_name: String, except: Card = null) -> Array:
+	return get_back_cards_for(controller_name).filter(func(b): return b != except and not b.tapped \
+		and not selected_cards_for_mana_conversion.has(b) and (stack == null or not stack.is_reserved_for_cost(b)))
+
+## Can this ability's CP cost be paid, with everything else it costs taken out first: the source itself when it taps,
+## the same-named card an S ability discards, and the cards a discard cost takes (the least useful ones as CP).
+func _skill_payable(card: Card, def: Dictionary, owner_hand: Hand) -> bool:
+	if bool(def.get("x_cost", false)) or bool(def.get("free_activation", false)):
+		return true   # X is already bounded by what can be paid (ability_x_max); a free activation costs nothing
+	var cost: Dictionary = def.get("cost", {})
+	if cost_is_free(cost):
+		return true
+	var backups: Array = _mana_backups(card.controller, card if bool(def.get("tap", false)) else null)
+	var spare: Array = owner_hand.cards.filter(func(h): return stack == null or not stack.is_reserved_for_cost(h)) \
+		if owner_hand != null else []
+	if bool(def.get("s_cost", false)):
+		for h in spare:
+			if h.card_name == card.card_name:
+				spare.erase(h)
+				break
+	var discards: int = int(def.get("discard", 0))
+	if discards > 0:
+		# Give up first the cards whose element the cost does not ask for.
+		spare.sort_custom(func(a, b): return _useful_for(a, cost) < _useful_for(b, cost))
+		spare = spare.slice(mini(discards, spare.size()))
+	return COST_CHECK.can_pay(cost, backups, spare)
+
+func _useful_for(card: Card, cost: Dictionary) -> int:
+	for element in card.mana_elements():
+		if int(cost.get(element, 0)) > 0:
+			return 1
+	return 0
+
+## CAN THE LOCAL PLAYER CAST THIS HAND CARD RIGHT NOW? Priority, timing (the same rule the drop uses:
+## Card.can_be_played), a legal target for a targeted Summon, and the CP cost payable WITHOUT the card itself.
+func can_cast_from_hand(card: Card) -> bool:
+	if card == null or not is_instance_valid(card) or card.controller != Card.PLAYER or game == null:
+		return false
+	if not has_priority():
+		return false
+	var owner_hand: Hand = game.hand_for(1)
+	if owner_hand == null or not owner_hand.cards.has(card):
+		return false
+	if stack != null and (stack.summon_casting_card != null or stack.casting_card != null \
+			or stack.skill_activation_proxy != null):
+		return false
+	if not card.can_be_played():
+		return false
+	if card.type == Card.SUMMON:
+		var criteria = card.get_cast_target_criteria()
+		if criteria != null and not criteria.is_empty() and not has_viable_target(criteria, card, "Summon"):
+			return false
+	var spare: Array = owner_hand.cards.filter(func(h): return h != card)
+	return COST_CHECK.can_pay(effective_cost(card), _mana_backups(Card.PLAYER), spare)
+
+## Is there ANYTHING the local player could do with priority right now: a card to cast, an ability to use?
+## Auto-pass passes for them when there is not.
+func local_has_any_play() -> bool:
+	if game == null:
+		return false
+	for card in game.hand_for(1).cards:
+		if can_cast_from_hand(card):
+			return true
+	for card in get_all_cards():
+		if card.controller == Card.PLAYER and can_activate_now(card, false, true):
+			return true
+	return false
+
+## Damage in the controller's Damage Zone. Used by "you can only use this ability if you have received N damage"
+## (Gilgamesh 207); the zone holds one card per point, so its count is the number.
+func _damage_received_by(card: Card) -> int:
+	if game == null:
+		return 0
+	var side = game.side_for(1 if card.controller == Card.PLAYER else 2)
+	return side.damage_count() if side != null else 0
+
+## Cards that could be paid for a `"sacrifice": {...}` skill cost. Criteria are read from the SOURCE's perspective, so
+## `controller: "player"` means the activating card's controller.
+func _sacrifice_candidates(criteria: Dictionary, source: Card) -> Array:
+	var out: Array = []
+	for c in get_all_cards():
+		if c != null and is_instance_valid(c) and c.matches_criteria(criteria, source):
+			out.append(c)
+	return out
+
+## Green ring: "you may activate this right now" — your cards only, and gone the moment a modal
+## takes the moment away. It is DERIVED state with many causes (the input mode, a card's tapped
+## state, which cards are on the field), so it is POLLED rather than hooked to one trigger; the
+## card setters are guarded, so an unchanged card costs a bool comparison.
+const AVAILABILITY_POLL := 0.15
+var _availability_timer: float = 0.0
+
+func _process(delta: float) -> void:
+	_availability_timer += delta
+	if _availability_timer < AVAILABILITY_POLL:
+		return
+	_availability_timer = 0.0
+	refresh_available_effects()
+
+func refresh_available_effects() -> void:
+	# The ring means "you can do this now", cost included: an ability you could not pay for is not offered.
+	for card in get_all_cards():
+		card.set_available_highlight(can_activate_now(card, false, true))
+	# ...and the same for the cards in your hand you could cast right now.
+	if game != null:
+		var own_hand: Hand = game.hand_for(1)
+		if own_hand != null:
+			for card in own_hand.cards:
+				card.set_available_highlight(can_cast_from_hand(card))
+
+## Activate an ability. `skill_index < 0` means ASK: one ability activates directly, two or more open the picker
+## modal and wait for the choice. Explicit indexes stay supported (probes, and any future "activate ability N").
+## Set per activation: its remaining steps are answered by the owner's agent, not by this machine's UI.
+var _activation_by_agent: bool = false
+
+func begin_skill_activation(card: Card, skill_index: int = -1, by_agent: bool = false) -> void:
+	if not can_activate_now(card, by_agent):
+		return
+	var skills: Array = card.activation_skills()
+	if skills.is_empty():
+		return
+	var owner_hand: Hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
+	if not by_agent:
+		skill_activation_begun.emit(card)
+	if skill_index < 0:
+		skill_index = 0
+		if skills.size() > 1:
+			# WHICH ENTRIES ARE PAYABLE RIGHT NOW. An S ability needs a card of the same name in hand; the picker
+			# shows it disabled instead of letting the player pick an activation that can only abort.
+			var usable: Array = []
+			for def in skills:
+				var turn_ok: bool = (not bool(def.get("only_your_turn", false)) \
+					or int(game.turn_owner) == (1 if card.controller == Card.PLAYER else 2)) \
+					and (not bool(def.get("only_if_blocking", false)) or card.status_effects.has("blocking")) \
+					and (not bool(def.get("tap", false)) or card.can_tap()) \
+					and (not def.has("only_if_damage_received")
+						or _damage_received_by(card) >= int(def["only_if_damage_received"]))
+				var can_pay: bool = turn_ok and (not bool(def.get("s_cost", false)) \
+					or owner_hand.has_card_matching_criteria({"is_named": card.card_name})) \
+					and (not bool(def.get("x_cost", false)) or ability_x_max(card) >= 0)
+				if can_pay and def.has("sacrifice"):
+					can_pay = not _sacrifice_candidates(def["sacrifice"], card).is_empty()
+				if can_pay and int(def.get("discard", 0)) > 0:
+					can_pay = owner_hand != null and owner_hand.cards.size() >= int(def.get("discard", 0))
+				usable.append(can_pay)
+			var chooser_id: int = 1 if card.controller == Card.PLAYER else 2
+			var agent: Agent = game.agent_for(chooser_id)
+			if agent == null:
+				return
+			skill_index = await agent.choose_skill(chooser_id, card, skills, usable)
+			# The picker is awaited, so anything could have happened behind it. Re-check before spending anything.
+			if not can_activate_now(card, by_agent):
+				return
+		if skill_index < 0:
+			return
+	if skill_index >= skills.size():
+		return
+	var def: Dictionary = skills[skill_index].duplicate(true)
+	var x_value: int = -1
+	if bool(def.get("x_cost", false)):
+		# DECLARE X BEFORE PAYING. The ability is not on the stack yet and nothing has been spent, so Cancel here is
+		# free. Once confirmed, the cost becomes {neutral: X} and the normal exact-payment pipeline takes over.
+		var x_max: int = ability_x_max(card)
+		if x_max < 0:
+			return
+		var x_owner: int = 1 if card.controller == Card.PLAYER else 2
+		var x_agent: Agent = game.agent_for(x_owner)
+		if x_agent == null:
+			return
+		x_value = await x_agent.choose_number(x_owner, int(def.get("x_min", 0)), x_max, "Choose X")
+		if x_value < 0:
+			return
+		def["x_value"] = x_value
+		def["cost"] = {"neutral": x_value}
+	if not stack.add_skill_activation_proxy(card, skill_index, x_value):
+		return
+	assistant.clear_payment_accumulator()
+	def = stack.skill_activation_proxy.skill_def_override
+	# TAP THE SOURCE NOW, BEFORE THE MANA STEP. Tapping is part of the ability's cost, so it belongs at the moment
+	# of activation rather than at stack commit — and an untapped source during payment could be selected as mana
+	# for its own ability (paying the Red Mage's skill with the Red Mage). Tapped, it is out of the pool by the same
+	# rule that keeps every other tapped Backup out.
+	#
+	# Stack._clear_skill_proxy() undoes this when the player backs out, so the tap is only really spent once the
+	# activation commits.
+	if def.get("tap", false) and not card.tapped:
+		card.tap()
+	# PUT-INTO-THE-BREAK-ZONE COST (Mystic 96). Paid at activation like the S discard, and chosen by the owner through
+	# the agent seam, so the human gets a picker and the AI picks for itself. A cancelled pick aborts the whole
+	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
+	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
+	var sacrifice: Dictionary = def.get("sacrifice", {})
+	if not sacrifice.is_empty() and not bool(def.get("defer_sacrifice", false)):
+		var picked: Card = null
+		if bool(sacrifice.get("is_source", false)):
+			# "Put THIS card into the Break Zone" — no choice to make, and no reason to ask an agent.
+			picked = card if card.matches_criteria(sacrifice, card) else null
+		else:
+			var candidates: Array = _sacrifice_candidates(sacrifice, card)
+			if not candidates.is_empty():
+				picked = await game.agent_for(owner_id).choose_sacrifice(owner_id, candidates)
+		if picked == null:
+			stack.call("_clear_skill_proxy")
+			return
+		# PICKED, NOT PAID: it leaves at commit together with every other cost (Stack.pending_cost_sacrifices).
+		stack.pending_cost_sacrifices.append(picked)
+	# DISCARD AS A COST (Ninja 78). The owner picks which cards leave their hand, through the same agent seam the
+	# discard effects use — so the human gets the hand picker and the AI chooses for itself. A refused pick aborts the
+	# activation and clears the proxy, which is what keeps "cancel" from costing a card.
+	var discard_count: int = int(def.get("discard", 0))
+	if discard_count > 0:
+		for _i in range(discard_count):
+			# Only cards not already picked for this cost can be picked again.
+			var choosable: Array = owner_hand.cards.filter(func(h): return not stack.is_reserved_for_cost(h)) \
+				if owner_hand != null else []
+			if choosable.is_empty():
+				stack.call("_clear_skill_proxy")
+				return
+			var discarded: Card = await game.agent_for(owner_id).choose_discard(owner_id, choosable)
+			if discarded == null:
+				stack.call("_clear_skill_proxy")
+				return
+			# PICKED, NOT PAID: discarded at commit together with every other cost (Stack.pending_cost_discards).
+			stack.pending_cost_discards.append(discarded)
+	# WHO ANSWERS THE COSTS. A click (or a probe standing in for one) goes through this machine's UI, which only ever
+	# shows the local player's hand; an activation decided by the owner's agent (a replayed online opponent) is
+	# answered by that agent instead.
+	var owner_agent: Agent = game.agent_for(owner_id)
+	var by_ui: bool = not by_agent and card.controller == Card.PLAYER
+	_activation_by_agent = not by_ui
+	if def.get("s_cost", false):
+		# Special ability (S): first discard a card sharing a name with the
+		# source, then the regular mana payment step follows.
+		if by_ui:
+			stack.begin_s_cost_selection(card, skill_index)
+			return
+		# ANY OTHER OWNER picks the same-named card through its agent, as a discard (it is one, paid at commit).
+		var named: Array = owner_hand.cards.filter(func(h): return h.card_name == card.card_name \
+			and not stack.is_reserved_for_cost(h))
+		var s_card: Card = await owner_agent.choose_discard(owner_id, named) if not named.is_empty() else null
+		if s_card == null:
+			stack.call("_clear_skill_proxy")
+			return
+		stack.s_cost_selected_card = s_card
+	var cost: Dictionary = def.get("cost", {})
+	if cost_is_free(cost):
+		# NOTHING TO PAY, SO NO PAYMENT STAGE — and no Confirm to press on an empty screen before anything can happen.
+		# This is exactly the branch the Confirm button would have taken, so nothing is skipped but the modal.
+		continue_skill_activation_after_mana(stack.skill_activation_proxy)
+		return
+	card_activated_ability.emit(cost)
+	if not by_ui:
+		# Same as Game.play_card_for(): the owner's agent pays, and the modal it opened is never shown here.
+		assistant.hide_buttons()
+		var paid: bool = await owner_agent.pay_cost(owner_id, cost)
+		if paid:
+			assistant.on_charge_complete()
+		else:
+			assistant.on_charge_cancelled()
+
+## A mana cost with nothing in it — absent, empty, or all zeroes. Those cost the player nothing, so showing them a payment
+## modal asks them to confirm that they intend to pay nothing.
+func cost_is_free(cost: Dictionary) -> bool:
+	for key in cost:
+		if int(cost[key]) > 0:
+			return false
+	return true
+
+func continue_skill_activation_after_mana(_proxy: Card) -> void:
+	if _proxy == null or _proxy.effect_source == null:
+		return
+	var src: Card = _proxy.effect_source
+	var idx: int = _proxy.skill_activation_index
+	var def: Dictionary = _proxy.skill_def_override
+	if def.is_empty():
+		def = src.activation_skill(idx)
+	if def.is_empty():
+		return
+	var choose_target = def.get("choose_target", null)
+	if choose_target:
+		# The arc starts from the PROXY in the stack, not from the card on the field:
+		# that is the object the player is actually resolving, and it is where the
+		# arrow should appear to come from. The proxy carries the same controller, and
+		# source_kind below is what the protection rules read, so targeting behaviour
+		# is unchanged.
+		request_target(choose_target, _proxy, true, "Ability")
+	else:
+		if _activation_by_agent:
+			# Nothing left to decide: only the UI gets a Confirm to press.
+			stack.confirm_skill_without_target_then_priority()
+			return
+		GlobalVariables.refresh_mode()
+		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
+	
+func execute_card_effect(card, event):
+	# CODE-DEFINED EFFECTS. A script that declares this event wins over the JSON entry for the same keyword, so a card
+	# can migrate one hook at a time while its remaining effects stay data-driven. The stack copy records the event id;
+	# Game resolves it by calling CardEffect.dispatch with a fresh EffectContext.
+	var event_id: int = EVENTS.normalize(event)
+	var event_key: String = EVENTS.name_of(event_id)
+	if event_id == EVENTS.Event.NONE:
+		return
+	if card.abilities_enabled() and card.effect_handles_event(event_id):
+		var stack_node = game.get("stack") if game != null else null
+		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
+			stack_node.enqueue_code_trigger(card, event_id, {})
+		return
+	if( not card.is_key_word_in_card_effect(event_key)):
+		return
+	# A TRIGGER-LEVEL CONDITION, checked BEFORE anything is put on the stack. Instruction conditions cannot do this
+	# job: a conditional triggered ability would still choose a target and queue an empty effect. "When <card> forms a
+	# party WITH X and attacks" is the case that needs it.
+	var trigger_condition: String = str(card.card_effects.get(event_key, {}).get("condition", ""))
+	if trigger_condition != "" and not _trigger_condition_holds(trigger_condition):
+		return
+	add_card_effect_to_stack.emit(card.id, event_key, card)
+	# Most elegant single-line solution
+	var choose_target_criteria = card.card_effects.get(event_key, {}).get('choose_target', null)
+	
+	# The effect RESOLVES as a card in the stack — Stack.create_card() makes that copy in
+	# response to the signal above, synchronously, so it is already there. That copy is the
+	# object the player is resolving, so the targeting arc must originate from IT and not
+	# from the card sitting on the field.
+	var stack_card: Card = _stack_effect_card_for(card)
+	if choose_target_criteria:
+		var source_for_target: Card = stack_card if stack_card != null else card
+		# NO LEGAL TARGET MEANS NO TARGETING SESSION. "You may deal it damage" style triggers fire when nothing is
+		# eligible (no dull Forward, say) — opening an empty session there would strand the effect with no way to
+		# finish it, so the trigger simply adds an effect that resolves with nothing to do.
+		var domain: String = "field"
+		if choose_target_criteria is Dictionary:
+			domain = str(choose_target_criteria.get("in", "field"))
+		if has_viable_target(choose_target_criteria, source_for_target, "Ability", domain):
+			request_target(choose_target_criteria, source_for_target, false, "Ability")
+
+## The stack's copy of the effect triggered by `source`, if it exists yet.
+func _stack_effect_card_for(source: Card) -> Card:
+	if game == null:
+		return null
+	var s: Variant = game.get("stack")
+	if s == null or s.cards == null:
+		return null
+	var found: Card = null
+	for c in s.cards:
+		if c.effect_source == source:
+			found = c
+	return found
+## Every card on the field, TURN PLAYER'S FIRST. Not "mine first": each machine in an online match is its own
+## "player", so a perspective-based order would walk the cards differently on the two machines and anything
+## order-dependent (which card breaks first, which trigger goes on the stack first) would desync. Turn order is the
+## same everywhere — and it is how the rules order simultaneous things anyway.
+func get_all_cards() -> Array[Card]:
+	if game != null and int(game.turn_owner) == 2:
+		return opponent_front_cards + opponent_back_cards + front_cards + back_cards
+	return front_cards + back_cards + opponent_front_cards + opponent_back_cards
+
+func get_front_cards_for(controller_name: String) -> Array[Card]:
+	# Forwards of one side. Agents use this for attack / block decisions.
+	return front_cards if controller_name == Card.PLAYER else opponent_front_cards
+
+func get_back_cards_for(controller_name: String) -> Array[Card]:
+	# Backups of one side: the AI taps these to pay card costs.
+	return back_cards if controller_name == Card.PLAYER else opponent_back_cards
+
+func untap_cards_for(controller_name: String) -> void:
+	# Active Phase untaps only the turn player's cards.
+	var cards: Array[Card] = (front_cards + back_cards) if controller_name == Card.PLAYER else (opponent_front_cards + opponent_back_cards)
+	for card in cards:
+		# FROZEN: "does not activate during its controller's next Active Phase."
+		#
+		# The status is CONSUMED here rather than counted down in turn_end(). A duration would be the wrong clock:
+		# turn_end() ticks every card once per turn regardless of who owns it, so a freeze applied on the victim's
+		# OWN turn would expire before their next Active Phase, and the same keyword would behave differently
+		# depending on when it was applied. Consuming it at the untap it denies is exact in both directions, and it
+		# does not stack - being Frozen twice still skips one Phase, because the second erase is a no-op.
+		#
+		# It does NOT block untap_targets(): "Activate" effects still work on a Frozen card. Freeze denies the
+		# Active Phase, not activation.
+		# "WILL NOT ACTIVATE DURING YOUR NEXT ACTIVE PHASE" (Kain) is the same clock as Freeze: a status consumed by
+		# the untap it denies, never counted down at End Phase.
+		if card.status_effects.has("skip_next_active"):
+			card.status_effects.erase("skip_next_active")
+			LOG.info("Skip", "%s does not activate" % card.card_name)
+			continue
+		if card.status_effects.has("frozen"):
+			card.status_effects.erase("frozen")
+			card.refresh_status_visuals()
+			LOG.info("Freeze", "%s does not activate" % card.card_name)
+			continue
+		card.untap()
+		
+func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
+	targeting_started.emit(card)
+	targeting_criteria = _legacy_target_criteria(targeting_criteria)
+	# Always start a targeting session fresh. Leftover target_card from a
+	# previous session made set_target_card() ignore clicks (stuck UI).
+	targeting_allow_cancel = allow_cancel
+	target_card = null
+	source_card = card
+	# A SESSION MAY ASK FOR MORE THAN ONE TARGET. `choose_target` may carry a "count"; absent (or anything that is not a
+	# Dictionary) means ONE, and one behaves exactly as it always has — including going straight to Confirm on the pick.
+	# See `targeting_picked`.
+	#
+	# `count` IS A SESSION KEY, NOT A PROPERTY OF A CARD, so it is stripped before anything is matched against it.
+	# Card.matches_criteria() treats every key as a METHOD NAME ON CARD and errors out on anything else — so leaving
+	# "count" in the criteria made has_method("count") false, which made every candidate illegal and meant no pick could
+	# ever be recorded. That is a silent failure: the ring simply never lit.
+	targeting_source_kind = source_kind
+	targeting_blocks = targeting_criteria if targeting_criteria is Array else [targeting_criteria]
+	targeting_block_index = 0
+	targeting_block_start = 0
+	targeting_picked.clear()
+	_chosen_notified = false
+	# EVERY arc from the last session goes, not just the aiming one: a multi-target session leaves several behind.
+	for old in targeting_arrows:
+		if old != null and is_instance_valid(old):
+			old.queue_free()
+	targeting_arrows.clear()
+	if arrow:
+		arrow.queue_free()
+		arrow = null
+	reset_targets()
+	# The stack's review link draws the same arrow shape and paints the same aura, so it has to
+	# let go of both before this session claims them.
+	var stack_node = game.get("stack")
+	if stack_node != null:
+		stack_node.release_target_display()
+	LOG.info("Targeting", "request_target source=%s stages=%d" % [card.card_name, targeting_blocks.size()])
+	GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)
+	_begin_target_block(0)
+	if allow_cancel:
+		assistant.prepare_targeting_phase_cancel()
+
+## WHICH BOARD a criteria block looks at.
+func _block_domain(block) -> String:
+	return str(block.get("in", "field")) if block is Dictionary else "field"
+
+## Typed TargetRequest/TargetSequence objects are converted here; the session itself still runs on legacy blocks.
+func _legacy_target_criteria(criteria):
+	if criteria is Object and criteria.has_method("to_legacy"):
+		return criteria.to_legacy()
+	return criteria
+
+## Start pick stage `index`. One stage is one criteria block; a normal single-target effect has exactly one, and
+## `count` still means "this many picks inside THIS stage" (Aerith's "up to 3 Backups").
+##
+## The stage's first pick index is the sum of the earlier stages' counts, not `targeting_picked.size()`: that is what
+## makes stepping back into a previous stage ask for exactly the right number of picks again.
+func _begin_target_block(index: int) -> void:
+	targeting_block_index = index
+	var start: int = 0
+	for i in range(index):
+		var previous = targeting_blocks[i]
+		start += maxi(1, int(previous.get("count", 1))) if previous is Dictionary else 1
+	targeting_block_start = start
+	var block = targeting_blocks[index] if index >= 0 and index < targeting_blocks.size() else {}
+	targeting_criteria_now = block
+	targeting_count = 1
+	targeting_domain = _block_domain(block)
+	if block is Dictionary:
+		targeting_count = maxi(1, int(block.get("count", 1)))
+		if block.has("count") or block.has("in"):
+			targeting_criteria_now = block.duplicate()
+			targeting_criteria_now.erase("count")
+			targeting_criteria_now.erase("in")
+	target_card = null
+	_spawn_aiming_arrow(source_card)
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	# set_viable_targets() clears every ring; give the picks already recorded theirs back. The colour follows the
+	# CHOOSER, not the card's owner: when you are the one picking, your picks are orange even on the opponent's board.
+	var local_chooser: bool = source_card == null or source_card.controller == Card.PLAYER
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
+		if local_chooser:
+			taken.set_selected_highlight(true)
+	# A non-local owner resolves this stage through its agent instead of waiting for clicks nobody will make.
+	var owner_id: int = 1 if source_card != null and source_card.controller == Card.PLAYER else 2
+	var agent: Agent = game.agent_for(owner_id)
+	if agent != null and not agent.is_human():
+		agent.choose_target(owner_id, source_card, targeting_criteria_now)
+
+## A fresh arc, aimed at the pointer from `from`.
+##
+## THE INVARIANT this section maintains, and that everything here depends on:
+##
+##     targeting_arrows is ONE ARC PER PICK, in pick order, PLUS ONE AIMING ARC at the end.
+##
+## So targeting_arrows[i] is the arc locked on targeting_picked[i], and the last element is the one following the pointer.
+## When the session is FULL there is no aiming arc — the last element is the final pick's — and _aim_with_current() adds
+## one after a step back re-opens it. Breaking this is invisible until a step back removes the wrong arc, or two at once,
+## or leaves one on screen: the arrows and the state quietly stop agreeing.
+func _spawn_aiming_arrow(from: Card) -> void:
+	var fresh = ballistic_arrow_scene.instantiate()
+	arrow = fresh
+	# THE OPPONENT'S CHOICE IS PRIVATE until it is on the stack: their session keeps its arcs (the bookkeeping below
+	# relies on one arc per pick) but under a hidden parent, so nothing of where they aim is drawn here.
+	if _session_is_local():
+		add_child(fresh)
+	else:
+		_hidden_arrow_parent().add_child(fresh)
+	fresh.set_is_aiming_from_card(true, from)
+	targeting_arrows.append(fresh)
+
+## The open targeting session is the LOCAL player's (only then is any of it drawn).
+func _session_is_local() -> bool:
+	return source_card == null or not is_instance_valid(source_card) or source_card.controller == Card.PLAYER
+
+var _hidden_arrows: Node3D = null
+
+func _hidden_arrow_parent() -> Node3D:
+	if _hidden_arrows == null or not is_instance_valid(_hidden_arrows):
+		_hidden_arrows = Node3D.new()
+		_hidden_arrows.name = "HiddenTargetingArrows"
+		_hidden_arrows.visible = false
+		add_child(_hidden_arrows)
+	return _hidden_arrows
+
+## Point the aiming arc at the pointer from `source_card`, spawning one when the picks have caught up with the arcs.
+## The ONLY place `arrow` is assigned besides a spawn, so the invariant cannot drift out from under it.
+func _aim_with_current() -> void:
+	while targeting_arrows.size() <= targeting_picked.size():
+		_spawn_aiming_arrow(source_card)
+	var pointing = targeting_arrows.back()
+	arrow = pointing
+	if pointing != null and is_instance_valid(pointing):
+		# It must not stay locked: at a full session the last element is a PICK's arc, and borrowing it would set that
+		# pick's arrow following the pointer and leave its card bare.
+		pointing.locked = false
+		pointing.set_is_aiming_from_card(true, source_card)
+
+## Drop one pick: its ring, its arc, and its claim on being the current target.
+##
+## THE ARC AT `at` IS THAT PICK'S, by the invariant above — so exactly ONE arrow leaves the board, and the caller
+## must not free the aiming arc separately, or the array collects dead arcs and its indexes stop matching the picks.
+func _drop_pick(at: int) -> void:
+	var picked: Card = targeting_picked[at]
+	targeting_picked.remove_at(at)
+	if at < targeting_arrows.size():
+		var spent = targeting_arrows[at]
+		targeting_arrows.remove_at(at)
+		if spent != null and is_instance_valid(spent):
+			spent.queue_free()
+	if picked != null and is_instance_valid(picked):
+		picked.set_selected_highlight(false)
+		picked.set_targeted_highlight(false)
+	if picked == target_card:
+		target_card = null
+	# STEPPING BACK ACROSS A STAGE BOUNDARY. The pick just removed was the FIRST of the current stage, so the
+	# previous stage becomes current and asks for its own criteria again.
+	if targeting_block_index > 0 and at == targeting_block_start:
+		_begin_target_block(targeting_block_index - 1)
+		return
+	# It becomes legal again: the card is no longer spoken for, and the ring it lost has to come back.
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
+		# ...and the picks that are STILL picked keep their rings, for the same reason as in set_target_card(): the call
+		# above clears them all. (Only the local player's own picks are drawn.)
+		if not _session_is_local():
+			continue
+		if taken.controller == Card.OPPONENT:
+			taken.set_targeted_highlight(true)
+		else:
+			taken.set_selected_highlight(true)
+	# Re-establish the invariant before anything reads the arrows again.
+	_aim_with_current()
+
+func set_target_card(card: Card):
+	# A click only counts when the candidate is a legally valid target.
+	# is_valid_target is set by set_viable_targets() (criteria + protection).
+	if not card.is_valid_target:
+		push_warning("[Targeting] %s is not a valid target" % card.card_name)
+		return
+	# A FULL SESSION IGNORES FURTHER PICKS. It is complete at `count`; one more pick than the session has arcs for is a
+	# state nothing downstream could match back up. Confirm and a right-click are the two ways on from here.
+	if targeting_count > 1 and targeting_picked.size() >= targeting_count:
+		return
+	# Blue and orange are the LOCAL player's vocabulary: "legal" and "you picked this".
+	# When the opponent is the one choosing, the picked card is shown in RED instead —
+	# along with their arc, so an incoming effect is readable while it is on the stack.
+	var local_chooser: bool = source_card == null or source_card.controller == Card.PLAYER
+	# Clicking another valid target MOVES the selection — and the ring with it — rather
+	# than being ignored, so either player can change their mind.
+	#
+	# FOR A ONE-PICK STAGE IT ALSO REPLACES THE PICK. This list is what every effect
+	# reads, so appending on every click meant select A -> change to B -> Confirm acted
+	# on BOTH cards (Alchemist's "Dull it" tapped two). A stage that asks for one target
+	# has exactly one slot; a later click overwrites it instead of adding a second.
+	var stage_pick_index: int = targeting_block_start
+	var replaces_single_pick: bool = (targeting_count == 1
+			and targeting_picked.size() > stage_pick_index)
+	var previous_pick: Card = targeting_picked[stage_pick_index] if replaces_single_pick else null
+	if target_card != null and is_instance_valid(target_card):
+		target_card.set_selected_highlight(false)
+		target_card.set_targeted_highlight(false)
+	if previous_pick != null and is_instance_valid(previous_pick) and previous_pick != target_card:
+		previous_pick.set_selected_highlight(false)
+		previous_pick.set_targeted_highlight(false)
+	target_card = card
+	# The opponent's picks are not shown while they choose: only once the play is on the stack.
+	if local_chooser:
+		card.set_selected_highlight(true)
+	LOG.info("Targeting", str("target selected: ", card.card_name))
+	arrow.lock_arc(card.get_global_face_centre())
+	if replaces_single_pick:
+		targeting_picked[stage_pick_index] = card
+	else:
+		targeting_picked.append(card)
+	target_picked.emit(card)
+	# THIS STAGE IS FULL: either the next stage takes over (Hades: Forward, then Backup) or the session is complete.
+	var stage_full: bool = targeting_picked.size() >= targeting_block_start + targeting_count
+	if stage_full and targeting_block_index + 1 < targeting_blocks.size():
+		LOG.info("Targeting", "stage %d done — asking for stage %d" % [
+			targeting_block_index + 1, targeting_block_index + 2])
+		_begin_target_block(targeting_block_index + 1)
+		return
+	if targeting_picked.size() >= targeting_count:
+		request_target_confirmation.emit(target_card, targeting_allow_cancel)
+		return
+	# MORE PICKS TO COME. The arc stays where it landed — that IS the record of the pick — a new one takes over the
+	# aiming, and the card just taken leaves the legal set so the same Backup cannot be chosen twice. Its orange ring
+	# stays: set_valid_target() only owns the blue prompt glow.
+	LOG.info("Targeting", "%d of %d picked — aiming for the next" % [targeting_picked.size(), targeting_count])
+	target_card = null
+	_spawn_aiming_arrow(source_card)
+	set_viable_targets(targeting_criteria_now, source_card, targeting_source_kind)
+	for taken in targeting_picked:
+		taken.set_valid_target(false, false)
+		# AND GIVE EVERY PICKED CARD ITS RING BACK. The set_viable_targets() call just above clears the pick highlight on
+		# EVERY card — that is how a session is supposed to start — so using it to refresh the legal set after each pick
+		# wiped the ring off all the earlier picks and left only the newest one lit.
+		if not _session_is_local():
+			continue
+		if taken.controller == Card.OPPONENT:
+			taken.set_targeted_highlight(true)
+		else:
+			taken.set_selected_highlight(true)
+	# CONFIRM IS AVAILABLE NOW, WITH FEWER PICKS THAN THE COUNT. The card says "choose UP TO 3", so stopping early has to
+	# be possible — and the aiming arc stays, so the player can equally keep going and reach the full count, which ends
+	# the session by itself. Only the last slot is ever mandatory.
+	request_target_confirmation.emit(
+		targeting_picked.back() if not targeting_picked.is_empty() else null, targeting_allow_cancel)
+
+## ONE STEP BACK, for a right-click, and it works from ANY point in the session.
+##
+## ANY pick steps back — INCLUDING THE LAST ONE ONCE THE COUNT IS FULL. Stepping back re-opens the session: a new
+## aiming arc appears and the picks that remain are still picks.
+func clear_target_selection() -> void:
+	# A ONE-TARGET STAGE HAS ONE SLOT. Dropping the pick is what makes right-click
+	# cancellation real: leaving it in `targeting_picked` let the next click append a
+	# second card, and the already-confirmed effect then resolved against both.
+	if targeting_count == 1 and targeting_block_index == 0 and not targeting_picked.is_empty():
+		_drop_pick(targeting_picked.size() - 1)
+		target_card = null
+		if assistant != null:
+			if targeting_allow_cancel:
+				assistant.prepare_targeting_phase_cancel()
+			else:
+				assistant.hide_buttons()
+		return
+	if targeting_count > 1 and not targeting_picked.is_empty():
+		# ONE call. `_drop_pick` removes that pick's arc AND re-establishes the aiming one (see _aim_with_current).
+		# Freeing the aiming arc here as well would take TWO arrows off the board and leave a dead arc in the array.
+		_drop_pick(targeting_picked.size() - 1)
+		LOG.info("Targeting", "back to %d of %d" % [targeting_picked.size(), targeting_count])
+		if not targeting_picked.is_empty():
+			# Picks remain, so finishing early is still allowed: Confirm stays on offer next to the aiming arc.
+			target_card = targeting_picked.back()
+			request_target_confirmation.emit(target_card, targeting_allow_cancel)
+		elif assistant != null:
+			target_card = null
+			if targeting_allow_cancel:
+				assistant.prepare_targeting_phase_cancel()
+			else:
+				assistant.hide_buttons()
+		return
+	if target_card == null or not is_instance_valid(target_card):
+		return
+	if source_card != null and target_card == source_card:
+		return
+	target_card.set_selected_highlight(false)
+	target_card.set_targeted_highlight(false)
+	LOG.info("Targeting", "selection cleared — aiming again")
+	target_card = null
+	if arrow != null and is_instance_valid(arrow):
+		# `locked` is what froze the arc on the pick (see lock_arc); dropping it and re-aiming puts the arc back on the
+		# pointer. Both, because unlocking alone leaves the arc pointing at wherever the pick was.
+		arrow.locked = false
+		arrow.set_is_aiming_from_card(true, source_card)
+	if assistant != null:
+		if targeting_allow_cancel:
+			assistant.prepare_targeting_phase_cancel()
+		else:
+			assistant.hide_buttons()
+	
+func set_viable_targets(target_criteria, source: Card = null, source_kind: String = ""):
+	target_criteria = _legacy_target_criteria(target_criteria)
+	# The blue ring means "the game is asking YOU". When the OPPONENT is the one choosing,
+	# their legal options are not our business. The flag still goes on — their agent selects
+	# by it — but the glow stays off, so the only thing we see is the card they pick, which
+	# set_target_card() marks red.
+	var glow: bool = source == null or source.controller == Card.PLAYER
+	var candidates: Array = _target_candidates()
+	var legal: Array = []
+	for card in candidates:
+		if _card_matches_criteria(card, target_criteria, source, source_kind):
+			legal.append(card)
+	# "Summons or abilities of your opponent must choose Cecil if possible." If at least one legal candidate demands
+	# to be chosen, the legal set collapses to those candidates. If none do, every legal candidate stays available.
+	var allowed: Array = legal
+	if source != null:
+		var mandatory: Array = []
+		for card in legal:
+			if card.must_be_chosen_by(source, source_kind):
+				mandatory.append(card)
+		if not mandatory.is_empty():
+			allowed = mandatory
+	for card in candidates:
+		var is_targetable: bool = allowed.has(card)
+		# A fresh session starts with nothing picked: clear any leftover ring.
+		card.set_selected_highlight(false)
+		card.set_targeted_highlight(false)
+		# The prompt glow IS the indicator — no separate marker is spawned on top of
+		# each candidate.
+		card.set_valid_target(is_targetable, glow)
+
+## Live "do you control a card matching this?" query for conditional printed rules (Rikku 201). `source` resolves
+## controller-relative words in the criteria; `controller_name` is whose board is being searched.
+func controls_matching(controller_name: String, criteria: Dictionary, source: Card = null) -> bool:
+	for card in get_all_cards():
+		if card.controller != controller_name:
+			continue
+		if card.matches_criteria(criteria, source):
+			return true
+	return false
+
+## WHERE THIS SESSION'S CANDIDATES COME FROM. The stack is a second target domain, for effects that choose a Summon
+## before it resolves (Summoner 53). `stack.cards` is copied because cancelling a Summon mutates it mid-session.
+func _target_candidates() -> Array:
+	if targeting_domain == "stack" and stack != null:
+		return stack.cards.duplicate()
+	return get_all_cards()
+
+func has_viable_target(target_criteria, source: Card = null, source_kind: String = "", domain: String = "field") -> bool:
+	target_criteria = _legacy_target_criteria(target_criteria)
+	# Used before casting a Summon (no legal target = cannot cast) and before offering an ability that needs a target.
+	# EVERY STAGE MUST BE SATISFIABLE. "Choose 1 Forward and 1 Backup" is mandatory on both, so a board missing one
+	# of them makes the card illegal to play at all (Advanced Rules: mandatory targets at casting time).
+	if target_criteria is Array:
+		for block in target_criteria:
+			if not has_viable_target(block, source, source_kind, _block_domain(block)):
+				return false
+		return true
+	var candidates: Array = stack.cards.duplicate() if domain == "stack" and stack != null else get_all_cards()
+	for card in candidates:
+		if _card_matches_criteria(card, target_criteria, source, source_kind):
+			return true
+	return false
+
+func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Card = null, source_kind: String = "") -> bool:
+	# Legality has two parts: the effect's choose_target criteria (properties of
+	# the candidate) and the candidate's own protection against this source.
+	# source_kind overrides the source card's own kind, because ability targeting
+	# is requested with the field card, which carries no effect_kind.
+	#
+	# The SOURCE is passed through: an exclude block may say "other than this card", and the relative controller keys
+	# ("one of yours") need to know whose effect is asking.
+	if not card.matches_criteria(target_criteria, source):
+		return false
+	if not card.can_be_chosen_by(source, source_kind):
+		return false
+	# A SHIELD GRANTED BY ANOTHER CARD (Dajh -> Sazh, Serah -> Snow). The printed rule above is self-contained; this one
+	# is a continuous field effect, so the board has to be asked.
+	#
+	# ONLY THE CHOOSING GATE. "All your Backups" effects still hit a card that cannot be chosen — it was never chosen —
+	# which is why `_cards_matching` (apply_effect) deliberately does NOT ask this.
+	if source != null and is_protected_from_being_chosen(card, source, source_kind):
+		return false
+	return true
+		
+func reset_targets():
+	# Every meaning a targeting session can leave behind: the blue prompt, the ORANGE pick, and
+	# the opponent's red reveal. The orange is the one that leaked — it was set on the click and
+	# only ever cleared by the *next* session starting, so an ability that resolved and was not
+	# followed by another targeting left its target glowing orange for the rest of the match.
+	for card in get_all_cards():
+		# Through the setter, so the "targetable" glow clears with the flag.
+		card.set_valid_target(false)
+		card.set_selected_highlight(false)
+		# ...and the opponent's red ring with it.
+		card.set_targeted_highlight(false)
+
+## Drop only the red "the opponent chose this" rings, leaving the selection state alone.
+## Called when the stack has fully resolved — the reveal is spent — rather than never, which
+## would leave the ring to outlive the effect.
+func clear_targeted_highlights() -> void:
+	for card in get_all_cards():
+		card.set_targeted_highlight(false)
+
+func remove_card(card):
+	front_cards.erase(card)
+	back_cards.erase(card)
+	opponent_front_cards.erase(card)
+	opponent_back_cards.erase(card)
+	refresh_continuous_effects()
+	# A member leaving the field leaves the party; fewer than two members disbands it. Done here because every way
+	# off the field (break, exile, return, effect) ends in remove_card, so no caller has to remember.
+	#
+	# drop_party_member() first, unconditionally: this runs BEFORE the card's zone changes, so a field check would
+	# still say FIELD and the departing card would stay in the party. prune_party() then clears any other stale ones.
+	drop_party_member(card)
+	prune_party()
+
+## ONE PASS OVER THE BOARD FOR EVERY CONTINUOUS EFFECT.
+##
+## This replaces three separate refresh paths (conditional power, count-based power, auras) with one outer field
+## scan and one desired-grant ledger. It runs at the same invalidation points as before: a card entering, a card
+## leaving, abilities being nullified/restored, damage changing a count, and end-phase cleanup. It is never polled.
+##
+## The scan computes DESIRED entries first, then applies/revokes only the differences. Existing temporary buffs
+## therefore survive, and a rule whose source left or was silenced is revoked exactly once.
+var _continuous_ledger: Dictionary = {}
+
+
+func _rule_get(rule, key: String, fallback = null):
+	if rule is Object and rule.has_method("as_rule"):
+		rule = rule.as_rule()
+	if rule is Dictionary:
+		return rule.get(key, fallback)
+	if rule == null:
+		return fallback
+	var value = rule.get(key)
+	return fallback if value == null else value
+
+
+func _collect_continuous(source: Card, desired: Dictionary) -> void:
+	var id: int = source.get_instance_id()
+
+	# 1. Conditional self-power.
+	var conditional: Array = _conditional_rules(source)
+	for i in range(conditional.size()):
+		var rule = conditional[i]
+		if not (rule is Dictionary):
+			continue
+		if not _conditional_holds(rule, source):
+			continue
+		var value: int = int(rule.get("value", 0))
+		if value != 0:
+			var key: String = "conditional:%d:%d" % [id, i]
+			desired[key] = {"card": source, "kind": "power", "value": value, "conditional": true}
+
+	# 2. This card's own dynamic power and dynamic properties.
+	var source_effect = source.effect()
+	if source_effect != null:
+		var own_ctx = source.make_effect_context("static")
+		if source_effect.has_method("power_modifier"):
+			var modifier: int = int(source_effect.power_modifier(own_ctx))
+			if modifier != 0:
+				var power_key: String = "self_power:%d" % id
+				desired[power_key] = {"card": source, "kind": "power", "value": modifier}
+		if source_effect.has_method("properties"):
+			var props = source_effect.properties(own_ctx)
+			if props is Array:
+				for property in props:
+					var property_name: String = str(property)
+					if property_name.is_empty():
+						continue
+					var prop_key: String = "self_property:%d:%s" % [id, property_name]
+					desired[prop_key] = {"card": source, "kind": "status", "status": property_name}
+
+	# 3. Auras this card grants to other cards.
+	var auras = source.effect_auras()
+	if auras.is_empty() and source.card_effects.has("aura"):
+		auras = source.card_effects["aura"]
+	if auras is Dictionary:
+		auras = [auras]
+	if not (auras is Array):
+		return
+	for i in range(auras.size()):
+		var rule = auras[i]
+		var condition = _rule_get(rule, "condition", null)
+		if condition is Callable and condition.is_valid() and not bool(condition.call(source)):
+			continue
+		var method: String = str(_rule_get(rule, "method", ""))
+		var targets: Dictionary = _rule_get(rule, "targets", {})
+		for target in get_all_cards():
+			if target == null or not is_instance_valid(target) or not target.is_on_field():
+				continue
+			if not CARD_TARGET.matches(target, targets, source):
+				continue
+			var key: String = "aura:%d:%d:%d" % [id, i, target.get_instance_id()]
+			if method == "power_change":
+				var value: int = int(_rule_get(rule, "value", 0))
+				if value != 0:
+					desired[key] = {"card": target, "kind": "power", "value": value}
+			elif method == "grant_status":
+				var status: String = str(_rule_get(rule, "status", ""))
+				if not status.is_empty():
+					desired[key] = {"card": target, "kind": "status", "status": status}
+
+
+func _apply_continuous_entry(key: String, entry: Dictionary, previous: Dictionary) -> void:
+	var card: Card = entry.get("card")
+	if card == null or not is_instance_valid(card):
+		return
+	if entry.get("kind", "") == "power":
+		var old_value: int = int(previous.get("value", 0)) if not previous.is_empty() else 0
+		var value: int = int(entry.get("value", 0))
+		card.add_power_modifier(key, value)
+		if bool(entry.get("conditional", false)):
+			card.current_conditional_bonus = maxi(0, card.current_conditional_bonus + value - old_value)
+	elif entry.get("kind", "") == "status":
+		card.grant_status(str(entry.get("status", "")))
+
+
+func _revoke_continuous_entry(key: String, entry: Dictionary) -> void:
+	var card: Card = entry.get("card")
+	if card == null or not is_instance_valid(card):
+		return
+	if entry.get("kind", "") == "power":
+		card.remove_power_modifier(key)
+		if bool(entry.get("conditional", false)):
+			card.current_conditional_bonus = maxi(0, card.current_conditional_bonus - int(entry.get("value", 0)))
+	elif entry.get("kind", "") == "status":
+		card.revoke_status(str(entry.get("status", "")))
+
+
+func refresh_continuous_effects() -> void:
+	var desired: Dictionary = {}
+	for card in get_all_cards():
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		if not card.abilities_enabled():
+			continue
+		_collect_continuous(card, desired)
+
+	for key in desired:
+		var entry: Dictionary = desired[key]
+		var previous: Dictionary = _continuous_ledger.get(key, {})
+		if previous.is_empty():
+			_apply_continuous_entry(key, entry, previous)
+		elif entry.get("kind", "") == "power" and int(previous.get("value", 0)) != int(entry.get("value", 0)):
+			_apply_continuous_entry(key, entry, previous)
+		elif entry.get("kind", "") == "status" and str(previous.get("status", "")) != str(entry.get("status", "")):
+			_revoke_continuous_entry(key, previous)
+			_apply_continuous_entry(key, entry, {})
+
+	for key in _continuous_ledger.keys():
+		if not desired.has(key):
+			_revoke_continuous_entry(key, _continuous_ledger[key])
+
+	_continuous_ledger = desired
+
+
+## Conditional continuous effects ("if you control X, this gains power").
+##
+## A BOARD SCAN, not a registry. The board is tiny, every condition already queried the board, and a registry
+## needed a matching unregister at every exit from the field. The scan runs from the same invalidation points as
+## the other continuous systems (play_card, remove_card, silence/restore, end cleanup), never per frame.
+##
+## The ledger is still per rule: a card may have two conditional powers (Rikku 201: +2000 for Yuna, +2000 for
+## Paine), and one shared bonus made them overwrite each other.
+func _conditional_rules(card: Card) -> Array:
+	var effect_obj = card.effect()
+	if effect_obj != null and effect_obj.has_method("conditional_powers"):
+		var code_rules = effect_obj.conditional_powers()
+		if code_rules is Array and not code_rules.is_empty():
+			return code_rules
+	var json_rules = card.card_effects.get("conditional_power", [])
+	if json_rules is Dictionary:
+		json_rules = [json_rules]
+	return json_rules if json_rules is Array else []
+
+
+func _conditional_holds(rule: Dictionary, source: Card) -> bool:
+	var condition = rule.get("condition", null)
+	if condition is Callable:
+		return bool(condition.call(source))
+	if condition is Dictionary:
+		return _condition_met(condition, source)
+	return false
+
+
+func _condition_met(condition: Dictionary, source: Card = null) -> bool:
+	if condition.is_empty():
+		return false
+	for card in get_all_cards():
+		if card.matches_criteria(condition, source):
+			return true
+	return false
+
+## AURAS — continuous effects a card grants to OTHERS while it is on the field ("your Fire Forwards gain +1000 power",
+## card 1-030R). Not the same thing as `conditional_power`, which a card applies to ITSELF when a condition holds.
+##
+## Auras are not stored on Field or applied/revoked manually: every continuous effect — auras, conditional power,
+## dynamic power, granted statuses — is collected by one board scan in refresh_continuous_effects() and diffed
+## against _continuous_ledger.
+
+## Both sides' Forwards, TURN PLAYER'S FIRST — the same order on both machines of an online match. The state-based
+## checks below walk this, and their order decides which "when broken" trigger goes on the stack first.
+func _forwards_turn_player_first() -> Array[Card]:
+	if game != null and int(game.turn_owner) == 2:
+		return opponent_front_cards + front_cards
+	return front_cards + opponent_front_cards
+
+func get_breakable_cards():
+	# Forwards whose accumulated damage is equal to or greater than their
+	# current power. A card at 0 power is handled separately (it is put into
+	# the Graveyard, not broken).
+	var ans = []
+	for card in _forwards_turn_player_first():
+		if card.has_zero_power():
+			continue
+		if card.is_broken():
+			ans.append(card)
+	return ans
+
+func get_zero_power_cards():
+	# Forwards whose current power is 0 or less. These are put into the
+	# Graveyard without triggering break effects.
+	var ans = []
+	for card in _forwards_turn_player_first():
+		if card.has_zero_power():
+			ans.append(card)
+	return ans
+
+func _tap_selected_cards():
+	for c in selected_cards_for_mana_conversion:
+		c.tap()
+		
+## THE ATTACKING PARTY, always including `attacker_card` as its first member. A party of one is just a normal attack,
+## so every consumer can keep reading `attacker_card` and only the combat maths has to look here.
+##
+## Formation rule (from the rules): clicking another Forward while one is already selected JOINS THE PARTY if it is
+## the same element; a different element does nothing. There is no "replace the attacker" any more — deselect first.
+var attacking_party: Array[Card] = []
+
+func set_attacker(card:Card):
+	if card == null:
+		return
+	if attacker_card == null:
+		attacker_card = card
+		attacker_card.set_attacker_status(true)
+		attacking_party.clear()
+		attacking_party.append(card)
+	elif attacker_card == card:
+		# Clicking the primary again clears the whole formation.
+		reset_attacker()
+		attacker_changed.emit()
+		return
+	elif attacking_party.has(card):
+		# A non-primary member: clicking it again drops it from the party.
+		remove_party_member(card)
+		return
+	elif add_party_member(card):
+		pass
+	# else: different element or cannot attack — DO NOTHING, per the party rules.
+	attacker_changed.emit()
+
+## Join `card` to the current attack. Returns false when the rules say it cannot: it must be able to attack, it must
+## not already be in the party, and it must share the primary's ELEMENT SET (identical, so a mono-element Forward
+## cannot join a multi-element one).
+func add_party_member(card: Card) -> bool:
+	if attacker_card == null or card == null:
+		return false
+	if card == attacker_card or attacking_party.has(card):
+		return false
+	if not card.can_attack():
+		return false
+	if not same_element_as_primary(card):
+		return false
+	attacking_party.append(card)
+	card.set_attacker_status(true)
+	LOG.info("Party", "%s joins %s (%d members)" % [card.card_name, attacker_card.card_name, attacking_party.size()])
+	return true
+
+func remove_party_member(card: Card) -> void:
+	if card == null or card == attacker_card or not attacking_party.has(card):
+		return
+	attacking_party.erase(card)
+	if is_instance_valid(card):
+		card.set_attacker_status(false)
+	LOG.info("Party", "%s leaves (%d members)" % [card.card_name, attacking_party.size()])
+
+func same_element_as_primary(card: Card) -> bool:
+	if attacker_card == null:
+		return false
+	return element_set(card) == element_set(attacker_card)
+
+## `element` is an Array on some cards and a bare String on others, so normalise before comparing.
+func element_set(card: Card) -> Array:
+	var raw = card.element
+	var out: Array = raw if raw is Array else [raw]
+	out.sort()
+	return out
+
+func is_party() -> bool:
+	return attacking_party.size() >= 2
+
+## The members of the current attack. FALLS BACK to the lone `attacker_card`: callers (and probes) have always been
+## able to set that field directly, and a single attacker is a party of one — it must not need formation to fight.
+func party_members() -> Array[Card]:
+	if attacking_party.is_empty() and attacker_card != null:
+		var one: Array[Card] = [attacker_card]
+		return one
+	return attacking_party
+
+## Sum of the members' CURRENT power — read at the moment of damage, like a single attacker's power is.
+func party_power() -> int:
+	var total: int = 0
+	for card in party_members():
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			total += card.power
+	return total
+
+## "If ALL members of a Party have Pre-emptive Strike, then the Party has it. Otherwise it does not."
+func party_has_first_strike() -> bool:
+	var members: Array[Card] = party_members()
+	if members.is_empty():
+		return false
+	for card in members:
+		if card == null or not is_instance_valid(card) or not card.is_first_strike():
+			return false
+	return true
+
+## Drop members that have left the field; a party of fewer than two disbands.
+##
+## The REMAINING member keeps attacking as a normal single attack — the rules disband the party, not the attack — so
+## `attacker_card` is moved to it rather than the whole combat being cancelled.
+func prune_party() -> void:
+	if attacking_party.is_empty():
+		return
+	var alive: Array[Card] = []
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			alive.append(card)
+		elif card != null and is_instance_valid(card):
+			card.set_attacker_status(false)
+	attacking_party = alive
+	_disband_if_too_small()
+
+## A card is leaving the field. Drop it WITHOUT asking `is_on_field()`: remove_card() runs before the zone actually
+## changes (the pile sets it), so a field check there still says FIELD and the "departed" member stayed in the party.
+func drop_party_member(card: Card) -> void:
+	if card == null or not attacking_party.has(card):
+		return
+	attacking_party.erase(card)
+	if is_instance_valid(card):
+		card.set_attacker_status(false)
+	_disband_if_too_small()
+
+func _disband_if_too_small() -> void:
+	if attacking_party.size() >= 2:
+		return
+	LOG.info("Party", "disbands (%d member(s) left)" % attacking_party.size())
+	if attacking_party.is_empty():
+		attacker_card = null
+	elif not attacking_party.has(attacker_card):
+		attacker_card = attacking_party[0]
+
+func reset_attacker():
+	# Clear the markers on EVERY member, not just the primary, or a disbanded party leaves "attacking" rings behind.
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and card.is_on_field():
+			card.set_attacker_status(false)
+	attacking_party.clear()
+	attacker_card = null
+
+## Select/deselect a blocker for the current combat (human input only).
+## Game.set_blocker() is what *declares* it (via the set_blocker instruction).
+func set_blocker_card(card: Card) -> void:
+	if card == null or card.controller != Card.PLAYER or not card.can_attack():
+		return
+	if blocker_card == card:
+		card.set_blocker_status(false)
+		card.set_selected_highlight(false)
+		blocker_card = null
+		hide_block_arc()
+	else:
+		if blocker_card != null and is_instance_valid(blocker_card):
+			blocker_card.set_blocker_status(false)
+			blocker_card.set_selected_highlight(false)
+		blocker_card = card
+		card.set_blocker_status(true)
+		# Same vocabulary as targeting: blue = legal, orange = the one you picked. So a
+		# reselect before committing simply moves the orange and the arc.
+		card.set_selected_highlight(true)
+		show_block_arc(card)
+	blocker_changed.emit()
+
+## Mark every card that could legally block for `controller` with the prompt glow.
+##
+## Only ever called for the LOCAL defender: the ring means "the game is asking YOU to
+## choose". An opponent's declaration shows the arc alone, because that cue is not a
+## question addressed to the human.
+func set_blockable(controller: String, enabled: bool) -> void:
+	for card in get_all_cards():
+		if card.controller != controller:
+			continue
+		card.set_valid_target(enabled and can_block(card))
+
+## The block predicate, and THE ONE PLACE blocking legality is decided. Everything that glows and everything that is
+## clickable goes through here, which is what keeps those two in agreement.
+##
+## "block_disabled" is a status the card data has always handed out — Red Mage's ability applies it — and NOTHING ever
+## consulted it, so the ability looked like it worked and did nothing. It belongs here rather than at each call site, for
+## the same reason `unbreakable` lives in one place in Game.
+##
+## The status expires on its own: Card.turn_end() decrements it, so "this turn" is enforced by construction and there is
+## no second place that has to remember to take it off.
+## "The Backups you control cannot be broken by your opponent's Summons or abilities" (Auron).
+##
+## A CONTINUOUS rule, asked at the moment of the break — no per-card statuses. That matters because the protected set
+## changes: a Backup that arrives later is covered with no refresh, and one that leaves needs no cleanup. The cost is
+## that whoever asks must know the cause, which is why damage records its source on the card.
+##
+## Data on the protector:
+##   "protects": {"targets": {"is_type": "Backup", "controller": "player"},
+##                "from": "opponent", "by": ["Summon", "Ability"]}
+## `targets` is read from the PROTECTOR's perspective, and `by` may be omitted to mean any effect.
+##
+## GRANTED CHOICE PROTECTION — "The Card Name Sazh you control cannot be chosen by your opponent's Summons or
+## abilities" (Dajh). Same continuous shape as the break rule, but asked from the TARGETING gate only: a set effect
+## ("all the Backups") still hits the card, because it was never chosen.
+##
+##   "shields": {"targets": {"is_named": "Sazh"}, "from": "opponent", "by": ["Summon", "Ability"]}
+## The rules that read the board live in scripts/rules.gd, owned by this node as `rules`. These forwarders keep the
+## Field API stable for every existing caller and probe, so moving a rule out is a one-line change here.
+func effective_cost(card: Card) -> Dictionary:
+	return rules.effective_cost(card)
+
+func is_protected_from_being_chosen(card: Card, source: Card, source_kind: String) -> bool:
+	return rules.is_protected_from_being_chosen(card, source, source_kind)
+
+func is_protected_from_break(card: Card, source_controller: String, source_kind: String) -> bool:
+	return rules.is_protected_from_break(card, source_controller, source_kind)
+
+func modify_damage(source: Card, target: Card, amount: int, source_kind: String = "", source_controller: String = "", damage_kind: int = -1) -> int:
+	return rules.modify_damage(source, target, amount, source_kind, source_controller, damage_kind)
+
+## THE ONE PLACE DAMAGE LANDS. Effect damage, combat, party damage and first-strike steps all come through here, so
+## "when this card deals damage to a Forward, ..." riders are applied at the same moment on every path rather than
+## being re-implemented per call site.
+func cause_damage(target: Card, amount: int, source: Card = null, source_kind: String = "", source_controller: String = "", damage_kind: int = -1, reaction_delay: float = 0.0) -> int:
+	if target == null or not is_instance_valid(target) or amount <= 0:
+		return 0
+	if source != null and not is_instance_valid(source):
+		source = null
+	var dealt: int = modify_damage(source, target, amount, source_kind, source_controller, damage_kind)
+	target.suffer_damage(dealt, source_kind, source_controller, source, reaction_delay)
+	if source != null and dealt > 0 and target.is_on_field() and target.type == Card.FORWARD:
+		_apply_damage_caused_riders(source, target)
+	return dealt
+
+## "When the Forward that took damage from Cid Highwind is put from the field into the Break Zone on the same turn, ..."
+## (Cid 72/73).
+##
+## The rider is stored ON THE DAMAGED CARD, not on Cid: a one-turn status carrying the trigger that must run if THAT
+## Forward leaves the field. That is what makes it survive Cid leaving play, and carrying the CONTROLLER with it is
+## what sends the mill to the right player. `Card.turn_end()` expires it like any other status.
+func _apply_damage_caused_riders(source: Card, target: Card) -> void:
+	var rider_rules = []
+	var rider_effect = source.effect() if source.abilities_enabled() else null
+	if rider_effect != null and rider_effect.has_method("damage_caused_riders"):
+		rider_rules = rider_effect.damage_caused_riders()
+	if rider_rules.is_empty():
+		rider_rules = source.card_effects.get("on_causing_damage_to_forward", [])
+	if rider_rules is Dictionary:
+		rider_rules = [rider_rules]
+	if not (rider_rules is Array):
+		return
+	for rule in rider_rules:
+		if not (rule is Dictionary):
+			continue
+		var status: String = str(rule.get("status", ""))
+		if status.is_empty():
+			continue
+		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller}
+		if rule.has("on_enter_break_zone"):
+			payload["on_enter_break_zone"] = rule["on_enter_break_zone"]
+		LOG.info("Damage", "%s marks %s (%s)" % [source.card_name, target.card_name, status])
+		target.add_status_effect(status, payload)
+
+func can_block(card: Card) -> bool:
+	if card == null:
+		return false
+	if card.status_effects.has("block_disabled"):
+		return false
+	if not card.can_attack():
+		return false
+	if attacker_card == null:
+		return true
+	# AT LEAST ONE MEMBER, NOT ALL OF THEM. Advanced Rules 15.1.1.9.6: a Forward can block a party if it can legally
+	# block at least ONE Forward that makes it up, and that blocks the whole party. For a single attacker this is just
+	# "that attacker", so the same loop covers both.
+	#
+	# (The tempting inverse — "illegal if any member refuses this blocker" — is wrong: a party of two Yuffies with
+	# "cannot be blocked by cost 3+ / 4+" is blockable by a cost-3 Forward, because it can block the cost-4 one.)
+	var members: Array = party_members()
+	if members.is_empty():
+		members = [attacker_card]
+	for member in members:
+		if member == null or not is_instance_valid(member):
+			continue
+		if not member.allows_blocker(card):
+			continue
+		if not card.can_block_attacker(member):
+			continue
+		return true
+	return false
+
+## The card that MUST block this attacker, if any. It only counts when the marker names this attacker (or a
+## member of its party) AND the card can legally block — "if it is possible" in Lightning's text is not a
+## requirement when the card is tapped or otherwise unable to block.
+func forced_blocker_for(attacker: Card) -> Card:
+	if attacker == null or not is_instance_valid(attacker):
+		return null
+	var attackers: Array = party_members()
+	if attackers.is_empty():
+		attackers = [attacker]
+	var defender: String = Card.OPPONENT if attacker.controller == Card.PLAYER else Card.PLAYER
+	for card in get_front_cards_for(defender):
+		if card == null or not is_instance_valid(card) or not card.is_on_field():
+			continue
+		if not card.must_block_against(attackers):
+			continue
+		if can_block(card):
+			return card
+	return null
+
+
+## The review link: the arc that shows what a card IN THE STACK was pointed at, re-drawn on
+## demand as the player moves over the stack (see Stack.refresh_target_display).
+##
+## It is drawn by the FIELD, not by the stack, because `BallisticArrow` treats the points it is
+## handed as LOCAL coordinates. The stack node is flipped and sits above the board, so an arrow
+## parented to it and given global points lands wherever that transform carries it — which is
+## exactly what "arrows in random places" was. The Field's frame is identity, as it is for the
+## other two arrows, so global points are correct here.
+var review_arrow: BallisticArrow = null
+## One link per target of the card being reviewed ("choose up to 3" draws three). review_arrow is the first.
+var _review_arrows: Array = []
+
+func show_review_link(source: Card, target: Card) -> void:
+	show_review_links(source, [target])
+
+func show_review_links(source: Card, targets: Array) -> void:
+	var live: Array = targets.filter(func(t): return t != null and is_instance_valid(t))
+	if source == null or not is_instance_valid(source) or live.is_empty():
+		hide_review_link()
+		return
+	_review_arrows = _review_arrows.filter(func(a): return a != null and is_instance_valid(a))
+	while _review_arrows.size() < live.size():
+		var fresh: BallisticArrow = ballistic_arrow_scene.instantiate()
+		add_child(fresh)
+		_review_arrows.append(fresh)
+	for i in range(_review_arrows.size()):
+		var link: BallisticArrow = _review_arrows[i]
+		if i >= live.size():
+			link.set_is_aiming(false)
+			continue
+		# Same convention as the live targeting arrow — from the source's TOP EDGE to the target's centre — so a link
+		# being reviewed looks exactly like the one that was drawn. It FOLLOWS the source, which may still be settling
+		# into its stack slot.
+		link.set_is_aiming_from_card(true, source)
+		link.lock_arc(live[i].get_global_face_centre())
+	review_arrow = _review_arrows[0]
+
+func hide_review_link() -> void:
+	for link in _review_arrows:
+		if link != null and is_instance_valid(link):
+			link.set_is_aiming(false)
+
+## The link from the blocker to the attacker, drawn CENTRE to CENTRE.
+##
+## Static by design: both cards are already on the field and neither moves while the
+## declaration is open, so this aims once and locks. That is the opposite of the targeting
+## arrow, which follows the mouse and a card that may still be tweening into the stack.
+## ONE ARC PER PARTY MEMBER. When the attacker is a party, the block is not a single link: the blocker's power is
+## being divided across every member, so each of them gets an arc from the blocker's face centre. A party of one (the
+## ordinary attack) still produces exactly one arc, so this is the same call for both cases.
+##
+## Static by design: both cards are already on the field and neither moves while the declaration is open, so each arc
+## aims once and locks.
+func show_block_arc(blocker: Card) -> void:
+	hide_block_arc()
+	if blocker == null or attacker_card == null:
+		return
+	var targets: Array = party_members()
+	if targets.is_empty():
+		targets = [attacker_card]
+	for member in targets:
+		if member == null or not is_instance_valid(member):
+			continue
+		var arc: BallisticArrow = ballistic_arrow_scene.instantiate()
+		add_child(arc)
+		# Adjacent cards are the common case for a block, and the default floor exists to
+		# stop a dot being drawn for a near-zero targeting drag.
+		arc.min_distance = 0.15
+		# A block joins the two battle rows, so its chord runs up the screen. Bowing along
+		# screen-up would put the arch along the chord (a 1.54 m path for an 0.85 m span);
+		# perpendicular instead makes it a sideways link. Kept shallow — this is a link
+		# between two cards, not a shot.
+		arc.bow_perpendicular = true
+		arc.peak_ratio = 0.22
+		arc.set_is_aiming(true, blocker.get_global_face_centre())
+		arc.lock_arc(member.get_global_face_centre())
+		block_arrows.append(arc)
+
+func hide_block_arc() -> void:
+	for arc in block_arrows:
+		if arc != null and is_instance_valid(arc):
+			arc.set_is_aiming(false)
+			arc.queue_free()
+	block_arrows.clear()
+
+func reset_blocker():
+	# The blocker may have broken in the clash, so only clear the marker while it
+	# is still a card on the field.
+	if blocker_card != null and is_instance_valid(blocker_card):
+		if blocker_card.is_on_field():
+			blocker_card.set_blocker_status(false)
+		blocker_card.set_selected_highlight(false)
+	blocker_card = null
+	hide_block_arc()
+func _on_assistant_charge_cancelled() -> void:
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
+
+
+func _on_assistant_charge_complete() -> void:
+	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
+		return
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	_tap_selected_cards()
+	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
+
+func apply_deferred_skill_mana_payment() -> void:
+	for c in selected_cards_for_mana_conversion:
+		c.reset()
+	_tap_selected_cards()
+	selected_cards_for_mana_conversion = []
+	selected_mana_elements.clear()
+
+
+func _on_assistant_target_cancel() -> void:
+	if stack.skill_mana_deferred_until_target_confirm or stack.summon_mana_deferred_until_target_confirm:
+		for c in selected_cards_for_mana_conversion:
+			c.reset()
+		selected_cards_for_mana_conversion.clear()
+		selected_mana_elements.clear()
+	targeting_allow_cancel = false
+	target_card = null
+	source_card = null
+	# EVERY arc, for the same reason as the completion path: a multi-target session leaves one locked on each pick.
+	_clear_target_arrows()
+	reset_targets()
+	# NOTE: the TARGET modal is popped by Assistant.on_target_cancel() /
+	# on_target_complete(), which owns the modal it opened. Don't pop here too.
+
+
+## "WHEN CHOSEN" — called when a targeting session is CONFIRMED, not when rings are clicked.
+##
+## Only the OPPONENT'S choice counts: Kuja's text says "chosen by ... your opponent", so being picked by its own
+## controller must not trigger it. And only Summon/Ability targeting: a set effect reaches cards without choosing them.
+## Fired once per session (`_chosen_notified`), because a pick can be replaced before confirming.
+func notify_targets_chosen() -> void:
+	if _chosen_notified:
+		return
+	_chosen_notified = true
+	if source_card == null or targeting_picked.is_empty():
+		return
+	var chooser: String = source_card.controller
+	var kind: String = targeting_source_kind
+	if kind != "Summon" and kind != "Ability":
+		return
+	for card in targeting_picked:
+		if card == null or not is_instance_valid(card):
+			continue
+		if card.controller == chooser:
+			continue
+		if not card.is_key_word_in_card_effect("when_chosen") and not card.effect_handles_event(EVENTS.Event.CHOSEN):
+			continue
+		LOG.info("Chosen", "%s was chosen by the opponent's %s" % [card.card_name, kind])
+		execute_card_effect(card, EVENTS.Event.CHOSEN)
+
+func _on_stack_execute_card_effect(card: Card) -> void:
+	# CODE EVENTS OPEN THEIR TARGETING SESSION INSIDE THE HANDLER, so this pre-clear would wipe the arc the handler
+	# just spawned. Their post-resolution cleanup is enough. JSON effects and event triggers still need the old
+	# pre-clear because their target session existed before resolution.
+	if card.effect_event == EVENTS.Event.NONE:
+		_clear_target_arrows()
+		target_card = null
+		source_card = null
+		targeting_allow_cancel = false
+		reset_targets()
+
+## Free every arc this session spawned: the aiming one and the locked ones. Called wherever a session ends.
+func _clear_target_arrows() -> void:
+	for a in targeting_arrows:
+		if a != null and is_instance_valid(a):
+			a.queue_free()
+	targeting_arrows.clear()
+	if arrow != null and is_instance_valid(arrow):
+		arrow.queue_free()
+	arrow = null
+
+## End a targeting session from the EFFECT side. The normal stack path does this in
+## _on_stack_execute_card_effect; event triggers resolve through Game._resolve_event_trigger and need the same
+## cleanup afterwards, or the last locked arc and the orange pick ring outlive the effect.
+func finish_targeting_state() -> void:
+	_clear_target_arrows()
+	target_card = null
+	source_card = null
+	targeting_allow_cancel = false
+	reset_targets()
+
+## CARD INPUT. Card forwards a click and a hover to whichever zone it sits in; these are the Field's.
+func on_card_grabbed(card: Card) -> void:
+	match GlobalVariables.get_player_mode():
+		GlobalVariables.Player_Mode.PAYING_COST:
+			if card.type == Card.BACKUP and card.tapped == false and card.controller == Card.PLAYER:
+				# The Field owns the "selected for mana" marker (Card.show_mana_crystal).
+				if selected_cards_for_mana_conversion.has(card):
+					remove_card_from_mana_conversion(card)
+				else:
+					# The CARD decides whether it needs to ask. A one-colour card answers immediately; an
+					# any-colour card opens the circle through EffectContext.
+					begin_mana_choice(card)
+		GlobalVariables.Player_Mode.ATTACKING:
+			if phase == GlobalVariables.Phase.ATTACK_DECLARATION_STEP:
+				if card.controller == Card.PLAYER and card.can_attack():
+					set_attacker(card)
+		GlobalVariables.Player_Mode.FREE, GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			try_activate_from_field(card)
+		GlobalVariables.Player_Mode.TARGET:
+			set_target_card(card)
+		GlobalVariables.Player_Mode.BLOCKING:
+			# Blocking is the local player's call: any of your own untapped
+			# Forwards may block, even one that would break — the AI's "only
+			# trade up" heuristic is a policy, not a rule.
+			#
+			# THROUGH can_block(), not can_attack(): the two differed, and the ring already used the former, so a card with
+			# block_disabled would not have glowed but was still clickable.
+			if card.controller == Card.PLAYER and can_block(card):
+				set_blocker_card(card)
+
+## A battlefield card is small, and at board scale its text cannot be read at all: hovering shows a readable preview.
+func on_card_hovered(card: Card, entered: bool) -> void:
+	if card.current_zone != Card.Zone.FIELD:
+		return
+	if entered:
+		show_card_preview(card)
+	else:
+		hide_card_preview()

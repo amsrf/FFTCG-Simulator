@@ -1,7 +1,7 @@
 extends Node
 ## Radial mana choice: one static crystal per available element, arranged evenly around the card.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const COSMOS := 183
 
 var _checks: int = 0

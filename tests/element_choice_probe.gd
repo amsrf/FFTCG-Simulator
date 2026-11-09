@@ -1,7 +1,7 @@
 extends Node
 ## Element picker UI used by "name an Element" effects (Mime 173).
 
-const SCENE := preload("res://element_choice.tscn")
+const SCENE := preload("res://scenes/ui/element_choice.tscn")
 
 var _checks: int = 0
 var _fails: int = 0

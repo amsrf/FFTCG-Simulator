@@ -7,7 +7,7 @@ extends Node
 ## The point of the mechanism is the LEDGER: the rule's contribution is tracked and only the difference is applied,
 ## so recomputing never erases a temporary buff, and the count is read live from the board.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const JECHT := 15
 const DARK_KNIGHT := 92

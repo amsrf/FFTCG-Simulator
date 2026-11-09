@@ -8,7 +8,7 @@ extends Node
 ##
 ##   godot --headless res://tests/aura_probe.tscn --quit-after 900
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const AURA_CARD := 30          ## 1-030R, the Fire Backup that grants the aura.
 
 var _checks: int = 0

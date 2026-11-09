@@ -6,7 +6,7 @@ extends RefCounted
 ## Constraints receive card DATABASE IDS and the list of ids already selected. They use CardFilter to read the
 ## printed card data, because deck search works with ids rather than live Card nodes.
 
-const CARD_FILTER := preload("res://scripts/card_filter.gd")
+const CARD_FILTER := preload("res://scripts/core/card_filter.gd")
 
 
 func allows(_id: int, _selected: Array) -> bool:

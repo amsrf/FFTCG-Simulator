@@ -1,8 +1,8 @@
 extends Node
 ## Four clash outcomes through the real Game resolution path.
 
-const GAME_SCENE := preload("res://game.tscn")
-const TEST_GROUNDS := preload("res://scripts/test_grounds.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 
 const SCENARIO_ATTACKER_WINS := 0
 const SCENARIO_DEFENDER_WINS := 1

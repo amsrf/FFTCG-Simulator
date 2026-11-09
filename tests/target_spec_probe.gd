@@ -1,7 +1,7 @@
 extends Node
 ## Typed target definitions: CardQuery says WHICH cards, TargetRequest says where/how many, TargetSequence says stages.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 const TARGET_SEQUENCE := preload("res://scripts/effects/target_sequence.gd")

@@ -4,8 +4,8 @@ extends Node
 ## Drives the modal directly (selection, border, confirm, cancel, disabled entries) and then through the real entry
 ## point, `Field.begin_skill_activation(card)` with no index, which must open the picker instead of activating ability 0.
 
-const GAME_SCENE := preload("res://game.tscn")
-const SKILL_CHOICE := preload("res://skill_choice.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const SKILL_CHOICE := preload("res://scenes/ui/skill_choice.tscn")
 
 const RIKKU := 89
 const RED_MAGE := 3

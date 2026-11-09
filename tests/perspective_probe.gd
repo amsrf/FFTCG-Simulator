@@ -6,8 +6,8 @@ extends Node
 ## final boards are translated to SEATS and compared — names, uids, damage, tapped state, hands, piles, whose turn.
 ## A difference means some rule or ordering depends on which side is "player", which would desync two machines.
 
-const GAME_SCENE := preload("res://game.tscn")
-const PRESENTATION := preload("res://scripts/presentation.gd")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const PRESENTATION := preload("res://scripts/core/presentation.gd")
 ## Defaults; override from the command line to widen coverage, e.g.
 ##   godot --headless res://tests/perspective_probe.tscn -- --preset=standard --turns=5 --seed=12345
 ## "standard" builds seeded shuffled decks, so different seeds are genuinely different games ("ai" has fixed decks).

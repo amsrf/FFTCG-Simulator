@@ -11,7 +11,7 @@ extends Node
 ##   3  toggle slow motion (0.35x)
 ##   4  toggle the help panel
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const SUMMON_ID := 62          # Valefor: a Summon with no target, so the flight is uninterrupted.
 const SLOW_SCALE := 0.35
 

@@ -10,7 +10,7 @@ extends Node
 ## First Strike is granted as a STATUS here, which exercises the granted half of the printed/granted split. The
 ## printed half is covered by cards 29 and 87 in card_effects.json.
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 const STRONG := 6000
 const WEAK := 4000

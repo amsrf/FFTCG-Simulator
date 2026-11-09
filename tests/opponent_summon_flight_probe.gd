@@ -3,7 +3,7 @@ extends Node
 ## lands, in screen percentages. This is the objective version of "does it leave from the middle
 ## of the hand, reach the screen centre, and finish at the stack?".
 
-const GAME_SCENE := preload("res://game.tscn")
+const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("debug")

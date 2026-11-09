@@ -5,7 +5,7 @@ extends RefCounted
 ## selection changes, and whether Confirm is legal. This is deliberately separate from a CardQuery: a
 ## "different Elements" rule is a property of the CURRENT SELECTION, not a property of a single card.
 
-const CARD_FILTER := preload("res://scripts/card_filter.gd")
+const CARD_FILTER := preload("res://scripts/core/card_filter.gd")
 const UNIQUE_CONSTRAINT := preload("res://scripts/effects/unique_field_constraint.gd")
 const TOTAL_COST_CONSTRAINT := preload("res://scripts/effects/total_cost_constraint.gd")
 
