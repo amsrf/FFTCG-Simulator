@@ -20,13 +20,21 @@ func take_priority(player_id: int) -> bool:
 	var phase = game.phase
 	if phase != GlobalVariables.Phase.FIRST_MAIN_PHASE and phase != GlobalVariables.Phase.SECOND_MAIN_PHASE:
 		return false
-	for card in game.hand_for(player_id).cards:
-		if not _is_safe_to_play(card):
-			continue
-		if not _can_afford(card, player_id):
-			continue
-		if await game.play_card_for(player_id, card):
-			return true  # an action: priority moves to the opponent
+	# A CHARACTER KEEPS PRIORITY (it never uses the stack), so the AI goes on casting until nothing more is affordable,
+	# then passes. A Summon goes on the stack, and that does pass priority to the opponent.
+	var played: bool = true
+	while played:
+		played = false
+		for card in game.hand_for(player_id).cards.duplicate():
+			if not _is_safe_to_play(card):
+				continue
+			if not _can_afford(card, player_id):
+				continue
+			if await game.play_card_for(player_id, card):
+				if card.type == Card.SUMMON:
+					return true
+				played = true
+				break
 	return false
 
 func _is_safe_to_play(card: Card) -> bool:

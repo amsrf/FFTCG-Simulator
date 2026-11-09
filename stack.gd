@@ -410,8 +410,9 @@ func cast_card():
 			return
 		_shatter_paid_cost()
 		# The CAST is the action, not the end of its presentation. Record it
-		# before the ~1.3 s teleport so priority sees the action immediately.
-		game.note_action_taken()
+		# before the ~1.3 s teleport. A Character does not use the stack, so the
+		# caster KEEPS priority (Game.note_character_cast).
+		game.note_character_cast(landing)
 		var owner_hand: Hand = _owner_hand(landing)
 		# DISCARD FIRST: the payment cards' flights must be QUEUED before the dissolve, so they play first. Flushing
 		# here makes that order explicit instead of depending on which charge_complete handler runs first.

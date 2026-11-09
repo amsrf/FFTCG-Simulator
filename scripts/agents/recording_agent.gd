@@ -60,6 +60,7 @@ func _hook_human() -> void:
 	game.field.target_picked.connect(_on_pick)
 	game.assistant.target_complete.connect(func(): _on_targeting_done(false))
 	game.assistant.target_cancel.connect(func(): _on_targeting_done(true))
+	game.action_committed.connect(_on_action_committed)
 	game.priority_window_ended.connect(_on_window_ended)
 	game.field.skill_activation_begun.connect(_on_activation_begun)
 	game.stack.s_cost_chosen.connect(_on_s_cost_chosen)
@@ -143,10 +144,21 @@ func _on_targeting_done(cancelled: bool) -> void:
 	# A target chosen while an effect resolves: the other machine asks the remote seat for exactly this.
 	_send(entry)
 
-func _on_window_ended(acted: bool) -> void:
-	if acted and not _draft.is_empty() and _window.is_empty() and _human:
-		# An action committed while this seat did not hold priority: it happened on this machine only.
+## THE HUMAN'S DRAFT COMMITTED: it joins the open window now. A Character cast keeps the window open (more casts may
+## follow in it); the window itself is sent when it ends.
+func _on_action_committed() -> void:
+	if not _human or _draft.is_empty():
+		return
+	if _window.is_empty():
 		push_error("[Lockstep] %s committed outside this seat's priority window - it was NOT sent" % str(_draft.get("card")))
+		_draft = {}
+		return
+	if not _is_activation():
+		_add_payment_if_missing()
+	_window["plays"].append(_draft)
+	_draft = {}
+
+func _on_window_ended(acted: bool) -> void:
 	if acted and not _draft.is_empty() and not _window.is_empty():
 		if not _is_activation():
 			_add_payment_if_missing()

@@ -1214,7 +1214,11 @@ func snapshot_by_seat() -> Dictionary:
 		var side: PlayerSide = side_for(1 if mine else 2)
 		d["s%d.front" % seat] = describe.call(field.front_cards if mine else field.opponent_front_cards)
 		d["s%d.back" % seat] = describe.call(field.back_cards if mine else field.opponent_back_cards)
-		d["s%d.hand" % seat] = side.hand.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+		# A hand is a SET: its order is the player's own arrangement (drags, a cancelled cast going back where it was
+		# picked up), which the other machine never sees. Nothing in the rules picks from a hand by position.
+		var hand_cards: Array = side.hand.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
+		hand_cards.sort()
+		d["s%d.hand" % seat] = hand_cards
 		d["s%d.deck" % seat] = side.deck.deck_cards.map(func(c): return c.uid)
 		d["s%d.damage" % seat] = side.damage_zone.cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
 		d["s%d.break_zone" % seat] = side.graveyard.graveyard_cards.map(func(c): return "%s#%d" % [c.card_name, c.uid])
@@ -2240,7 +2244,19 @@ func _on_priority_passed() -> void:
 ## activated). When an *agent* acts nobody is awaiting this signal — the agent
 ## reports the action through its `take_priority()` return value instead.
 func note_action_taken() -> void:
+	action_committed.emit()
 	priority_window_ended.emit(true)
+
+## Something was committed: a cast, an ability on the stack. Online play adds the draft to the open window here.
+signal action_committed
+
+## A CHARACTER WAS CAST. Characters never use the stack, so this does NOT pass priority: the player keeps their window
+## and may cast again, until they pass or put something on the stack (a Summon, an ability).
+func note_character_cast(card: Card) -> void:
+	action_committed.emit()
+	if card != null and is_instance_valid(card) and card.controller == Card.PLAYER and player_agent != null \
+			and player_agent.is_human() and priority_holder == 1:
+		assistant.show_pass_priority_button()
 
 func priority() -> void:
 	# One round of priority at a time. Extra requests (e.g. Stack.request_priority

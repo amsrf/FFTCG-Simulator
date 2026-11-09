@@ -139,7 +139,8 @@ func shatter_paid(_target_card: Card = null) -> void:
 		return
 	var world_parent: Node = get_parent()
 	for crystal in crystals():
-		if not bool(crystal.get("lit")):
+		# The row can be rebuilt while this awaits between crystals, freeing the ones not reached yet.
+		if not is_instance_valid(crystal) or crystal.get("lit") != true:
 			continue
 		crystal.call("shatter", world_parent)
 		if shatter_stagger_seconds > 0.0:

@@ -77,6 +77,8 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 		_drive_human(game, _human_driver_pending)
 	var start := Time.get_ticks_msec()
 	var desyncs: Array = []
+	var snaps: Dictionary = {}
+	game.turn_state_recorded.connect(func(t, _h): snaps[t] = game.snapshot_by_seat())
 	game.desync_detected.connect(func(t, a, b): desyncs.append("turn %s: %s vs %s" % [t, a, b]))
 	while not game.match_over and game.turn_number <= TURNS:
 		await get_tree().create_timer(0.1).timeout
@@ -85,7 +87,7 @@ func _play(cfg: Dictionary, label: String) -> Dictionary:
 			break
 	_driver_stop = true
 	var out := {"hashes": game.turn_hashes.duplicate(), "turn": game.turn_number, "desyncs": desyncs,
-		"out_of_sync": game.out_of_sync, "match_over": game.match_over,
+		"out_of_sync": game.out_of_sync, "match_over": game.match_over, "snaps": snaps,
 		"snapshot": game.snapshot_by_seat()}
 	print("[Lockstep] %s: turn %d after %.1fs" % [label, game.turn_number, (Time.get_ticks_msec() - start) / 1000.0])
 	game.queue_free()
@@ -117,9 +119,16 @@ func _drive_human(game: Node, holder: Array) -> void:
 					continue
 				if _human_cancels == 0 and await _human_cast(game, true) == "cancelled":
 					_human_cancels += 1
-				if await _human_cast(game, false) == "cast":
+				# A Character keeps priority, so after casting the human still has to pass.
+				# Up to TWO casts in the same window: Characters do not pass priority.
+				for _i in range(2):
+					if _driver_stop or not is_instance_valid(game) or rec.pending_kind != "take_priority":
+						break
+					if await _human_cast(game, false) != "cast":
+						break
 					_human_casts += 1
-				else:
+					await get_tree().create_timer(0.2).timeout
+				if not _driver_stop and is_instance_valid(game) and rec.pending_kind == "take_priority":
 					assistant.pressed_pass_priority.emit()
 			"decide_attackers", "decide_attacker":
 				assistant.advance_attack_declaration_step.emit()
@@ -275,8 +284,8 @@ func _ready() -> void:
 	var messages: Array = recorder[0].sent if recorder[0] != null else []
 	var plays := 0
 	for m in messages:
-		if m.contains("\"take_priority\"") and m.contains("\"card\""):
-			plays += 1
+		if m.contains("\"take_priority\""):
+			plays += m.count("\"card\"")
 	print("[Lockstep] seat 1 sent %d messages (%d priority windows with a play)" % [messages.size(), plays])
 	if HUMAN:
 		print("[Lockstep] scripted human: %d casts, %d cancelled drafts, %d abilities, %d cancelled abilities" % [
@@ -288,6 +297,11 @@ func _ready() -> void:
 		for m in messages:
 			acts += m.count("\"activate\"")
 		_expect(acts == _human_activations, "only committed abilities were sent (%d sent, %d activated)" % [acts, _human_activations])
+		var multi := 0
+		for m in messages:
+			if m.contains("\"take_priority\"") and m.count("\"card\"") >= 2:
+				multi += 1
+		_expect(multi > 0, "a Character cast kept priority: one window carried two plays (%d such windows)" % multi)
 		_expect(plays == _human_casts + _human_activations, "only committed plays were sent (%d sent, %d cast + %d activated)" % [
 			plays, _human_casts, _human_activations])
 	_expect(messages.size() > 5, "seat 1 sent decisions to replay (%d)" % messages.size())
@@ -334,8 +348,11 @@ func _ready() -> void:
 		_expect(not h_a.is_empty() and same == h_a.size() and h_a.size() == h_b.size(),
 			"both machines hash every turn identically (%d / %d)" % [same, h_a.size()])
 		if same != h_a.size():
-			for line in GAME_SCENE.instantiate().get_script().diff_snapshots(a["snapshot"], b["snapshot"]):
-				print("[Lockstep] DIFF " + line)
+			var differ = GAME_SCENE.instantiate().get_script()
+			for t in h_a:
+				if str(h_a[t]) != str(h_b.get(t, "")) and a["snaps"].has(t) and b["snaps"].has(t):
+					for line in differ.diff_snapshots(a["snaps"][t], b["snaps"][t]):
+						print("[Lockstep] DIFF turn %d: %s" % [t, line])
 	print("[Lockstep] %d checks | failures: %d" % [_checks, _fails])
 	print("[Lockstep] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
