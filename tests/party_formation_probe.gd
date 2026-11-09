@@ -114,6 +114,20 @@ func _ready() -> void:
 		and absf(zack.position.x - home[zack]) < 0.01, "after the attack disbands, every card is exactly home")
 	_expect(not plate.visible, "and the plate is gone")
 
+	# --- neighbours: nothing moves at all ------------------------------------------------------------------------------
+	red.position.x = -0.65
+	zack.position.x = 0.0
+	squall.position.x = 0.65
+	field.set_attacker(red)
+	field.add_party_member(zack)
+	await _settle()
+	_expect(absf(red.position.x + 0.65) < 0.001 and absf(zack.position.x) < 0.001 and absf(squall.position.x - 0.65) < 0.001,
+		"members already side by side: no card moves (red %.2f, zack %.2f, squall %.2f)" % [red.position.x, zack.position.x, squall.position.x])
+	_expect(plate.visible and absf(badge.position.x - (-0.325)) < 0.01 and badge.text == str(red.power + zack.power),
+		"the plate still shows, and the bare total sits in the gap between them (%s at %.2f)" % [badge.text, badge.position.x])
+	field.reset_attacker()
+	await _settle()
+
 	print("[Formation] %d checks | failures: %d" % [_checks, _fails])
 	print("[Formation] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

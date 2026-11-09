@@ -396,6 +396,8 @@ const FAN_MAX_TILT_DEGREES := 12.0
 ## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". At 80% of a 225 px
 ## card the band is ~180 px, which keeps the whole cost strip and most of the art above the edge.
 const FAN_VISIBLE_FRACTION := 0.62
+## The opponent's hand shows less, which lifts it off their Backup row: at 0.62 its lower edge touched their Backups.
+const MIRRORED_VISIBLE_FRACTION := 0.45
 ## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. The drop is this times
 ## `r * r`, where `r` is the card's offset from the middle over half the row — so it is a `t * t` curve, symmetric by
 ## construction, and it can never exceed this fraction however big the hand gets. THE MIDDLE IS HIGHEST.
@@ -543,7 +545,7 @@ func _sink_offset() -> Vector3:
 	var want_edge: float = view_h - (bottom - top) * FAN_VISIBLE_FRACTION
 	var here: float = top
 	if mirror_presentation:
-		want_edge = (bottom - top) * FAN_VISIBLE_FRACTION
+		want_edge = (bottom - top) * MIRRORED_VISIBLE_FRACTION
 		here = bottom
 	# Screen Y grows DOWNWARD, so a positive difference means the card sits too high and has to come down the screen —
 	# which is the opposite direction to the camera's up axis.

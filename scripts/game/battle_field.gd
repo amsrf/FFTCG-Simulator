@@ -2411,10 +2411,11 @@ func on_card_hovered(card: Card, entered: bool) -> void:
 # ======================================================================================================================
 # PARTY FORMATION — presentation only. Nothing here is read by the rules.
 #
-# There is no room to step a party forward (the rows are ~0.13 apart), so the party forms INSIDE its own row: the
-# members close up around their midpoint, and only the Forwards actually in the way slide outward, leaving a gap. A
-# translucent plate in the party's element colour sits under the members, with the party's total power above them;
-# each card keeps its own power/damage readout underneath. When the party disbands, every card slides back home.
+# The party forms INSIDE its own row, and cards move only when they have to: members that are already neighbours stay
+# exactly where they are. Only when a non-member stands BETWEEN them (A C B) do the members close up around their
+# midpoint and the Forwards in the way slide outward, leaving a gap. A translucent plate in the party's element colour
+# sits under the members, with the party's total power as a bare number in the gap between them; each card keeps its
+# own power/damage readout underneath. When the party disbands, every card slides back home.
 #
 # Only position.x is animated, so the attack/block nudges (set_attacker_status / set_blocker_status move z) keep
 # working on top of it. Order in the row means nothing in the rules, so rearranging it is free.
@@ -2429,9 +2430,6 @@ const CARD_LOCAL_SIZE := Vector2(0.411, 0.595)
 const PARTY_PLATE_MARGIN := 0.07
 ## Vertical margin kept small: the strip between the rows holds the opponent's readouts, and the plate must not cover them.
 const PARTY_PLATE_MARGIN_Z := 0.02
-## The party total gets its OWN space on the plate, beside the members on the screen-right end (field -x): the strip
-## between the rows holds the opponent's readouts, which matter most exactly now (choosing a blocker).
-const PARTY_BADGE_WIDTH := 0.46
 
 ## Card -> its x in the row before the formation moved it.
 var _formation_home: Dictionary = {}
@@ -2464,6 +2462,19 @@ func _refresh_party_formation() -> void:
 			if not row.has(card):
 				targets[card] = _formation_home[card]
 		members.sort_custom(func(a, b): return _formation_home[a] < _formation_home[b])
+		# Already neighbours (no non-member between the first and last member): nothing moves.
+		var lo_home: float = _formation_home[members[0]]
+		var hi_home: float = _formation_home[members[members.size() - 1]]
+		var split: bool = false
+		for card in row:
+			if not members.has(card) and _formation_home[card] > lo_home and _formation_home[card] < hi_home:
+				split = true
+		if not split:
+			for card in row:
+				targets[card] = _formation_home[card]
+			_apply_formation(targets)
+			_place_party_plate(members, targets)
+			return
 		var centre: float = 0.0
 		for card in members:
 			centre += _formation_home[card]
@@ -2485,8 +2496,7 @@ func _refresh_party_formation() -> void:
 				right.append(card)
 		left.sort_custom(func(a, b): return _formation_home[a] > _formation_home[b])
 		right.sort_custom(func(a, b): return _formation_home[a] < _formation_home[b])
-		# Field -x is screen-right, where the badge sits: those cards make room for it too.
-		var limit: float = block_left - ROW_CARD_STEP - PARTY_SIDE_GAP - PARTY_BADGE_WIDTH
+		var limit: float = block_left - ROW_CARD_STEP - PARTY_SIDE_GAP
 		for card in left:
 			var x: float = minf(_formation_home[card], limit)
 			targets[card] = x
@@ -2501,7 +2511,10 @@ func _refresh_party_formation() -> void:
 		for card in _formation_home.keys():
 			targets[card] = _formation_home[card]
 		_formation_home.clear()
+	_apply_formation(targets)
+	_place_party_plate(members if members.size() >= 2 else [], targets)
 
+func _apply_formation(targets: Dictionary) -> void:
 	if _formation_tween != null and _formation_tween.is_valid():
 		_formation_tween.kill()
 	_formation_tween = null
@@ -2514,7 +2527,6 @@ func _refresh_party_formation() -> void:
 			_formation_tween = create_tween().set_parallel(true)
 		_formation_tween.tween_property(card, "position:x", float(targets[card]), PARTY_SLIDE_SECONDS) \
 				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_place_party_plate(members if members.size() >= 2 else [], targets)
 
 ## The plate and badge, placed where the members WILL be (the slide is short, and the plate fades in over it).
 func _place_party_plate(members: Array, targets: Dictionary) -> void:
@@ -2537,10 +2549,9 @@ func _place_party_plate(members: Array, targets: Dictionary) -> void:
 		_party_badge = Label3D.new()
 		_party_badge.name = "PartyBadge"
 		_party_badge.font = load("res://assets/fonts/fffont.tres")
-		_party_badge.font_size = 132
+		_party_badge.font_size = 110
 		_party_badge.pixel_size = 0.001
-		_party_badge.outline_size = 30
-		_party_badge.line_spacing = -20
+		_party_badge.outline_size = 28
 		_party_badge.outline_modulate = Color(0.04, 0.05, 0.08, 1)
 		_party_badge.no_depth_test = true
 		_party_badge.render_priority = 2
@@ -2550,14 +2561,13 @@ func _place_party_plate(members: Array, targets: Dictionary) -> void:
 		add_child(_party_badge)
 	var first: Card = members[0]
 	var card_size := Vector2(CARD_LOCAL_SIZE.x * absf(first.scale.x), CARD_LOCAL_SIZE.y * absf(first.scale.z))
-	var lo: float = INF
-	var hi: float = -INF
+	var xs: Array = []
 	for card in members:
-		var x: float = float(targets.get(card, card.position.x))
-		lo = minf(lo, x)
-		hi = maxf(hi, x)
-	# The plate spans the members plus the badge's space on the -x end.
-	var plate_lo: float = lo - card_size.x / 2.0 - PARTY_BADGE_WIDTH - PARTY_PLATE_MARGIN
+		xs.append(float(targets.get(card, card.position.x)))
+	xs.sort()
+	var lo: float = xs[0]
+	var hi: float = xs[xs.size() - 1]
+	var plate_lo: float = lo - card_size.x / 2.0 - PARTY_PLATE_MARGIN
 	var plate_hi: float = hi + card_size.x / 2.0 + PARTY_PLATE_MARGIN
 	var size := Vector2(plate_hi - plate_lo, card_size.y + 2.0 * PARTY_PLATE_MARGIN_Z)
 	var row_z: float = first.position.z
@@ -2568,8 +2578,14 @@ func _place_party_plate(members: Array, targets: Dictionary) -> void:
 	var tint: Color = _party_colour(first)
 	material.set_shader_parameter("tint", tint)
 	_party_plate.visible = true
-	# Centred in its space, nudged off the last card so the text never touches it.
-	_party_badge.position = Vector3(lo - card_size.x / 2.0 - PARTY_BADGE_WIDTH / 2.0 - 0.02, first.position.y + 0.02, row_z)
+	# In the GAP between two members — the one nearest the party's centre — at mid-card height.
+	var centre_x: float = (lo + hi) / 2.0
+	var gap_x: float = (xs[0] + xs[1]) / 2.0
+	for i in range(xs.size() - 1):
+		var mid: float = (xs[i] + xs[i + 1]) / 2.0
+		if absf(mid - centre_x) < absf(gap_x - centre_x):
+			gap_x = mid
+	_party_badge.position = Vector3(gap_x, first.position.y + 0.03, row_z)
 	_party_badge.modulate = tint.lerp(Color.WHITE, 0.55)
 	_party_badge.visible = true
 	_refresh_party_badge()
@@ -2581,4 +2597,4 @@ func _party_colour(card: Card) -> Color:
 func _refresh_party_badge() -> void:
 	if _party_badge == null or not _party_badge.visible:
 		return
-	_party_badge.text = "PARTY\n%d" % party_power()
+	_party_badge.text = str(party_power())

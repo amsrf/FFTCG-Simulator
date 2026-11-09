@@ -86,6 +86,20 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 				if int(cfg["player_field"][i].get("id", -1)) == 3:
 					cfg["player_field"].remove_at(i)
 			cfg["player_field"].append({"id": 64, "tapped": false})
+			# A SECOND FIRE PAIR SPLIT BY SQUALL, for party formation: Zack and Squall swap places, and 1 Auron (Fire)
+			# lands beside Squall, so the row reads Auron | Squall | Red XIII | Zack. Red XIII + Zack are neighbours
+			# (nothing moves); Auron + Red XIII have Squall between them (he is pushed aside).
+			var zack_i: int = -1
+			var squall_i: int = -1
+			for i in range(cfg["player_field"].size()):
+				match int(cfg["player_field"][i].get("id", -1)):
+					12: zack_i = i
+					41: squall_i = i
+			if zack_i >= 0 and squall_i >= 0:
+				var tmp = cfg["player_field"][zack_i]
+				cfg["player_field"][zack_i] = cfg["player_field"][squall_i]
+				cfg["player_field"][squall_i] = tmp
+			cfg["player_field"].append({"id": 1, "tapped": false})   # Auron (Fire Forward 9000)
 			# THREE FORWARDS + FIVE BACKUPS, the legal maximum for each row. The five Evokers are all wind,
 			# which is exactly what 62 Valefor costs (5) — the old board had nine Backups, which is not a legal
 			# field and made the perspective layout impossible to inspect.
