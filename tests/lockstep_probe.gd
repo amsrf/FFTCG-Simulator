@@ -22,6 +22,7 @@ var HUMAN := false
 var _human_casts := 0
 var _human_cancels := 0
 var _human_activations := 0
+var _human_summons := 0
 ## Casts whose message was already sent BEFORE the human passed (the other player sees a cast at once).
 var _sent_before_pass := 0
 var _human_activation_cancels := 0
@@ -48,6 +49,13 @@ func _read_args() -> void:
 
 func _base() -> Dictionary:
 	var cfg: Dictionary = MatchSetup.build_config("ai", {"player_type": "ai", "opponent_type": "ai", "seed": SEED, "starting_player": 1})
+	# A TARGETED SUMMON FOR SEAT 1: Ifrit (1 Fire, choose a Forward) in hand, and a Red Mage (Fire) in place of the
+	# tapped Chemist to pay for it. Both machines build the same board from this.
+	cfg["player_hand"] = cfg["player_hand"] + [4]
+	for i in range(cfg["player_field"].size()):
+		if int(cfg["player_field"][i].get("id", -1)) == 32:
+			cfg["player_field"][i] = {"id": 3, "tapped": false}
+			break
 	if SEED != 424242:
 		cfg["player_deck"] = MatchSetup._shuffled(cfg.get("player_deck", []), SEED)
 		cfg["opponent_deck"] = MatchSetup._shuffled(cfg.get("opponent_deck", []), SEED + 1)
@@ -114,6 +122,10 @@ func _drive_human(game: Node, holder: Array) -> void:
 				if rec.window_serial == last_window:
 					continue
 				last_window = rec.window_serial
+				# A TARGETED SUMMON (Ifrit at a Forward): pay, aim, confirm. It goes on the stack, so priority passes.
+				if _human_summons == 0 and await _human_summon(game) == "cast":
+					_human_summons += 1
+					continue
 				if _human_activation_cancels == 0 and await _human_activate(game, true) == "cancelled":
 					_human_activation_cancels += 1
 				if _human_activations < 3 and await _human_activate(game, false) == "activated":
@@ -231,6 +243,44 @@ func _human_activate(game: Node, cancel: bool) -> String:
 			return "activated"
 	return "none"
 
+func _human_summon(game: Node) -> String:
+	var hand = game.hand_for(1)
+	var field = game.field
+	var assistant = game.assistant
+	var ifrit: Card = null
+	for card in hand.cards:
+		if card.id == 4:
+			ifrit = card
+	if ifrit == null or not hand.charge(ifrit):
+		return "none"
+	await get_tree().process_frame
+	for backup in field.get_back_cards_for(Card.PLAYER):
+		if assistant.can_pay_cost():
+			break
+		if not backup.tapped and "火" in backup.mana_element():
+			field.add_card_to_mana_conversion(backup, "火")
+	if not assistant.can_pay_cost():
+		assistant.on_charge_cancelled()
+		await get_tree().process_frame
+		return "none"
+	assistant.on_charge_complete()
+	await get_tree().process_frame
+	var target: Card = null
+	for c in field.get_all_cards():
+		if c.is_valid_target and c.controller != Card.PLAYER:
+			target = c
+			break
+	if target == null:
+		assistant.on_target_cancel()
+		return "none"
+	field.set_target_card(target)
+	await get_tree().process_frame
+	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+		assistant.on_target_complete()
+	await get_tree().process_frame
+	print("[Lockstep] human cast Ifrit at %s" % target.card_name)
+	return "cast"
+
 func _human_cast(game: Node, cancel: bool) -> String:
 	var hand = game.hand_for(1)
 	var field = game.field
@@ -311,10 +361,12 @@ func _ready() -> void:
 			"the human both activated and cancelled abilities (%d / %d)" % [_human_activations, _human_activation_cancels])
 		_expect(acts == _human_activations, "only committed abilities were sent (%d sent, %d activated)" % [acts, _human_activations])
 		_expect(multi > 0, "a Character cast kept priority: two plays in one window (%d times)" % multi)
+		_expect(_human_summons > 0, "the human cast a targeted Summon (%d)" % _human_summons)
 		_expect(_sent_before_pass == _human_casts, "every cast was sent the moment it committed, before the pass (%d / %d)" % [
 			_sent_before_pass, _human_casts])
-		_expect(plays == _human_casts + _human_activations, "only committed plays were sent (%d sent, %d cast + %d activated)" % [
-			plays, _human_casts, _human_activations])
+		_expect(plays == _human_casts + _human_activations + _human_summons,
+			"only committed plays were sent (%d sent, %d cast + %d activated + %d summoned)" % [
+			plays, _human_casts, _human_activations, _human_summons])
 	_expect(messages.size() > 5, "seat 1 sent decisions to replay (%d)" % messages.size())
 
 	if TAMPER and messages.size() > 3:

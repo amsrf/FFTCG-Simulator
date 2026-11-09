@@ -1201,6 +1201,8 @@ func _on_assistant_target_complete() -> void:
 	if summon_casting_card != null:
 		_commit_summon_to_stack()
 		_shatter_paid_cost()      # the Summon is on the stack
+		# THE AIMING ARROWS ARE DONE: the cast succeeded, and the stack shows its arrows once the card has landed.
+		field._clear_target_arrows()
 		request_priority.emit()
 		return
 	# DIVIDE DAMAGE IS CHOSEN BEFORE THE ABILITY COMMITS. "Divide 6000 damage among them as you like" (Yuffie's
@@ -1223,6 +1225,8 @@ func _on_assistant_target_complete() -> void:
 			return
 		game.set_damage_division(split)
 	commit_skill_activation_costs_if_pending()
+	# Same for an ability: committed, so its aiming arrows go; the stack shows its arrows from here.
+	field._clear_target_arrows()
 	_shatter_paid_cost()          # activation committed: costs paid, target chosen
 	# Same as the no-target path below: clear the button that got us here, then put the player's pass button back. Hiding the
 	# rack alone leaves the parked priority round with nothing to be answered by.

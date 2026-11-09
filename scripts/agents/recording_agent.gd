@@ -153,6 +153,12 @@ func _on_targeting_done(cancelled: bool) -> void:
 func _on_action_committed() -> void:
 	if not _human or _draft.is_empty():
 		return
+	# THE TARGETS ARE PART OF THE PLAY. Confirming the targets is what commits a Summon or an ability, and which of the
+	# confirm's handlers runs first (the stack committing, or _on_targeting_done) is down to connection order. So a
+	# session still open here is closed now and its picks go into the play, never after it.
+	if _session_local:
+		_session_local = false
+		_draft["nested"].append({"kind": "choose_target", "result": {"picks": _picks.duplicate(), "cancel": false}})
 	if _window.is_empty():
 		push_error("[Lockstep] %s committed outside this seat's priority window - it was NOT sent" % str(_draft.get("card")))
 		_draft = {}
