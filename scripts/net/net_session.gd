@@ -38,6 +38,20 @@ var fixed_seed: int = 0
 ## HOST ONLY, for testing by hand: both seats start from the PRACTICE BOARD (the "ai" preset: Backups for mana and
 ## Forwards already on the field, and that preset's decks), instead of an empty board and each player's own deck.
 var practice_board: bool = false
+## HOST ONLY, for tests: cards dealt into each seat's opening hand on top of the normal five, {"1": [ids], "2": [ids]}.
+var hand_extras: Dictionary = {}
+const PRACTICE_SUMMON := 4        # Ifrit: 1 Fire, choose 1 Forward, deal it 4000
+const PRACTICE_FIRE_BACKUP := 3   # Red Mage, a Fire Backup
+
+## `field` with the first Backup of id `old_id` replaced by `new_id` (or `new_id` added when there is none).
+func _with_backup_swapped(field: Array, old_id: int, new_id: int) -> Array:
+	var out: Array = field.duplicate(true)
+	for i in range(out.size()):
+		if int(out[i].get("id", -1)) == old_id:
+			out[i] = {"id": new_id, "tapped": false}
+			return out
+	out.append({"id": new_id, "tapped": false})
+	return out
 
 var game: Node = null
 var remote: Agent = null
@@ -176,7 +190,13 @@ func _on_hello(message: Dictionary) -> void:
 		var board: Dictionary = MatchSetup.build_config("ai")
 		seat1_deck = _ints(board["player_hand"] + board["player_deck"])
 		their_deck = _ints(board["opponent_hand"] + board["opponent_deck"])
-		start_fields = {"1": board["player_field"], "2": board["opponent_field"]}
+		# A SUMMON TO TRY AND THE MANA FOR IT, on both sides: Ifrit (1 Fire, choose a Forward) dealt into each opening
+		# hand, and one Backup per side swapped for a Red Mage (Fire) so it can be paid for. Still five Backups each.
+		start_fields = {
+			"1": _with_backup_swapped(board["player_field"], 32, PRACTICE_FIRE_BACKUP),
+			"2": _with_backup_swapped(board["opponent_field"], 68, PRACTICE_FIRE_BACKUP),
+		}
+		hand_extras = {"1": [PRACTICE_SUMMON], "2": [PRACTICE_SUMMON]}
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var setup := {
@@ -185,6 +205,7 @@ func _on_hello(message: Dictionary) -> void:
 		"starting_seat": rng.randi_range(1, 2),
 		"decks": {"1": seat1_deck, "2": their_deck},
 		"fields": start_fields,
+		"hand_extras": hand_extras,
 	}
 	_send(setup)
 	_start(setup)
@@ -199,7 +220,7 @@ func _start(setup: Dictionary) -> void:
 	var decks: Dictionary = setup.get("decks", {})
 	var cfg: Dictionary = MatchSetup.online_config(int(setup.get("seed", 1)), local_seat,
 		int(setup.get("starting_seat", 1)), _ints(decks.get("1", [])), _ints(decks.get("2", [])),
-		setup.get("fields", {}))
+		setup.get("fields", {}), setup.get("hand_extras", {}))
 	for key in config_overrides:
 		cfg[key] = config_overrides[key]
 	cfg["wrap_agent"] = _wrap_agent

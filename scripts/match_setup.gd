@@ -178,7 +178,7 @@ func close_online() -> void:
 ## THE SAME MATCH ON BOTH MACHINES, each from its own side. Seat 1's deck is shuffled with `seed`, seat 2's with
 ## seed + 1, whichever machine builds it; then "player" is this machine's seat and "opponent" the other one.
 func online_config(seed_value: int, local_seat: int, starting_seat: int, seat1_deck: Array, seat2_deck: Array,
-		fields: Dictionary = {}) -> Dictionary:
+		fields: Dictionary = {}, hand_extras: Dictionary = {}) -> Dictionary:
 	var by_seat: Dictionary = {1: _shuffled(seat1_deck, seed_value), 2: _shuffled(seat2_deck, seed_value + 1)}
 	var mine: Array = by_seat[local_seat]
 	var theirs: Array = by_seat[3 - local_seat]
@@ -192,14 +192,22 @@ func online_config(seed_value: int, local_seat: int, starting_seat: int, seat1_d
 		"starting_player": 1 if starting_seat == local_seat else 2,
 		"seed": seed_value,
 		"shuffle": true,
-		"player_hand": mine.slice(0, opening_mine),
-		"opponent_hand": theirs.slice(0, opening_theirs),
+		"player_hand": mine.slice(0, opening_mine) + _ids(hand_extras.get(str(local_seat), [])),
+		"opponent_hand": theirs.slice(0, opening_theirs) + _ids(hand_extras.get(str(3 - local_seat), [])),
 		"player_deck": mine.slice(opening_mine),
 		"opponent_deck": theirs.slice(opening_theirs),
 		"player_field": _field_entries(fields.get(str(local_seat), [])),
 		"opponent_field": _field_entries(fields.get(str(3 - local_seat), [])),
 		"first_phase": "first_main",
 	}
+
+## Card ids that crossed the network: JSON turns every number into a float.
+func _ids(values) -> Array:
+	var out: Array = []
+	if values is Array:
+		for v in values:
+			out.append(int(v))
+	return out
 
 ## Field entries that crossed the network: JSON turns every number into a float.
 func _field_entries(entries) -> Array:
