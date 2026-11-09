@@ -468,8 +468,10 @@ func showPower():
 	if(power_label == null):
 		return
 	if(type == FORWARD):
+		# THE NUMBERS SIT UNDER THE CARD (like Master Duel's stats), so the art is not covered and needs no dark band
+		# painted behind them (the shader's `effect_enabled` band stays off).
 		power_label.visible = true
-		mat.set_shader_parameter("effect_enabled", true)
+		mat.set_shader_parameter("effect_enabled", false)
 	else:
 		power_label.visible = false
 

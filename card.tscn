@@ -60,13 +60,14 @@ transform = Transform3D(0.4, 0, 0, 0, -1.74846e-08, -0.4, 0, 0.4, -1.74846e-08, 
 visible = false
 
 [node name="PowerDisplay" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0.00504819, 0.00429562, 0.261672)
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0.004, 0.345)
 visible = false
 pixel_size = 0.001
 text = "80000/90000"
 font = ExtResource("7_pjytt")
-font_size = 40
-outline_size = 17
+font_size = 64
+outline_modulate = Color(0.04, 0.05, 0.08, 1)
+outline_size = 14
 script = ExtResource("7_b4rk6")
 
 [node name="FieldMesh" type="MeshInstance3D" parent="."]
