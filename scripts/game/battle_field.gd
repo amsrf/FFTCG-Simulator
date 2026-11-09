@@ -936,6 +936,7 @@ func _process(delta: float) -> void:
 		return
 	_availability_timer = 0.0
 	refresh_available_effects()
+	_refresh_party_badge()
 
 func refresh_available_effects() -> void:
 	# The ring means "you can do this now", cost included: an ability you could not pay for is not offered.
@@ -1651,6 +1652,7 @@ func remove_card(card):
 	# still say FIELD and the departing card would stay in the party. prune_party() then clears any other stale ones.
 	drop_party_member(card)
 	prune_party()
+	_formation_home.erase(card)
 
 ## ONE PASS OVER THE BOARD FOR EVERY CONTINUOUS EFFECT.
 ##
@@ -1896,6 +1898,7 @@ func set_attacker(card:Card):
 	elif add_party_member(card):
 		pass
 	# else: different element or cannot attack — DO NOTHING, per the party rules.
+	_queue_party_formation()
 	attacker_changed.emit()
 
 ## Join `card` to the current attack. Returns false when the rules say it cannot: it must be able to attack, it must
@@ -1913,6 +1916,7 @@ func add_party_member(card: Card) -> bool:
 	attacking_party.append(card)
 	card.set_attacker_status(true)
 	LOG.info("Party", "%s joins %s (%d members)" % [card.card_name, attacker_card.card_name, attacking_party.size()])
+	_queue_party_formation()
 	return true
 
 func remove_party_member(card: Card) -> void:
@@ -1922,6 +1926,7 @@ func remove_party_member(card: Card) -> void:
 	if is_instance_valid(card):
 		card.set_attacker_status(false)
 	LOG.info("Party", "%s leaves (%d members)" % [card.card_name, attacking_party.size()])
+	_queue_party_formation()
 
 func same_element_as_primary(card: Card) -> bool:
 	if attacker_card == null:
@@ -1979,6 +1984,7 @@ func prune_party() -> void:
 			card.set_attacker_status(false)
 	attacking_party = alive
 	_disband_if_too_small()
+	_queue_party_formation()
 
 ## A card is leaving the field. Drop it WITHOUT asking `is_on_field()`: remove_card() runs before the zone actually
 ## changes (the pile sets it), so a field check there still says FIELD and the "departed" member stayed in the party.
@@ -1989,6 +1995,7 @@ func drop_party_member(card: Card) -> void:
 	if is_instance_valid(card):
 		card.set_attacker_status(false)
 	_disband_if_too_small()
+	_queue_party_formation()
 
 func _disband_if_too_small() -> void:
 	if attacking_party.size() >= 2:
@@ -2006,6 +2013,7 @@ func reset_attacker():
 			card.set_attacker_status(false)
 	attacking_party.clear()
 	attacker_card = null
+	_queue_party_formation()
 
 ## Select/deselect a blocker for the current combat (human input only).
 ## Game.set_blocker() is what *declares* it (via the set_blocker instruction).
@@ -2398,3 +2406,179 @@ func on_card_hovered(card: Card, entered: bool) -> void:
 		show_card_preview(card)
 	else:
 		hide_card_preview()
+
+
+# ======================================================================================================================
+# PARTY FORMATION — presentation only. Nothing here is read by the rules.
+#
+# There is no room to step a party forward (the rows are ~0.13 apart), so the party forms INSIDE its own row: the
+# members close up around their midpoint, and only the Forwards actually in the way slide outward, leaving a gap. A
+# translucent plate in the party's element colour sits under the members, with the party's total power above them;
+# each card keeps its own power/damage readout underneath. When the party disbands, every card slides back home.
+#
+# Only position.x is animated, so the attack/block nudges (set_attacker_status / set_blocker_status move z) keep
+# working on top of it. Order in the row means nothing in the rules, so rearranging it is free.
+# ======================================================================================================================
+const PARTY_PLATE_SHADER := preload("res://shaders/party_plate.gdshader")
+const ELEMENTS := preload("res://scripts/core/elements.gd")
+## Extra space between the party and the Forwards beside it, on top of the normal row step.
+const PARTY_SIDE_GAP := 0.22
+const PARTY_SLIDE_SECONDS := 0.3
+## The card mesh, in card-local metres (card.tscn's BoxMesh): scaled by the card's own scale on the field.
+const CARD_LOCAL_SIZE := Vector2(0.411, 0.595)
+const PARTY_PLATE_MARGIN := 0.07
+## Vertical margin kept small: the strip between the rows holds the opponent's readouts, and the plate must not cover them.
+const PARTY_PLATE_MARGIN_Z := 0.02
+## The party total gets its OWN space on the plate, beside the members on the screen-right end (field -x): the strip
+## between the rows holds the opponent's readouts, which matter most exactly now (choosing a blocker).
+const PARTY_BADGE_WIDTH := 0.46
+
+## Card -> its x in the row before the formation moved it.
+var _formation_home: Dictionary = {}
+var _formation_tween: Tween = null
+var _formation_queued: bool = false
+var _party_plate: MeshInstance3D = null
+var _party_badge: Label3D = null
+
+## Coalesce: the AI declares with reset + set + add + add in one go, which should be ONE slide, not four.
+func _queue_party_formation() -> void:
+	if _formation_queued:
+		return
+	_formation_queued = true
+	call_deferred("_refresh_party_formation")
+
+func _refresh_party_formation() -> void:
+	_formation_queued = false
+	var members: Array = []
+	for card in attacking_party:
+		if card != null and is_instance_valid(card) and (front_cards.has(card) or opponent_front_cards.has(card)):
+			members.append(card)
+	var targets: Dictionary = {}   # card -> x
+	if members.size() >= 2:
+		var row: Array = front_cards if front_cards.has(members[0]) else opponent_front_cards
+		for card in row:
+			if not _formation_home.has(card):
+				_formation_home[card] = card.position.x
+		# Cards of the OTHER row that were displaced by an earlier formation go home.
+		for card in _formation_home.keys():
+			if not row.has(card):
+				targets[card] = _formation_home[card]
+		members.sort_custom(func(a, b): return _formation_home[a] < _formation_home[b])
+		var centre: float = 0.0
+		for card in members:
+			centre += _formation_home[card]
+		centre /= members.size()
+		var k: int = members.size()
+		for i in range(k):
+			targets[members[i]] = centre + (i - (k - 1) / 2.0) * ROW_CARD_STEP
+		var block_left: float = centre - (k - 1) / 2.0 * ROW_CARD_STEP
+		var block_right: float = centre + (k - 1) / 2.0 * ROW_CARD_STEP
+		# The others keep their place unless they are in the way; then they are pushed out, one step apart.
+		var left: Array = []
+		var right: Array = []
+		for card in row:
+			if members.has(card):
+				continue
+			if _formation_home[card] < centre:
+				left.append(card)
+			else:
+				right.append(card)
+		left.sort_custom(func(a, b): return _formation_home[a] > _formation_home[b])
+		right.sort_custom(func(a, b): return _formation_home[a] < _formation_home[b])
+		# Field -x is screen-right, where the badge sits: those cards make room for it too.
+		var limit: float = block_left - ROW_CARD_STEP - PARTY_SIDE_GAP - PARTY_BADGE_WIDTH
+		for card in left:
+			var x: float = minf(_formation_home[card], limit)
+			targets[card] = x
+			limit = x - ROW_CARD_STEP
+		limit = block_right + ROW_CARD_STEP + PARTY_SIDE_GAP
+		for card in right:
+			var x: float = maxf(_formation_home[card], limit)
+			targets[card] = x
+			limit = x + ROW_CARD_STEP
+	else:
+		# No party: everyone home, and forget the homes.
+		for card in _formation_home.keys():
+			targets[card] = _formation_home[card]
+		_formation_home.clear()
+
+	if _formation_tween != null and _formation_tween.is_valid():
+		_formation_tween.kill()
+	_formation_tween = null
+	for card in targets.keys():
+		if card == null or not is_instance_valid(card) or not card.is_inside_tree():
+			continue
+		if absf(card.position.x - float(targets[card])) < 0.001:
+			continue
+		if _formation_tween == null:
+			_formation_tween = create_tween().set_parallel(true)
+		_formation_tween.tween_property(card, "position:x", float(targets[card]), PARTY_SLIDE_SECONDS) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_place_party_plate(members if members.size() >= 2 else [], targets)
+
+## The plate and badge, placed where the members WILL be (the slide is short, and the plate fades in over it).
+func _place_party_plate(members: Array, targets: Dictionary) -> void:
+	if members.is_empty():
+		if _party_plate != null:
+			_party_plate.visible = false
+			_party_badge.visible = false
+		return
+	if _party_plate == null:
+		_party_plate = MeshInstance3D.new()
+		_party_plate.name = "PartyPlate"
+		_party_plate.mesh = PlaneMesh.new()
+		var material := ShaderMaterial.new()
+		material.shader = PARTY_PLATE_SHADER
+		# Drawn before every other transparent thing, so no readout (theirs included) ever sits under it.
+		material.render_priority = -10
+		_party_plate.material_override = material
+		_party_plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_party_plate)
+		_party_badge = Label3D.new()
+		_party_badge.name = "PartyBadge"
+		_party_badge.font = load("res://assets/fonts/fffont.tres")
+		_party_badge.font_size = 132
+		_party_badge.pixel_size = 0.001
+		_party_badge.outline_size = 30
+		_party_badge.line_spacing = -20
+		_party_badge.outline_modulate = Color(0.04, 0.05, 0.08, 1)
+		_party_badge.no_depth_test = true
+		_party_badge.render_priority = 2
+		_party_badge.outline_render_priority = 1
+		# Flat on the table and readable from the player's seat — the same basis the cards' own readouts end up with.
+		_party_badge.basis = Basis(Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0))
+		add_child(_party_badge)
+	var first: Card = members[0]
+	var card_size := Vector2(CARD_LOCAL_SIZE.x * absf(first.scale.x), CARD_LOCAL_SIZE.y * absf(first.scale.z))
+	var lo: float = INF
+	var hi: float = -INF
+	for card in members:
+		var x: float = float(targets.get(card, card.position.x))
+		lo = minf(lo, x)
+		hi = maxf(hi, x)
+	# The plate spans the members plus the badge's space on the -x end.
+	var plate_lo: float = lo - card_size.x / 2.0 - PARTY_BADGE_WIDTH - PARTY_PLATE_MARGIN
+	var plate_hi: float = hi + card_size.x / 2.0 + PARTY_PLATE_MARGIN
+	var size := Vector2(plate_hi - plate_lo, card_size.y + 2.0 * PARTY_PLATE_MARGIN_Z)
+	var row_z: float = first.position.z
+	(_party_plate.mesh as PlaneMesh).size = size
+	_party_plate.position = Vector3((plate_lo + plate_hi) / 2.0, first.position.y - 0.01, row_z)
+	var material: ShaderMaterial = _party_plate.material_override
+	material.set_shader_parameter("size", size)
+	var tint: Color = _party_colour(first)
+	material.set_shader_parameter("tint", tint)
+	_party_plate.visible = true
+	# Centred in its space, nudged off the last card so the text never touches it.
+	_party_badge.position = Vector3(lo - card_size.x / 2.0 - PARTY_BADGE_WIDTH / 2.0 - 0.02, first.position.y + 0.02, row_z)
+	_party_badge.modulate = tint.lerp(Color.WHITE, 0.55)
+	_party_badge.visible = true
+	_refresh_party_badge()
+
+func _party_colour(card: Card) -> Color:
+	var i: int = ELEMENTS.index_of(element_set(card)[0] if not element_set(card).is_empty() else "")
+	return ELEMENTS.ACCENT[i] if i >= 0 else Color(0.9, 0.9, 0.9)
+
+func _refresh_party_badge() -> void:
+	if _party_badge == null or not _party_badge.visible:
+		return
+	_party_badge.text = "PARTY\n%d" % party_power()

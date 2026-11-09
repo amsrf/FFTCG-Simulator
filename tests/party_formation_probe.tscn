@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/party_formation_probe.gd" id="1"]
+
+[node name="PartyFormationProbe" type="Node"]
+script = ExtResource("1")
