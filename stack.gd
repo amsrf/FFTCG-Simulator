@@ -384,9 +384,9 @@ func add_created_card_to_tree(card: Card, wording: String):
 	card.enter_zone(Card.Zone.STACK, wording)
 	
 func cast_card():
-	# It is being played, so it is public now, whichever branch runs.
-	reveal_parked(casting_card)
 	if casting_card.type == Card.SUMMON:
+		# It is being played, so it is public now. (A Character is revealed as it dissolves, below.)
+		reveal_parked(casting_card)
 		# Summons stay on the stack and resolve as effects. Resolution
 		# (game._on_stack_execute_card_effect) sends them to the graveyard.
 		casting_card.key_word_effect = "when_cast"
@@ -426,6 +426,8 @@ func cast_card():
 		var fade: float = field.teleport_fade_seconds
 		Vfx.present(func() -> void:
 			if is_instance_valid(landing):
+				# Public from here: the opponent's card turns face up as it dissolves out of their hand.
+				landing.set_revealed(true)
 				await landing.teleport.play_out(shine, fade).finished)
 		# RULES, at once: the Character is on the field.
 		field.play_card(landing, landing.controller != Card.PLAYER, true, true, false, true)
@@ -745,17 +747,12 @@ func _on_hand_charge_start(card: Card) -> void:
 			card.stop_hand_layout()
 			card.set_cast_pending_highlight(true)
 	else:
-		# A CHARACTER IS PARKED IN THE FAKE STACK while its cost is paid. It is
-		# not in `cards`, so it is not legally on the stack; `park_card()` gives
-		# it the Stack presentation, then the thin gold aura marks it as the play.
+		# THE CHARACTER IS NOT A STACK CARD, for either player. It stays parented to its hand through payment (yours in
+		# the latched cast stance, the opponent's where it sits in their face-down hand); the Stack only holds the
+		# reference that cast_card() will fade from. The thin gold aura marks it as the play. It used to be parked in
+		# the stack area for the opponent, which showed a stack trip that Characters never make.
 		casting_card = card
-		if card.controller == Card.PLAYER:
-			# THE CHARACTER IS NOT A STACK CARD. It stays parented to the hand,
-			# in the latched cast stance, through payment; the Stack only holds the
-			# reference that cast_card() will fade from.
-			card.stop_hand_layout()
-		else:
-			park_card(card)
+		card.stop_hand_layout()
 		card.set_cast_pending_highlight(true)
 
 
