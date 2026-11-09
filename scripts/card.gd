@@ -1404,6 +1404,12 @@ func set_energized_highlight(enabled: bool, colour: Color = Color.WHITE) -> void
 ## The material's stock widths, captured when the ring is built (see _build_target_border).
 var _border_width_base: float = 0.025
 var _glow_width_base: float = 0.07
+## The stock pulse (target_border_material.tres), and the calmer one for cards in the hand.
+var _pulse_amount_base: float = 0.25
+var _pulse_width_base: float = 0.18
+const HAND_RING_WIDTH_SCALE := 0.6
+const HAND_RING_PULSE_AMOUNT := 0.08
+const HAND_RING_PULSE_WIDTH := 0.04
 ## How wide the green availability ring is drawn, as a fraction of the others. It is a STANDING
 ## cue — it can sit on several cards for a whole turn — while blue/orange/red are momentary, so
 ## it is drawn thinner to stay subordinate to them.
@@ -1464,8 +1470,14 @@ func _refresh_target_ring() -> void:
 		width_scale = CAST_PENDING_WIDTH_SCALE
 	elif _energized_highlight_on:
 		width_scale = ENERGIZED_WIDTH_SCALE
+	# CALMER IN THE HAND: a row of rings pulsing side by side is noise. Thinner, and a gentle pulse.
+	var in_hand: bool = current_zone == Zone.HAND
+	if in_hand:
+		width_scale *= HAND_RING_WIDTH_SCALE
 	_border_material.set_shader_parameter("border_width", _border_width_base * width_scale)
 	_border_material.set_shader_parameter("glow_width", _glow_width_base * width_scale)
+	_border_material.set_shader_parameter("pulse_amount", HAND_RING_PULSE_AMOUNT if in_hand else _pulse_amount_base)
+	_border_material.set_shader_parameter("pulse_width", HAND_RING_PULSE_WIDTH if in_hand else _pulse_width_base)
 	var color: Color = _border_color_base
 	var glow: Color = _glow_color_base
 	# LOWEST PRIORITY, so it is checked FIRST: everything below overwrites it. The colour is the CARD's
@@ -1573,6 +1585,8 @@ func _build_target_border() -> void:
 	# half width) without losing the look the material was tuned to.
 	_border_width_base = maxf(float(_border_material.get_shader_parameter("border_width")), 0.005)
 	_glow_width_base = maxf(float(_border_material.get_shader_parameter("glow_width")), 0.0)
+	_pulse_amount_base = float(_border_material.get_shader_parameter("pulse_amount"))
+	_pulse_width_base = float(_border_material.get_shader_parameter("pulse_width"))
 	# Size the quad from the ring + spill, and write the result back so the shader
 	# and the geometry can never disagree about where the glow ends.
 	var border_width: float = _border_width_base
