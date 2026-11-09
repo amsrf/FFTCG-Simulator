@@ -783,6 +783,11 @@ var match_over: bool = false
 ## The match's ONE random generator. Seeded from config["seed"] in start_match(), so a seeded match replays
 ## exactly — nothing that affects the rules may use Godot's global RNG.
 var rng := RandomNumberGenerator.new()
+## AUTO-PASS for the local player: pass for them when they get priority and have nothing they could do (no card to
+## cast, no ability to use). From the menu setting (MatchSetup.auto_pass); off unless the config says so, so tests that
+## drive the human by hand are not passed for.
+var auto_pass: bool = false
+
 ## The other player's last move was a PASS: passing now would be the second pass in a row, which resolves the top of
 ## the stack or, with the stack empty, ends the phase (rule 11.1.7). Set before each priority question; the pass button
 ## reads it to say what passing does.
@@ -882,6 +887,7 @@ func start_match(config: Dictionary) -> void:
 		break
 
 	# "player_type": "ai" seats an AI as player 1 too — AI-vs-AI simulations and the determinism probe.
+	auto_pass = bool(config.get("auto_pass", false))
 	player_agent = AIAgent.new() if str(config.get("player_type", "local")) == "ai" else LocalAgent.new()
 	player_agent.bind(self)
 	match str(config.get("opponent_type", "mock")):

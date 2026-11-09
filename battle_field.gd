@@ -762,7 +762,9 @@ func ability_x_max(card: Card) -> int:
 ## `by_agent`: the activation is decided by the card's owner's AGENT (a replayed online opponent, a probe), not clicked
 ## here. Then the rules are checked for that owner's seat — they hold priority, their hand pays — and the local UI
 ## mode is irrelevant. A click keeps the local checks: your card, your priority, a free moment on screen.
-func can_activate_now(card: Card, by_agent: bool = false) -> bool:
+## `check_payment`: also require that the ability's CP cost can be paid right now (the "you can use this" ring and
+## auto-pass). A click or a replay does not ask for it: the payment step is where a short payment shows.
+func can_activate_now(card: Card, by_agent: bool = false, check_payment: bool = false) -> bool:
 	if card == null or game == null:
 		return false
 	var owner_id: int = 1 if card.controller == Card.PLAYER else 2
@@ -828,7 +830,80 @@ func can_activate_now(card: Card, by_agent: bool = false) -> bool:
 			if (target_domain == "field" or target_domain == "stack") \
 					and not has_viable_target(ct, card, "Ability", target_domain):
 				continue
+		if check_payment and not _skill_payable(card, def, owner_hand):
+			continue
 		return true
+	return false
+
+const COST_CHECK := preload("res://scripts/cost_check.gd")
+
+## Untapped Backups `controller_name` could dull for CP right now.
+func _mana_backups(controller_name: String, except: Card = null) -> Array:
+	return get_back_cards_for(controller_name).filter(func(b): return b != except and not b.tapped \
+		and not selected_cards_for_mana_conversion.has(b) and (stack == null or not stack.is_reserved_for_cost(b)))
+
+## Can this ability's CP cost be paid, with everything else it costs taken out first: the source itself when it taps,
+## the same-named card an S ability discards, and the cards a discard cost takes (the least useful ones as CP).
+func _skill_payable(card: Card, def: Dictionary, owner_hand: Hand) -> bool:
+	if bool(def.get("x_cost", false)) or bool(def.get("free_activation", false)):
+		return true   # X is already bounded by what can be paid (ability_x_max); a free activation costs nothing
+	var cost: Dictionary = def.get("cost", {})
+	if cost_is_free(cost):
+		return true
+	var backups: Array = _mana_backups(card.controller, card if bool(def.get("tap", false)) else null)
+	var spare: Array = owner_hand.cards.filter(func(h): return stack == null or not stack.is_reserved_for_cost(h)) \
+		if owner_hand != null else []
+	if bool(def.get("s_cost", false)):
+		for h in spare:
+			if h.card_name == card.card_name:
+				spare.erase(h)
+				break
+	var discards: int = int(def.get("discard", 0))
+	if discards > 0:
+		# Give up first the cards whose element the cost does not ask for.
+		spare.sort_custom(func(a, b): return _useful_for(a, cost) < _useful_for(b, cost))
+		spare = spare.slice(mini(discards, spare.size()))
+	return COST_CHECK.can_pay(cost, backups, spare)
+
+func _useful_for(card: Card, cost: Dictionary) -> int:
+	for element in card.mana_elements():
+		if int(cost.get(element, 0)) > 0:
+			return 1
+	return 0
+
+## CAN THE LOCAL PLAYER CAST THIS HAND CARD RIGHT NOW? Priority, timing (the same rule the drop uses:
+## Card.can_be_played), a legal target for a targeted Summon, and the CP cost payable WITHOUT the card itself.
+func can_cast_from_hand(card: Card) -> bool:
+	if card == null or not is_instance_valid(card) or card.controller != Card.PLAYER or game == null:
+		return false
+	if not has_priority():
+		return false
+	var owner_hand: Hand = game.hand_for(1)
+	if owner_hand == null or not owner_hand.cards.has(card):
+		return false
+	if stack != null and (stack.summon_casting_card != null or stack.casting_card != null \
+			or stack.skill_activation_proxy != null):
+		return false
+	if not card.can_be_played():
+		return false
+	if card.type == Card.SUMMON:
+		var criteria = card.get_cast_target_criteria()
+		if criteria != null and not criteria.is_empty() and not has_viable_target(criteria, card, "Summon"):
+			return false
+	var spare: Array = owner_hand.cards.filter(func(h): return h != card)
+	return COST_CHECK.can_pay(effective_cost(card), _mana_backups(Card.PLAYER), spare)
+
+## Is there ANYTHING the local player could do with priority right now: a card to cast, an ability to use?
+## Auto-pass passes for them when there is not.
+func local_has_any_play() -> bool:
+	if game == null:
+		return false
+	for card in game.hand_for(1).cards:
+		if can_cast_from_hand(card):
+			return true
+	for card in get_all_cards():
+		if card.controller == Card.PLAYER and can_activate_now(card, false, true):
+			return true
 	return false
 
 ## Damage in the controller's Damage Zone. Used by "you can only use this ability if you have received N damage"
@@ -863,8 +938,15 @@ func _process(delta: float) -> void:
 	refresh_available_effects()
 
 func refresh_available_effects() -> void:
+	# The ring means "you can do this now", cost included: an ability you could not pay for is not offered.
 	for card in get_all_cards():
-		card.set_available_highlight(can_activate_now(card))
+		card.set_available_highlight(can_activate_now(card, false, true))
+	# ...and the same for the cards in your hand you could cast right now.
+	if game != null:
+		var own_hand: Hand = game.hand_for(1)
+		if own_hand != null:
+			for card in own_hand.cards:
+				card.set_available_highlight(can_cast_from_hand(card))
 
 ## Activate an ability. `skill_index < 0` means ASK: one ability activates directly, two or more open the picker
 ## modal and wait for the choice. Explicit indexes stay supported (probes, and any future "activate ability N").

@@ -42,15 +42,38 @@ func choose_number(_owner_id: int, minimum: int, maximum: int, prompt: String = 
 	return result
 
 
+## How long an automatic pass waits, so the screen does not jump (and so an instant pass does not tell the opponent at
+## once that you have nothing).
+const AUTO_PASS_DELAY := 0.6
+var _window_serial: int = 0
+
 func take_priority(_player_id: int) -> bool:
 	# The human's priority window ends two ways: they press pass, or they
-	# perform an action — the rules hand priority to the opponent the moment an
-	# action is performed. Both routes end at Game.priority_window_ended, which
-	# carries which of the two happened.
+	# perform an action that goes on the stack. Both routes end at
+	# Game.priority_window_ended, which carries which of the two happened.
 	var assistant: Assistant = game.assistant
 	assistant.show_pass_priority_button()
+	_window_serial += 1
+	if bool(game.get("auto_pass")):
+		_auto_pass_if_nothing_to_do(_window_serial)
 	var acted: bool = await game.priority_window_ended
+	_window_serial += 1
 	return acted
+
+## AUTO-PASS: nothing in hand can be cast and no ability can be used, so pass for the player after a short pause. The
+## check runs again at the end of the pause, and the pass only happens if this is still the same window.
+func _auto_pass_if_nothing_to_do(serial: int) -> void:
+	if game.field.local_has_any_play():
+		return
+	await game.get_tree().create_timer(AUTO_PASS_DELAY).timeout
+	if serial != _window_serial or game == null or bool(game.get("match_over")):
+		return
+	if int(game.get("priority_holder")) != 1 or game.field.local_has_any_play():
+		return
+	var mode = GlobalVariables.get_player_mode()
+	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+		return   # something else is going on (a modal): leave it to the player
+	game.assistant._pass_priority()
 
 func decide_attacker(_player_id: int) -> Card:
 	# The human selects an attacker by clicking cards; the (Attack / No Attack)

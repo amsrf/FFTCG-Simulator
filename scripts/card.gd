@@ -1243,11 +1243,11 @@ const SELECTED_GLOW_COLOR := Color(0.95, 0.32, 0.0)
 ## red, alongside their targeting arc.
 const TARGETED_BORDER_COLOR := Color(0.95, 0.12, 0.12)
 const TARGETED_GLOW_COLOR := Color(0.85, 0.03, 0.03)
-## A card whose effect YOU can activate right now: an untapped Backup with a "skill", in a
-## moment where acting is allowed. Green means "this is available", not "this is being chosen"
-## — it goes dark the instant a targeting or payment modal takes the moment away.
-const AVAILABLE_BORDER_COLOR := Color(0.15, 0.95, 0.3)
-const AVAILABLE_GLOW_COLOR := Color(0.04, 0.7, 0.12)
+## A card YOU can play right now: a field ability you can use, or a hand card you can cast (cost included). A light,
+## thin blue means "this is available", not "this is being chosen" — it goes dark the instant a targeting or payment
+## modal takes the moment away, so it never sits beside the target prompt.
+const AVAILABLE_BORDER_COLOR := Color(0.40, 0.85, 1.0)
+const AVAILABLE_GLOW_COLOR := Color(0.05, 0.55, 0.95)
 ## A Character committed to be played, waiting for its mana payment. Gold and
 ## narrow: not a prompt, and not a marker on a mana source.
 const CAST_PENDING_BORDER_COLOR := Color(1.0, 0.82, 0.28)
