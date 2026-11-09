@@ -35,6 +35,9 @@ var config_overrides: Dictionary = {}
 var start_fields: Dictionary = {}
 ## HOST ONLY, for tests: use this seed instead of rolling one (0 = roll).
 var fixed_seed: int = 0
+## HOST ONLY, for testing by hand: both seats start from the PRACTICE BOARD (the "ai" preset: Backups for mana and
+## Forwards already on the field, and that preset's decks), instead of an empty board and each player's own deck.
+var practice_board: bool = false
 
 var game: Node = null
 var remote: Agent = null
@@ -168,13 +171,19 @@ func _on_hello(message: Dictionary) -> void:
 		status("The other player runs a different version - refused.")
 		return
 	var their_deck: Array = _ints(message.get("deck", []))
+	var seat1_deck: Array = my_deck
+	if practice_board:
+		var board: Dictionary = MatchSetup.build_config("ai")
+		seat1_deck = _ints(board["player_hand"] + board["player_deck"])
+		their_deck = _ints(board["opponent_hand"] + board["opponent_deck"])
+		start_fields = {"1": board["player_field"], "2": board["opponent_field"]}
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var setup := {
 		"t": "setup", "protocol": PROTOCOL,
 		"seed": fixed_seed if fixed_seed != 0 else rng.randi_range(1, 999999),
 		"starting_seat": rng.randi_range(1, 2),
-		"decks": {"1": my_deck, "2": their_deck},
+		"decks": {"1": seat1_deck, "2": their_deck},
 		"fields": start_fields,
 	}
 	_send(setup)

@@ -116,6 +116,11 @@ func _add_online_section(box: VBoxContainer) -> void:
 	cancel_button.disabled = true
 	buttons.add_child(cancel_button)
 
+	var practice := CheckBox.new()
+	practice.text = "Host on the practice board (for testing)"
+	practice.tooltip_text = "Both players start with Backups and Forwards already on the field, using the practice decks"
+	box.add_child(practice)
+
 	var status := Label.new()
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -133,6 +138,7 @@ func _add_online_section(box: VBoxContainer) -> void:
 		return session
 	host_button.pressed.connect(func():
 		var session: Node = open.call()
+		session.practice_board = practice.button_pressed
 		set_busy.call(session.host(int(port.value), MatchSetup.online_deck()) == OK))
 	join_button.pressed.connect(func():
 		var session: Node = open.call()
@@ -141,6 +147,31 @@ func _add_online_section(box: VBoxContainer) -> void:
 		MatchSetup.close_online()
 		status.text = "Cancelled."
 		set_busy.call(false))
+
+	# STARTED FROM THE COMMAND LINE (tools/run_two_instances.bat): `-- --host [--practice]` or `-- --join[=IP]`, plus
+	# an optional `--port=N`, click the right buttons by themselves.
+	var auto := ""
+	for arg in OS.get_cmdline_user_args():
+		var a: String = str(arg)
+		if a == "--host":
+			auto = "host"
+		elif a == "--join" or a.begins_with("--join="):
+			auto = "join"
+			if a.contains("="):
+				address.text = a.get_slice("=", 1)
+		elif a == "--practice":
+			practice.button_pressed = true
+		elif a.begins_with("--port="):
+			port.value = int(a.get_slice("=", 1))
+	if auto == "host" and not _auto_started:
+		_auto_started = true
+		host_button.pressed.emit()
+	elif auto == "join" and not _auto_started:
+		_auto_started = true
+		join_button.pressed.emit()
+
+## Only the first time the menu opens: coming back to it after a match must not start another one.
+static var _auto_started: bool = false
 
 ## The session outlives this menu (it carries the match), but these labels and buttons do not: stop it calling them.
 func _exit_tree() -> void:
