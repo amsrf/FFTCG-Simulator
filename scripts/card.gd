@@ -409,6 +409,11 @@ func _on_card_area_3d_card_grabbed(_card: Variant):
 	if zone != null and zone.has_method("on_card_grabbed"):
 		zone.on_card_grabbed(self)
 
+## The left mouse button is down: the player is carrying a card (or pressing on one). No hover STARTS then; leaving one
+## still goes through, so whatever was hovered before the press clears normally.
+static func pointer_held() -> bool:
+	return Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+
 ## Hover on the card's own area. The hand's LIFT is driven separately by HandMesh
 ## (mesh_instance_3d.gd); these handlers exist so a zone can react to the pointer being over a
 ## card. The stack uses it to put a hovered card's targeting on display. The FIELD uses it to show a
@@ -420,6 +425,9 @@ func _on_card_area_3d_mouse_entered():
 	# PAYING FOR MANA disables every card hover: the hand is a row of sources and the field is not
 	# what the player is choosing between. The hand's own gate lives in Hand.set_hovered().
 	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
+		return
+	# NOR WHILE DRAGGING: a card carried across the board must not pop up every card it passes over.
+	if pointer_held():
 		return
 	var zone: Node = get_parent()
 	if zone != null and zone.has_method("on_card_hovered"):

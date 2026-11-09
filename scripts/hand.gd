@@ -692,6 +692,9 @@ func set_hovered(card: Card, entered: bool) -> void:
 	# the payment opened can shrink back.
 	if entered and GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.PAYING_COST:
 		return
+	# No hover lift for the cards a dragged card passes over (Card.pointer_held).
+	if entered and Card.pointer_held():
+		return
 	var was: Card = hovered_card
 	if entered:
 		hovered_card = card
