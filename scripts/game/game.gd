@@ -537,22 +537,23 @@ func extra_attacks_from_damage() -> void:
 ## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
 ## say "player"/"your" and still mean the caster's side.
-func draw_cards(count: int = 1, player_id: int = 0) -> void:
+## Returns the draw flight (null when nothing was drawn) — see Hand.draw_many().
+func draw_cards(count: int = 1, player_id: int = 0) -> Tween:
 	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == Card.PLAYER else 2)
 	var d = deck if owner_id == 1 else opponent_deck
 	var h: Hand = hand_for(owner_id)
 	if d == null or h == null:
-		return
+		return null
 	var drawn: Array = []
 	for _i in range(maxi(0, count)):
 		if d.deck_cards.is_empty():
 			break
 		drawn.append(d.deck_cards.pop_front())
 	if drawn.is_empty():
-		return
+		return null
 	LOG.info("Draw", "P%d draws %d" % [owner_id, drawn.size()])
 	# One flight for all of them: "draw 2" is one motion of two cards, not two draws (Hand.draw_many).
-	h.draw_many(drawn)
+	return h.draw_many(drawn)
 
 ## Buff EVERY member of the attacking party — "Chocobo and all the Forwards forming a party with it gain +3000 power".
 ##
@@ -2158,7 +2159,9 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 		GlobalVariables.Phase.DRAW_PHASE:
 			# 9.2: the turn player draws 2 cards — 9.2.1.3: except the first player in their very first turn, who
 			# draws 1. turn_number only moves at the turn boundary, so turn 1 is exactly that turn.
-			draw_cards(1 if turn_number == 1 else 2, turn_owner)
+			# Nobody can act until the cards are in hand (9.2.1.2: no priority in the Draw Phase), so the Main Phase —
+			# and its priority — opens only once they have landed. Fast mode skips the wait.
+			await PRESENTATION.wait(draw_cards(1 if turn_number == 1 else 2, turn_owner))
 			next_phase()
 		GlobalVariables.Phase.FIRST_MAIN_PHASE:
 			await priority()

@@ -161,10 +161,12 @@ func draw(card):
 ##
 ## EACH FLIGHT HAS ITS OWN Path3D/PathFollow3D. They used to share the scene's one PathFollow3D, so two draws started
 ## close together (the Draw Phase followed by a "draw 1" effect) fought over its progress and teleported the first card.
-func draw_many(drawn: Array) -> void:
+##
+## Returns the flight tween (finished = the cards have landed), for a caller that must not move on mid-flight.
+func draw_many(drawn: Array) -> Tween:
 	drawn = drawn.filter(func(c): return c != null and is_instance_valid(c))
 	if drawn.is_empty():
-		return
+		return null
 	var count: int = drawn.size()
 	var first_index: int = cards.size()
 	var starts: Array = []
@@ -254,6 +256,7 @@ func draw_many(drawn: Array) -> void:
 
 	# The cards only BECOME hand cards here — at the end of the flight.
 	tween.tween_callback(_land_drawn.bind(drawn, path))
+	return tween
 
 ## End of a draw flight: back into the hand, into their slots, then the fan tilt. With one card the path ended on its
 ## slot, so the re-layout does not move it.

@@ -946,7 +946,8 @@ func refresh_available_effects() -> void:
 		var own_hand: Hand = game.hand_for(1)
 		if own_hand != null:
 			for card in own_hand.cards:
-				card.set_available_highlight(can_cast_from_hand(card))
+				# A card still flying in from the deck is not in your hand yet: no ring until it lands.
+				card.set_available_highlight(card.get_parent() == own_hand and can_cast_from_hand(card))
 
 ## Activate an ability. `skill_index < 0` means ASK: one ability activates directly, two or more open the picker
 ## modal and wait for the choice. Explicit indexes stay supported (probes, and any future "activate ability N").
