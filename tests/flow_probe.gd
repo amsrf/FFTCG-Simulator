@@ -41,6 +41,26 @@ func _ready() -> void:
 	# tree loaded.
 	add_child(game)
 	await get_tree().process_frame
+	var board_visual = game.get_node("Board/MeshInstance3D")
+	_expect(board_visual.mesh != null and board_visual.mesh.get_surface_count() == 1,
+		"the scenery geometry loads on the existing Board node path")
+	_expect(not game.get_node("Field/MeshInstance3D").visible,
+		"the old purple field surface does not cover the scenery")
+	_expect(board_visual.displayed_seat == game.local_seat,
+		"board scenery follows the configured local seat")
+	var first_board_mesh = board_visual.mesh
+	_expect(board_visual.river != null and board_visual.river.mesh != null,
+		"the river loads as independent scenery geometry")
+	var first_water = board_visual.river.mesh.surface_get_material(0)
+	_expect(is_equal_approx(first_water.get_shader_parameter("flow_direction"), 1.0),
+		"seat one river follows the world flow direction")
+	board_visual.configure_seat(2)
+	_expect(board_visual.displayed_seat == 2 and board_visual.mesh != first_board_mesh,
+		"seat two loads the opposite biome view")
+	var second_water = board_visual.river.mesh.surface_get_material(0)
+	_expect(is_equal_approx(second_water.get_shader_parameter("flow_direction"), -1.0),
+		"seat two river reverses its screen flow for the same world current")
+	board_visual.configure_seat(game.local_seat)
 	# Keep our own camera current so the arrow's screen-space maths is the real one.
 	$Camera3D.current = true
 
@@ -544,7 +564,7 @@ func _check_demo_stack_fan() -> void:
 			_expect(absf(offset.dot(pose.y) - stack.FAN_HEIGHT_STEP) < 0.0001
 				and view_camera.unproject_position(upper.global_position).y < view_camera.unproject_position(lower.global_position).y - 1.0 and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0,
 				"stack layer %d steps visibly upward while retaining its normal depth" % (i + 1))
-		_expect(stack.cards.back().position.is_zero_approx(), "the newest card occupies the fixed top slot")
+		_expect(stack.cards.back().position.is_equal_approx(stack.FAN_ANCHOR), "the newest card occupies the fixed top slot")
 		_expect(float(stack.cards.back().mat.get_shader_parameter("shadow_strength")) == 0.0,
 			"top stack card receives no overlap shadow")
 		var inspected: Card = stack.cards.front()

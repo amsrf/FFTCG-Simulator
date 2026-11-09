@@ -278,19 +278,31 @@ func _update_stack_shadows() -> void:
 		settled.append(hovered_card)
 	preload("res://scripts/card_overlap_shadow.gd").update(self, settled)
 
+## THE TOP SLOT IS FIXED (the newest card always lands in the same place), but not at the Stack node's origin: the fan
+## grows from the top card towards the bottom right, where the screen edge and the pass button are. Its length stops
+## growing at four cards (the spacing tightens with the count), at about (0.25, 0, 0.29) here, so the top slot sits half
+## of that up and to the left, and the longest fan fits around the stack's spot instead of running off the screen.
+const FAN_ANCHOR := Vector3(-0.123, 0.0, -0.144)
+
 func calculate_card_position(i: int) -> Vector3:
+	return _fan_position(i)
+
+func _fan_position(i: int) -> Vector3:
 	var list := layout_cards()
 	if list.is_empty():
-		return Vector3.ZERO
+		return FAN_ANCHOR
 	var top := list.size() - 1
 	var pose := _stack_card_local_basis(list[top])
 	var spacing := _stack_spacing(list.size())
 	var fraction: float = spacing / card_width
 	var half_width: Vector3 = pose.x * card_width * 0.5
 	var camera := get_viewport().get_camera_3d()
-	var center := Vector3.ZERO
+	var center := FAN_ANCHOR
+	# The anchor's sideways part is carried by `center` (the search below works along pose.x from it); the rest is
+	# added to each layer.
+	var anchor_off_axis := FAN_ANCHOR - pose.x * FAN_ANCHOR.dot(pose.x)
 	for index in range(top - 1, i - 1, -1):
-		var layer := -pose.y * ((top - index) * FAN_HEIGHT_STEP) + pose.z * ((top - index) * spacing * 0.85)
+		var layer := anchor_off_axis - pose.y * ((top - index) * FAN_HEIGHT_STEP) + pose.z * ((top - index) * spacing * 0.85)
 		var sideways := center.dot(pose.x) + spacing
 		if camera != null:
 			var covering_edge := camera.unproject_position(to_global(center + half_width)).x

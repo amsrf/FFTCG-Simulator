@@ -493,11 +493,11 @@ const READABLE_ROTATION := Vector3(0, PI, 0)
 ## a card played straight from the hand then lands on the stack at the size it is already drawn at, instead of
 ## popping. That only stays true while this and the table agree, so the table reads this constant.
 ##
-## 1.0 is a SIZE CHOICE for the perspective board. The stack sits closer to the lens than the field,
-## so 1.0 world renders around 1.25x a field card — big enough to read, small enough to sit in the
-## board instead of reading as a UI overlay. The hand hover has its own HOVER_CARD_SCALE, and the stack's
+## A SIZE CHOICE for the perspective board. The stack sits closer to the lens than the field, so 1.0 world renders
+## around 1.25x a field card; 1.35 (since 2026-11) makes a stack card clearly the thing to read while it waits, about
+## 1.7x a field card, and still sits in the board rather than reading as a UI overlay. The hand hover has its own HOVER_CARD_SCALE, and the stack's
 ## pose lives in the Stack node's "Stack Rotation" exports.
-const STACK_CARD_SCALE := 1.0
+const STACK_CARD_SCALE := 1.35
 
 ## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so a world size written
 ## straight into it would come out 2.3x bigger than the number says.

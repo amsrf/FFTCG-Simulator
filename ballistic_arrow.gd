@@ -127,6 +127,12 @@ var _shape_ok_reported: bool = false
 var _shape_warning_state: int = -1
 
 func _ready() -> void:
+	# THE ARROW DRAWS IN WORLD SPACE. Every point it is handed is a global position (a card's top edge, a target's
+	# centre), so it must not inherit its parent's transform: the Field is not at the origin (it is moved and scaled),
+	# and inheriting that drew every arrow shifted off the cards it joins. Visibility is still inherited, so a hidden
+	# parent still hides it.
+	top_level = true
+	global_transform = Transform3D.IDENTITY
 	_shaft_material = ARC_MATERIAL.duplicate()
 	_head_material = ARC_MATERIAL.duplicate()
 	# The head is real geometry: the shader must not widen it. Setting both widths to
