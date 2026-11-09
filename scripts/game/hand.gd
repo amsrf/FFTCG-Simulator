@@ -149,108 +149,125 @@ func _land_returned(card: Card) -> void:
 	card.enter_zone(Card.Zone.HAND)
 	update_card_positions()
 
+## Draw one card: the single-card case of draw_many().
 func draw(card):
-	add_card_to_tree(card)
-	update_card_positions(cards.size() - 1)
-	
-	var tween = create_tween()
-	var path = $Path3D
-	var path_follow = $Path3D/PathFollow3D
-	var curve = Curve3D.new()
-	var target_position = calculate_card_position(cards.size() - 1)
-	
-	# A SINGLE ARC — one cubic from the deck to the hand, so the card moves in one smooth motion.
+	draw_many([card])
+
+## Draw several cards AS ONE MOTION — "draw 2" reads as one draw of two, not as two draws.
+##
+## The cards leave the deck stacked, fan out sideways into an overlapping row while they fly, and land together; each
+## then settles into its own slot. With one card this is exactly the old single draw: no offset, the path ends on its
+## slot, and it gets the same flip, bump and tilt.
+##
+## EACH FLIGHT HAS ITS OWN Path3D/PathFollow3D. They used to share the scene's one PathFollow3D, so two draws started
+## close together (the Draw Phase followed by a "draw 1" effect) fought over its progress and teleported the first card.
+func draw_many(drawn: Array) -> void:
+	drawn = drawn.filter(func(c): return c != null and is_instance_valid(c))
+	if drawn.is_empty():
+		return
+	var count: int = drawn.size()
+	var first_index: int = cards.size()
+	var starts: Array = []
+	for card in drawn:
+		add_card_to_tree(card)
+		starts.append(card.position)
+
+	# Each flight gets its own path, built like the scene's $Path3D (identity, child of the hand).
+	var path := Path3D.new()
+	add_child(path)
+	var path_follow := PathFollow3D.new()
+	path_follow.rotation_mode = PathFollow3D.ROTATION_NONE
+	path_follow.loop = false
+	path.add_child(path_follow)
+
+	# The group flies to the CENTRE of its landing slots; with one card that is the slot itself.
+	var landing := Vector3.ZERO
+	for i in range(count):
+		landing += calculate_card_position(first_index + i)
+	landing /= float(count)
+	var start: Vector3 = starts[0]
+
+	# A SINGLE ARC — one cubic from the deck to the hand, so the cards move in one smooth motion.
 	#
 	# THE CLIMB IS IN -Z, NOT IN Y. This camera looks almost straight down, so a path that rises in world Y is
 	# foreshortened to nothing and the card appears to travel flat across the board. In this rig "up the screen" is -Z.
 	#
-	# THE CONTROL POINT SITS ABOVE THE DESTINATION, NOT ABOVE THE MIDDLE OF THE CHORD, and that one choice is the
-	# whole shape. A Bezier leaves its start heading AT its control point and arrives at its end heading AWAY from it.
-	# With the control directly over the hand, the card sets off up-and-right in a long straight diagonal and comes
-	# into the hand travelling straight DOWN — the tight hook the reference draws. Put the control over the midpoint
-	# instead and the tangents splay outward, giving a symmetric dome that glides in from the side. Measured, both
-	# crest at about the same height: it is the ARRIVAL that changes, not the climb.
-	#
-	# 5.0 is how tall it is; the quadratic halves it, so it crests about 2.5 above the chord. Set it by the rise you
-	# want ON SCREEN, not by the number.
-	var start: Vector3 = card.position
-	# 5.0 of OVERSHOOT. The control sits far to the RIGHT of the destination as well as above it, so the card sweeps
-	# out past the hand and hooks back left into it. Screen-right is +X in this rig.
-	#
-	# Measured off the reference: the arc sweeps to about x 1550 while the hand ends at x 1195 — so the crest sits
-	# roughly 350 px BEYOND the hand, not just past it. In this rig that works out at ~5.0 of control offset, because
-	# the crest does not follow the control one-for-one: for a quadratic the crest offset from the landing is
-	# (start.x - end.x) / 4 + overshoot / 2, and the deck-to-hand run is about 4.4, so the first 2.2 is spent merely
-	# cancelling the curve's natural shortfall.
-	var control: Vector3 = Vector3(target_position.x + 2.6, target_position.y, target_position.z - 5.0)
+	# THE CONTROL POINT SITS ABOVE (AND RIGHT OF) THE DESTINATION, NOT ABOVE THE MIDDLE OF THE CHORD. A Bezier leaves
+	# its start heading AT its control point and arrives heading AWAY from it, so the card sets off up-and-right, sweeps
+	# out past the hand and hooks back down into it — the reference's tight hook. 2.6 right and 5.0 up were measured
+	# off that reference (crest ~350 px beyond the hand).
+	var control: Vector3 = Vector3(landing.x + 2.6, landing.y, landing.z - 5.0)
+	var curve := Curve3D.new()
 	curve.add_point(start)
-	curve.add_point(target_position)
-	# Both handles at the two thirds a quadratic Bezier takes when written as a cubic — so the path is EXACTLY one
-	# arc, with no interior kink.
+	curve.add_point(landing)
+	# Both handles at the two thirds a quadratic Bezier takes when written as a cubic — exactly one arc, no kink.
 	curve.set_point_out(0, (control - start) * (2.0 / 3.0))
-	curve.set_point_in(1, (control - target_position) * (2.0 / 3.0))
-	# SMALL, or the path is not a curve at all. `bake_interval` is the distance between baked samples, and on a curve
-	# only a couple of metres long a value of 50 bakes almost nothing but the CONTROL POINTS — so the card
-	# travelled a bent polyline, which is what reads as "it moves directly" instead of arcing through the middle of
-	# the screen. 0.05 is roughly a thousandth of the path length.
+	curve.set_point_in(1, (control - landing) * (2.0 / 3.0))
+	# SMALL, or the path is a bent polyline through the control points rather than a curve.
 	curve.bake_interval = 0.05
 	path.curve = curve
+	path_follow.progress_ratio = 0.0
+	# Put the follower on the start NOW: the cards are about to be placed relative to it this frame.
+	path_follow.position = start
 
-	# Reset PathFollow3D progress
-	path_follow.progress_ratio = 0
+	# THE ROW. Neighbours sit ROW_STEP card widths apart, centred on the group — measured in CARD WIDTHS, not hand
+	# slots, because the slots tighten as the hand fills and the in-flight 1.45x zoom widens the cards: at 0.9 about
+	# 60% of the card underneath stays visible at the peak of the zoom. A slight lift per card keeps the later card on
+	# top, as in the fan. The hand spacing takes over as they settle.
+	const ROW_STEP := 0.9
+	var row_offsets: Array = []
+	for i in range(count):
+		row_offsets.append(Vector3((i - (count - 1) / 2.0) * card_width * ROW_STEP, 0.002 * i, 0.0))
 
-	# Configure PathFollow3D
-	path_follow.rotation_mode = PathFollow3D.ROTATION_NONE
+	var tween := create_tween()
+	for i in range(count):
+		var card: Card = drawn[i]
+		card.reparent(path_follow)
+		# Leave the deck as one stack (every card where the first one is), then spread while flying.
+		card.position = Vector3(0.0, 0.002 * i, 0.0)
+		# THE FLIP. The deck is turned over about X, but add_card_to_tree() ran enter_zone(HAND), which ASSIGNS the
+		# hand's rotation (zero) — so without this the card would be face-up from the first frame. Y stays ZERO, not
+		# the fan tilt: a card in the air must not wear its hand tilt (see _tilt_into_hand()).
+		card.rotation = Vector3(PI, 0.0, 0.0)
 
-	# Reparent the card to PathFollow3D for the animation
-	card.reparent(path_follow)
+	# Laid out only now: the cards in flight are parented to the path, so the layout leaves them alone and only makes
+	# room for them among the cards already in hand.
+	update_card_positions()
 
-	# THE FLIP — and this is why the card appeared to snap face-up.
-	#
-	# The deck's node is turned over about X — Transform3D(1.4, 0, 0, 0, -1.4, 0, 0, 0, -1.4, ...) — so a card that
-	# keeps the deck's orientation shows its BACK. But add_card_to_tree() runs enter_zone(HAND), and enter_zone ASSIGNS
-	# the zone's rotation outright, which for the hand is Vector3.ZERO. That wipes the half turn before the card has
-	# moved a millimetre, so it was face-up from the first frame.
-	#
-	# Note the Y component is ZERO, not the fan tilt: a card in the air must not wear its hand tilt. See
-	# _tilt_into_hand(), which applies that once the flight is over.
-	card.rotation = Vector3(PI, 0.0, 0.0)
-
-	# THE FLIGHT: one tween, quickest off the deck and easing into the hand.
-	#
-	# 1.7 s — 1.5 plus the 0.2 that was asked for. It has been 1.3 → 1.9 → 1.5 → 1.7: at 1.3 the card crossed faster
-	# than the eye could follow the turn, and 1.9 overcorrected into something stately.
-	#
-	# It was briefly TWO stages, the second covering the last fifth of the path in a third of the time, to slow the
-	# arrival down. That read as unnatural — the card visibly changes pace part-way in — so it is one ease again. The
-	# single EASE_OUT already spends most of its time near the end; that is the tail, and it is enough.
+	# THE FLIGHT: 1.7 s, quickest off the deck and easing into the hand. (1.3 was too fast to follow the turn; 1.9
+	# was stately. A two-stage ease read as a change of pace part-way — one EASE_OUT already has the tail.)
 	tween.tween_property(path_follow, "progress_ratio", 1.0, 1.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	# THE FLIP STARTS AT ONCE AND IS DONE WELL BEFORE THE CARD ARRIVES.
-	#
-	# It has its own duration and easing, not the flight's: EASE_IN_OUT would hold the turn almost still for its first
-	# third, so the card would look unturned while the flight ran at full speed, and finishing exactly on landing would
-	# leave no approach.
-	#
-	# 0.9 s of the 1.7 s flight lands the last degree of the turn at ~78% of the PATH — the flight is QUAD EASE_OUT, so
-	# 53% of the TIME is 78% of the DISTANCE. That is the draw5 frame, and what follows is the approach into the hand.
-	tween.parallel().tween_property(card, "rotation", Vector3.ZERO, 0.9).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	for i in range(count):
+		var card: Card = drawn[i]
+		# THE FLIP starts at once and is done well before arrival: 0.9 s of the 1.7 s flight lands the last degree at
+		# ~78% of the path, and what follows is the approach into the hand.
+		tween.parallel().tween_property(card, "rotation", Vector3.ZERO, 0.9).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		# THE SPREAD: the cards fan apart over the first part of the climb, so they leave as one stack and travel as a row.
+		if count > 1:
+			tween.parallel().tween_property(card, "position", row_offsets[i], 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		# AND IT COMES TOWARDS THE VIEWER on the way, settling as it lands — Arena's beat that makes a draw read as
+		# leaving the deck and arriving in the hand. A RATIO on the hand's resting size (hand_scale), its own tween so
+		# it does not fight the flight tween.
+		var bump: Tween = create_tween()
+		bump.tween_property(card, "scale", Vector3.ONE * hand_scale * 1.45, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		bump.tween_property(card, "scale", Vector3.ONE * hand_scale, 1.2).set_trans(Tween.TRANS_SINE)
 
-	# AND IT COMES TOWARDS THE VIEWER on the way, settling as it lands — the beat Arena uses to make a draw read as
-	# the card leaving the deck and arriving in your hand rather than sliding under the table. It gets its own tween,
-	# because the flight tween is already running and two tweeners on one property would fight over it.
-	# 1.45x is how close it comes; 0.5 puts the peak near the top of the arc, and 1.2 settles it by the time it lands.
-	# IT IS A RATIO ON THE HAND'S RESTING SIZE, and it settles BACK to that size — not to 1.0, which is not the size a
-	# hand card is drawn at (see Card.ZONE_PRESENTATION and Hand.hand_scale). The 1.45 was tuned when the resting size
-	# happened to be 1.0, so it is the RATIO that was tuned; keeping it a multiple preserves that.
-	var bump: Tween = create_tween()
-	bump.tween_property(card, "scale", Vector3.ONE * hand_scale * 1.45, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	bump.tween_property(card, "scale", Vector3.ONE * hand_scale, 1.2).set_trans(Tween.TRANS_SINE)
+	# The cards only BECOME hand cards here — at the end of the flight.
+	tween.tween_callback(_land_drawn.bind(drawn, path))
 
-	# Reparent the card back to its original parent after the animation
-	tween.tween_callback(card.reparent.bind(self))
-	tween.tween_callback(path_follow.set.bind("progress_ratio", 0))  # Reset PathFollow3D progress
-	# The card only BECOMES a hand card here — at the end of the flight.
-	tween.tween_callback(_tilt_into_hand.bind(card))
+## End of a draw flight: back into the hand, into their slots, then the fan tilt. With one card the path ended on its
+## slot, so the re-layout does not move it.
+func _land_drawn(drawn: Array, path: Path3D) -> void:
+	for card in drawn:
+		if card != null and is_instance_valid(card) and card.get_parent() != self:
+			card.reparent(self)
+	if drawn.size() > 1:
+		update_card_positions()
+	for card in drawn:
+		if card != null and is_instance_valid(card) and cards.has(card):
+			_tilt_into_hand(card)
+	if is_instance_valid(path):
+		path.queue_free()
 
 ## Gives an arrived card its place in the fan — the LAST step of a draw, deliberately after the flight.
 ##

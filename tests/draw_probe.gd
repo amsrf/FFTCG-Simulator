@@ -81,7 +81,8 @@ func _ready() -> void:
 		samples.append(rad_to_deg(card.rotation.y))
 		points.append(card.global_position)
 		meshes.append(rad_to_deg(mesh.global_rotation.y))
-		progresses.append(float(path_follow.get("progress_ratio")))
+		# Each flight owns its path and frees it on landing: a freed path means the flight is complete.
+		progresses.append(float(path_follow.get("progress_ratio")) if is_instance_valid(path_follow) else 1.0)
 		# What the PLAYER sees: where the card lands on screen, and how big it is.
 		screens.append(cam.unproject_position(card.global_position) if cam != null else Vector2.ZERO)
 		scales.append(card.scale.x)
