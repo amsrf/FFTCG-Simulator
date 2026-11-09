@@ -199,9 +199,6 @@ const CARD_EDGE := preload("res://scripts/card_edge.gd")
 ## The printed cost crystal, enlarged over the original. See card_cost_badge.gd.
 const CARD_COST_BADGE := preload("res://scripts/card_cost_badge.gd")
 var cost_badge: MeshInstance3D = null
-## The printed name box, enlarged the same way. See card_name_badge.gd.
-const CARD_NAME_BADGE := preload("res://scripts/card_name_badge.gd")
-var name_badge: MeshInstance3D = null
 
 ## Show the cost badge only where the printed face is what is on screen: face up, on the field or in the hand, and not
 ## while the card is dissolving in or out.
@@ -211,8 +208,6 @@ func refresh_cost_badge() -> void:
 	var dissolving: bool = teleport != null and bool(teleport.chrome_hidden)
 	cost_badge.visible = revealed and _stack_face == null and not dissolving \
 		and (current_zone == Zone.FIELD or current_zone == Zone.HAND)
-	if name_badge != null and is_instance_valid(name_badge):
-		name_badge.visible = cost_badge.visible
 
 func initialize(card_id: int, card_controller: String):
 	id = card_id
@@ -317,7 +312,6 @@ func assign_card_texture():
 	mat.shader = shader
 	_printed_texture = full_texture
 	cost_badge = CARD_COST_BADGE.install(self, full_texture, _card_face_size())
-	name_badge = CARD_NAME_BADGE.install(self, full_texture, _card_face_size(), type == SUMMON)
 	mat.set_shader_parameter("texture_albedo", full_texture)
 	mat.set_shader_parameter("effect_enabled", false)
 	mat.set_shader_parameter("shadow_strength", 0.0)
