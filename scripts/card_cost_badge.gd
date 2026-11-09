@@ -44,7 +44,7 @@ static func install(card: Node3D, texture: Texture2D, face: Vector2) -> MeshInst
 	material.set_shader_parameter("crop_px", CROP.size)
 	# DRAWN AFTER THE CARD'S RING. Both are see-through layers; without this the ring's glow (drawn later) washed
 	# over the part of the crystal that overhangs the card's corner.
-	material.render_priority = 1
+	material.render_priority = 2   # and over the name badge, whose left end it overlaps
 	badge.material_override = material
 	badge.visible = false
 	return badge
