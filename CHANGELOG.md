@@ -2,6 +2,28 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-12
+
+### Changed
+- **A broken card now plays the DESTROY BURST** instead of the glass shatter (reference `Clips/destroy.mp4`, frames
+  145-205; three cards break there at once, this is ONE card's burst). `CardShards` keeps being the one break node
+  (Game.break_card, the Vfx director's held break, the clash's defeated proxy) and gains `style`: `DESTROY_BURST`
+  (default) or `GLASS_SHATTER` (the Blender fracture, unchanged). The burst is `scripts/vfx/card_destroy_burst.gd`,
+  procedural and laid out in the camera's screen plane: the card's own mesh washes to white, swells and pops
+  (0.12 s) under a white flash; 24 faceted CRYSTAL SHARDS in the card's element colour (`Card.ELEMENT_COLOURS` via
+  `current_elements()`, pale blue with no element) are thrown out, tumbling so the lit facet swaps sides, slowing
+  and shrinking away; ONE wind swirl curls out of the card and opens into a clear bubble about two card heights
+  across; sparkles twinkle as it settles. 1.5 s, then it frees itself. A clash knockback's velocity carries the
+  cloud along. New shaders `destroy_shard` / `destroy_swirl` / `destroy_sparkle` / `destroy_card_pop`, all in
+  `Game.EFFECT_SHADERS`. `tests/card_shatter_probe` checks both styles (the pop is there on the break frame and gone
+  by 0.22 s, the shards carry the element colour and fly outward, exactly one swirl opens wider than the card,
+  sparkles, self-cleanup). Viewer: `tools/destroy_demo.tscn` (G glass style, V camera, S slow motion;
+  `--card=<id>` picks the element, `--freeze=<s>` for shots).
+
+### Known Issues
+- `clash_cinematic_probe` prints one `!is_inside_tree()` error from `card_overlap_shadow.gd` (via
+  `Stack._update_stack_shadows`); the checks pass, and the break presentation does not touch that path.
+
 ## [Unreleased] — 2026-11-11
 
 ### Changed

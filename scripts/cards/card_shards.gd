@@ -1,12 +1,20 @@
 extends Node3D
-## Runtime shatter for a broken card.
+## Runtime presentation of a broken card. Every break goes through this node (Game.break_card, a held break
+## released by the Vfx director, the clash's defeated proxy), and `style` decides the look:
 ##
-## Blender owns the ten crack patterns; this node owns the explosion. The
+## DESTROY_BURST (default): the card pops in a white flash and bursts into crystal shards of its element, one wind
+## swirl opening into a bubble, and sparkles - scripts/vfx/card_destroy_burst.gd (reference: Clips/destroy, 145-205).
+##
+## GLASS_SHATTER: Blender owns the ten crack patterns; this node owns the explosion. The
 ## fractured asset is instantiated at the broken card's transform, the card art
 ## material is applied only to the CardArt surfaces, and CardShardGlass is used
 ## for the cut faces and backs.
 
 signal finished
+
+enum Style { DESTROY_BURST, GLASS_SHATTER }
+
+const DESTROY_BURST := preload("res://scripts/vfx/card_destroy_burst.gd")
 
 const VARIANTS: Array[PackedScene] = [
 	preload("res://Blender/card_shatter_01.glb"),
@@ -23,6 +31,7 @@ const VARIANTS: Array[PackedScene] = [
 const GLASS_SHADER := preload("res://shaders/card_shard_glass.gdshader")
 const FLASH_SHADER := preload("res://shaders/card_shatter_flash.gdshader")
 
+@export var style: Style = Style.DESTROY_BURST
 @export var free_when_done: bool = true
 ## 0 = random fracture pattern; 1..10 = a fixed Blender variant (useful while tuning).
 @export_range(0, 10, 1) var variant_index: int = 0
@@ -93,6 +102,7 @@ var _flash: MeshInstance3D = null
 var _flash_material: ShaderMaterial = null
 var _flash_age: float = 0.0
 var _flash_base_size: float = 1.0
+var _destroy: Node3D = null
 
 
 func _ready() -> void:
@@ -120,12 +130,44 @@ func burst_from_card(card: Card, inherited_velocity := Vector3.ZERO, inherited_s
 		if art is ShaderMaterial:
 			for prefix in ["shadow_", "shadow2_", "shadow3_", "shadow4_"]:
 				art.set_shader_parameter(prefix + "strength", 0.0)
+	if style == Style.DESTROY_BURST:
+		# The mesh's own pose, not the Card's: HandMesh may be lifted/scaled relative to the Card.
+		var face: MeshInstance3D = card.hand_mesh
+		var pose: Transform3D = face.global_transform if face != null else card.global_transform
+		burst_destroy(card.global_transform, pose, art, face.mesh if face != null else null, inherited_velocity,
+			_crystal_tint(card))
+		return
 	burst(card.global_transform, art)
 	var local_velocity := global_basis.inverse() * inherited_velocity
 	var local_spin := global_basis.orthonormalized().inverse() * inherited_spin
 	for i in range(_pieces.size()):
 		_velocities[i] += local_velocity + local_spin.cross(_pieces[i].position)
 		_spins[i] += local_spin
+
+
+## The DESTROY_BURST look. `from` is where this node sits (the card), `face_pose` the card face mesh's pose.
+func burst_destroy(from: Transform3D, face_pose: Transform3D, art_material: Material, face_mesh: Mesh,
+		drift := Vector3.ZERO, tint: Color = DESTROY_BURST.DEFAULT_TINT) -> void:
+	_clear()
+	global_transform = from
+	_running = true
+	_age = 0.0
+	_destroy = DESTROY_BURST.new()
+	_destroy.name = "DestroyBurst"
+	add_child(_destroy)
+	_destroy.connect("finished", _finish)
+	_destroy.call("setup", face_pose, art_material, face_mesh, randi(), drift, tint)
+	# Nothing to move here: the burst runs itself and reports back.
+	set_process(false)
+
+
+## The shards are crystal of the card's ELEMENT (its live element, so an override counts): a Fire card breaks into
+## ruby, Ice into pale blue. No element -> clear pale-blue crystal.
+func _crystal_tint(card: Card) -> Color:
+	var elements: Array[String] = card.current_elements()
+	if elements.is_empty():
+		return DESTROY_BURST.DEFAULT_TINT
+	return Card.ELEMENT_COLOURS.get(elements[0], DESTROY_BURST.DEFAULT_TINT)
 
 
 func burst(from: Transform3D, art_material: Material) -> void:
@@ -318,6 +360,12 @@ func _clear() -> void:
 		_flash.queue_free()
 	_flash = null
 	_flash_material = null
+	if _destroy != null and is_instance_valid(_destroy):
+		# No remove_child: _finish runs from inside the burst's own `finished` emission (its _process).
+		if _destroy.is_connected("finished", _finish):
+			_destroy.disconnect("finished", _finish)
+		_destroy.queue_free()
+	_destroy = null
 
 
 func _finish() -> void:

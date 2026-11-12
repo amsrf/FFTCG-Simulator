@@ -847,6 +847,11 @@ const EFFECT_SHADERS: Array[Shader] = [
 	# The power-up (power_up_burst.gd): swords, red gas and streaks, first rendered mid-game when a Forward is buffed.
 	preload("res://shaders/power_up_sword.gdshader"),
 	preload("res://shaders/power_up_gas.gdshader"),
+	# The destroy burst (card_destroy_burst.gd): every break plays it, and the first one must not hitch.
+	preload("res://shaders/destroy_shard.gdshader"),
+	preload("res://shaders/destroy_swirl.gdshader"),
+	preload("res://shaders/destroy_sparkle.gdshader"),
+	preload("res://shaders/destroy_card_pop.gdshader"),
 ]
 
 func _ready():
