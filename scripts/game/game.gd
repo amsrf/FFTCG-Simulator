@@ -837,8 +837,16 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/earth_shockwave.gdshader"),
 	preload("res://shaders/earth_break_crystal.gdshader"),
 	preload("res://shaders/earth_break_burst.gdshader"),
+	# Fire damage (fire_burst.gd): the gathering sparks, core, fireball and rings.
+	preload("res://shaders/fire_spark.gdshader"),
+	preload("res://shaders/fire_glow.gdshader"),
+	preload("res://shaders/fire_ball.gdshader"),
+	preload("res://shaders/fire_ring.gdshader"),
 	# The materialising card's crystal prisms (card_crystallize.gd): first rendered mid-cast.
 	preload("res://shaders/card_crystal_prism.gdshader"),
+	# The power-up (power_up_burst.gd): swords, red gas and streaks, first rendered mid-game when a Forward is buffed.
+	preload("res://shaders/power_up_sword.gdshader"),
+	preload("res://shaders/power_up_gas.gdshader"),
 ]
 
 func _ready():

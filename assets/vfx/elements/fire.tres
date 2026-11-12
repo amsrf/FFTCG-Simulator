@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="VfxPreset" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="VfxPreset" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/vfx/vfx_preset.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/effects/fire/fire_burst_cue.tscn" id="2"]
 
 [resource]
 script = ExtResource("1")
@@ -8,3 +9,8 @@ element = "火"
 tint = Color(0.86, 0.09, 0.17, 1)
 hit_stagger_seconds = 0.06
 board_stagger_seconds = 0.08
+
+owns_damage_reaction = true
+effect_break = true
+impact_scene = ExtResource("2")
+board_impact_scene = ExtResource("2")

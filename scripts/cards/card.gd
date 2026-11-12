@@ -626,6 +626,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# so without this the card could arrive in the hand/Graveyard still lifted
 	# and tilted.
 	damage_fx.normalize()
+	# Same for a power-up burst: the swords belong to the field slot the card just left.
+	power_fx.on_enter_zone(zone == Zone.FIELD)
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
 	# while the card was parked keeps writing Stack-local positions after the card
 	# has been reparented to the hand or the field, and the new zone's layout
@@ -726,6 +728,9 @@ func stop_stack_layout() -> void:
 ## Damage presentation (recoil + Earth launch). See card_damage_fx.gd.
 const CARD_DAMAGE_FX := preload("res://scripts/cards/card_damage_fx.gd")
 var damage_fx: CARD_DAMAGE_FX = CARD_DAMAGE_FX.new(self)
+## Power-up presentation (swords + red gas, then the readout swells as it counts). See card_power_fx.gd.
+const CARD_POWER_FX := preload("res://scripts/cards/card_power_fx.gd")
+var power_fx: CARD_POWER_FX = CARD_POWER_FX.new(self)
 
 ## WHO/WHAT dealt the most recent damage. The state-based break happens later, in a sweep that cannot see the source,
 ## so the damage records it here and the sweep asks the same protection question an explicit break does.
@@ -935,8 +940,10 @@ func recompute_power() -> void:
 	if next == power:
 		return
 	power = next
+	# The readout follows at the end of the frame, from the NET change: a rise on a settled field Forward plays the
+	# power-up (card_power_fx.gd), anything else is the plain count.
 	if power_label:
-		power_label.changePower(power)
+		power_fx.notice_power_change()
 	power_changed.emit(power)
 
 

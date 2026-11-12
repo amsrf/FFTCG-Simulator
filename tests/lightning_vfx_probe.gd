@@ -172,15 +172,16 @@ func _check_effect_break(game: Node, field, origin: Card) -> void:
 
 	# An element without a staged break keeps the plain immediate shatter and gets no strike.
 	await Vfx.idle()
-	var fire_source: Card = game.create_card(1, "player")
-	game.add_child(fire_source)
+	# Water (151): Fire now stages its breaks too (the fire burst), so it can no longer stand in for "no staging".
+	var water_source: Card = game.create_card(151, "player")
+	game.add_child(water_source)
 	var plain: Card = game.create_card(41, "opponent")
 	game.add_child(plain)
 	field.play_card(plain, true, false)
 	await get_tree().process_frame
 	Vfx.clear_events()
 	var before: int = _shard_count()
-	EFFECT_CONTEXT.new(game, fire_source, "test", {}, fire_source, [plain]).break_cards([plain])
+	EFFECT_CONTEXT.new(game, water_source, "test", {}, water_source, [plain]).break_cards([plain])
 	_expect(Vfx.get_events().filter(func(e): return e.kind == VfxEvent.Kind.EFFECT_BREAK).is_empty()
 		and _shard_count() > before, "a break by an element without a staged break shatters at once, no strike")
 

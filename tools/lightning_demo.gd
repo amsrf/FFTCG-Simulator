@@ -16,6 +16,11 @@ const AUTO_REPLAY_SECONDS := 2.15
 const DEMO_DAMAGE: Array[int] = [3000, 5000, 8000, 12000]
 const DEMO_TIER_NAMES: Array[String] = ["weak", "medium", "high", "maximum"]
 
+## The card whose element is shown (121 = Lightning, 1 = Fire). `--source <id>` on the command line overrides it;
+## `tools/fire_demo.tscn` is this same viewer with 1 set here.
+@export var source_id: int = 121
+@export var title: String = "LIGHTNING DAMAGE VFX  (雷)"
+
 var _game: Node = null
 var _field: Node = null
 var _targets: Array[Card] = []
@@ -53,7 +58,6 @@ func _ready() -> void:
 	# camera projects right above the middle target as a ghost card.
 	# --source <card id>: strike with another element's card instead (41 = Ice), to view that element's cue on the
 	# same real board, hit recoil included.
-	var source_id: int = 121
 	var source_arg: int = args.find("--source")
 	if source_arg >= 0 and source_arg + 1 < args.size():
 		source_id = int(args[source_arg + 1])
@@ -276,7 +280,7 @@ func _update_hud() -> void:
 	if _auto_timer != null and not _auto_timer.is_stopped():
 		auto_state = "on"
 	_hud.text = "\n".join(PackedStringArray([
-		"LIGHTNING DAMAGE VFX  (雷)",
+		title,
 		"VFX-only viewer — cards are not damaged",
 		"",
 		"SPACE / R — Strike selected card",
