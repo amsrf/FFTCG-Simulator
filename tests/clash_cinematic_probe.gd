@@ -62,6 +62,7 @@ func _shards() -> int:
 func _ready() -> void:
 	await _boot()
 	_expect(_attacker != null and _defender != null, "the clash ground has both combatants")
+	_check_power_choreography()
 
 	await _run(SCENARIO_ATTACKER_WINS)
 	_expect(_attacker.is_on_field(), "scenario 0 keeps the attacker")
@@ -138,3 +139,23 @@ func _ready() -> void:
 	print("[Clash] %d checks | failures: %d" % [_checks, _fails])
 	print("[Clash] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
+
+
+## Power drives the blow: a stronger card draws back further, charges faster, and pushes the meeting point.
+func _check_power_choreography() -> void:
+	var cinema = preload("res://scenes/game/clash_cinematic.tscn").instantiate()
+	var weak: Card = _game.create_card(_defender.id, "opponent")
+	var strong: Card = _game.create_card(_attacker.id, "player")
+	weak.set_base_power(2000)
+	strong.set_base_power(10000)
+	var s_weak: float = cinema.strength_for(weak)
+	var s_strong: float = cinema.strength_for(strong)
+	_expect(s_weak < 0.05 and s_strong > 0.95, "clash strength spans weak_power..strong_power")
+	_expect(cinema._windup_scale(s_strong) > cinema._windup_scale(s_weak) * 1.5,
+		"a stronger card draws back further")
+	_expect(cinema._charge_time(s_strong) < cinema._charge_time(s_weak) * 0.6,
+		"a stronger card charges faster")
+	weak.free()
+	strong.free()
+	cinema.free()
+

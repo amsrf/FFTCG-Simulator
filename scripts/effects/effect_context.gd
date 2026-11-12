@@ -440,9 +440,19 @@ func dull(cards: Array) -> void:
 func break_cards(cards: Array) -> void:
 	if game == null:
 		return
+	# A break BY EFFECT has no damage to show. When the source's element stages it (lightning, earth), break_card()
+	# holds the card on its slot and the effect-break event below shows it, at the element's maximum tier.
+	var origin: Card = source if source != null and is_instance_valid(source) else null
+	var staged: bool = origin != null and Vfx.stages_effect_break(origin)
+	var visuals: Dictionary = Vfx.capture_damage_visuals(cards) if staged else {}
+	var struck: Array = []
 	for card in cards:
 		if card != null and is_instance_valid(card) and card.is_on_field():
-			game.break_card(card)
+			game.break_card(card, "", "", origin)
+			# Struck either way: one protection kept on the field survives the strike.
+			struck.append(card)
+	if staged and not struck.is_empty():
+		Vfx.effect_break(struck, origin, visuals)
 
 
 func power_change(cards: Array, amount: int, duration: int = 1) -> void:

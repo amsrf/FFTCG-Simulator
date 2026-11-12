@@ -71,6 +71,17 @@ func _ready() -> void:
 	_expect(board_events.size() == 1 and board_events[0].kind == VfxEvent.Kind.BOARD_DAMAGE,
 		"board_damage emits a distinct BOARD_DAMAGE event")
 
+	# A status with no preset of its own must NOT borrow the card's element preset: that played the element's
+	# damage cue (the ice projectile) on every combat status change of an Ice Forward.
+	var ice_card: Card = _game.create_card(41, "player")
+	var attacking := VfxEvent.new(VfxEvent.Kind.STATUS_APPLIED, [ice_card], "氷", 0, null, "", "attacking")
+	_expect(Vfx.preset_for(attacking) == null,
+		"a status change with no status preset plays no element cue")
+	var frozen := VfxEvent.new(VfxEvent.Kind.STATUS_APPLIED, [ice_card], "氷", 0, null, "", "frozen")
+	_expect(Vfx.preset_for(frozen) != null and Vfx.preset_for(frozen) != Vfx.preset_for_element("氷"),
+		"a status with its own preset still gets it")
+	ice_card.free()
+
 	var fire: VfxPreset = Vfx.preset_for_element("火")
 	_expect(fire != null and fire.tint.is_equal_approx(Color(0.86, 0.09, 0.17)),
 		"element presets are loaded and expose their tint")

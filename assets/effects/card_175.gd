@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 1-175 enter-the-field ability
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+	]
 
 
 func when_enter_field(ctx: EFFECT_CONTEXT) -> void:

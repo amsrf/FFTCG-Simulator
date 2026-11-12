@@ -118,6 +118,9 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			# 33 Argath is a cost-2 Forward whose ETB makes ITS OPPONENT discard 1 — so the AI playing it is how
 			# the human's discard UI gets exercised.
 			cfg["opponent_hand"] = [62, 33, 4, 55, 53]
+			# GADOT 1-007 for the two-ETB stack test: entering puts two abilities on the stack, and their cards fly in
+			# staggered. Red XIII (29, a cost-2 Fire Forward) is already in the hand for his "play a Fire Forward".
+			cfg["player_hand"].append(7)
 		"debug":
 			cfg = _debug()
 		_:

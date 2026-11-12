@@ -16,6 +16,13 @@ signal event_finished(event: VfxEvent)
 ## The queue has drained and nothing is playing.
 signal idle_reached
 const PRESENTATION := preload("res://scripts/core/presentation.gd")
+## Loaded on first use, NOT preloaded: this is an autoload, and preloading the card scene here makes it load while
+## the card's own scripts are still loading - a cycle that left every card.tscn instance() returning null (the clash
+## proxies vanished).
+const CARD_SCENE_PATH := "res://scenes/cards/card.tscn"
+const CARD_SHARDS_PATH := "res://scenes/cards/card_shards.tscn"
+## Loaded on first use, like the card scenes above (an autoload must not preload into the card's own load).
+const COUNTER_CUE_PATH := "res://scripts/vfx/counter_cue.gd"
 
 const ELEMENT_PRESET_DIR := "res://assets/vfx/elements"
 const STATUS_PRESET_DIR := "res://assets/vfx/status"
@@ -37,6 +44,8 @@ var _events: Array[VfxEvent] = []
 var _pending: Array[VfxEvent] = []
 var _playing: bool = false
 var _presets: Dictionary = {}
+## Holds taken at a break (hold_for_break) and not yet claimed by the event that shows it: instance id -> visual.
+var _pending_holds: Dictionary = {}
 
 
 func _ready() -> void:
@@ -93,6 +102,169 @@ func board_damage(targets: Array, amount: int, element: String,
 	_emit(event)
 
 
+## The amount an EFFECT_BREAK event carries: the start of the maximum damage tier, so the cue plays its biggest hit.
+const EFFECT_BREAK_AMOUNT := 9000
+
+## Does `source`'s element stage the breaks it causes (VfxPreset.effect_break)?
+func stages_effect_break(source: Card) -> bool:
+	if not is_instance_valid(source):
+		return false
+	var preset: VfxPreset = preset_for_element(source.element)
+	return preset != null and preset.effect_break and preset.impact_scene != null
+
+
+## Cards `source`'s effect tried to break outright. `target_visuals` are the pre-break snapshots
+## (capture_damage_visuals). The ones that really broke were HELD at the break (Game.break_card -> hold_for_break) and
+## pick their hold up here; a card protection kept on the field is struck all the same, and survives.
+func effect_break(targets: Array, source: Card, target_visuals: Dictionary) -> void:
+	var hits: Array = []
+	for target in targets:
+		if is_instance_valid(target) and target_visuals.has(target.get_instance_id()):
+			hits.append(target)
+			target_visuals[target.get_instance_id()]["lethal"] = not target.is_on_field()
+	if hits.is_empty() or not is_instance_valid(source):
+		return
+	var event := VfxEvent.new(VfxEvent.Kind.EFFECT_BREAK, hits, source.element, EFFECT_BREAK_AMOUNT, source,
+		"single" if hits.size() == 1 else "multi")
+	event.target_visuals = target_visuals
+	_emit(event)
+
+
+# --- VISUAL HOLDS ----------------------------------------------------------------------------------------------
+# The rules move a card at once; its presentation may need it to stay where it was until a moment INSIDE an animation
+# (a lightning break: the card is broken when the bolt lands, not when the effect resolves). A HOLD does that:
+#   hold_card(card, visual)   at the rules moment - a stand-in copy of the card is left at `visual.transform` and the
+#                             real card is hidden wherever the rules put it (the Break Zone pile, ...)
+#   release_hold(card, visual, shatter)   at the animation's moment - the stand-in bursts into shards (or simply
+#                             goes) and the real card is shown where it now lives
+# A cue releases its holds itself; anything it leaves is released when its event finishes, so a hold can never strand a
+# card hidden. `visual` is the event's target_visuals entry for that card.
+
+## A BREAK THE SOURCE'S ELEMENT STAGES (Game.break_card asks this while the card is still on its slot): a stand-in
+## takes the card's place, and the event that shows the break (the damage, or the effect break) claims it in _emit.
+## Returns false when the break is not staged - the caller then plays the ordinary shatter.
+func hold_for_break(card: Card, source: Card) -> bool:
+	if not is_instance_valid(card) or not stages_effect_break(source) or not card.is_drawn_on_field():
+		return false
+	var visual := {"transform": card.global_transform, "floor_y": card.get_parent().global_position.y,
+		"shatter": true, "lethal": true}
+	hold_card(card, visual, false)
+	_pending_holds[card.get_instance_id()] = visual
+	# Nothing claims it (the effect showed no event)? Then it breaks at the end of this frame, as it always did.
+	_release_unclaimed_holds.call_deferred()
+	return true
+
+
+## After the rules have moved a held card (Game.break_card): hide it where it now lives until its hold is released.
+func hide_held(card: Card) -> void:
+	var visual: Dictionary = _pending_holds.get(card.get_instance_id(), {})
+	if visual.is_empty() or not is_instance_valid(card):
+		return
+	card.set_hidden(true)
+	visual["hid_card"] = true
+
+
+func _claim_holds(event: VfxEvent) -> void:
+	if _pending_holds.is_empty():
+		return
+	if event.kind != VfxEvent.Kind.DAMAGE and event.kind != VfxEvent.Kind.BOARD_DAMAGE \
+			and event.kind != VfxEvent.Kind.EFFECT_BREAK:
+		return
+	for target in event.targets:
+		if not is_instance_valid(target):
+			continue
+		var id: int = target.get_instance_id()
+		if not _pending_holds.has(id):
+			continue
+		var held: Dictionary = _pending_holds[id]
+		_pending_holds.erase(id)
+		var visual: Dictionary = event.target_visuals.get(id, {})
+		for key in held:
+			if key != "transform" or not visual.has("transform"):
+				visual[key] = held[key]
+		event.target_visuals[id] = visual
+
+
+func _release_unclaimed_holds() -> void:
+	for id in _pending_holds.keys():
+		var visual: Dictionary = _pending_holds[id]
+		_pending_holds.erase(id)
+		var card = instance_from_id(id)
+		release_hold(card if is_instance_valid(card) else null, visual, true)
+
+
+## A STACK OBJECT IS COUNTERED. `move` is the rules move (Stack.cancel_stack_card: into its owner's Break Zone), run
+## at once; the card is held on its stack spot - a stand-in wearing the same stack face - and hidden in the pile until
+## the counter cue has shocked it and shattered it (VfxEvent.Kind.COUNTERED).
+func countered(card: Card, move: Callable) -> void:
+	var staged: bool = is_instance_valid(card) and card.is_inside_tree() and card.visible
+	var visual: Dictionary = {}
+	if staged:
+		visual["transform"] = card.global_transform
+		hold_card(card, visual, false, Card.Zone.STACK)
+	move.call()
+	if not staged or not is_instance_valid(card):
+		return
+	card.set_hidden(true)
+	visual["hid_card"] = true
+	var event := VfxEvent.new(VfxEvent.Kind.COUNTERED, [card], card.element, 0, null, "single")
+	event.target_visuals[card.get_instance_id()] = visual
+	_emit(event)
+
+
+func hold_card(card: Card, visual: Dictionary, hide: bool = true, zone: Card.Zone = Card.Zone.FIELD) -> void:
+	if not is_instance_valid(card) or not visual.has("transform") or visual.has("stand_in"):
+		return
+	var stand_in: Card = (load(CARD_SCENE_PATH) as PackedScene).instantiate()
+	stand_in.initialize(card.id, card.controller)
+	# Under the Game, like the clash's proxies (Card code looks for its Game among its ancestors).
+	var host: Node = card.get_parent()
+	while host != null and not host.has_method("break_card"):
+		host = host.get_parent()
+	(host if host != null else self).add_child(stand_in)
+	stand_in.name = "HeldCard"
+	stand_in.enter_zone(zone, card.stack_face_wording if zone == Card.Zone.STACK else "")
+	stand_in.global_transform = visual.transform
+	stand_in.hide_power_display()
+	stand_in.set_hidden(false)
+	stand_in.process_mode = Node.PROCESS_MODE_DISABLED
+	var area: Area3D = stand_in.get_node_or_null("CardArea3D") as Area3D
+	if area != null:
+		area.input_ray_pickable = false
+		area.collision_layer = 0
+		area.collision_mask = 0
+	visual["stand_in"] = stand_in
+	if hide and card.visible:
+		card.set_hidden(true)
+		visual["hid_card"] = true
+
+
+func release_hold(card: Card, visual: Dictionary, shatter: bool = false) -> void:
+	var stand_in = visual.get("stand_in", null)
+	visual.erase("stand_in")
+	if is_instance_valid(stand_in):
+		if shatter:
+			var shards: Node3D = (load(CARD_SHARDS_PATH) as PackedScene).instantiate()
+			stand_in.get_parent().add_child(shards)
+			shards.set("free_when_done", true)
+			shards.set("floor_world_y", float(visual.get("floor_y", (stand_in as Node3D).global_position.y)))
+			shards.call("burst_from_card", stand_in)
+		stand_in.queue_free()
+	if visual.get("hid_card", false):
+		visual.erase("hid_card")
+		if is_instance_valid(card):
+			card.set_hidden(false)
+
+
+func _release_leftover_holds(event: VfxEvent) -> void:
+	for target in event.targets:
+		if not is_instance_valid(target):
+			continue
+		var visual: Dictionary = event.target_visuals.get(target.get_instance_id(), {})
+		if visual.has("stand_in") or visual.get("hid_card", false):
+			release_hold(target, visual, bool(visual.get("shatter", false)))
+
+
 func card_broken(card: Card, cause: String = "") -> void:
 	if card == null or not is_instance_valid(card):
 		return
@@ -103,6 +275,11 @@ func card_broken(card: Card, cause: String = "") -> void:
 func preset_for(event: VfxEvent) -> VfxPreset:
 	if not event.status.is_empty() and _presets.has("status:" + event.status):
 		return _presets["status:" + event.status]
+	# A STATUS event looks only for a status preset. Falling through to the card's ELEMENT preset played that
+	# element's damage cue for every status change: an Ice Forward attacking (status "attacking") or arriving with
+	# summoning sickness dropped an ice projectile on itself in the middle of combat.
+	if event.kind == VfxEvent.Kind.STATUS_APPLIED or event.kind == VfxEvent.Kind.STATUS_REMOVED:
+		return null
 	if _presets.has(event.element):
 		return _presets[event.element]
 	return null
@@ -204,6 +381,8 @@ func idle() -> void:
 		await idle_reached
 
 func _emit(event: VfxEvent) -> void:
+	# Before anything can play it: the queue may start this event synchronously.
+	_claim_holds(event)
 	_events.append(event)
 	event_queued.emit(event)
 	_pending.append(event)
@@ -231,10 +410,14 @@ func _present(event: VfxEvent) -> void:
 			await _await_with_watchdog(event.presenter, "presentation")
 		event_finished.emit(event)
 		return
-	var preset: VfxPreset = preset_for(event)
-	var scene: PackedScene = _scene_for(event, preset)
-	if scene != null:
-		var cue: Node = scene.instantiate()
+	var cue: Node = null
+	if event.kind == VfxEvent.Kind.COUNTERED:
+		cue = (load(COUNTER_CUE_PATH) as Script).new()
+	else:
+		var scene: PackedScene = _scene_for(event, preset_for(event))
+		if scene != null:
+			cue = scene.instantiate()
+	if cue != null:
 		add_child(cue)
 		if cue.has_method("play"):
 			await _await_with_watchdog(cue.play.bind(event), "cue %s" % cue.name)
@@ -244,6 +427,7 @@ func _present(event: VfxEvent) -> void:
 			cue.queue_free()
 	else:
 		await get_tree().process_frame
+	_release_leftover_holds(event)
 	event_finished.emit(event)
 
 

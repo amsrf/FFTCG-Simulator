@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 4-062C Chocobo: when it forms a party and attacks, the party gains +3000.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.PARTY_ATTACK: Callable(self, "when_party_attack"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack"),
+	]
 
 
 func when_party_attack(ctx: EFFECT_CONTEXT) -> void:

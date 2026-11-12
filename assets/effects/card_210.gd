@@ -3,10 +3,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Lightning 1-210R: costs 1 less for each other Category XIII Forward you control.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER: Callable(self, "when_cause_damage_to_player"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER, "when_cause_damage_to_player"),
+	]
 
 
 func modify_cost(ctx: COST_CONTEXT, _card: Card, cost: Dictionary) -> Dictionary:

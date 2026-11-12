@@ -49,6 +49,21 @@ const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
 @export var camera_shake_strength: float = 0.045
 @export var random_seed: int = 0
 
+## POWER DRIVES THE BLOW. Each card's power maps to a strength 0..1 between these two values; a stronger card draws
+## back further, charges faster (it leaves later and still arrives on the same frame), drives the meeting point into
+## its opponent's half, and throws a defeated opponent harder.
+@export_group("Power")
+@export var weak_power: int = 2000
+@export var strong_power: int = 10000
+## Wind-up distance multiplier at strength 0 and 1.
+@export var windup_scale_range := Vector2(0.70, 1.40)
+## Charge time multiplier at strength 0 and 1 (lower = faster).
+@export var charge_scale_range := Vector2(1.70, 0.70)
+## How far the meeting point moves toward the weaker card, in card heights, at the largest strength gap.
+@export var impact_push: float = 0.45
+## Knockback multiplier on a defeated card at its opponent's strength 0 and 1.
+@export var knockback_scale_range := Vector2(0.75, 1.65)
+
 var _attacker: Card = null
 var _defender: Card = null
 var _proxy_a: Card = null
@@ -62,6 +77,9 @@ var _camera: Camera3D = null
 var _camera_home: Transform3D = Transform3D.IDENTITY
 var _rng := RandomNumberGenerator.new()
 var _defeated: Dictionary = {}
+## Strength 0..1 of the attacker (a) and the defender (b), from their power when the clash started.
+var _strength_a: float = 0.5
+var _strength_b: float = 0.5
 
 
 ## Start the cinematic. `survives_*` comes from the already-resolved game state.
@@ -77,6 +95,8 @@ func play(attacker: Card, defender: Card, snap_a: Transform3D, snap_b: Transform
 	_survives_a = survives_a
 	_survives_b = survives_b
 	_rng.seed = random_seed if random_seed != 0 else int(Time.get_ticks_usec())
+	_strength_a = strength_for(attacker)
+	_strength_b = strength_for(defender)
 
 	_camera = get_viewport().get_camera_3d()
 	if _camera != null:
@@ -95,6 +115,13 @@ func play(attacker: Card, defender: Card, snap_a: Transform3D, snap_b: Transform
 
 	await _choreograph()
 	_cleanup()
+
+
+## A card's strength 0..1 for the choreography: its current power between weak_power and strong_power.
+func strength_for(card: Card) -> float:
+	if card == null or not is_instance_valid(card):
+		return 0.5
+	return clampf(inverse_lerp(float(weak_power), float(strong_power), float(card.power)), 0.0, 1.0)
 
 
 func _make_proxy(source: Card, snapshot: Transform3D) -> Card:
@@ -150,8 +177,10 @@ func _choreograph() -> void:
 	var card_height: float = 0.60 * maxf(_proxy_a.global_transform.basis.get_scale().x,
 			_proxy_b.global_transform.basis.get_scale().x)
 	var half_extent: float = card_height * 0.5 + 0.03
-	var a_impact: Vector3 = midpoint - axis * half_extent
-	var b_impact: Vector3 = midpoint + axis * half_extent
+	# The stronger card drives the collision into the weaker one's half.
+	var contact: Vector3 = midpoint + axis * (_strength_a - _strength_b) * impact_push * card_height
+	var a_impact: Vector3 = contact - axis * half_extent
+	var b_impact: Vector3 = contact + axis * half_extent
 
 	var a_away: Vector3 = (a0 - mid_ground)
 	var b_away: Vector3 = (b0 - mid_ground)
@@ -174,32 +203,31 @@ func _choreograph() -> void:
 	var a_windup := (Basis.from_euler(a_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_a.controller == Card.OPPONENT else windup_pitch_degrees))).get_euler()
 	var b_windup := (Basis.from_euler(b_pose_rot) * Basis(Vector3.RIGHT, deg_to_rad(-windup_pitch_degrees if _proxy_b.controller == Card.OPPONENT else windup_pitch_degrees))).get_euler()
 	# Wind-up: retreat away from the midpoint.
-	await _move_both(a0 + lift + a_away * windup_distance,
-		b0 + lift + b_away * windup_distance,
+	await _move_both(a0 + lift + a_away * windup_distance * _windup_scale(_strength_a),
+		b0 + lift + b_away * windup_distance * _windup_scale(_strength_b),
 		a_windup, b_windup,
 		windup_seconds, Tween.TRANS_BACK, Tween.EASE_OUT)
 
 	# The beat before the hit. No movement, no easing to distract from it; the cards are simply held back.
 	await _wait(windup_hold_seconds)
 
-	# Charge: very short, very sharp acceleration into the collision point.
-	await _move_both(a_impact, b_impact,
-		a_pose_rot, b_pose_rot,
-		charge_seconds, Tween.TRANS_EXPO, Tween.EASE_IN)
+	# Charge: very short, very sharp acceleration into the collision point. Each card at its own speed; the faster
+	# one leaves later, so both arrive on the same frame.
+	await _charge(a_impact, b_impact, a_pose_rot, b_pose_rot)
 
-	_impact_flash(midpoint)
-	_shake_camera()
+	_impact_flash(contact)
+	_shake_camera(maxf(_strength_a, _strength_b))
 	await _wait(hitstop_seconds)
 
 	var recovery: Array[Tween] = []
 	if _survives_a:
 		recovery.append(_start_recovery(_proxy_a, a_start, a_base_rot, a_scale0))
 	else:
-		_start_defeat(_proxy_a, -axis)
+		_start_defeat(_proxy_a, -axis, _strength_b)
 	if _survives_b:
 		recovery.append(_start_recovery(_proxy_b, b_start, b_base_rot, b_scale0))
 	else:
-		_start_defeat(_proxy_b, axis)
+		_start_defeat(_proxy_b, axis, _strength_a)
 
 	for tween in recovery:
 		await tween.finished
@@ -245,6 +273,27 @@ func _move_both(a_pos: Vector3, b_pos: Vector3, a_rot: Vector3, b_rot: Vector3,
 	await tween.finished
 
 
+func _windup_scale(strength: float) -> float:
+	return lerpf(windup_scale_range.x, windup_scale_range.y, strength)
+
+
+func _charge_time(strength: float) -> float:
+	return charge_seconds * lerpf(charge_scale_range.x, charge_scale_range.y, strength)
+
+
+func _charge(a_pos: Vector3, b_pos: Vector3, a_rot: Vector3, b_rot: Vector3) -> void:
+	var a_time := _charge_time(_strength_a)
+	var b_time := _charge_time(_strength_b)
+	var longest := maxf(a_time, b_time)
+	var tween: Tween = create_tween().set_parallel(true)
+	tween.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	for entry in [[_proxy_a, a_pos, a_rot, a_time], [_proxy_b, b_pos, b_rot, b_time]]:
+		var delay: float = longest - float(entry[3])
+		tween.tween_property(entry[0], "position", entry[1], entry[3]).set_delay(delay)
+		tween.tween_property(entry[0], "rotation", entry[2], entry[3]).set_delay(delay)
+	await tween.finished
+
+
 func _start_recovery(proxy: Card, start_pos: Vector3, base_rot: Vector3,
 		base_scale: Vector3 = Vector3.ZERO) -> Tween:
 	var tween: Tween = create_tween()
@@ -256,7 +305,9 @@ func _start_recovery(proxy: Card, start_pos: Vector3, base_rot: Vector3,
 	return tween
 
 
-func _start_defeat(proxy: Card, direction: Vector3) -> void:
+## `hit_by` is the winner's strength 0..1: a stronger blow throws the loser further and higher.
+func _start_defeat(proxy: Card, direction: Vector3, hit_by: float = 0.5) -> void:
+	var force := lerpf(knockback_scale_range.x, knockback_scale_range.y, hit_by)
 	var spin_axis: Vector3 = Vector3(
 		_rng.randf_range(-1.0, 1.0),
 		_rng.randf_range(-1.0, 1.0),
@@ -265,8 +316,8 @@ func _start_defeat(proxy: Card, direction: Vector3) -> void:
 		spin_axis = Vector3.RIGHT
 	_defeated[proxy] = {
 		"age": 0.0,
-		"velocity": direction * knockback_speed + Vector3.UP * upward_impulse,
-		"spin": spin_axis * deg_to_rad(tumble_speed * _rng.randf_range(0.75, 1.2)),
+		"velocity": (direction * knockback_speed + Vector3.UP * upward_impulse) * force,
+		"spin": spin_axis * deg_to_rad(tumble_speed * _rng.randf_range(0.75, 1.2) * sqrt(force)),
 	}
 
 
@@ -326,9 +377,10 @@ func _impact_flash(point: Vector3) -> void:
 	tween.chain().tween_callback(quad.queue_free)
 
 
-func _shake_camera() -> void:
+func _shake_camera(strength: float = 0.5) -> void:
 	if _camera == null or not is_instance_valid(_camera):
 		return
+	var amount := camera_shake_strength * lerpf(0.75, 1.5, strength)
 	var base: Vector3 = _camera_home.origin
 	var tween: Tween = create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -336,7 +388,7 @@ func _shake_camera() -> void:
 		var offset := Vector3(
 			_rng.randf_range(-1.0, 1.0),
 			_rng.randf_range(-1.0, 1.0),
-			_rng.randf_range(-1.0, 1.0)) * camera_shake_strength
+			_rng.randf_range(-1.0, 1.0)) * amount
 		tween.tween_property(_camera, "global_position", base + offset,
 			camera_shake_seconds / 7.0)
 	tween.tween_property(_camera, "global_position", base,

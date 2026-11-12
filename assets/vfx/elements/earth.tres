@@ -12,5 +12,6 @@ hit_stagger_seconds = 0.06
 board_stagger_seconds = 0.08
 
 owns_damage_reaction = true
+effect_break = true
 impact_scene = ExtResource("2")
 board_impact_scene = ExtResource("2")

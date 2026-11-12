@@ -13,7 +13,7 @@ const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EXDEATH := 122
 const SQUALL := 41
 const IFRIT := 4
-const WAIT := 2.4   # EX_BURST_DELAY is 2.0
+const WAIT := PlayerSide.EX_BURST_DELAY + 0.4
 
 var _checks: int = 0
 var _fails: int = 0
@@ -70,6 +70,8 @@ func _ready() -> void:
 
 	# --- 1. damage FROM EXDEATH: the card still becomes damage, the burst is skipped ------------------------
 	_opponent.take_damage(1, exdeath)
+	_expect(_game.find_children("ExBurstReveal*", "Node3D", false, false).is_empty(),
+		"a suppressed burst gets no EX BURST reveal")
 	await get_tree().create_timer(WAIT).timeout
 	print("[Exdeath] after Exdeath's damage: zone=%d stack=%d mode=%s" % [
 		_zone_size(), _stack.stack_length(), GlobalVariables.get_player_mode()])
@@ -82,7 +84,14 @@ func _ready() -> void:
 
 	# --- 2. damage from ANYTHING ELSE: the burst runs as usual --------------------------------------------
 	_opponent.take_damage(1, other_source)
+	_expect(_game.find_children("ExBurstReveal*", "Node3D", false, false).size() == 1,
+		"a card that bursts gets the EX BURST reveal")
 	await get_tree().create_timer(WAIT).timeout
+	# Its effect card flies onto the stack before it resolves and asks for a target.
+	var waited := 0.0
+	while waited < 4.0 and GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
 	print("[Exdeath] after another source: zone=%d stack=%d mode=%s" % [
 		_zone_size(), _stack.stack_length(), GlobalVariables.get_player_mode()])
 	_expect(_zone_size() == 2, "the second damage card lands")

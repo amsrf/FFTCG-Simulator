@@ -24,6 +24,16 @@ func _ready() -> void:
 	if not cards.is_empty():
 		target = cards.front()
 	_update_help()
+	# --hit=<damage> strikes at once; --freeze=<seconds> stops time that long after it (for the shot harness).
+	for argument in OS.get_cmdline_user_args():
+		if argument == "--break":
+			_break_target()
+		elif argument.begins_with("--hit="):
+			damage = argument.trim_prefix("--hit=").to_int()
+			_hit()
+		elif argument.begins_with("--freeze="):
+			await get_tree().create_timer(argument.trim_prefix("--freeze=").to_float()).timeout
+			Engine.time_scale = 0.0
 
 func _hit() -> void:
 	_reset()
@@ -54,6 +64,16 @@ func _hit() -> void:
 	if _cue == cue:
 		_cue = null
 
+## B / --break: an Earth card's effect BREAKS the target outright, through the real EffectContext.break_cards()
+## (stone spike impale). One-shot: the card really goes to the Break Zone.
+func _break_target() -> void:
+	if not is_instance_valid(target) or not target.is_on_field():
+		return
+	var source: Card = game.create_card(100, "player")   # an Earth (土) card, kept off the field
+	game.add_child(source)
+	source.visible = false
+	preload("res://scripts/effects/effect_context.gd").new(game, source, "demo").break_cards([target])
+
 func _reset() -> void:
 	for effect in _preview_shards:
 		if is_instance_valid(effect):
@@ -82,6 +102,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_3: damage = 8000
 		KEY_4: damage = 10000
 		KEY_K: _lethal = not _lethal
+		KEY_B: _break_target()
 		KEY_M: _area = not _area
 		KEY_S:
 			_slow = not _slow

@@ -23,7 +23,7 @@ use from card code.
 ## Agent Rules (read first)
 
 ### Code-defined effects
-- `scripts/effects/card_effect.gd` is the interface. A card subclass declares `handlers()` (event id -> Callable) and
+- `scripts/effects/card_effect.gd` is the interface. A card subclass declares its auto-abilities in `trigger_specs()` and
   overrides only the hooks it uses; `EffectContext` carries the source, controller, event data and explicit helpers (`cards_in`,
   `choose`, `choose_targets`, `may`, `search_deck`, `reveal_top`, `mill`, `discard`, `damage`, `remove_from_game`).
   Effects are stateless and cached by `effect_registry.gd`.
@@ -34,21 +34,42 @@ use from card code.
   `Card.current_elements()` before the printed element.
 - A code hook wins over the JSON entry for the same event. Other events on the same card can remain JSON until they
   are migrated: this is a hybrid, not a flag day.
-- Code triggers are stack objects. `Stack.enqueue_code_trigger()` stores the typed event id/payload on the copy;
-  `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch()` with a fresh context when that copy resolves.
-  Do not call an effect hook immediately when the event happens.
-- `scripts/effects/events.gd` is the closed event vocabulary (`Event` + `NAMES`). A card declares triggers in
-  `handlers()` exactly once: `function when_enter_field` is paired with
-  `EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field")`. The engine checks the map keys before enqueueing
-  and dispatch() calls the matching Callable. Do not use `has_method(event)` for trigger detection.
+- Code triggers are stack objects. `Stack.enqueue_code_triggers()` puts ONE copy per triggered auto-ability on the
+  stack; each copy stores the typed event id/payload and `effect_ability_index`, and
+  `Game._on_stack_execute_card_effect()` calls `CardEffect.dispatch(event, ctx, index)` with a fresh context when that
+  copy resolves. Do not call an effect hook immediately when the event happens.
+- **One `TriggerSpec` = one printed auto-ability.** `scripts/effects/events.gd` is the closed event vocabulary
+  (`Event` + `NAMES`). A card lists its auto-abilities in `trigger_specs()` in PRINTED order:
+  `trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field")`. Two specs may share an event — Gadot 1-007 has two
+  enter-the-field abilities, so entering puts TWO stack objects on the stack, each resolving on its own. Method names
+  are free. `CardEffect.auto_abilities()` is the one list the engine reads, and an ability's index in it is its
+  identity: `triggered_abilities(event, event_ctx, source)` picks the indices (spec filters run for board events),
+  `dispatch()` runs exactly that index. The old `handlers()` dictionary is gone — it could hold one ability per event.
+  Do not use `has_method(event)` for trigger detection.
+- **Simultaneous auto-abilities: the first printed resolves first** (it is put on the stack last, on top). The rules
+  let the controller choose the order; until `Agent` gets that choice, this is the default, and for Gadot it is the
+  order the player wants (the Fire Forward is played before the +1000 lands).
+- **A trigger's stack card shows what it DOES, not what triggered it.** `CardEffect.stack_text(printed, index)` →
+  `scripts/effects/trigger_text.gd` (pure text): split the printed text on `[[br]]`, take the nth auto-ability
+  ("When…", "Each time…", "At the…") whose trigger clause names the event, cut up to the first comma outside brackets.
+  A condition after the trigger STAYS ("If you control Yuna, draw 1 card."): it is checked at resolution. A card whose
+  printed text does not parse gets `.text("…")` on its TriggerSpec — no special cases in the parser. No match keeps
+  the full printed text and pushes a warning. `tests/trigger_text_probe.tscn` sweeps every coded ability; its
+  `KNOWN_UNMATCHED` list is code whose event the printed card does not contain (data to fix, not a parser case).
+- **Triggers that land together fly in STAGGERED.** Every trigger card created before its group's presentation starts
+  joins one `Vfx.present(_present_trigger_batch)` job; flight n starts `Stack.trigger_stagger_seconds` (0.25 s,
+  exported) after flight n-1 STARTED, bottom of the stack first. The flights overlap, so they pass `shared = false`
+  to `_fly_local_summon_translation` / `_fly_opponent_summon` and never claim or kill the Summon flight slot. The job
+  ends when the LAST card lands, so decisions wait for the whole group. `flow_probe` measures the launch gap, the
+  overlap and the settle.
 - **Auto-abilities choose targets when they resolve.** In a `when_enter_field` / `when_attack` hook, call
   `await ctx.choose_targets(criteria, count)` and use the returned array. This matches the rules and lets each event
   have its own targeting logic.
 - **Activated abilities and Summons choose targets before they are committed**, so their ability descriptors own
   target criteria and the hook receives `ctx.targets`. Do not move those choices into the resolution hook.
 - Activated abilities use `AbilitySpec` (`scripts/effects/ability_spec.gd`) via `activated_abilities()` and
-  `_ability(...)`: one object carries text, costs, target timing and the handler. Event hooks do not get this
-  descriptor because a card has zero-or-one of each event. Code abilities win over JSON `skill` entries for that card.
+  `_ability(...)`: one object carries text, costs, target timing and the handler. Auto-abilities have the parallel
+  descriptor, `TriggerSpec`. Code abilities win over JSON `skill` entries for that card.
 - When inspecting an effect from a test, keep the effect object alive: `load(path).new().activated_abilities()` leaves
   the specs' `Callable`s pointing at a freed RefCounted. Store the effect in a local first.
 - Targets are typed everywhere in card code: `CardQuery` says which cards, `TargetRequest` says domain/count, and
@@ -239,6 +260,11 @@ go through it. A stack card's click reaches `Stack.on_card_grabbed()`, which for
 CANCELLING a stack object is `Stack.cancel_stack_card()`: remove it from `cards` (so the priority loop never picks
 it), then move it to its owner's Break Zone — it was paid for. Do NOT set a flag and let it resolve with no effect;
 removal is what makes it never resolve.
+The move goes through `Vfx.countered(card, move)`: the rules move happens at once, while a stand-in holds the card's
+stack spot and `scripts/vfx/counter_cue.gd` shocks it, turns it cyan and shatters it (VfxEvent.Kind.COUNTERED). Its
+arcs live on the STAND-IN's HandMesh (under the Game), its shards under the cue (under `Vfx`).
+**`tools/shot.tscn --frames N` counts uncapped frames, not time:** with a demo's `--freeze=<s>`, take enough frames
+(~900) that the freeze has happened before the shot, or every "later" frame is really the same early moment.
 
 ## A zone picker is the deck search, not a new window
 
@@ -546,6 +572,14 @@ autocomplete, rename and Find Usages. Keep `.call()` only for dynamically instan
 `PlayerSide.take_damage(amount, source)` threads the dealer into `_run_ex_burst(card, source)`; a source with
 `ex_burst_disabler` (printed or status) skips the burst while the card still enters the Damage Zone. Rules paths that
 damage a player must pass a source; only debug keys may omit it.
+
+A burst that will happen gets a REVEAL first: `PlayerSide._run_ex_burst()` calls `Game.stage_ex_burst_reveal()`
+synchronously, BEFORE `take_damage` emits `damaged`, which is what lets `_zoom_to_damage()` stretch its hold over it.
+After the reveal the burst's effect card FLIES onto the stack before resolving (`Stack.stage_ex_burst` /
+`await_trigger_entry` / `commit_ex_burst`): during the flight it is in `layout_cards()` via `ex_burst_card` but NOT in
+`cards`, which is what keeps the priority loop from offering a response. It goes back on top and resolves in one frame.
+`PlayerSide.EX_BURST_DELAY` is derived from `DamageZone.FLIGHT_SECONDS` + the reveal + the camera return; probes must
+read it rather than hard-code a wait.
 
 `DamageZone.draw()` must call `card.enter_zone(Card.Zone.DAMAGE)` — it is the animated path used for every real damage
 card, and without it the card keeps its DECK zone/rotation.
@@ -878,6 +912,7 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **Frozen is a card-space additive overlay, not a 3D ice mesh.** `Card.refresh_frozen_overlay()` lazily builds `FrozenOverlay` from `assets/effects/frost/frost_cracks.png` + `frost_outline.png` (generated by `tools/make_frost_overlay.py`), parents it to `HandMesh` like the target ring, and shows it only while `is_frozen()` on the field. `_tween_frozen_spread()` animates the shader's `spread` 0→1 over 1.60 s with cubic ease-in; six named edge/corner origins have different delays and tempos, so the frost grows inward in overlapping patches from places that begin at different times, and 1→0 over the same 1.60 s with cubic ease-out (the reverse of the growth) when Freeze is consumed. The shader writes the additive result to `ALBEDO`, not `EMISSION`: in an `unshaded` spatial shader `EMISSION` alone produced no visible output. Its `readability_clear` factor dims the central top/bottom columns so the name banner and rules box stay legible while the side bands and corners remain frosted. Direct `status_effects` mutations must call `refresh_status_visuals()`; the Active Phase's in-place `erase("frozen")` does exactly that.
 - **Artifact's graphics archives are documented in `references/ARTIFACT_REFERENCE.md`.** It records the install/VPK paths, the Frostbite and Winter's Curse asset paths, decompiled particle/material details, and reusable extraction commands (`tools/artifact_vpk_list.py`, `tools/artifact_vpk_extract.py`, ValveResourceFormat CLI). Extracted Artifact assets are reference-only and must never be committed or shipped.
 - **VFX goes through semantic events, not scenes spawned in card effects.** `references/VFX_ARCHITECTURE.md` defines the `VfxEvent` contract and the `Vfx` autoload director (`scripts/vfx/vfx_director.gd`). Core hooks: status changes in `Card.refresh_status_visuals()`, effect damage in `EffectContext.damage()` / `board_damage()`, and breaks in `Game.break_card()`. Element/status looks are data presets under `assets/vfx/elements` and `assets/vfx/status`; card scripts must never `preload()` a VFX scene directly. The director queue is serial, while persistent status visuals stay card-owned. `tests/vfx_director_probe.gd` covers the event contract.
+- **A presentation that must happen INSIDE an animation uses a visual hold, never a delayed rule.** The rules move the card at once (a break puts it in the Break Zone immediately); `Vfx.hold_card(card, visual)` leaves a stand-in at the pre-event snapshot and hides the real card, and the cue calls `Vfx.release_hold(card, visual, shatter)` at its moment (lightning: when the bolt lands; earth: once the golden crystal has gone back down). The director releases any hold a cue leaves when the event finishes. BREAKS are held by `Game.break_card()` itself when the source's preset sets `effect_break` (`Vfx.hold_for_break`), and the damage/effect-break event claims the hold in `VfxDirector._emit()`; an unclaimed hold shatters at the end of the frame. So pass the causing card to `break_card(..., source_card)`. Never `preload()` card scenes in the director (an autoload): it broke every `card.tscn` instance. Element cues must aim at `event.target_visuals[id].transform`, not the live card: by the time they play, a broken card is already in the pile.
 - **The first authored element effect is lightning (`雷`), and it is screen-space on purpose.** `assets/vfx/elements/lightning.tres` points at `assets/effects/lightning/lightning_strike_cue.tscn`. The cue strikes one card for a `single` event and every valid target for `multi`/`sequence`/`radial`/`board`; the stagger is **0.36 s** (0.45 s for `sequence`), long enough that each impact reads separately. The per-target `LightningStrike` anchors a camera-facing bolt to `Card.get_global_face_centre()` and extends it up the camera's screen-up axis; a world-vertical bolt would be seen end-on because the board camera is almost top-down. **Do not push that quad back along camera Z to fake depth**: for an off-centre card it changes the projected landing point, and the shaders already use `depth_test_disabled`. **`QuadMesh` UV.y = 0 is its local +Y (top) edge**, so `lightning_bolt.gdshader` works in `y = 1 - UV.y`; otherwise the path converges and the impact pool sit at the top of the quad instead of the card. Damage magnitude is semantic: `VfxEvent.damage_tier()` maps <=3000 / 3001..6000 / 6001..8999 / 9000+ to weak/medium/high/maximum, and every element cue can read it. Lightning scales bolt width, glow, branching, span, shockwave extent, impact intensity and screen flash from its `TIER_*` arrays. The palette follows `references/violet_thunder.jpg`: white-hot core, purple inner glow, deep royal-violet halo — not a flat violet bolt. There is no card-rim effect; the target border is left alone. The impact ring grows only to 0.84 in its own UV space and fades radially before the quad edge, or the square quad clips it into an unnatural border. Both shaders are in `Game.EFFECT_SHADERS`; Compatibility compiles a shader on first render, and a first strike must not hitch. `tools/lightning_demo.tscn` is the viewing harness and `tests/lightning_vfx_probe.gd` covers preset wiring, the `DAMAGE` event, cue instantiation, one strike per target, and cleanup.
 - **Effect damage makes the card itself recoil through a HandMesh-local tween.** `Card.play_damage_reaction()` lifts, scales, yaws, rolls and side-shifts `HandMesh` for 0.62 s using two `Curve`s (a bounce envelope and a signed wiggle). Do **not** animate the Card root: that transform is the Field layout. Effect/Summon damage is the non-empty `source_kind` path in `Card.suffer_damage()`; combat keeps the clash presentation. `EffectContext._apply_damage_to_cards()` staggers multiple targets by 0.20 s through the new optional `reaction_delay` on `Field.cause_damage()` / `Card.suffer_damage()`. `Card.enter_zone()` and `reset_for_field_arrival()` call `normalize_damage_reaction()` so a lifted pose cannot leak into another zone. `tools/damage_reaction_demo.tscn` is the viewing harness and `tests/damage_reaction_probe.gd` covers the pose, settle, combat exclusion, stagger and zone cleanup.
 
@@ -985,7 +1020,10 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 
 - **An animating action should RETURN its tween, and multi-target animations join with `AnimationBatch`.** `await` inside a target loop serialises: five returned Forwards took ~3000 ms one after another. The Godot equivalent of `Promise.all()` is `scripts/animation_batch.gd` — start every tween, `close()`, `await batch.wait()`; it never hangs on a null/invalid tween and never aborts. That only works if the animation is ONE awaitable, which is why `Hand.begin_return_card()` is a single chained tween (the landing callback is a step inside the chain, not a second tween). Logical changes stay synchronous before the join, so a follow-up instruction sees the right board while the visuals catch up.
 
-- **A stack card leaving the stack is a layout event.** `resolve_top_effect()` must call `update_card_positions()` after popping, exactly as the hand reflows when a card leaves it; otherwise every resolved effect leaves a hole in the fan. `_clear_skill_proxy()` already did this, which is the convention to follow. It also refreshes the hover/review arrow for free, because `update_card_positions()` ends with `refresh_target_display()`.
+- **A resolving card stays on screen until it has RESOLVED.** `resolve_top_effect()` pops it from `cards` at once (rules),
+  but keeps it in `Stack.resolving_card`, which `layout_cards()` includes, until `resolution_complete`; the reflow
+  happens only then. Do not reflow at the pop, or the card leaves before the player has made its choices.
+- **A stack card leaving the stack is a layout event.** `resolve_top_effect()` must call `update_card_positions()` after resolving, exactly as the hand reflows when a card leaves it; otherwise every resolved effect leaves a hole in the fan. `_clear_skill_proxy()` already did this, which is the convention to follow. It also refreshes the hover/review arrow for free, because `update_card_positions()` ends with `refresh_target_display()`.
 
 ## Changelog
 

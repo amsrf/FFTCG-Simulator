@@ -819,6 +819,9 @@ var priority_holder: int = 0:
 ##
 ## Anything added to the payment/absorb effects belongs in this list.
 const EFFECT_SHADERS: Array[Shader] = [
+	preload("res://shaders/ex_burst_aura.gdshader"),
+	preload("res://shaders/counter_arc.gdshader"),
+	preload("res://shaders/counter_overlay.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
@@ -826,9 +829,16 @@ const EFFECT_SHADERS: Array[Shader] = [
 	# damage, so without a warm-up the first strike would hitch mid-animation.
 	preload("res://shaders/lightning_bolt.gdshader"),
 	preload("res://shaders/lightning_impact.gdshader"),
+	preload("res://shaders/lightning_scar.gdshader"),
+	preload("res://shaders/lightning_spark.gdshader"),
 	# Warm the Earth dust shader before its first damage presentation.
 	preload("res://shaders/earth_dust.gdshader"),
 	preload("res://shaders/earth_ground_crack.gdshader"),
+	preload("res://shaders/earth_shockwave.gdshader"),
+	preload("res://shaders/earth_break_crystal.gdshader"),
+	preload("res://shaders/earth_break_burst.gdshader"),
+	# The materialising card's crystal prisms (card_crystallize.gd): first rendered mid-cast.
+	preload("res://shaders/card_crystal_prism.gdshader"),
 ]
 
 func _ready():
@@ -1625,7 +1635,7 @@ func cause_damage():
 	if field.attacker_card != null:
 		var attacker: Card = field.attacker_card
 		if attacker.abilities_enabled() and attacker.effect_handles_event(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER):
-			stack.enqueue_code_trigger(attacker, EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER)
+			stack.enqueue_code_triggers(attacker, EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER)
 		else:
 			stack.begin_triggered_ability(attacker, "when_cause_damage_to_player")
 	
@@ -1701,9 +1711,30 @@ func _damage_slot_world(zone: Node3D, index: int) -> Vector3:
 	return zone.global_transform * (zone.call("calculate_card_position", index) as Vector3)
 
 
+## Sides whose next damage zoom must hold for an EX BURST reveal (stage_ex_burst_reveal), consumed by the zoom.
+var _ex_reveal_sides: Dictionary = {}
+const EX_BURST_REVEAL := preload("res://scripts/vfx/ex_burst_reveal.gd")
+
+## A damage card on `side` is about to EX BURST: show it (gold aura, pulses, the "EX BURST" title) as it lands, and
+## make the damage zoom hold on it until the reveal is over. Called by PlayerSide._run_ex_burst before `damaged`.
+func stage_ex_burst_reveal(side: PlayerSide, card: Card) -> void:
+	if card == null or not is_instance_valid(card) or match_over:
+		return
+	_ex_reveal_sides[side] = true
+	var reveal: Node3D = EX_BURST_REVEAL.new()
+	reveal.name = "ExBurstReveal"
+	add_child(reveal, true)
+	reveal.setup(card, DamageZone.FLIGHT_SECONDS)
+
+
 func _zoom_to_damage(side: PlayerSide) -> void:
 	if side == null or match_over:
 		return
+	# An EX BURST reveal keeps the camera on the card until it is over.
+	var hold: float = damage_zoom_hold_seconds
+	if _ex_reveal_sides.has(side):
+		_ex_reveal_sides.erase(side)
+		hold = maxf(hold, DamageZone.FLIGHT_SECONDS + EX_BURST_REVEAL.SECONDS - damage_zoom_in_seconds)
 	var zone: Node3D = side.get_node_or_null("DamageZone") as Node3D
 	if zone == null:
 		return
@@ -1772,7 +1803,7 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	_damage_tween = create_tween()
 	_damage_tween.set_trans(Tween.TRANS_SINE)
 	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
-	_damage_tween.tween_interval(damage_zoom_hold_seconds)
+	_damage_tween.tween_interval(hold)
 	# BACK TO ITS OWN POSE, not the board's. Ending on the board pose was half of the "works once" bug: it puts the
 	# board view back on screen (correct) but leaves THIS camera parked there, which poisons the next zoom's
 	# read-back. The handoff to the board view happens in the callback below; this just puts it back where it lives.
@@ -1810,6 +1841,15 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	# It is safe because nothing else is on the stack at this moment: a card becoming damage cannot happen while
 	# anything is resolving.
 	field.execute_card_effect(card, event)
+
+	# THE EFFECT CARD FLIES ONTO THE STACK FIRST, like any triggered ability (from below the screen for ours, from the
+	# top for the opponent's), and the targeting arrow then starts FROM it. It is held out of `cards` while it flies,
+	# so the priority loop never sees a stack object and nobody can respond: this is only for the eye. It goes back on
+	# top and resolves below in the same frame.
+	var burst_card: Card = stack.stage_ex_burst(card)
+	if burst_card != null:
+		await stack.await_trigger_entry(burst_card)
+		stack.commit_ex_burst(burst_card)
 
 	# TARGETED BURSTS WAIT FOR THE PICK; NO-TARGET BURSTS HAVE NOTHING TO WAIT FOR. Either way the effect copy is now
 	# on the stack and must be resolved HERE, because a burst bypasses the priority loop entirely — leaving a no-target
@@ -2374,7 +2414,9 @@ func enforce_game_state_rules() -> void:
 	# THE SWEEP HAS NO IDEA WHAT DEALT THE DAMAGE, so the card carries it (Card.last_damage_kind/controller) and the
 	# same protection question an explicit break asks can be answered here too.
 	for card in field.get_breakable_cards():
-		break_card(card, card.last_damage_controller, card.last_damage_kind)
+		# Effect damage carries its dealer (combat's kind is empty: the clash presents those breaks).
+		break_card(card, card.last_damage_controller, card.last_damage_kind,
+			card.last_damage_source if not card.last_damage_kind.is_empty() else null)
 
 ## THE FIELD -> BREAK ZONE CHOKE POINT, and therefore the place where a REPLACEMENT effect belongs.
 ##
@@ -2577,7 +2619,8 @@ func put_card_into_graveyard(card: Card) -> void:
 ## Break `card`. `source_kind`/`source_controller` describe the CAUSE ("Summon"/"Ability" and who controlled it), so
 ## continuous protection rules can be asked before anything moves; the state-based sweep passes the card's recorded
 ## last damage source, and combat passes an empty kind.
-func break_card(card: Card, source_controller: String = "", source_kind: String = ""):
+## `source_card` is what caused the break, when an effect did (its element may STAGE the break: Vfx.hold_for_break).
+func break_card(card: Card, source_controller: String = "", source_kind: String = "", source_card: Card = null):
 	if not card.is_on_field():
 		return
 	if 'unbreakable' in card.status_effects:
@@ -2593,8 +2636,14 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 	# Spawn the shards BEFORE the card leaves the field so we can use its exact
 	# world transform and its card-art material. The original is removed in the
 	# same frame; the shard burst lives independently in Game space.
-	_play_break_shatter(card)
+	# UNLESS the source's element stages the break (lightning, earth): then a stand-in holds the card on its slot and
+	# the element's cue breaks it at its own moment (the bolt landing, the spike withdrawing).
+	var held: bool = Vfx.hold_for_break(card, source_card)
+	if not held:
+		_play_break_shatter(card)
 	move_card_from_field(card, Card.Zone.GRAVEYARD, "BREAK")
+	if held:
+		Vfx.hide_held(card)
 
 func _play_break_shatter(card: Card) -> void:
 	if card == null or not is_instance_valid(card):
@@ -2718,7 +2767,7 @@ func _resolve_code_effect(card: Card) -> void:
 		picks = [card.effect_target]
 	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, picks)
 	# dispatch() maps the typed event id to the card's method in one place.
-	await effect_obj.dispatch(card.effect_event, ctx)
+	await effect_obj.dispatch(card.effect_event, ctx, card.effect_ability_index)
 
 
 func _resolve_event_trigger(card: Card) -> void:

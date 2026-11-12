@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 1-172C Moogle
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.CAST: Callable(self, "when_cast"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.CAST, "when_cast"),
+	]
 
 
 func when_cast(ctx: EFFECT_CONTEXT) -> void:

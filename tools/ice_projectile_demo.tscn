@@ -68,10 +68,11 @@ mouse_filter = 2
 [node name="Help" type="Label" parent="CanvasLayer/Panel"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "ICE — CRYSTAL ENCLOSURE
+text = "ICE — CONJURE AND SHATTER
 Space: replay   R: clear
 1: show raised   2: toggle slow motion
-64 fitted Blender fragments; impact at the card"
+5 6 7 8: damage tier (weak, medium, high, maximum)
+Top-down reveal, converging wisps and frost mist"
 
 
 [node name="CardSizeReference" type="MeshInstance3D" parent="."]

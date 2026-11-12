@@ -8,6 +8,8 @@ extends VfxCue
 ## who is hit, in what order, and when the screen flash fires.
 
 const STRIKE_SCENE := preload("res://assets/effects/lightning/lightning_strike.tscn")
+## When the bolt reaches the card (LightningStrike.REVEAL_SECONDS).
+const IMPACT_SECONDS := 0.09
 const STRIKE_LIFETIME := 0.58
 const SCREEN_FLASH_LAYER := 80
 ## A single strike owns the stage for about 0.58 s. Multi-target hits start the
@@ -44,8 +46,13 @@ func play(event: VfxEvent) -> void:
 	for i in ordered.size():
 		var strike: Node3D = STRIKE_SCENE.instantiate()
 		add_child(strike)
+		var visual: Dictionary = event.target_visuals.get(ordered[i].get_instance_id(), {})
 		strike.call("setup", ordered[i], tint, event.seed + i * 173, float(i) * spacing,
-			event.damage_tier())
+			event.damage_tier(), visual.get("transform", null))
+		# A break by effect: the card is HELD on its slot (Vfx.hold_card) and breaks when the bolt lands. A card that
+		# protection saved just takes the hit.
+		if visual.has("stand_in") or event.kind == VfxEvent.Kind.EFFECT_BREAK:
+			_on_impact(ordered[i], visual, float(i) * spacing + IMPACT_SECONDS)
 
 	# The screen flash belongs to the impact, not to the wind-up. It is one
 	# shared flash even when several bolts land, so a board hit does not strobe.
@@ -53,6 +60,16 @@ func play(event: VfxEvent) -> void:
 
 	var total: float = STRIKE_LIFETIME + float(maxi(ordered.size() - 1, 0)) * spacing
 	await get_tree().create_timer(total).timeout
+
+
+func _on_impact(card: Card, visual: Dictionary, delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if not is_instance_valid(card):
+		return
+	if visual.has("stand_in"):
+		Vfx.release_hold(card, visual, true)
+	elif card.is_drawn_on_field():
+		card.damage_fx.play_reaction(Vfx.EFFECT_BREAK_AMOUNT)
 
 
 ## Probe hook: how many cards this cue actually struck.

@@ -10,11 +10,11 @@ extends "res://scripts/effects/card_effect.gd"
 const CHOOSABLE: Array[String] = ["火", "氷", "風", "土", "雷", "水"]
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.PARTY_ATTACK: Callable(self, "when_party_attack"),
-		EVENTS.Event.ATTACK_PHASE_START: Callable(self, "attack_phase_start"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack"),
+		trigger(EVENTS.Event.ATTACK_PHASE_START, "attack_phase_start"),
+	]
 
 
 func attack_phase_start(ctx: EFFECT_CONTEXT) -> void:

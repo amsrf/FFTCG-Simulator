@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 12-058C Gippal: when a party you control attacks, that party gains +5000.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.PARTY_ATTACKS: Callable(self, "when_party_attacks"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.PARTY_ATTACKS, "when_party_attacks"),
+	]
 
 
 func when_party_attacks(ctx: EFFECT_CONTEXT) -> void:

@@ -3,10 +3,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 9-006H Queen of Eblan
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.PARTY_ATTACK: Callable(self, "when_party_attack"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack"),
+	]
 
 
 func when_party_attack(ctx: EFFECT_CONTEXT) -> void:

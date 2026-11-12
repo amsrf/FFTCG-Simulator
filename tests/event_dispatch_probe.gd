@@ -39,11 +39,14 @@ func _ready() -> void:
 		if effect == null:
 			continue
 		cards += 1
-		var handlers: Dictionary = effect.handlers()
-		for event in handlers:
+		# Keep `effect` alive while its specs are inspected: their Callables point at it.
+		for spec in effect.auto_abilities():
 			triggers += 1
-			_expect(EVENTS.NAMES.has(event), "%s declares a known event" % file)
-			var handler = handlers[event]
+			_expect(EVENTS.NAMES.has(spec.event), "%s declares a known event" % file)
+			var handler = spec.handler
+			# The declaration inventory, one line per ability: diffable across a refactor of how cards declare.
+			print("[Events] ability %s %s %s" % [file, EVENTS.name_of(spec.event),
+				handler.get_method() if handler is Callable and handler.is_valid() else "<invalid>"])
 			_expect(handler is Callable and handler.is_valid(),
 				"%s binds a valid Callable" % file)
 			if handler is Callable and handler.is_valid():

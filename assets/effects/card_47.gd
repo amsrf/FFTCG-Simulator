@@ -4,10 +4,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 《Ice》: Choose 1 dull Forward. Deal it 1000 damage.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+	]
 
 
 func activated_abilities() -> Array:

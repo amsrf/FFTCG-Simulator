@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 1-093 Vanille: search for Hecatoncheir, then return this card to the field.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_BREAK_FROM_FIELD: Callable(self, "when_enter_break_from_field"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_BREAK_FROM_FIELD, "when_enter_break_from_field"),
+	]
 
 
 func when_enter_break_from_field(ctx: EFFECT_CONTEXT) -> void:

@@ -9,5 +9,6 @@ element = "雷"
 tint = Color(0.34, 0.06, 0.88, 1)
 impact_scene = ExtResource("2")
 board_impact_scene = ExtResource("2")
+effect_break = true
 hit_stagger_seconds = 0.06
 board_stagger_seconds = 0.08

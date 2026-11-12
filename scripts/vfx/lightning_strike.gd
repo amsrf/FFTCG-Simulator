@@ -15,6 +15,8 @@ extends Node3D
 
 const BOLT_SHADER := preload("res://shaders/lightning_bolt.gdshader")
 const IMPACT_SHADER := preload("res://shaders/lightning_impact.gdshader")
+## Sparks and the fissure left in the ground. It outlives this node, so it is spawned under the tree root.
+const AFTERMATH := preload("res://scripts/vfx/lightning_aftermath.gd")
 
 const BOLT_WIDTH := 1.28
 const BOLT_HEIGHT := 2.95
@@ -57,20 +59,18 @@ func _ready() -> void:
 
 
 ## Called once by the cue, after the node is in the tree.
+## `pose`: where the card WAS (a pre-damage/pre-break snapshot). A card the hit broke has already been moved to the
+## Break Zone, so its live transform would aim the bolt at the pile.
 func setup(target: Node3D, tint: Color, strike_seed: int, delay: float,
-		damage_tier: int = 1) -> void:
+		damage_tier: int = 1, pose: Variant = null) -> void:
 	if target == null or not is_instance_valid(target):
 		queue_free()
 		return
-	# Use the card's own face-centre helper when it has one. The card root is
-	# already centred, but this keeps the strike tied to the documented world
-	# point instead of a private assumption.
-	if target.has_method("get_global_face_centre"):
-		_target_position = target.call("get_global_face_centre")
-	else:
-		_target_position = target.global_position
-	_target_basis = target.global_transform.basis.orthonormalized()
-	var basis_scale: Vector3 = target.global_transform.basis.get_scale()
+	var at: Transform3D = pose if pose is Transform3D else target.global_transform
+	# The card root is its face centre (Card.get_global_face_centre()).
+	_target_position = at.origin
+	_target_basis = at.basis.orthonormalized()
+	var basis_scale: Vector3 = at.basis.get_scale()
 	_card_scale = maxf((absf(basis_scale.x) + absf(basis_scale.z)) * 0.5, 0.01)
 	if target.has_method("_card_face_size"):
 		var size = target.call("_card_face_size")
@@ -82,6 +82,14 @@ func setup(target: Node3D, tint: Color, strike_seed: int, delay: float,
 	_tier = clampi(damage_tier, 0, 3)
 	_age = 0.0
 	_build()
+	# The scar is burnt INTO THE CARD'S FACE and the board around it: its plane sits just above the face and is drawn
+	# over the card. (The Field node's own height is not the board surface - the sculpted board rises above it.)
+	var floor_y: float = _target_position.y + 0.004
+	var aftermath := AFTERMATH.new()
+	aftermath.name = "LightningAftermath"
+	get_tree().root.add_child(aftermath)
+	aftermath.setup(_target_position, floor_y, _card_scale, _arc_colour(), strike_seed,
+		_delay + REVEAL_SECONDS, _tier)
 	set_process(true)
 
 

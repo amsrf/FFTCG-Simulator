@@ -51,12 +51,11 @@ def _outer_mask() -> Image.Image:
 def _irregular_inner_window(rng: random.Random) -> list[tuple[float, float]]:
     """A jagged clear window inside the card edge.
 
-    The band is deliberately asymmetric: much heavier on the left/bottom and
-    in the corners, thinner along the top/right, matching the reference's
-    wind-blown frost buildup.
+    Left and right are symmetric (the same inset on both sides); the band is
+    heavier along the bottom than the top.
     """
     left = INSET + 190
-    right = SIZE - INSET - 100
+    right = SIZE - INSET - 190
     top = INSET + 150
     bottom = SIZE - INSET - 205
     jitter = 30

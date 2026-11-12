@@ -3,10 +3,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-194S Snow
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.BLOCKS: Callable(self, "when_blocks"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.BLOCKS, "when_blocks"),
+	]
 
 
 func when_blocks(ctx: EFFECT_CONTEXT) -> void:

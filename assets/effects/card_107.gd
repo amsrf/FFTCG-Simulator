@@ -10,10 +10,10 @@ extends "res://scripts/effects/card_effect.gd"
 const SIX_ELEMENTS: Array[String] = ["火", "氷", "風", "土", "雷", "水"]
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+	]
 
 
 func current_elements(_ctx: EFFECT_CONTEXT, card) -> Array[String]:

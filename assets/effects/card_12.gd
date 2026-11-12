@@ -3,10 +3,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-012R Zack
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+	]
 
 
 func when_enter_field(ctx: EFFECT_CONTEXT) -> void:

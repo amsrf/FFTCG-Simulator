@@ -4,10 +4,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## Auto-ability: targets, if any, are chosen when the ability resolves.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ATTACK, "when_attack"),
+	]
 
 
 func when_attack(ctx: EFFECT_CONTEXT) -> void:

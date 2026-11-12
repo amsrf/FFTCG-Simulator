@@ -43,8 +43,12 @@ func take_damage(amount: int = 1, source: Card = null) -> void:
 ##
 ##     "4": { "ex_burst": "when_cast", "when_cast": { "choose_target": ..., "instructions": [...] } }
 ##
-## The wait is for the damage zoom: "after the camera goes back" is when the player is meant to act on it.
-const EX_BURST_DELAY := 2.0
+## The wait is for the damage zoom: "after the camera goes back" is when the player is meant to act on it. A card
+## that bursts gets the EX BURST REVEAL as it lands (scripts/vfx/ex_burst_reveal.gd), and the zoom holds on it until
+## the reveal is over (Game._zoom_to_damage), so the burst waits for: the flight, the reveal, the camera's return.
+const EX_REVEAL_SECONDS := 1.8   # ex_burst_reveal.gd SECONDS
+const EX_CAMERA_RETURN := 0.4    # Game.damage_zoom_out_seconds
+const EX_BURST_DELAY := DamageZone.FLIGHT_SECONDS + EX_REVEAL_SECONDS + EX_CAMERA_RETURN + 0.1
 
 func ex_burst_key(card: Card) -> int:
 	if card == null:
@@ -66,6 +70,9 @@ func _run_ex_burst(card: Card, source: Card = null) -> void:
 		return
 	if game == null or not game.has_method("run_ex_burst"):
 		return
+	# The drama: it is going to burst, so show it as it lands. Synchronous, before the await, so the zoom (started
+	# when take_damage emits `damaged`, after this) already knows to hold on the card.
+	game.stage_ex_burst_reveal(self, card)
 	await get_tree().create_timer(EX_BURST_DELAY).timeout
 	game.run_ex_burst(self, card, event_id)
 

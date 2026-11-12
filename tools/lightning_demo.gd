@@ -9,6 +9,7 @@ extends Node
 ## normal play; this is only a viewing harness.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 const TARGET_IDS: Array[int] = [41, 12, 43]
 const AUTO_REPLAY_SECONDS := 2.15
@@ -50,7 +51,13 @@ func _ready() -> void:
 	# reads its element to decide which preset the director resolves. Hide it:
 	# a Card added to the tree outside a zone sits at the world origin, which the
 	# camera projects right above the middle target as a ghost card.
-	_source = _game.create_card(121, "player")
+	# --source <card id>: strike with another element's card instead (41 = Ice), to view that element's cue on the
+	# same real board, hit recoil included.
+	var source_id: int = 121
+	var source_arg: int = args.find("--source")
+	if source_arg >= 0 and source_arg + 1 < args.size():
+		source_id = int(args[source_arg + 1])
+	_source = _game.create_card(source_id, "player")
 	_game.add_child(_source)
 	_source.visible = false
 
@@ -70,7 +77,17 @@ func _ready() -> void:
 
 	# Then show the effect once without requiring a key press.
 	await get_tree().create_timer(0.55).timeout
-	_strike_selected()
+	# --break: the source's effect BREAKS the selected card outright (no damage) - the staged break, through the real
+	# EffectContext.break_cards() path. The card really goes to the Break Zone, so this is a one-shot.
+	if args.has("--break"):
+		_break_selected()
+	else:
+		_strike_selected()
+	# --freeze <seconds>: stop time that long after the strike starts, so the shot harness can capture that moment.
+	var freeze_arg: int = args.find("--freeze")
+	if freeze_arg >= 0 and freeze_arg + 1 < args.size():
+		await get_tree().create_timer(float(args[freeze_arg + 1])).timeout
+		Engine.time_scale = 0.0
 
 
 func _input(event: InputEvent) -> void:
@@ -149,6 +166,15 @@ func _select(index: int) -> void:
 	_update_hud()
 
 
+func _break_selected() -> void:
+	var card: Card = _targets[_selected]
+	if card == null or not is_instance_valid(card) or not card.is_on_field():
+		return
+	_last_action = "break by effect on Card %d (one-shot: the card goes to the Break Zone)" % [_selected + 1]
+	_update_hud()
+	EFFECT_CONTEXT.new(_game, _source, "demo", {}, _source, [card]).break_cards([card])
+
+
 func _strike_selected() -> void:
 	if _is_cooling_down():
 		return
@@ -161,7 +187,7 @@ func _strike_selected() -> void:
 	_update_hud()
 	# This is a viewing harness. Emit the semantic event directly: a 12000
 	# tier would break a 6000-power card and the shatter would hide the effect.
-	Vfx.damage([card], _damage_amount(), "雷", _source, "single")
+	Vfx.damage([card], _damage_amount(), _source.element, _source, "single")
 
 
 func _strike_multi() -> void:
@@ -170,7 +196,7 @@ func _strike_multi() -> void:
 	_last_strike_ms = Time.get_ticks_msec()
 	_last_action = "multi-target — %d (%s)" % [_damage_amount(), _damage_tier_name()]
 	_update_hud()
-	Vfx.damage(_targets, _damage_amount(), "雷", _source, "multi")
+	Vfx.damage(_targets, _damage_amount(), _source.element, _source, "multi")
 
 
 func _board_strike() -> void:
@@ -179,7 +205,7 @@ func _board_strike() -> void:
 	_last_strike_ms = Time.get_ticks_msec()
 	_last_action = "board presentation — %d (%s)" % [_damage_amount(), _damage_tier_name()]
 	_update_hud()
-	Vfx.board_damage(_targets, _damage_amount(), "雷", _source)
+	Vfx.board_damage(_targets, _damage_amount(), _source.element, _source)
 
 
 func _damage_amount() -> int:

@@ -30,6 +30,8 @@ var code: String
 var crystal_scene
 var crystal_instance
 var _stack_face: SubViewport
+## The wording the stack face was built with (enter_zone(STACK, wording)), so a stand-in can show the same face.
+var stack_face_wording: String = ""
 var _printed_texture: Texture2D
 var mat: ShaderMaterial
 @export var tapped = false;
@@ -84,6 +86,9 @@ var extra_auras: Array = []
 ## A code-defined event on a stack copy. NONE for ordinary JSON effects and real cards.
 var effect_event: int = EVENTS.Event.NONE
 var effect_event_data: Dictionary = {}
+## WHICH auto-ability of the source this copy is: its index in CardEffect.auto_abilities(). Two abilities on the same
+## event (Gadot's two enter-the-field abilities) are two copies with different indices. -1 = not a code auto-ability.
+var effect_ability_index: int = -1
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
 ## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
 var effect_targets: Array[Card] = []
@@ -601,6 +606,8 @@ func tween_to_scale(to_scale: float, seconds: float) -> void:
 ## scale, drops every transient marker (drag, target glow, mana crystal) and shows
 ## or hides the field readout. Positions stay the zone's own business.
 func enter_zone(zone: Zone, stack_wording: String = "") -> void:
+	if zone == Zone.STACK:
+		stack_face_wording = stack_wording if not stack_wording.is_empty() else stack_face_wording
 	if zone == Zone.STACK and _stack_face == null:
 		_stack_face = preload("res://scenes/cards/stack_ability_face.tscn").instantiate()
 		add_child(_stack_face)

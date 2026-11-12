@@ -197,14 +197,18 @@ func _check_earth_launch(game: Node) -> void:
 			motion = card.damage_fx.play_earth_launch(amount, seed_value)
 			motion.pause()
 			var contact_time := card.damage_fx.earth_contact_seconds
-			var bounded_waver := true
-			var visible_waver := false
-			for _sample in range(24):
+			# The thrown card flips end over end (pitch) and is flat again well before it lands: a whole number of
+			# turns, with the spin dying out, so the landing needs no correction.
+			var flipped := false
+			var late_tilt := 0.0
+			for step in range(24):
 				motion.custom_step(contact_time / 25.0)
 				var tilt := card.hand_mesh.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY)
-				bounded_waver = bounded_waver and tilt < deg_to_rad(14.0)
-				visible_waver = visible_waver or tilt > deg_to_rad(1.0)
-			_expect(bounded_waver and visible_waver, "Earth card gently wavers without full rotations throughout the arc")
+				flipped = flipped or tilt > deg_to_rad(150.0)
+				if step >= 21:
+					late_tilt = maxf(late_tilt, tilt)
+			_expect(flipped and late_tilt < deg_to_rad(12.0),
+				"Earth card flips over in the air and is nearly flat for the last stretch of the fall")
 			motion.custom_step(contact_time / 25.0 + 0.00001)
 			var contact: Transform3D = contact_poses.front()
 			var world_offset: Vector3 = card.global_basis * contact.origin
@@ -275,18 +279,37 @@ func _check_earth_launch(game: Node) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_expect(game.find_children("EarthDefeatProxy*", "Node3D", true, false).is_empty(),
-		"lethal Earth damage creates no airborne Card proxy")
-	_expect(game.find_children("CardShards*", "Node3D", true, false).size() == shards_before + 1,
-		"lethal Earth hit uses exactly one normal immediate break effect")
-	_expect(card.visible and not card.damage_fx.is_reacting(),
-		"broken card stays visible in the Break Zone without airborne motion")
-	var totem_at_hit := false
-	for cue_node in Vfx.get_children():
-		for effect in cue_node.get_children():
-			if effect is Node3D and effect.has_node("Lift") and effect.has_node("BaseRocks"):
-				totem_at_hit = effect.global_position.distance_to(Vector3(snapshot.origin.x, _field.global_position.y, snapshot.origin.z)) < 0.001
-	_expect(totem_at_hit, "lethal Earth hit still erupts at the original field position")
+	# THE BREAK IS STAGED: a stand-in holds the card on its slot, a golden crystal grows up through it, and it shatters
+	# only when the crystal starts to sink (earth_break_crystal.gd). The real card waits, hidden, in the Break Zone.
+	var held: Array = game.find_children("HeldCard*", "Node3D", true, false)
+	_expect(held.size() == 1 and not card.visible
+		and game.find_children("CardShards*", "Node3D", true, false).size() == shards_before,
+		"lethal Earth damage holds the card on its slot (stand-in, real card hidden) instead of shattering at once")
+	var crystals: Array = game.find_children("EarthBreakCrystal*", "Node3D", true, false)
+	_expect(crystals.size() == 1, "and a crystal grows up through it")
+	await get_tree().create_timer(0.55).timeout
+	_expect(held.size() == 1 and is_instance_valid(held[0])
+		and (held[0] as Node3D).global_position.distance_to(snapshot.origin) < 0.03,
+		"the card stays on its slot (it is not carried) while the crystal stands")
+	await get_tree().create_timer(0.45).timeout
+	_expect(game.find_children("HeldCard*", "Node3D", true, false).size() == 1
+		and game.find_children("CardShards*", "Node3D", true, false).size() == shards_before,
+		"the card is still whole while the crystal sinks and vanishes from the top down")
+	await get_tree().create_timer(0.75 + preload("res://scripts/vfx/earth_break_crystal.gd").BUILDUP).timeout
+	_expect(game.find_children("CardShards*", "Node3D", true, false).size() == shards_before + 1
+		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and card.visible,
+		"it shatters once the crystal has gone back down, and the real card shows in the Break Zone")
+	await Vfx.idle()
+	# A break BY EFFECT from an Earth source gets the same impale.
+	var victim: Card = game.create_card(41, "opponent")
+	game.add_child(victim)
+	_field.play_card(victim, true, false)
+	await get_tree().process_frame
+	ctx.break_cards([victim])
+	await get_tree().process_frame
+	_expect(not victim.is_on_field() and game.find_children("HeldCard*", "Node3D", true, false).size() == 1
+		and game.find_children("EarthBreakCrystal*", "Node3D", true, false).size() == 1,
+		"an Earth effect that breaks a card outright gets the crystal too")
 	await get_tree().create_timer(3.0).timeout
 	source.queue_free()
 	var demo = preload("res://tools/earth_damage_demo.tscn").instantiate()

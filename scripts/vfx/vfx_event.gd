@@ -15,6 +15,14 @@ enum Kind {
 	## A zone move or other board presentation. The rules have ALREADY changed the state; `presenter` only animates
 	## it (reparent, fly, lay out). Run in queue order like every other event.
 	PRESENT,
+	## Cards an EFFECT broke outright (no damage), for an element whose preset stages it (`VfxPreset.effect_break`).
+	## Played by the element's impact scene at the maximum tier; `target_visuals[id].shatter` asks the cue to burst
+	## the card at its impact, since the immediate break shatter was held back for it. (Appended: values are stable.)
+	EFFECT_BREAK,
+	## A stack object was COUNTERED (Stack.cancel_stack_card). The rules already moved the card to the Break Zone; it is
+	## HELD on its stack spot (`target_visuals[id].stand_in`) while it malfunctions and shatters (counter_cue.gd).
+	## Element-independent. (Appended: values are stable.)
+	COUNTERED,
 }
 
 var kind: Kind = Kind.STATUS_APPLIED

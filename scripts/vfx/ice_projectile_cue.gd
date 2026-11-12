@@ -18,6 +18,22 @@ func play(event: VfxEvent) -> void:
 		var pose: Transform3D = visual.transform
 		var projectile := PROJECTILE.instantiate()
 		add_child(projectile)
+		# Harder hits conjure a bigger crystal of a different cut, raised higher before the drop.
+		projectile.set_damage_tier(event.damage_tier())
+		# THE BOARD CAMERA LOOKS ALMOST STRAIGHT DOWN, from close by. Held straight up, the crystal drifts up the screen
+		# away from its target and is seen end-on. So the two are split:
+		#   * it is HELD mostly along the line to the camera, which keeps it over its target on screen (the drop then
+		#     reads as the crystal coming down at the table), with a little lift up the screen;
+		#   * its long axis lies mostly ALONG the screen, so it is seen side-on, point aimed down at the card.
+		var camera := get_viewport().get_camera_3d()
+		if camera != null:
+			var toward_camera: Vector3 = (camera.global_position - projectile.global_position).normalized()
+			var screen_up := camera.global_basis.y.normalized()
+			var held: Vector3 = (toward_camera * 0.95 + screen_up * 0.12).normalized()
+			var axis: Vector3 = (screen_up * 0.75 + toward_camera * 0.65).normalized()
+			var to_local: Basis = projectile.global_basis.inverse()
+			projectile.fall_direction = to_local * held
+			projectile.spike_axis = to_local * axis
 		projectile.global_position = Vector3(pose.origin.x, maxf(pose.origin.y, float(visual.floor_y)) + 0.015, pose.origin.z)
 		var delay := float(i) * (0.35 if event.mode == "sequence" else 0.20)
 		var start := create_tween()

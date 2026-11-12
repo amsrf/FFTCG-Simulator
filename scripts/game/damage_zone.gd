@@ -8,6 +8,8 @@ var game: Game:
 # The list of cards in the hand
 
 const CARD_CHARGE = 2
+## How long a damage card flies from the deck to its slot. The EX BURST reveal starts as it lands.
+const FLIGHT_SECONDS := 1.3
 
 var cards = []
 var deck: Node = null
@@ -62,8 +64,8 @@ func draw(card):
 	card.reparent(path_follow)
 
 	# Animate the card along the path
-	tween.tween_property(path_follow, "progress_ratio", 1.0, 1.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	tween.parallel().tween_property(card, "scale", Vector3(1.2, 1.2, 1.2), 1.3)
+	tween.tween_property(path_follow, "progress_ratio", 1.0, FLIGHT_SECONDS).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tween.parallel().tween_property(card, "scale", Vector3(1.2, 1.2, 1.2), FLIGHT_SECONDS)
 	tween.parallel().tween_property(card, "rotation_degrees", Vector3.ZERO, 0.7)
 
 	# Reparent the card back to its original parent after the animation

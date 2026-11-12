@@ -18,6 +18,9 @@ var card_filter = null
 var destination: int = -1
 var player_scope: int = PlayerScope.ANY
 var requires_active: bool = false
+## What the stack face says. Empty = derived from the printed text (TriggerText); set it with .text() only when the
+## printed wording does not parse.
+var wording: String = ""
 
 
 func _init(p_event: int, p_handler: Callable) -> void:
@@ -54,6 +57,12 @@ func opponent_only():
 
 func active_only():
 	requires_active = true
+	return self
+
+
+## Override the stack face's wording for this ability (the printed text did not parse).
+func text(value: String):
+	wording = value
 	return self
 
 

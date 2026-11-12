@@ -287,6 +287,25 @@ static func cecil_damage() -> Dictionary:
 	return cfg
 
 
+## EX BURST REVEAL. Press Y to take 1 damage: the top five cards of your deck all have EX BURST, so every hit lands
+## through your damage camera with the reveal (gold aura, pulses, "EX BURST" title), and the burst itself follows.
+## In order: Ifrit (4000 to a Forward), Shiva (dull + Freeze), Ramuh (5000 to an active Forward), Gippal (no target:
+## your Forwards +4000) and Valefor (3000 to every opponent Forward). The opponent Forwards are sturdy so the damage
+## shows; Bard is on your side so Gippal has something to pump. Opponent is passive.
+const EX_BURST_TOP: Array = [4, 38, 143, 101, 198]
+
+static func ex_burst_reveal() -> Dictionary:
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_ex_burst"
+	cfg["opponent_type"] = "mock"
+	cfg["player_field"] = [{"id": BARD}]
+	cfg["player_hand"] = []
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": 47}, {"id": DARK_KNIGHT}]
+	cfg["opponent_hand"] = []
+	cfg["player_deck"] = EX_BURST_TOP + range(PLAYER_DECK_START + 10, PLAYER_DECK_START + DECK_SIZE)
+	return cfg
+
+
 static func cosmos_mana() -> Dictionary:
 	## MULTI-COLOUR MANA. Cosmos is the only source you need: start paying Ifrit, click Cosmos, and the eight
 	## colour crystals appear around it. The opponent has one legal Ifrit target so the Summon can actually be cast.
@@ -398,6 +417,10 @@ const GROUNDS := {
 		"title": "Ground: Wakka 216 (nullify abilities)",
 		"blurb": "Attack with Wakka to pump a Forward per controlled Forward, or use Status Reels (S + water) on Cloud: it loses all abilities and its power becomes 1000 until end of turn.",
 	},
+	"ex_burst": {
+		"title": "Ground: EX BURST reveal (take damage)",
+		"blurb": "Press Y to take 1 damage. The top five cards of your deck all have EX BURST: each hit shows the gold aura, pulses and the EX BURST title through your damage camera, then the burst resolves (Ifrit, Shiva, Ramuh, Gippal, Valefor). Opponent is passive.",
+	},
 	"cosmos": {
 		"title": "Ground: Cosmos 183 (any-colour mana)",
 		"blurb": "Play Ifrit from hand and start paying. Click Cosmos: eight small crystals appear around it, evenly spaced. Hover to grow one, click to generate that colour. Then target Squall.",
@@ -448,6 +471,8 @@ static func config(name: String) -> Dictionary:
 			return wakka_status()
 		"cosmos":
 			return cosmos_mana()
+		"ex_burst":
+			return ex_burst_reveal()
 		"tama":
 			return tama_x()
 		"golbez":
@@ -474,6 +499,7 @@ const CATEGORY_OF := {
 	"kimahri": "Card Effects",
 	"wakka": "Card Effects",
 	"cosmos": "Card Effects",
+	"ex_burst": "Card Effects",
 	"tama": "Abilities & Targeting",
 	"golbez": "Card Effects",
 	"break_zone": "Zones",

@@ -3,11 +3,11 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## 1-063 enter-the-field ability
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field"),
-		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+		trigger(EVENTS.Event.ATTACK, "when_attack"),
+	]
 
 
 func when_enter_field(ctx: EFFECT_CONTEXT) -> void:

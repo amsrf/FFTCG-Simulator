@@ -20,6 +20,9 @@ const REACTION_SIDE := [0.006, 0.012, 0.018, 0.025]
 ## Earth launch follows gravity and returns exactly to the mesh's resting pose.
 const EARTH_LAUNCH_HEIGHTS: Array[float] = [1.0, 1.6, 2.2, 2.9]
 const EARTH_LAUNCH_GRAVITY := 9.8
+## Whole PITCH turns the thrown card makes in the air, per damage tier. Whole turns, with the spin dying out toward
+## touchdown, so it comes down flat on its slot and needs no correction on landing.
+const EARTH_LAUNCH_TURNS: Array[int] = [1, 1, 2, 2]
 signal earth_landed
 
 ## Card is a Node3D; kept untyped so this file and card.gd do not depend on each other's class_name.
@@ -85,8 +88,9 @@ func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> 
 	var velocity := EARTH_LAUNCH_GRAVITY * duration * 0.5
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	# Small bounded wavering replaces full turns. The envelope fades away
-	# before touchdown, preserving the planned landing pose.
+	# The card flips end over end (pitch) a whole number of times; a small bounded wavering rides on top. Both fade
+	# away before touchdown, preserving the planned landing pose.
+	var turns := float(EARTH_LAUNCH_TURNS[VfxEvent.damage_tier_for(damage)]) * (1.0 if rng.randf() < 0.5 else -1.0)
 	var frequencies := Vector3(rng.randf_range(5.0, 7.0), rng.randf_range(3.0, 5.0), rng.randf_range(4.0, 6.0))
 	var phases := Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
 	var excursion := Vector3(rng.randf_range(-0.045, 0.045), 0.0, rng.randf_range(-0.035, 0.035))
@@ -104,7 +108,11 @@ func play_earth_launch(damage: int, seed_value: int = 1, delay: float = 0.0) -> 
 			sin(time * frequencies.y + phases.y) * deg_to_rad(3.0),
 			sin(time * frequencies.z + phases.z) * deg_to_rad(6.0)) * envelope
 		angles += landing_tilt * smoothstep(0.65, 0.94, p)
-		var orientation := Basis(Vector3.RIGHT, angles.x) * Basis(Vector3.UP, angles.y) * Basis(Vector3.BACK, angles.z)
+		# Spin speed follows 1 - cos: nothing at the launch, fastest at the top of the arc, nothing again at the
+		# landing - so the last stretch of the fall is the card arriving flat, not a rotation being stopped.
+		var spin := TAU * turns * (p - sin(TAU * p) / TAU)
+		var orientation := Basis(Vector3.RIGHT, spin) * Basis(Vector3.RIGHT, angles.x) * Basis(Vector3.UP, angles.y) \
+			* Basis(Vector3.BACK, angles.z)
 		return Transform3D(orientation, position_local)
 	# First corner contact ends the free fall. The centre need not reach zero:
 	# a tilted card touches the ground earlier than a flat one.

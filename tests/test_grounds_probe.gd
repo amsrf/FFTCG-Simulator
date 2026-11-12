@@ -182,6 +182,17 @@ func _ready() -> void:
 	_expect(cecil["opponent_field"].size() == 3, "with three opponent Forwards to choose from")
 	_expect(cecil["opponent_type"] == "mock", "the opponent is passive, so only your Y key causes damage")
 	_expect(cecil["player_deck"].size() >= 7, "the deck has enough cards for repeated Y presses")
+	var ex: Dictionary = GROUNDS.ex_burst_reveal()
+	var ex_top: Array = ex["player_deck"].slice(0, GROUNDS.EX_BURST_TOP.size())
+	_expect(ex_top == GROUNDS.EX_BURST_TOP and ex["player_deck"].size() >= 7,
+		"the EX BURST ground stacks five EX BURST cards on top of your deck (%s)" % str(ex_top))
+	var ex_all_burst := true
+	for id in GROUNDS.EX_BURST_TOP:
+		var probe_effect = load("res://assets/effects/card_%d.gd" % int(id)).new()
+		ex_all_burst = ex_all_burst and int(probe_effect.ex_burst_event()) != 0
+	_expect(ex_all_burst, "and every one of them really has an EX BURST")
+	_expect(ex["opponent_type"] == "mock" and ex["opponent_field"].size() == 3,
+		"with a passive opponent and three Forwards for the bursts to hit")
 
 	# --- boot one for real -------------------------------------------------------------------------------
 	# The party ground is the one that must not move on its own, so it is the most useful smoke test.

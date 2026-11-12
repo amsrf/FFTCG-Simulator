@@ -1,5 +1,6 @@
 extends Node
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## POWER_CHANGE_TARGETS probe.
 ##
 ## Two things can be wrong here and they are separate:
@@ -115,8 +116,9 @@ func _ready() -> void:
 
 	# --- the data wiring: card 7 ------------------------------------------------------------------------
 	var card7_effect = load("res://assets/effects/card_7.gd").new()
-	_expect(card7_effect.has_method("when_enter_field"),
-		"card 7's ETB power change is code-owned")
+	var card7_etb: Array[int] = card7_effect.triggered_abilities(EVENTS.Event.ENTER_FIELD)
+	_expect(card7_etb.size() == 2 and card7_effect.has_method("pump_forwards"),
+		"card 7 declares TWO enter-the-field abilities, the power change among them (%d)" % card7_etb.size())
 
 	print("[PowerAll] card 7 is %s" % str(db[6].get("name_en", "?")))
 	_finish()

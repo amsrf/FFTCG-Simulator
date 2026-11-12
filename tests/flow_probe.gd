@@ -18,6 +18,8 @@ extends Node3D
 ## It says nothing about how any of it LOOKS.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 ## Card 31 (Chemist) has `when_enter_field` with `choose_target {"is_type": "Forward"}`,
 ## and it is in the debug preset's opening hand. That preset is unshuffled with a fixed
 ## seed, so this is stable run to run.
@@ -194,6 +196,11 @@ func _ready() -> void:
 		return
 	_expect(arrow._source_card == copy,
 		"the arrow comes from the effect copy in the stack, not the field card")
+	# A RESOLVING CARD STAYS ON THE STACK until its effect has fully finished. It used to leave the layout the moment
+	# resolution began, so a Gadot vanished before the player had chosen anything.
+	_expect(stack.layout_cards().has(copy) and copy.get_parent() == stack,
+		"the resolving copy is still laid out on the stack while its choice is open")
+	_expect(not stack.cards.has(copy), "the resolving copy is no longer a legal stack object (out of `cards`)")
 
 	# 3. Exactly the legal targets were marked.
 	var valid: Array[String] = []
@@ -248,9 +255,14 @@ func _ready() -> void:
 	if etb_assistant != null:
 		etb_assistant.call("on_target_complete")
 		await get_tree().process_frame
-		while stack.stack_length() > 0:
-			await stack.resolve_top_effect()
+		while stack.stack_length() > 0 or stack.resolution_pending:
+			if stack.stack_length() > 0:
+				await stack.resolve_top_effect()
+			else:
+				await stack.resolution_complete
 	await get_tree().process_frame
+	_expect(not is_instance_valid(copy) or not stack.layout_cards().has(copy),
+		"once the effect has resolved, its copy has left the stack layout")
 
 	# ---- The OPPONENT casts a Summon. Two things must hold: the arc comes from the card in
 	# ---- the stack, and a choice that is not ours never puts the blue ring on our cards.
@@ -510,6 +522,12 @@ func _ready() -> void:
 
 	await _check_opponent_translation(game)
 	await _check_demo_stack_fan()
+	# A fresh, clean board for the simultaneous-trigger check: the AI board above has its own stack history.
+	await Vfx.idle()
+	game.queue_free()
+	await get_tree().process_frame
+	await _check_simultaneous_triggers()
+	await _check_gadot_played_from_hand()
 
 	_report()
 	get_tree().quit()
@@ -957,9 +975,190 @@ func _check_opponent_translation(game) -> void:
 	_expect(card.position.distance_to(stack.calculate_card_position(card.index)) < 0.001,
 		"translation ends at the real stack slot")
 
+	var spot: Vector3 = card.global_position
 	stack.cancel_stack_card(card)
 	_expect(card.current_zone == Card.Zone.GRAVEYARD and card.mat.get_shader_parameter("texture_albedo") == original,
 		"leaving the stack restores the printed Break Zone face")
+	# COUNTERED: the rules moved it at once; on screen a stand-in wearing its stack face stays on its spot, shorts
+	# out, turns cyan and shatters (scripts/vfx/counter_cue.gd). The real card waits hidden in the Break Zone.
+	var held: Array = game.find_children("HeldCard*", "Node3D", true, false)
+	_expect(held.size() == 1 and not card.visible
+		and (held[0] as Card).global_position.distance_to(spot) < 0.05
+		and (held[0] as Card).current_zone == Card.Zone.STACK and (held[0] as Card).has_node("StackAbilityFace"),
+		"a countered card is held on its stack spot by a stand-in with its stack face, the real card hidden")
+	var countered := Vfx.get_events().filter(func(e) -> bool:
+		return e.kind == VfxEvent.Kind.COUNTERED and e.targets.has(card))
+	_expect(countered.size() == 1, "cancelling a stack object emits one COUNTERED event")
+	# The cue plays in its turn in the presentation queue: time it from when it STARTS.
+	var cue_wait := 0.0
+	while cue_wait < 6.0 and game.find_children("CounterArcs", "MeshInstance3D", true, false).is_empty():
+		await get_tree().process_frame
+		cue_wait += get_process_delta_time()
+	print("[FlowProbe] counter cue started %.2f s after the cancel" % cue_wait)
+	await get_tree().create_timer(0.4).timeout
+	_expect(game.find_children("CounterArcs", "MeshInstance3D", true, false).size() == 1 and not card.visible,
+		"electric arcs crackle over the held card while the real card stays hidden")
+	await get_tree().create_timer(1.2).timeout
+	_expect(Vfx.find_children("CounterShard*", "MeshInstance3D", true, false).size() > 20
+		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and card.visible,
+		"it shatters into cyan pieces, the stand-in goes and the real card shows in the Break Zone")
+	await Vfx.idle()
+	await get_tree().process_frame
+	_expect(Vfx.find_children("CounterShard*", "MeshInstance3D", true, false).is_empty(),
+		"the pieces are gone when the cue finishes")
+
+## GADOT 1-007: TWO enter-the-field auto-abilities are TWO stack objects, and their cards fly in STAGGERED, not together.
+func _check_simultaneous_triggers() -> void:
+	MatchSetup.config = TEST_GROUNDS.config("clean")
+	var game = GAME_SCENE.instantiate()
+	add_child(game)
+	await get_tree().process_frame
+	game.player_agent = MockAgent.new()      # MockAgent accepts a "may" and picks the first legal hand card
+	game.player_agent.bind(game)
+	game.opponent_agent = MockAgent.new()
+	game.opponent_agent.bind(game)
+	var field = game.field
+	var stack: Stack = game.stack
+	var gadot: Card = game.create_card(7, "player")
+	game.add_child(gadot)
+	field.play_card(gadot, false, false)       # setup placement: no ETB of its own
+	var wol: Card = game.create_card(5, "player")   # Warrior of Light: Fire Forward, cost 2, no auto-ability
+	game.add_child(wol)
+	game.hand.add_card(wol)
+	await get_tree().process_frame
+
+	var started: Array = []    # [card, msec]
+	var landed: Dictionary = {}  # card -> msec
+	stack.trigger_flight_started.connect(func(c: Card) -> void: started.append([c, Time.get_ticks_msec()]))
+	var queue_busy_at_landing: Array = []   # was the presentation queue still busy as each card landed?
+	stack.trigger_entered.connect(func(c: Card) -> void:
+		landed[c] = Time.get_ticks_msec()
+		queue_busy_at_landing.append(not Vfx.is_idle()))
+
+	field.execute_card_effect(gadot, EVENTS.Event.ENTER_FIELD)
+	# RULES FIRST: both stack objects exist in the same frame the abilities trigger, before any animation.
+	_expect(stack.cards.size() == 2, "Gadot entering puts TWO stack objects on the stack at once (%d)" % stack.cards.size())
+	if stack.cards.size() != 2:
+		return
+	var top: Card = stack.cards[1]
+	var bottom: Card = stack.cards[0]
+	_expect(top.effect_ability_index == 0 and bottom.effect_ability_index == 1,
+		"the FIRST printed ability is on top and resolves first (top %d, bottom %d)" % [top.effect_ability_index, bottom.effect_ability_index])
+	_expect(not top.visible and not bottom.visible, "neither card is drawn before its flight starts")
+
+	var waited := 0.0
+	while landed.size() < 2 and waited < 5.0:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	_expect(started.size() == 2 and landed.size() == 2, "both trigger cards flew in and landed (%d started, %d landed)" % [started.size(), landed.size()])
+	if started.size() != 2 or landed.size() != 2:
+		return
+	var gap: float = (started[1][1] - started[0][1]) / 1000.0
+	print("[FlowProbe] trigger launches %.3f s apart (stagger %.2f s)" % [gap, stack.trigger_stagger_seconds])
+	_expect(gap > 0.1, "the two trigger cards do NOT spawn together (%.3f s apart)" % gap)
+	_expect(absf(gap - stack.trigger_stagger_seconds) < 0.1,
+		"the second launches one stagger after the first (%.3f s vs %.2f s)" % [gap, stack.trigger_stagger_seconds])
+	_expect(started[1][1] < landed[started[0][0]],
+		"the flights overlap: the second starts before the first has landed")
+	_expect(started[0][0] == bottom and started[1][0] == top, "they launch in stack order, bottom first, top last")
+	_expect(queue_busy_at_landing.size() == 2 and queue_busy_at_landing[0],
+		"decisions still wait after the first landing: the group's presentation runs until the LAST card lands")
+	await get_tree().create_timer(0.4).timeout
+	for c in [bottom, top]:
+		_expect(c.visible and not stack._incoming_triggers.has(c) and not stack._trigger_flights.has(c)
+			and c.position.distance_to(stack.calculate_card_position(c.index)) < 0.01,
+			"stack card %d settled visible in its own slot" % c.effect_ability_index)
+
+	# THE FACE SAYS WHAT EACH ABILITY DOES, not "When Gadot enters the field". The face breaks short text into lines.
+	var faces: Array[String] = []
+	for c in [top, bottom]:
+		var face = c.get_node_or_null("StackAbilityFace")
+		faces.append(face.get_node("Ability").text.replace("
+", " ") if face != null else "<no face>")
+	print("[FlowProbe] Gadot stack faces: %s" % str(faces))
+	_expect(faces[0] == "You may play 1 Fire Forward of cost 2 or less from your hand onto the field.",
+		"the top stack card shows ONLY the play sentence")
+	_expect(faces[1] == "All the Forwards you control gain +1000 power until the end of the turn.",
+		"the bottom stack card shows ONLY the +1000 sentence")
+
+	await stack.resolve_top_effect()
+	await get_tree().process_frame
+	_expect(wol.is_on_field(), "ability 0 resolves first: the Fire Forward is played from hand")
+	await stack.resolve_top_effect()
+	await get_tree().process_frame
+	_expect(gadot.power == 5000 and wol.power == 6000,
+		"ability 1 then gives +1000 to every Forward, including the one just played (Gadot %d, WoL %d)" % [gadot.power, wol.power])
+	_expect(stack.cards.is_empty(), "both of Gadot's abilities have resolved")
+	await Vfx.idle()
+	game.queue_free()
+	await get_tree().process_frame
+
+## The REAL play: Gadot cast from hand, paid, teleported in, and his two abilities triggering while that presentation
+## is still queued. Records each trigger card every frame so a missing flight shows up as "visible but never moved".
+func _check_gadot_played_from_hand() -> void:
+	MatchSetup.config = TEST_GROUNDS.config("clean")
+	var game = GAME_SCENE.instantiate()
+	add_child(game)
+	await get_tree().process_frame
+	game.player_agent = AIAgent.new()        # pays the cost itself, like an opponent would
+	game.player_agent.bind(game)
+	game.opponent_agent = MockAgent.new()
+	game.opponent_agent.bind(game)
+	var field = game.field
+	var stack: Stack = game.stack
+	for id in [8, 10]:   # two Fire Backups to pay Gadot's 2
+		var b: Card = game.create_card(id, "player")
+		game.add_child(b)
+		field.play_card(b, false, false)
+	var gadot: Card = game.create_card(7, "player")
+	game.add_child(gadot)
+	game.hand.add_card(gadot)
+	await get_tree().process_frame
+	game.turn_owner = 1
+
+	var started: Dictionary = {}
+	stack.trigger_flight_started.connect(func(c: Card) -> void: started[c] = Time.get_ticks_msec())
+	var played: bool = await game.play_card_for(1, gadot)
+	_expect(played, "Gadot is cast from hand through the real payment path")
+	# Watch the trigger cards until both landed (or give up).
+	var seen: Dictionary = {}   # card -> {first_visible_ms, launched_ms, path_length, last_pos}
+	var waited := 0.0
+	while waited < 8.0:
+		for c in stack.cards:
+			if c.effect_source != gadot:
+				continue
+			var rec: Dictionary = seen.get(c, {"visible_at": -1, "path": 0.0, "last": c.global_position, "from": Vector3.ZERO})
+			if c.visible and rec["visible_at"] < 0:
+				rec["visible_at"] = Time.get_ticks_msec()
+				rec["from"] = c.global_position
+			if c.visible:
+				rec["path"] += (c.global_position - rec["last"]).length()
+			rec["last"] = c.global_position
+			seen[c] = rec
+		if seen.size() == 2 and started.size() == 2 and not stack._trigger_flights.has(seen.keys()[0]) 				and not stack._trigger_flights.has(seen.keys()[1]):
+			break
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	print("[FlowProbe] played Gadot: stack %d, flights started %d, records %s" % [stack.cards.size(), started.size(),
+		str(seen.values().map(func(r): return "visible@%d path %.2f" % [r["visible_at"], r["path"]]))])
+	_expect(seen.size() == 2, "playing Gadot puts his two abilities on the stack (%d)" % seen.size())
+	for c in seen:
+		_expect(started.has(c), "trigger card %d had a flight" % c.effect_ability_index)
+		_expect(started.has(c) and seen[c]["visible_at"] >= started[c],
+			"trigger card %d is not drawn before its flight starts" % c.effect_ability_index)
+		var chord: float = (seen[c]["last"] - seen[c]["from"]).length()
+		_expect(seen[c]["path"] > 1.0, "trigger card %d visibly travelled to the stack (%.2f m)" % [c.effect_ability_index, seen[c]["path"]])
+		# Two flights in the air at once once leapfrogged each other toward the camera: a 168 m path for a 2.7 m trip.
+		# The flight is an arc up the screen, so a normal one is about 2.4x its chord.
+		_expect(seen[c]["path"] < chord * 4.0,
+			"trigger card %d flew a sane path, not off toward the camera (%.2f m for a %.2f m trip)" % [c.effect_ability_index, seen[c]["path"], chord])
+	if seen.size() == 2:
+		var paths: Array = seen.values().map(func(r): return r["path"])
+		_expect(absf(paths[0] - paths[1]) < 0.1 * maxf(paths[0], paths[1]),
+			"both overlapping flights take the same path (%.2f m / %.2f m): neither disturbs the other" % [paths[0], paths[1]])
+	await Vfx.idle()
+	game.queue_free()
+	await get_tree().process_frame
 
 func _find_by_id(cards: Array, card_id: int) -> Card:
 	for c in cards:

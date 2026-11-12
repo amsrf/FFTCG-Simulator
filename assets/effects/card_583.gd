@@ -5,10 +5,10 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 ## Auto-ability: targets, if any, are chosen when the ability resolves.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.PARTY_ATTACKS: Callable(self, "when_party_attacks"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.PARTY_ATTACKS, "when_party_attacks"),
+	]
 
 
 func when_party_attacks(ctx: EFFECT_CONTEXT) -> void:

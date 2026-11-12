@@ -70,22 +70,28 @@ func _ready() -> void:
 	# the Character fade, and only then does the field teleport begin.
 	_assistant.on_charge_complete()
 	await get_tree().create_timer(0.10).timeout
-	_expect(card.get_parent() == _hand,
-		"during the shine the card is still in its hand-side stance")
-	_expect(card.global_position.distance_to(source_position) < 0.02,
-		"and it does not move while shining")
-	_expect(_param(card, "teleport_glow") > 0.05,
-		"the source glow is rising")
-	_expect(_param(card, "teleport_reveal") <= 0.001,
-		"the source card itself is turning into the white silhouette")
+	# The source half plays on a stand-in (CardTeleport.play_out_ghost) left where the card was drawn, so the field
+	# build can start while it is still dissolving.
+	var ghost: MeshInstance3D = card.teleport.source_ghost
+	_expect(ghost != null and is_instance_valid(ghost),
+		"the source dissolve plays on a stand-in")
+	if ghost != null and is_instance_valid(ghost):
+		_expect(ghost.global_position.distance_to(source_position) < 0.05,
+			"which stays where the card was")
+		var ghost_mat := ghost.get_surface_override_material(0) as ShaderMaterial
+		_expect(float(ghost_mat.get_shader_parameter("teleport_glow")) > 0.05,
+			"the source glow is rising")
+		_expect(float(ghost_mat.get_shader_parameter("teleport_reveal")) <= 0.001,
+			"the source is turning into the white silhouette")
 	var source_halo = card.teleport.halo
 	_expect(source_halo == null or not source_halo.visible,
 		"the source has no overflow halo")
-	_expect(card.visible, "the source has not disappeared too early")
 
-	await get_tree().create_timer(0.50).timeout
+	await get_tree().create_timer(0.15).timeout
+	_expect(ghost != null and is_instance_valid(ghost),
+		"the source is STILL dissolving when the destination starts (the two overlap)")
 	_expect(card.get_parent() == _field,
-		"after the source fade the card is reparented to the Field")
+		"after the short head start the card is reparented to the Field")
 	_expect(card.current_zone == Card.Zone.FIELD,
 		"and its zone is Field")
 	_expect(card.visible, "the destination card is present while it resolves")
@@ -101,7 +107,7 @@ func _ready() -> void:
 	_expect(destination_halo == null or not destination_halo.visible,
 		"the destination does not draw a full-card halo during the build")
 
-	await get_tree().create_timer(0.70).timeout
+	await get_tree().create_timer(0.60).timeout
 	_expect(_param(card, "teleport_progress") <= 0.001,
 		"the scattered block build completes")
 	_expect(_param(card, "teleport_reveal") <= 0.001,
@@ -112,7 +118,7 @@ func _ready() -> void:
 	_expect(glow_halo != null and glow_halo.visible,
 		"the full-card halo appears only after the build is complete")
 
-	await get_tree().create_timer(0.35).timeout
+	await get_tree().create_timer(0.45).timeout
 	_expect(_param(card, "teleport_reveal") > 0.001 and _param(card, "teleport_reveal") < 0.999,
 		"the artwork begins revealing only after the build")
 	_expect(_param(card, "teleport_glow") > 0.001,
@@ -129,6 +135,8 @@ func _ready() -> void:
 	_expect(final_halo == null or not final_halo.visible,
 		"the halo is gone once the card is revealed")
 	_expect(card.visible, "the fully materialised card is visible")
+	_expect(card.power_label != null and card.power_label.visible,
+		"the power/damage readout is shown under the cast Forward")
 	_expect(_field.front_cards.has(card), "the card is in the Field row")
 	_expect(not card.ring_cast_pending(), "and the thin gold cast-pending aura is gone")
 

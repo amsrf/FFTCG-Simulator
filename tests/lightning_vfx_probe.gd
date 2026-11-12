@@ -109,8 +109,86 @@ func _ready() -> void:
 		_expect(event.damage_tier() == expected,
 			"%d damage resolves to tier %d" % [amount, expected])
 
+	await _check_effect_break(game, field, origin)
+
 	print("[LightningVfx] %d checks | failures: %d" % [_checks, _fails])
 	print("[LightningVfx] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	game.queue_free()
 	await get_tree().process_frame
 	get_tree().quit()
+
+
+## A lightning effect that BREAKS a card outright (no damage) gets the maximum-tier strike, and the card shatters at
+## the bolt's impact, where it was - not at once, and not in the Break Zone it has already been moved to.
+func _check_effect_break(game: Node, field, origin: Card) -> void:
+	await Vfx.idle()
+	var victim: Card = game.create_card(41, "opponent")
+	game.add_child(victim)
+	field.play_card(victim, true, false)
+	await get_tree().process_frame
+	var where: Vector3 = victim.global_position
+	var shards_before: int = _shard_count()
+	Vfx.clear_events()
+	var ctx = EFFECT_CONTEXT.new(game, origin, "test", {}, origin, [victim])
+	ctx.break_cards([victim])
+	_expect(not victim.is_on_field(), "a lightning break by effect still breaks the card at once (rules)")
+	var breaks: Array = Vfx.get_events().filter(func(e): return e.kind == VfxEvent.Kind.EFFECT_BREAK)
+	_expect(breaks.size() == 1 and breaks[0].damage_tier() == 3 and breaks[0].element == "雷",
+		"it emits one EFFECT_BREAK event at the maximum damage tier")
+	_expect(_shard_count() == shards_before, "the card does not shatter before the bolt lands")
+	var held: Array = get_tree().root.find_children("HeldCard*", "", true, false)
+	_expect(held.size() == 1 and (held[0] as Node3D).global_position.distance_to(where) < 0.01 and held[0].visible
+		and not victim.visible, "until then a stand-in holds the card on its slot, and the real card is hidden in the pile")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var cue: Node = null
+	for child in Vfx.get_children():
+		if child.has_method("strike_count"):
+			cue = child
+	_expect(cue != null and int(cue.call("strike_count")) == 1, "the lightning cue strikes the broken card")
+	var strike: Node = cue.get_child(0) if cue != null and cue.get_child_count() > 0 else null
+	_expect(strike != null and (strike.get("_target_position") as Vector3).distance_to(where) < 0.01,
+		"the bolt lands where the card was, not on the Break Zone pile")
+	await get_tree().create_timer(0.25).timeout
+	_expect(_shard_count() > shards_before, "the card shatters at the impact")
+	_expect(victim.visible and get_tree().root.find_children("HeldCard*", "", true, false).is_empty(),
+		"and then the stand-in is gone and the real card shows in the Break Zone")
+
+	# A card protection keeps on the field is struck all the same, and survives it.
+	await Vfx.idle()
+	var guarded: Card = game.create_card(41, "opponent")
+	game.add_child(guarded)
+	field.play_card(guarded, true, false)
+	guarded.add_status_effect("unbreakable", 1)
+	await get_tree().process_frame
+	Vfx.clear_events()
+	var guarded_before: int = _shard_count()
+	EFFECT_CONTEXT.new(game, origin, "test", {}, origin, [guarded]).break_cards([guarded])
+	var guarded_events: Array = Vfx.get_events().filter(func(e): return e.kind == VfxEvent.Kind.EFFECT_BREAK)
+	await get_tree().create_timer(0.30).timeout
+	_expect(guarded.is_on_field() and guarded_events.size() == 1 and _shard_count() == guarded_before
+		and get_tree().root.find_children("HeldCard*", "", true, false).is_empty() and guarded.visible,
+		"a protected card is struck anyway and survives: no stand-in, no shatter")
+
+	# An element without a staged break keeps the plain immediate shatter and gets no strike.
+	await Vfx.idle()
+	var fire_source: Card = game.create_card(1, "player")
+	game.add_child(fire_source)
+	var plain: Card = game.create_card(41, "opponent")
+	game.add_child(plain)
+	field.play_card(plain, true, false)
+	await get_tree().process_frame
+	Vfx.clear_events()
+	var before: int = _shard_count()
+	EFFECT_CONTEXT.new(game, fire_source, "test", {}, fire_source, [plain]).break_cards([plain])
+	_expect(Vfx.get_events().filter(func(e): return e.kind == VfxEvent.Kind.EFFECT_BREAK).is_empty()
+		and _shard_count() > before, "a break by an element without a staged break shatters at once, no strike")
+
+
+func _shard_count() -> int:
+	var shards_script: Script = preload("res://scripts/cards/card_shards.gd")
+	var count: int = 0
+	for node in get_tree().root.find_children("*", "Node3D", true, false):
+		if node.get_script() == shards_script:
+			count += 1
+	return count

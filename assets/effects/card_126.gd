@@ -2,10 +2,10 @@ extends "res://scripts/effects/card_effect.gd"
 ## 1-126 Orlandeau: when it attacks, deal 3000 to every opponent Forward.
 
 
-func handlers() -> Dictionary:
-	return {
-		EVENTS.Event.ATTACK: Callable(self, "when_attack"),
-	}
+func trigger_specs() -> Array:
+	return [
+		trigger(EVENTS.Event.ATTACK, "when_attack"),
+	]
 
 
 func when_attack(ctx: EFFECT_CONTEXT) -> void:

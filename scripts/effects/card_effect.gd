@@ -7,6 +7,7 @@ const COST_CONTEXT := preload("res://scripts/effects/cost_context.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const TRIGGER_SPEC := preload("res://scripts/effects/trigger_spec.gd")
+const TRIGGER_TEXT := preload("res://scripts/effects/trigger_text.gd")
 const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
 ## The engine-facing contract for code-defined card behavior.
 ##
@@ -14,26 +15,24 @@ const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
 ## cached per card id and shared by every copy of that card.
 ##
 ## There are three kinds of hook:
-##   * triggered events   -- declare event -> method in handlers(); the engine puts a stack object on the stack and
-##                           calls dispatch() with that event when it resolves
+##   * auto-abilities     -- one TriggerSpec per printed "When ..." ability in trigger_specs(); the engine puts ONE
+##                           stack object per ability on the stack and calls dispatch() with that ability's index
 ##   * continuous queries -- normal calls (current_elements, modify_cost, ...) made whenever the engine needs an answer
 ##   * replacement hooks  -- intercept something before it happens (future work)
 ##
 ## This file deliberately contains no card logic. A card subclass overrides only the hooks it needs.
 
-## THE TRIGGER DECLARATION. A card that handles an event puts exactly one entry here:
+## THE AUTO-ABILITY DECLARATION. One TriggerSpec per printed auto-ability, in PRINTED ORDER:
 ##
-##   func handlers() -> Dictionary:
-##       return { EVENTS.Event.ENTER_FIELD: Callable(self, "when_enter_field") }
+##   func trigger_specs() -> Array:
+##       return [
+##           trigger(EVENTS.Event.ENTER_FIELD, "play_fire_forward"),   # 1st "When Gadot enters the field"
+##           trigger(EVENTS.Event.ENTER_FIELD, "pump_forwards"),       # 2nd "When Gadot enters the field"
+##       ]
 ##
-## The engine reads the KEYS before putting anything on the stack; dispatch() reads the Callable later. One entry
-## answers both "should this trigger?" and "what runs?". The base is empty, so a card with no triggers costs nothing.
-func handlers() -> Dictionary:
-	return {}
-
-
-## Filtered trigger subscriptions. Use this instead of an event_matches() method: the filter is evaluated by the
-## engine BEFORE the stack object is created, while the card only supplies the event and the handler.
+## Two specs may share an event: each one is its own ability and becomes its own stack object. Optional filters on the
+## spec (card(), to_zone(), owner_only(), active_only()) are evaluated by the engine BEFORE the stack object exists.
+## The method names are free; the spec is what pairs the event with its handler.
 func trigger_specs() -> Array:
 	return []
 
@@ -44,26 +43,72 @@ func trigger(event: int, method: String):
 	return TRIGGER_SPEC.new(event, Callable(self, method))
 
 
+## THE ONE LIST the engine reads. An ability's position in it is its identity: the stack copy stores that index and
+## dispatch() runs exactly that entry, so two abilities on the same event can never be confused.
+func auto_abilities() -> Array:
+	var out: Array = []
+	for spec in trigger_specs():
+		if spec != null:
+			out.append(spec)
+	return out
+
+
+## Indices (into auto_abilities()) of the abilities this event triggers. With an EventContext the spec's filters are
+## evaluated (board events); without one only the event id is compared (the card's own events: enter, attack, ...).
+func triggered_abilities(event: int, event_ctx = null, source = null) -> Array[int]:
+	var out: Array[int] = []
+	var abilities: Array = auto_abilities()
+	for i in range(abilities.size()):
+		var spec = abilities[i]
+		if spec.event != event:
+			continue
+		if event_ctx != null and not spec.accepts(source, event_ctx):
+			continue
+		out.append(i)
+	return out
+
+
 func handles_event(event: int) -> bool:
-	var specs: Array = trigger_specs()
-	if not specs.is_empty():
-		for spec in specs:
-			if spec != null and spec.event == event:
-				return true
-		return false
-	return handlers().has(event)
+	for spec in auto_abilities():
+		if spec.event == event:
+			return true
+	return false
 
 
-## One place maps the event id to the card's method. No has_method() lookup and no string method name at the call site.
-func dispatch(event: int, ctx: EFFECT_CONTEXT) -> void:
-	var specs: Array = trigger_specs()
-	for spec in specs:
-		if spec != null and spec.event == event and spec.handler.is_valid():
-			await spec.handler.call(ctx)
-			return
-	var handler: Callable = handlers().get(event, Callable())
-	if handler.is_valid():
-		await handler.call(ctx)
+## What auto-ability `index` says on its stack card: the EFFECT, without the trigger that caused it. The spec's own
+## .text() wins; otherwise it is the printed ability for that event, counting abilities that share the event in printed
+## order (Gadot's second ENTER_FIELD spec is his second "When Gadot enters the field" sentence). "" = no match.
+func stack_text(printed: String, index: int) -> String:
+	var abilities: Array = auto_abilities()
+	if index < 0 or index >= abilities.size():
+		return ""
+	var spec = abilities[index]
+	if not spec.wording.is_empty():
+		return spec.wording
+	var nth := 0
+	for i in range(index):
+		if abilities[i].event == spec.event:
+			nth += 1
+	return TRIGGER_TEXT.for_event(printed, spec.event, nth)
+
+
+## Run one auto-ability. `index` is the ability's position in auto_abilities() (the stack copy carries it); a negative
+## index means "the first ability on this event", for callers that have no stack copy (a Summon's CAST).
+func dispatch(event: int, ctx: EFFECT_CONTEXT, index: int = -1) -> void:
+	var abilities: Array = auto_abilities()
+	if index < 0:
+		for i in range(abilities.size()):
+			if abilities[i].event == event:
+				index = i
+				break
+	if index < 0 or index >= abilities.size():
+		return
+	var spec = abilities[index]
+	if spec.event != event:
+		push_error("CardEffect.dispatch: ability %d is event %d, not %d" % [index, spec.event, event])
+		return
+	if spec.handler.is_valid():
+		await spec.handler.call(ctx)
 
 
 ## What this Summon asks the player to choose WHEN CAST, before it enters the stack. Return a Dictionary for one

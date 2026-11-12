@@ -24,7 +24,10 @@ const SLAM_PULSE := preload("res://scenes/vfx/slam_pulse.tscn")
 ## place and materialises at its field slot instead of travelling there.
 @export var teleport_shine_seconds: float = 0.45
 @export var teleport_fade_seconds: float = 0.20
-@export var teleport_materialize_seconds: float = 0.65
+@export var teleport_materialize_seconds: float = 0.9
+## The source's head start: how long after the hand-side card starts dissolving the field-side build begins. The two
+## overlap for the rest (the source's shine + fade is longer than this).
+@export var teleport_overlap_delay_seconds: float = 0.15
 ## After the silhouette is complete: brighten it, then fade the glow while the
 ## actual card texture is revealed.
 @export var teleport_glow_seconds: float = 0.18
@@ -437,7 +440,7 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 			if not is_instance_valid(card):
 				return
 			_arrive(card)
-			# NO TRAVEL. The source has already dissolved in place; the card appears directly on its slot.
+			# NO TRAVEL. The source is dissolving in place (a stand-in); the card appears directly on its slot.
 			card.position = target_position
 			card.visible = true
 			card.teleport.set_visual(1.0, 0.35, 0.0)
@@ -605,17 +608,8 @@ func trigger_event(event_name, context = null) -> void:
 		# A CODE EFFECT OWNS THIS EVENT FOR THIS CARD. Do not also run its JSON trigger for the same event; a migrated
 		# hook and a leftover JSON entry would fire the ability twice.
 		if source.abilities_enabled() and source.effect_handles_event(event_id):
-			var source_effect = source.effect()
-			if source_effect != null and source_effect.has_method("trigger_specs"):
-				var specs: Array = source_effect.trigger_specs()
-				if not specs.is_empty():
-					for spec in specs:
-						if spec != null and spec.accepts(source, event_ctx):
-							stack.enqueue_code_trigger(source, event_id, event_data)
-							break
-					continue
-			if source_effect != null and source_effect.handlers().has(event_id):
-				stack.enqueue_code_trigger(source, event_id, event_data)
+			# Every ability whose filters accept the event gets its own stack object.
+			stack.enqueue_code_triggers(source, event_id, event_data, event_ctx)
 			continue
 		for index in range(triggers.size()):
 			var trigger = triggers[index]
@@ -1144,8 +1138,8 @@ func execute_card_effect(card, event):
 		return
 	if card.abilities_enabled() and card.effect_handles_event(event_id):
 		var stack_node = game.get("stack") if game != null else null
-		if stack_node != null and stack_node.has_method("enqueue_code_trigger"):
-			stack_node.enqueue_code_trigger(card, event_id, {})
+		if stack_node != null and stack_node.has_method("enqueue_code_triggers"):
+			stack_node.enqueue_code_triggers(card, event_id, {})
 		return
 	if( not card.is_key_word_in_card_effect(event_key)):
 		return
