@@ -4,6 +4,40 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-12
 
+### Added
+- **Haste clock VFX.** A card that GAINS Haste, or enters the field with it, plays an ephemeral golden clock
+  (reference: haste clip frames 204-258, a few kept in `references/haste/`): the dial draws itself on clockwise, flares,
+  its chevron-tipped hands whirl (~3 turns/s and accelerating) with a sweep trail while a block band turns against them,
+  then it fades while expanding — 1.35 s. One camera-facing quad, `shaders/haste_clock.gdshader` (pure line distance
+  fields, no textures), driven by `scripts/vfx/haste_clock.gd`; the cue `scripts/vfx/haste_clock_cue.gd` holds the
+  presentation queue only for the 0.28 s appearance, the clock lives under the tree root and frees itself.
+  Preset `assets/vfx/status/haste.tres`; shader added to `Game.EFFECT_SHADERS`.
+- `Card.sync_haste_vfx()` raises the event on the false -> true edge of `has_haste()` on the field, so printed, status,
+  aura-granted and code-keyword Haste all count. `Field.play_card()` holds it until the card has landed (see
+  `begin_field_arrival` below); setup boards record it silently.
+  `Field.refresh_continuous_effects()` syncs every field card after the scan (grants).
+- `tests/haste_vfx_probe.tscn` and `tools/haste_demo.tscn` (`-- --shots <dir>` for a frame sequence).
+- **Summoning-sickness waves.** A Forward that cannot act yet has soft, smoky dark CIRCULAR pulses rippling OUTWARD
+  from its centre (reference `Clips/sick`, an Arena creature with summoning sickness): each ring is born at the centre,
+  grows toward the corners in 2.4 s and thins away, with the next already on its way (one every 1.5 s). Light on
+  purpose: ~10% darkening at the crest (measured from the render: the darkest ring's radius grows 52 -> 192 px over
+  1.2 s, then a new one appears at the centre). Rings are true circles because the shader works in metres, not UV. It fades in after the
+  card lands; the sickness ending fades it slowly, Haste clears it quickly as the clock appears, dulling fades it (it
+  returns if the card stands up while still sick), leaving the field hides it at once. Shown only while
+  `Card.shows_summoning_sickness()`: on the field and landed, sick, no Haste, upright, not a Backup.
+  `scripts/cards/sickness_overlay.gd` + `shaders/sickness_waves.gdshader`: a card-aligned plane on `HandMesh` (like the
+  frozen overlay), owned by `card_status_overlays.refresh_sickness()`, called on status change, tap/untap, Haste change
+  and zone change. Probe `tests/sickness_waves_probe.tscn` (22 checks); viewer `tools/sickness_demo.tscn`. (A corner
+  hourglass token was tried first and replaced.)
+- `Card.begin_field_arrival()` / `end_field_arrival()` (were `hold_haste_vfx` / `release_haste_vfx`): the arrival is
+  now marked done INSIDE the presentation queue, after the arrival animation, so the haste clock and the sickness waves
+  both appear on a card the player can see. The haste event is therefore raised when the card lands, not at
+  `play_card()`.
+
+### Fixed
+- `VfxDirector._scene_for()` played a status preset's `impact_scene` for `STATUS_REMOVED` too; losing a status now has
+  no cue.
+
 ### Changed
 - **A broken card now plays the DESTROY BURST** instead of the glass shatter (reference `Clips/destroy.mp4`, frames
   145-205; three cards break there at once, this is ONE card's burst). `CardShards` keeps being the one break node
@@ -21,6 +55,8 @@ All notable changes to the FF TCG Simulator project.
   `--card=<id>` picks the element, `--freeze=<s>` for shots).
 
 ### Known Issues
+- Only the clock part of the haste reference is built: the outward-flying arrow spokes, the tilted gyroscope rings and
+  the orange bloom haze around the character are not.
 - `clash_cinematic_probe` prints one `!is_inside_tree()` error from `card_overlap_shadow.gd` (via
   `Stack._update_stack_shadows`); the checks pass, and the break presentation does not touch that path.
 

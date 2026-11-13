@@ -385,6 +385,9 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# RULES: record the zone FIRST — everything below (statuses, the continuous-effect refresh) asks is_on_field(),
 	# which reads current_zone. Moving the NODE (reparent + enter_zone's look) is presentation: see _arrive() below.
 	card.current_zone = Card.Zone.FIELD
+	# The haste clock and the sickness waves wait for the arrival to be DRAWN (end_field_arrival below), or they
+	# would play on a card still in flight.
+	card.begin_field_arrival()
 
 	# HISTORY. Recorded here because this is where a Character actually reaches the field — the "was played" event —
 	# and `record` is false for the SETUP BOARD, where pre-placed cards were not played at all. Returning a card to
@@ -466,6 +469,9 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	else:
 		_arrive(card)
 		card.position = target_position
+	# Queued AFTER the arrival: the presentation queue is serial, so the card lands, THEN its haste clock / sickness
+	# waves appear. A setup board settles silently.
+	card.end_field_arrival(animate)
 	GlobalVariables.refresh_mode()
 	# RULES: the card has entered the field, so its ENTER_FIELD abilities trigger now — at the end of this frame, not
 	# when its arrival animation lands. A trigger that needs a decision (a target) still waits for the queue
@@ -1787,6 +1793,10 @@ func refresh_continuous_effects() -> void:
 			_revoke_continuous_entry(key, _continuous_ledger[key])
 
 	_continuous_ledger = desired
+	# Grants and properties can give or take Haste; the card raises the clock on the edge (held while arriving).
+	for card in get_all_cards():
+		if card != null and is_instance_valid(card):
+			card.sync_haste_vfx()
 
 
 ## Conditional continuous effects ("if you control X, this gains power").

@@ -439,6 +439,9 @@ func _scene_for(event: VfxEvent, preset: VfxPreset) -> PackedScene:
 			return preset.board_impact_scene
 		VfxEvent.Kind.CARD_BROKEN:
 			return preset.shard_scene
+		VfxEvent.Kind.STATUS_REMOVED:
+			# A status preset's impact_scene presents GAINING the status; losing it has no cue yet.
+			return null
 		_:
 			return preset.impact_scene
 

@@ -1,6 +1,6 @@
 extends RefCounted
-## STATUS OVERLAYS for one card: the silence bubble ("loses all abilities") and the cracked-ice rim (Frozen). Both
-## are FIELD-only and built lazily, so an ordinary card pays nothing for them. Pure presentation — the statuses
+## STATUS OVERLAYS for one card: the silence bubble ("loses all abilities"), the cracked-ice rim (Frozen) and the
+## summoning-sickness waves. All are FIELD-only and built lazily, so an ordinary card pays nothing for them. Pure presentation — the statuses
 ## themselves live in Card.status_effects. Owned by Card as `card.overlays`; Card.refresh_status_visuals() calls
 ## refresh() after every status change.
 ##
@@ -9,6 +9,9 @@ extends RefCounted
 
 ## The silence icon is a screen-facing status bubble, not part of the card face.
 const SILENCE_ICON_SCENE := preload("res://scenes/cards/silence_icon.tscn")
+
+## Summoning sickness: dark waves rolling inward across the card (see Card.shows_summoning_sickness()).
+const SICKNESS_OVERLAY := preload("res://scripts/cards/sickness_overlay.gd")
 
 ## FROSTBITE-STYLE FROZEN OVERLAY. A card-aligned additive quad that composites two original alpha masks so the
 ## artwork stays readable under the cracked icy rim.
@@ -24,6 +27,7 @@ const FROZEN_RECEDE_SECONDS := FROZEN_SPREAD_SECONDS
 ## Card is a Node3D; kept untyped so this file and card.gd do not depend on each other's class_name.
 var _card: Node3D
 var silence_icon: Node3D = null
+var sickness_waves: Node3D = null
 var frozen_overlay: MeshInstance3D = null
 var _frozen_material: ShaderMaterial = null
 var _frozen_tween: Tween = null
@@ -36,6 +40,41 @@ func _init(card: Node3D) -> void:
 func refresh() -> void:
 	_refresh_silence_icon()
 	_refresh_frozen_overlay()
+	refresh_sickness()
+
+## Show the sickness waves while the card is waiting to act, and choose HOW they go away: Haste clears them quickly
+## (the haste clock takes over), the sickness ending fades them slowly, dulling fades them (a dull card already reads as
+## unable to act; it comes back if the card stands up while still sick), and leaving the field hides it at once.
+## Called on every status change, tap/untap, Haste change and zone change.
+func refresh_sickness() -> void:
+	var wanted: bool = _card.shows_summoning_sickness()
+	if wanted:
+		if sickness_waves == null or not is_instance_valid(sickness_waves):
+			sickness_waves = SICKNESS_OVERLAY.new()
+			sickness_waves.name = "SicknessWaves"
+			# Same parent as the frozen overlay and the target ring: the visible card's mesh.
+			var hand_mesh = _card.hand_mesh
+			var parent: Node3D = (hand_mesh as Node3D) if hand_mesh != null else _card
+			parent.add_child(sickness_waves)
+			sickness_waves.call("setup", _card)
+		sickness_waves.call("show_waves")
+		return
+	if sickness_waves == null or not is_instance_valid(sickness_waves) or not sickness_waves.call("is_showing"):
+		return
+	if not _card.is_on_field():
+		sickness_waves.call("hide_now")
+	elif _card.has_haste():
+		sickness_waves.call("burst")
+	elif _card.tapped:
+		sickness_waves.call("dismiss")
+	else:
+		sickness_waves.call("wake")
+
+## Probe hook: "NONE" (never built), or the badge's state: HIDDEN / APPEARING / IDLE / LEAVING.
+func sickness_state() -> String:
+	if sickness_waves == null or not is_instance_valid(sickness_waves):
+		return "NONE"
+	return str(sickness_waves.call("state_name"))
 
 ## Show or hide the silence bubble. A card that loses its abilities and then leaves the field must not carry the icon
 ## into the hand, Break Zone or deck.

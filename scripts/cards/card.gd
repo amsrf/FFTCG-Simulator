@@ -172,6 +172,11 @@ var overlays: CARD_STATUS_OVERLAYS = CARD_STATUS_OVERLAYS.new(self)
 ## Last status set reported to Vfx. `refresh_status_visuals()` is the one sync
 ## point, so direct dictionary erases still produce a status_removed event.
 var _vfx_status_snapshot: Dictionary = {}
+## Whether the haste clock has been shown for the current spell of Haste on the field (see sync_haste_vfx()).
+var _haste_vfx_on: bool = false
+## True from the moment the RULES put this card on the field until its arrival has been DRAWN (Field.play_card() ->
+## begin_field_arrival() / end_field_arrival()). The haste clock and the sickness waves wait for it.
+var _arrival_pending: bool = false
 @onready var power_label: Label3D =  $PowerDisplay
 signal card_dragged(card)
 signal focus_card(card)
@@ -639,6 +644,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 		clear_copied_skill()
 	current_zone = zone
 	set_hidden(false)
+	# Leaving the field takes the sickness waves with it at once.
+	overlays.refresh_sickness()
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
 	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
 	# unflipped container, so its cards must carry the half turn themselves.
@@ -701,6 +708,7 @@ func tap():
 	# art and stats sideways on a board seen in perspective.
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y + tap_angle, tap_speed)
+	overlays.refresh_sickness()
 
 func untap():
 	if not tapped: return
@@ -712,6 +720,7 @@ func untap():
 	
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y, tap_speed)
+	overlays.refresh_sickness()
 
 ## Stop the hand's layout tween before another zone takes ownership of the card.
 func stop_hand_layout() -> void:
@@ -1105,6 +1114,7 @@ func abilities_enabled() -> bool:
 ## does for Freeze) use this to re-sync the visuals.
 func refresh_status_visuals() -> void:
 	_sync_status_vfx()
+	sync_haste_vfx()
 	overlays.refresh()
 
 ## Report status additions/removals through the presentation director. This is
@@ -1112,6 +1122,9 @@ func refresh_status_visuals() -> void:
 ## status mutation already calls refresh_status_visuals().
 func _sync_status_vfx() -> void:
 	var current: Dictionary = status_effects.duplicate()
+	# Haste has four sources (printed, timed status, aura grant, code keyword), so its presentation follows
+	# has_haste() in sync_haste_vfx() instead; reporting the status here too would play the clock twice.
+	current.erase("haste")
 	for status in current:
 		if not _vfx_status_snapshot.has(status):
 			Vfx.status_applied(self, str(status), _status_duration(status))
@@ -1119,6 +1132,52 @@ func _sync_status_vfx() -> void:
 		if not current.has(status):
 			Vfx.status_removed(self, str(status))
 	_vfx_status_snapshot = current
+
+
+## THE HASTE CLOCK follows has_haste(), not one status: printed Haste, a timed "haste" status, an aura grant and a
+## code keyword all mean the card has Haste. Raised on the false -> true edge while the card is on the field, so a
+## card that GAINS Haste or ENTERS the field with it plays the clock once; losing it reports STATUS_REMOVED.
+## Called from every place Haste can change: refresh_status_visuals() (statuses, silence), the end of
+## Field.refresh_continuous_effects() (grants, properties) and end_field_arrival().
+func sync_haste_vfx() -> void:
+	if _arrival_pending:
+		return
+	var now: bool = is_on_field() and has_haste()
+	if now and not _haste_vfx_on:
+		Vfx.status_applied(self, "haste", _status_duration("haste"))
+	elif _haste_vfx_on and not now and is_on_field():
+		Vfx.status_removed(self, "haste")
+	_haste_vfx_on = now
+	# Haste also decides whether the sickness waves are shown (and clears them when gained).
+	overlays.refresh_sickness()
+
+## Field.play_card() calls this when the RULES put the card on the field (statuses and the continuous scan run then,
+## before the card is drawn there), and end_field_arrival() once its arrival presentation is queued.
+func begin_field_arrival() -> void:
+	_arrival_pending = true
+	_haste_vfx_on = false
+
+## `animate` false (a setup board) settles at once and silently: a pre-placed card did not "enter" with Haste.
+## Otherwise the arrival is marked done INSIDE the presentation queue, right after the arrival animation, so the
+## haste clock and the sickness waves appear on a card the player can see.
+func end_field_arrival(animate: bool = true) -> void:
+	if not animate:
+		_arrival_pending = false
+		_haste_vfx_on = is_on_field() and has_haste()
+		overlays.refresh_sickness()
+		return
+	Vfx.present(func() -> void:
+		if not is_instance_valid(self):
+			return
+		_arrival_pending = false
+		sync_haste_vfx())
+
+## THE SUMMONING-SICKNESS WAVES are shown for a card that is WAITING to act: on the field and drawn there, summoning
+## sick without Haste, still upright (a dull card already reads as unable to act), and not a Backup (Backups enter
+## dull, and sickness only ever stopped them paying CP). Pure presentation; can_tap() is the rule.
+func shows_summoning_sickness() -> bool:
+	return is_on_field() and not _arrival_pending and status_effects.has("summoning_sickness") \
+		and not has_haste() and not tapped and type != BACKUP
 
 
 func _status_duration(status: String) -> int:

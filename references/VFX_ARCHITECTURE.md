@@ -102,6 +102,7 @@ assets/vfx/elements/water.tres
 assets/vfx/elements/light.tres
 assets/vfx/elements/dark.tres
 assets/vfx/status/frozen.tres
+assets/vfx/status/haste.tres
 ```
 
 The director falls back to `ELEMENT_TINTS` when no `.tres` exists, so an event
@@ -171,6 +172,24 @@ The palette follows `references/violet_thunder.jpg`: white-hot core, purple
 inner glow, deep royal-violet outer halo. It is not a flat violet bolt.
 The two shaders are listed in `Game.EFFECT_SHADERS`, because Compatibility
 compiles a shader on first render and a first strike must not hitch.
+
+### Haste clock (status "haste")
+
+`Card.sync_haste_vfx()` raises `STATUS_APPLIED("haste")` when `has_haste()` turns true on the field, so every source
+of Haste (printed, timed status, aura grant, code keyword) is one trigger; the generic `_sync_status_vfx()` skips the
+"haste" status so it never fires twice. `Field.play_card()` holds the edge until the arrival presentation is queued
+(`Card.begin_field_arrival()` / `end_field_arrival()`: a `Vfx.present` job after the arrival clears the hold, so the
+clock plays on the landed card). The cue spawns one `haste_clock.gd` per card under the
+tree root and releases the queue after `APPEAR_SECONDS`; the clock follows its card and frees itself at `LIFETIME`.
+Viewing harness: `tools/haste_demo.tscn`; probe: `tests/haste_vfx_probe.tscn`.
+
+### Summoning-sickness waves (persistent, card-owned)
+
+Not a `VfxCue`: like the frozen overlay it lives as long as its condition. `card_status_overlays.refresh_sickness()`
+builds `scripts/cards/sickness_overlay.gd` (a card-aligned plane on `HandMesh`, `shaders/sickness_waves.gdshader`: soft dark circular pulses rippling outward
+from the centre)
+lazily and drives it from `Card.shows_summoning_sickness()`; the overlay picks its exit (wake / burst / dismiss / hide).
+Viewer: `tools/sickness_demo.tscn`; probe: `tests/sickness_waves_probe.tscn`.
 
 ## Adding a new effect
 

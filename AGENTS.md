@@ -167,10 +167,10 @@ use from card code.
 
 ### Running Godot (harness only — allowed)
 - **Three allowed invocations**, from the project root (all exit on their own; `--quit-after` is only a hang guard, and it counts FRAMES, so keep it generous — headless frames are fast):
-  `"/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe" --headless res://tests/arrow_probe.tscn --quit-after 900`
-  `"/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe" --headless res://tests/flow_probe.tscn --quit-after 5000`
-  `"/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe" --headless res://tests/block_probe.tscn --quit-after 5000`
-  Note the doubled path: `Downloads/Godot_v4.7.2-stable_win64.exe/` is a **directory** whose name ends in `.exe`, and the real binary is one level inside it. That ambiguity is exactly what made the first attempt fail. (The Desktop `Godot_v4.4` is the wrong version.)
+  `godot --headless res://tests/arrow_probe.tscn --quit-after 900`
+  `godot --headless res://tests/flow_probe.tscn --quit-after 5000`
+  `godot --headless res://tests/block_probe.tscn --quit-after 5000`
+  `godot` (and `godot4`) on PATH are symlinks in `~/.local/bin/` to `~/.local/share/godot/4.7.2/Godot_v4.7.2-stable_linux.x86_64` — confirm with `godot --version` (`4.7.2.stable.official`).
 - **`tests/arrow_probe.tscn`** — the arrow in isolation: 1 apex / 0 inflections, the measured peak against `peak_ratio`, the screen clamp, both mesh surfaces, the head's base sitting on the shaft's end, and the origin following a card. **`tests/flow_probe.tscn`** — boots the real `game.tscn` on the `debug` preset and drives the ETB → stack → targeting handoff: the effect copy landing on the stack, the arrow sourced from **that copy and not the field card**, exactly the legal targets marked, and the origin staying on the copy's top edge across the stack's 0.3 s tween. **`tests/block_probe.tscn`** — the blocking cues: the blue ring landing on exactly my untapped Forwards, the pick turning orange and drawing the arc centre-to-centre, a reselect moving both, the opponent's pick drawing the arc with no blue ring, and the cross-row arc staying a bow (`path < chord * 1.5`) rather than running along its own chord. All print a `RESULT:` line. **Extend these** rather than writing throwaway scripts, and add an assertion for every bug that gets fixed.
 - **Never resolve a sibling through `get_tree().current_scene`** — it is only set when the game *is* the top-level scene, so a harness (or a second instance) gets **null** refs and the game runs half-wired. Walk the tree instead (`get_node("../../Field")`, `get_parent().get_node("Player/Hand")`). It also cannot be repaired from outside: assigning `current_scene` to a nested node is rejected (`p_scene->get_parent() != root`).
 - Still forbidden: the editor; booting the full game just to "verify" something; and `--check-only` / `--script`, which do not load autoloads and therefore report `Identifier not found: CardDatabase / GlobalVariables` — actively misleading.
@@ -179,8 +179,8 @@ use from card code.
 - There is no longer a `!is_inside_tree()` noise baseline: `Hand.add_card_to_tree()` now only preserves a global transform when the card already has a parent. A clean boot should have zero `ERROR:` lines; anything in the log is worth reading.
 
 ### Running Blender (allowed — it builds assets)
-- Blender 4.4 is installed at `"C:/Program Files/Blender Foundation/Blender 4.4/blender.exe"` (not on PATH; the repo's `.blend` files are v404). It runs headless, so a mesh can be generated and rendered with no viewport in the loop:
-  `"<blender>" --background --python "C:/…/Blender/build_gem_button.py"`
+- Blender **5.2 LTS** is installed from Flathub (`org.blender.Blender`, user install); `blender` on PATH is the wrapper `~/.local/bin/blender` → `flatpak run org.blender.Blender`. The sandbox has host filesystem access, so project paths work. The repo's `.blend` files were saved by 4.4 (v404): 5.2 opens them, but **re-saving one upgrades it** so 4.x can no longer read it. It runs headless, so a mesh can be generated and rendered with no viewport in the loop:
+  `blender --background --python Blender/build_gem_button.py`
 - `Blender/build_gem_button.py` is the parametric generator for the button: every dimension is a named constant at the top, and it writes `gem_button.glb` (for Godot), `gem_button.blend` (to hand-edit) and two Cycles previews.
 - **The workflow is render → LOOK at the PNG → fix.** The assistant cannot see a viewport, but it can render and then read the image — and that is what caught all three of the button's errors (a stone hidden inside a solid plate, spikes from a wrong offset, and a light card photographed instead of the subject). Do not tune a material blind when a render is one command away.
 - Lessons that generalise: **lights are for reflections, not illumination.** A polished surface mirrors its environment, so the bright source has to sit where the surface's reflection points, and a light placed in front of the subject is invisible to it — worse, if it is between the camera and the subject, it *is* the photograph. Large emissive cards placed **outside the camera's frustum** give chrome its bright/dark bands. And **offset a shape exactly, never per-point radially**: `stadium(hw+d, hh+d)` is the exact outward offset of `stadium(hw, hh)`, whereas pushing each point along its own radius is only correct on the caps and folds the straights.
@@ -196,15 +196,19 @@ use from card code.
 
 ## Rules Reference (vector DB)
 
-The user maintains a vector database of the official FFTCG rules. Consult it before deciding a timing/priority/trigger question,
-rather than inventing a rule:
+`~/RulesDb` indexes the official **FF-TCG Comprehensive Rules v3.3** (effective 2026-08-07): one chunk per numbered rule
+(498), each with its parent-rule breadcrumb, searched by embeddings (`bge-small-en-v1.5`, local) fused with BM25. Consult it
+before deciding a timing/priority/trigger question, rather than inventing a rule — and query it instead of reading the PDF:
 
 ```bash
-"C:\Users\KABUM\Desktop\VectorDb\rag-env\Scripts\python.exe" "C:\Users\KABUM\Desktop\VectorDb\search.py" "your rules question"
+~/RulesDb/rag-env/bin/python ~/RulesDb/search.py "can the opponent respond to an auto-ability"   # top 5
+~/RulesDb/rag-env/bin/python ~/RulesDb/search.py -k 10 "party blocked damage"                     # more hits
+~/RulesDb/rag-env/bin/python ~/RulesDb/search.py 11.8                                             # a rule + all sub-rules
 ```
 
-Quote the returned page/rule when it changes an implementation decision. It currently contains the game rules (for example,
-11.8.x auto-abilities: they go onto the stack at the next opportunity and can be responded to).
+Search hits a specific rule; when a hit's breadcrumb names the governing section (e.g. `11.8 Auto-Abilities`), fetch that
+section by number before deciding. Quote the rule number when it changes an implementation decision. New rules version:
+copy the PDF to `~/RulesDb/fftcg-comprules.pdf` and run `~/RulesDb/rag-env/bin/python ~/RulesDb/build_index.py`.
 
 ## Mill
 
@@ -809,7 +813,7 @@ missing key fails loudly.
 **Preferred: the headless probe** (see *Running Godot* above for the one allowed command). It is the fastest check and needs no editor and no clicking:
 
 ```bash
-GODOT="/c/Users/KABUM/Downloads/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-stable_win64.exe"
+GODOT=godot   # ~/.local/bin/godot -> Godot 4.7.2 (Linux)
 "$GODOT" --headless res://tests/arrow_probe.tscn --quit-after 900
 "$GODOT" --headless res://tests/flow_probe.tscn --quit-after 5000
 ```
@@ -819,10 +823,10 @@ It prints a `[ArrowProbe]` report with a `RESULT:` line, so pass/fail needs no i
 **Also available: a headless boot to catch compile errors**, which does need the user (or an allowed run):
 
 ```bash
-"$GODOT" --headless --path "C:\Users\KABUM\Desktop\TCG Project\TCG-Simulator-on-Godot" --quit-after 40
+"$GODOT" --headless --path ~/Projects/FFTCG-Simulator --quit-after 40
 ```
 
-- Use the Godot **4.7.2** binary (nested inside a same-named folder under `~/Downloads`). `Godot_v4.4-stable_win64.exe` on the Desktop is the **wrong** version.
+- Use the Godot **4.7.2** binary: `godot` on PATH (`~/.local/share/godot/4.7.2/Godot_v4.7.2-stable_linux.x86_64`). Any other version is the wrong one.
 - Success = 0 `SCRIPT ERROR` / `Compile Error` lines. Add `res://scenes/game/game.tscn` as a positional arg to boot straight into a match (uses the `debug` preset) and also expect `Entering: 2` (FIRST_MAIN_PHASE); the menu boot cannot reach it, since it waits for a button press.
 - Anything about how it **looks** still has to be seen — the probe verifies geometry, wiring and invariants, not taste.
 - `--check-only --script <file>` is unreliable here: autoloads are absent, so it false-errors with `Identifier not found: CardDatabase / GlobalVariables`.
@@ -916,6 +920,8 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **A presentation that must happen INSIDE an animation uses a visual hold, never a delayed rule.** The rules move the card at once (a break puts it in the Break Zone immediately); `Vfx.hold_card(card, visual)` leaves a stand-in at the pre-event snapshot and hides the real card, and the cue calls `Vfx.release_hold(card, visual, shatter)` at its moment (lightning: when the bolt lands; earth: once the golden crystal has gone back down). The director releases any hold a cue leaves when the event finishes. BREAKS are held by `Game.break_card()` itself when the source's preset sets `effect_break` (`Vfx.hold_for_break`), and the damage/effect-break event claims the hold in `VfxDirector._emit()`; an unclaimed hold shatters at the end of the frame. So pass the causing card to `break_card(..., source_card)`. Never `preload()` card scenes in the director (an autoload): it broke every `card.tscn` instance. Element cues must aim at `event.target_visuals[id].transform`, not the live card: by the time they play, a broken card is already in the pile.
 - **The first authored element effect is lightning (`雷`), and it is screen-space on purpose.** `assets/vfx/elements/lightning.tres` points at `assets/effects/lightning/lightning_strike_cue.tscn`. The cue strikes one card for a `single` event and every valid target for `multi`/`sequence`/`radial`/`board`; the stagger is **0.36 s** (0.45 s for `sequence`), long enough that each impact reads separately. The per-target `LightningStrike` anchors a camera-facing bolt to `Card.get_global_face_centre()` and extends it up the camera's screen-up axis; a world-vertical bolt would be seen end-on because the board camera is almost top-down. **Do not push that quad back along camera Z to fake depth**: for an off-centre card it changes the projected landing point, and the shaders already use `depth_test_disabled`. **`QuadMesh` UV.y = 0 is its local +Y (top) edge**, so `lightning_bolt.gdshader` works in `y = 1 - UV.y`; otherwise the path converges and the impact pool sit at the top of the quad instead of the card. Damage magnitude is semantic: `VfxEvent.damage_tier()` maps <=3000 / 3001..6000 / 6001..8999 / 9000+ to weak/medium/high/maximum, and every element cue can read it. Lightning scales bolt width, glow, branching, span, shockwave extent, impact intensity and screen flash from its `TIER_*` arrays. The palette follows `references/violet_thunder.jpg`: white-hot core, purple inner glow, deep royal-violet halo — not a flat violet bolt. There is no card-rim effect; the target border is left alone. The impact ring grows only to 0.84 in its own UV space and fades radially before the quad edge, or the square quad clips it into an unnatural border. Both shaders are in `Game.EFFECT_SHADERS`; Compatibility compiles a shader on first render, and a first strike must not hitch. `tools/lightning_demo.tscn` is the viewing harness and `tests/lightning_vfx_probe.gd` covers preset wiring, the `DAMAGE` event, cue instantiation, one strike per target, and cleanup.
 - **Fire (`火`) is a charge-then-explode burst.** `fire_burst_cue.gd` spawns one `fire_burst.gd` per target under the tree root (it outlives the cue): sparks spiral in for `CHARGE_SECONDS` (0.30 s), then the fireball (it burns out from the CENTRE OUTWARD while still expanding - the middle goes void first, the outer ring last; it must never shrink), shockwave and embers. The cue owns the recoil and the held-break release at the DETONATION. Effect materials drawn near the board need a `render_priority` above 0: the board is in the transparent pass, and distance sorting drew it over the fireball, clipping it to the card. The headless dummy renderer does not keep MultiMesh instance data, so probes read positions the script keeps on the CPU (`visible_mote_positions()`).
+- **Haste is presented on the EDGE of `has_haste()`, not on the "haste" status.** Haste has four sources (printed, timed status, aura grant, code keyword), so `Card.sync_haste_vfx()` is the one trigger and `_sync_status_vfx()` deliberately skips the "haste" status (it would play the clock twice). It runs from `refresh_status_visuals()`, the end of `Field.refresh_continuous_effects()`, and `Field.play_card()` → `Card.begin_field_arrival()` / `end_field_arrival()`: the rules mark the card on the field (summoning sickness, the continuous scan) before it is drawn there, so `_arrival_pending` holds every arrival-time visual until a `Vfx.present` job queued right after the arrival animation clears it. Anything else that should appear "once the card has landed" must wait on the same flag. The clock (`haste_clock.gd`) outlives its cue; the cue holds the queue only for the 0.28 s appearance. **`TAU` is a built-in in Godot shaders**: redefining it fails compilation, and a probe still passes on a shader that never compiled — count `SHADER ERROR` in the log.
+- **The summoning-sickness waves are a PRESENTATION of `can_tap()`'s rule, with their own visibility predicate.** `Card.shows_summoning_sickness()` = on the field, landed (`not _arrival_pending`), `summoning_sickness`, no Haste, upright, not a Backup. A dull card already reads as "cannot act" and Backups only ever lost CP to sickness, so showing it there would be noise on every Backup played. `card_status_overlays.refresh_sickness()` is the single owner: it is called on status change, tap/untap, Haste change and zone change, and it decides the EXIT (Haste → quick clear, sickness gone → slow fade, dulled → short fade, left the field → hide at once). A new way for any of those inputs to change must call it, or the waves go stale. The overlay (`sickness_overlay.gd`) is a card-aligned plane on `HandMesh` like the frozen overlay; its rings are circles rippling OUTWARD from the centre, measured in metres (`card_size`) so they are not ovals. The crest of `cos(waves * r - k * t)` moves outward; `+ k * t` moves it INWARD — that sign was wrong once, so measure the darkest ring's radius across frames rather than trusting a still.
 - **A power-up is presented by `Card.power_fx`, never by the label directly.** `recompute_power()` only calls
   `power_fx.notice_power_change()`; at the end of the frame the NET change against `PowerDisplay.target_power`
   decides: a rise on a settled, drawn field Forward plays `power_up_burst.gd` (swords + gas) and

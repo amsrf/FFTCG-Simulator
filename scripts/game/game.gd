@@ -842,6 +842,10 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/fire_glow.gdshader"),
 	preload("res://shaders/fire_ball.gdshader"),
 	preload("res://shaders/fire_ring.gdshader"),
+	# The haste clock (haste_clock.gd): first rendered when a card gains Haste or enters with it.
+	preload("res://shaders/haste_clock.gdshader"),
+	# The summoning-sickness waves (sickness_overlay.gd): first rendered when a Forward lands.
+	preload("res://shaders/sickness_waves.gdshader"),
 	# The materialising card's crystal prisms (card_crystallize.gd): first rendered mid-cast.
 	preload("res://shaders/card_crystal_prism.gdshader"),
 	# The power-up (power_up_burst.gd): swords, red gas and streaks, first rendered mid-game when a Forward is buffed.
