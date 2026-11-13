@@ -1793,10 +1793,12 @@ func refresh_continuous_effects() -> void:
 			_revoke_continuous_entry(key, _continuous_ledger[key])
 
 	_continuous_ledger = desired
-	# Grants and properties can give or take Haste; the card raises the clock on the edge (held while arriving).
+	# Grants and properties can give or take Haste (the card raises the clock on the edge, held while arriving), Brave
+	# or First Strike (the keyword badges).
 	for card in get_all_cards():
 		if card != null and is_instance_valid(card):
 			card.sync_haste_vfx()
+			card.refresh_keyword_icons()
 
 
 ## Conditional continuous effects ("if you control X, this gains power").
@@ -2137,7 +2139,7 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 func can_block(card: Card) -> bool:
 	if card == null:
 		return false
-	if card.status_effects.has("block_disabled"):
+	if card.is_block_disabled():
 		return false
 	if not card.can_attack():
 		return false

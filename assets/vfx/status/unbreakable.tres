@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="VfxPreset" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/vfx/vfx_preset.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/effects/protect/protect_shell_cue.tscn" id="2"]
+
+[resource]
+script = ExtResource("1")
+status = "unbreakable"
+tint = Color(1, 0.74, 0.22, 1)
+hit_stagger_seconds = 0.06
+board_stagger_seconds = 0.08
+impact_scene = ExtResource("2")

@@ -844,6 +844,10 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/fire_ring.gdshader"),
 	# The haste clock (haste_clock.gd): first rendered when a card gains Haste or enters with it.
 	preload("res://shaders/haste_clock.gdshader"),
+	# The protect shell (protect_shell.gd): first rendered when a card gains "cannot be broken".
+	preload("res://shaders/protect_shell.gdshader"),
+	# The shield tear (shield_tear.gd): first rendered when a card loses the ability to block.
+	preload("res://shaders/shield_tear.gdshader"),
 	# The summoning-sickness waves (sickness_overlay.gd): first rendered when a Forward lands.
 	preload("res://shaders/sickness_waves.gdshader"),
 	# The materialising card's crystal prisms (card_crystallize.gd): first rendered mid-cast.
@@ -2640,7 +2644,7 @@ func put_card_into_graveyard(card: Card) -> void:
 func break_card(card: Card, source_controller: String = "", source_kind: String = "", source_card: Card = null):
 	if not card.is_on_field():
 		return
-	if 'unbreakable' in card.status_effects:
+	if card.is_unbreakable():
 		return
 	if field.is_protected_from_break(card, source_controller, source_kind):
 		LOG.info("Protect", "%s cannot be broken by that effect" % card.card_name)

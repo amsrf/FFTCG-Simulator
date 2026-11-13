@@ -218,6 +218,18 @@ func refresh_cost_badge() -> void:
 	var dissolving: bool = teleport != null and bool(teleport.chrome_hidden)
 	cost_badge.visible = revealed and _stack_face == null and not dissolving \
 		and (current_zone == Zone.FIELD or current_zone == Zone.HAND)
+	refresh_keyword_icons()
+
+## Brave / First Strike badges along the bottom of the face. See card_keyword_icons.gd.
+const CARD_KEYWORD_ICONS := preload("res://scripts/cards/card_keyword_icons.gd")
+var keyword_icons: CARD_KEYWORD_ICONS = CARD_KEYWORD_ICONS.new(self)
+
+## Field only, face up, landed (held while the arrival plays, like the haste clock) and not dissolving. Called from
+## every place a keyword or that visibility can change: statuses, the continuous scan, arrival, zone and reveal.
+func refresh_keyword_icons() -> void:
+	var dissolving: bool = teleport != null and bool(teleport.chrome_hidden)
+	keyword_icons.refresh(current_zone == Zone.FIELD and revealed and _stack_face == null and not dissolving \
+		and not _arrival_pending)
 
 func initialize(card_id: int, card_controller: String):
 	id = card_id
@@ -1116,6 +1128,7 @@ func refresh_status_visuals() -> void:
 	_sync_status_vfx()
 	sync_haste_vfx()
 	overlays.refresh()
+	refresh_keyword_icons()
 
 ## Report status additions/removals through the presentation director. This is
 ## the one place that notices direct dictionary erases too, because every
@@ -1165,12 +1178,14 @@ func end_field_arrival(animate: bool = true) -> void:
 		_arrival_pending = false
 		_haste_vfx_on = is_on_field() and has_haste()
 		overlays.refresh_sickness()
+		refresh_keyword_icons()
 		return
 	Vfx.present(func() -> void:
 		if not is_instance_valid(self):
 			return
 		_arrival_pending = false
-		sync_haste_vfx())
+		sync_haste_vfx()
+		refresh_keyword_icons())
 
 ## THE SUMMONING-SICKNESS WAVES are shown for a card that is WAITING to act: on the field and drawn there, summoning
 ## sick without Haste, still upright (a dull card already reads as unable to act), and not a Backup (Backups enter
@@ -1225,6 +1240,18 @@ func is_brave() -> bool:
 ## the question it asks.
 func is_first_strike() -> bool:
 	return card_effects.has("first_strike") or status_effects.has("first_strike") or has_granted("first_strike") 		or has_code_keyword("first_strike")
+
+## CANNOT BE BROKEN ("it cannot be broken this turn", cards 32 / 110 / 146): the `unbreakable` status. Game.break_card()
+## asks this, and the indestructible keyword badge shows it. Conditional protection (Auron 1-002: "cannot be broken by
+## opponent Summons or abilities") is a CardEffect.prevents_break() query about a cause, not a property, so it is not
+## included here.
+func is_unbreakable() -> bool:
+	return status_effects.has("unbreakable")
+
+## CANNOT BLOCK ("it cannot block this turn", Red Mage 3): the `block_disabled` status. Field.can_block() asks this, and
+## the cannot-block keyword badge and the shield-tear VFX show it.
+func is_block_disabled() -> bool:
+	return status_effects.has("block_disabled")
 
 ## FROZEN: does not activate during its controller's next Active Phase. Granted only - no card prints Freeze, they
 ## all say "Freeze it" - so unlike Haste, Brave and First Strike there is no printed half. The status is CONSUMED

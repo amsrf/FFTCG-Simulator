@@ -2,6 +2,61 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-13
+
+### Added
+- **Keyword badges.** A field card shows one badge per keyword it currently has — Brave, First Strike, then
+  Indestructible ("cannot be broken"), then Cannot block — in a row along the bottom of its face from the left, closing up when one goes
+  away. The glyphs are game-icons.net icons (CC BY 3.0, credited in `assets/icons/keywords/CREDITS.md`): Brave is
+  `static-guard`, First Strike `bouncing-sword`, Indestructible `stone-wall`, Cannot block `cracked-shield`
+  (Lorc / Lorc / Delapouite / Lorc). When four would not fit, every badge shrinks so the row stays on the card. The originals
+  live in `assets/icons/keywords/source/`; `tools/build_keyword_icons.py` drops their black square and centres the
+  glyph on the shared plate (dark radial fill, white rim), writing `brave.svg` / `first_strike.svg` /
+  `indestructible.svg`. `scripts/cards/card_keyword_icons.gd`
+  (owned as `Card.keyword_icons`) asks the rules' own predicates (`is_brave()`, `is_first_strike()`, new
+  `is_unbreakable()`), so printed, status, aura and code keywords all show. `Card.refresh_keyword_icons()` runs from
+  `refresh_status_visuals()`, `refresh_cost_badge()` (zone / reveal / dissolve), `end_field_arrival()` and
+  `Field.refresh_continuous_effects()`; the row sits on `HandMesh`, so it tilts with a dull card and follows the damage
+  recoil. Textures are rasterized from the SVG source at 256 px with mipmaps whenever the source is readable (an editor
+  import can be stale); the `.import` files ask for `svg/scale=2` + mipmaps for exported builds. Probe
+  `tests/keyword_icons_probe.tscn`; open `tests/keyword_icons_preview.tscn` with F6 to look at them.
+
+- **Protect shell VFX ("cannot be broken").** A card that gains the `unbreakable` status gets an egg of hexagonal
+  glass panels closing around it (reference: frames 47-90 of the Protect clip, a few kept in `references/protect/`):
+  comets and two coloured motes appear, the panels form from the outline inward in a scattered order (the outermost
+  ring is randomly thinned, so the outline is ragged whole hexes rather than a full half-sphere), the outer panels
+  flare frosty white as the shell closes, then the blue glass fades and the gold rims linger — 1.6 s. One
+  camera-facing quad, `shaders/protect_shell.gdshader` (the hex grid is laid in longitude/latitude so panels squeeze
+  toward the outline like a sphere; no textures), driven by `scripts/vfx/protect_shell.gd`; the cue
+  `scripts/vfx/protect_shell_cue.gd` holds the presentation queue until the shell has closed (0.62 s). Preset
+  `assets/vfx/status/unbreakable.tres`; shader added to `Game.EFFECT_SHADERS`. Probe `tests/protect_vfx_probe.tscn`
+  (preset wiring, one shell per gain, clears the neighbouring card, timeline, release, cleanup); viewing harness
+  `tools/protect_demo.tscn` (`-- --shots <dir>` freezes the shell at fixed times).
+
+- **Shield tear VFX ("cannot block").** A card that gains the `block_disabled` status (Red Mage 3) gets an ethereal
+  blue shield, drawn in the power-up swords' fashion: an SVG glyph rasterised at runtime in three passes (soft glow
+  stroke, translucent blue fill with a bright outline, pale inner line), on camera-facing quads laid out in the
+  screen plane. BUILD-UP first: blue gas blooms over the upper card and blue streaks shoot up (the power-up's
+  `power_up_gas.gdshader`, recoloured through its rim/core uniforms), then the shield ARISES out of it from the card's
+  centre to sit near the TOP of the card (a steady 0.34 s climb, fading in and growing, a soft white flash as it
+  settles). It holds for a beat, then tears into two halves (each the shield clipped to its
+  side of the zigzag, so they rejoin exactly) that drift apart, tilt outward, drop and fade while a last puff of gas
+  bursts from the tear — 1.04 s. `scripts/vfx/shield_tear.gd` + `shaders/shield_tear.gdshader` (fade / flash); the cue
+  `scripts/vfx/shield_tear_cue.gd` holds the presentation queue for 0.66 s. Preset
+  `assets/vfx/status/block_disabled.tres`; shader added to `Game.EFFECT_SHADERS`. Probe
+  `tests/shield_tear_vfx_probe.tscn`; viewing harness `tools/shield_tear_demo.tscn` (`-- --shots <dir>`).
+
+### Changed
+- AGENTS.md: dropped the Artifact graphics-archive rule (no longer relevant).
+- `Field.can_block()` asks the new `Card.is_block_disabled()` instead of reading the `block_disabled` status, so the
+  rule, the cannot-block badge and the shield tear cannot disagree.
+- `Game.break_card()` asks `Card.is_unbreakable()` instead of reading the `unbreakable` status directly, so the rule
+  and the indestructible badge cannot disagree.
+
+### Known Issues
+- Party-granted Brave (Gippal) changes when a party is declared, which does not run any of the refresh points, so its
+  badge is not shown during the attack. Haste has no badge yet (it has the clock); add a row to `KEYWORDS` + an SVG.
+
 ## [Unreleased] — 2026-11-12
 
 ### Added
