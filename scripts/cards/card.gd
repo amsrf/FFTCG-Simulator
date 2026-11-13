@@ -654,6 +654,13 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# A copied ability is a continuous effect while its source is on the field. Leaving the field drops it.
 	if current_zone == Zone.FIELD and zone != Zone.FIELD:
 		clear_copied_skill()
+		# THE TAP/UNTAP TWEEN BELONGS TO THE FIELD. It animates rotation_degrees.y toward the FIELD's upright (a half
+		# turn, READABLE_ROTATION); left running after the move it overwrote the new zone's rotation set below, so a
+		# dull card put into the Break Zone (Black Mage's own sacrifice: untap() runs just before the move) landed in
+		# the pile upside down. Same rule as the hand and stack layout tweens.
+		if tween != null and tween.is_valid():
+			tween.kill()
+		tween = null
 	current_zone = zone
 	set_hidden(false)
 	# Leaving the field takes the sickness waves with it at once.

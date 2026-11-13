@@ -272,6 +272,32 @@ func _ready() -> void:
 	_expect(mill_deck.deck_cards.size() == deck_before - 1, "milling from the ground takes a card off the deck")
 	_expect(mill_pile.graveyard_cards.size() == pile_before + 1, "and the pile grows by one")
 
+	# --- the tribute ground: Black Mage's sacrifice is usable at once, and R's path really tributes -----------
+	mill_game.queue_free()
+	await get_tree().process_frame
+	MatchSetup.config = MatchSetup.build_config("tribute")
+	var tribute_game = GAME_SCENE.instantiate()
+	add_child(tribute_game)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var trfield = tribute_game.get("field")
+	var black_mage: Card = null
+	for c in trfield.get_all_cards():
+		if c.id == GROUNDS.BLACK_MAGE and c.controller == "player":
+			black_mage = c
+	_expect(black_mage != null, "the tribute ground places Black Mage on your side")
+	_expect(black_mage != null and trfield.can_activate_now(black_mage),
+		"and its put-itself-into-the-Break-Zone ability is usable straight away")
+	var first: Card = (trfield.get_front_cards_for("player") + trfield.get_back_cards_for("player"))[0]
+	Vfx.clear_events()
+	tribute_game.call("_debug_tribute_first_card", false)
+	_expect(first.current_zone == Card.Zone.GRAVEYARD
+		and Vfx.get_events().any(func(e) -> bool: return e.kind == VfxEvent.Kind.TRIBUTE),
+		"the R key's path puts %s into the Break Zone as a TRIBUTE" % first.card_name)
+	await Vfx.idle()
+	tribute_game.queue_free()
+	await get_tree().process_frame
+
 	# --- the Terra ground: it must actually demonstrate the surcharge -----------------------------------
 	MatchSetup.config = MatchSetup.build_config("terra")
 	var terra_game = GAME_SCENE.instantiate()

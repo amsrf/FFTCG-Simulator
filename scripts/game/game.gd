@@ -822,6 +822,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/ex_burst_aura.gdshader"),
 	preload("res://shaders/counter_arc.gdshader"),
 	preload("res://shaders/counter_overlay.gdshader"),
+	# The tribute burst (tribute_cue.gd): first rendered when an effect puts a card into the Break Zone.
+	preload("res://shaders/tribute_burst.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
@@ -1108,6 +1110,11 @@ func _input(event):
 		# DEBUG: only in Test Mode. B breaks the first player Forward; Shift+B breaks the opponent's.
 		if str(MatchSetup.config.get("preset", "")).begins_with("ground_"):
 			_debug_break_first_forward(event.shift_pressed)
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == Key.KEY_R:
+		# DEBUG: only in Test Mode. R tributes (puts into the Break Zone, not a break) your first field card; Shift+R
+		# the opponent's. Same path as a sacrifice or an effect: put_card_into_graveyard() -> Vfx.tributed().
+		if str(MatchSetup.config.get("preset", "")).begins_with("ground_"):
+			_debug_tribute_first_card(event.shift_pressed)
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_V:
 		_show_zone_view(player.damage_zone, "Damage Zone")
 	if event is InputEventKey and event.pressed and event.keycode == Key.KEY_G:
@@ -1122,6 +1129,15 @@ func _input(event):
 ##
 ## V = your damage zone, G = your graveyard. Left/right click on the zones themselves comes next; the keys make
 ## this usable and testable now.
+func _debug_tribute_first_card(opponent_side: bool = false) -> void:
+	var side_name: String = "opponent" if opponent_side else "player"
+	for candidate in field.get_front_cards_for(side_name) + field.get_back_cards_for(side_name):
+		if candidate != null and is_instance_valid(candidate) and candidate.is_on_field():
+			LOG.info("Debug", "tribute %s" % candidate.card_name)
+			put_card_into_graveyard(candidate)
+			return
+	LOG.info("Debug", "no %s card to tribute" % side_name)
+
 func _debug_break_first_forward(opponent_side: bool = false) -> void:
 	var side_name: String = "opponent" if opponent_side else "player"
 	var victim: Card = null
@@ -2634,8 +2650,11 @@ func put_card_into_graveyard(card: Card) -> void:
 	if not card.is_on_field():
 		return
 	card.broken = false
-	card.untap()
-	move_card_from_field(card, Card.Zone.GRAVEYARD, "REMOVAL")
+	# PRESENTED AS A TRIBUTE, not a shatter: the card did not break. The rules move happens inside, at once; a stand-in
+	# keeps the slot while a light orb bursts, then flies onto the pile (Vfx.tributed -> scripts/vfx/tribute_cue.gd).
+	Vfx.tributed(card, func() -> void:
+		card.untap()
+		move_card_from_field(card, Card.Zone.GRAVEYARD, "REMOVAL"))
 
 ## Break `card`. `source_kind`/`source_controller` describe the CAUSE ("Summon"/"Ability" and who controlled it), so
 ## continuous protection rules can be asked before anything moves; the state-based sweep passes the card's recorded

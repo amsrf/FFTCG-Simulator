@@ -23,6 +23,11 @@ enum Kind {
 	## HELD on its stack spot (`target_visuals[id].stand_in`) while it malfunctions and shatters (counter_cue.gd).
 	## Element-independent. (Appended: values are stable.)
 	COUNTERED,
+	## A card an EFFECT put from the field into the Break Zone WITHOUT breaking it (Game.put_card_into_graveyard:
+	## sacrifice, "put into the Break Zone", power 0, the Backup limit). The rules already moved it; a stand-in holds
+	## its field slot while a light orb bursts on it, then lifts clear and flies onto the pile (tribute_cue.gd).
+	## Element-independent. (Appended: values are stable.)
+	TRIBUTE,
 }
 
 var kind: Kind = Kind.STATUS_APPLIED

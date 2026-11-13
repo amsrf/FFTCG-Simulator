@@ -23,6 +23,7 @@ const CARD_SCENE_PATH := "res://scenes/cards/card.tscn"
 const CARD_SHARDS_PATH := "res://scenes/cards/card_shards.tscn"
 ## Loaded on first use, like the card scenes above (an autoload must not preload into the card's own load).
 const COUNTER_CUE_PATH := "res://scripts/vfx/counter_cue.gd"
+const TRIBUTE_CUE_PATH := "res://scripts/vfx/tribute_cue.gd"
 
 const ELEMENT_PRESET_DIR := "res://assets/vfx/elements"
 const STATUS_PRESET_DIR := "res://assets/vfx/status"
@@ -208,6 +209,27 @@ func countered(card: Card, move: Callable) -> void:
 	card.set_hidden(true)
 	visual["hid_card"] = true
 	var event := VfxEvent.new(VfxEvent.Kind.COUNTERED, [card], card.element, 0, null, "single")
+	event.target_visuals[card.get_instance_id()] = visual
+	_emit(event)
+
+
+## A CARD AN EFFECT PUTS INTO THE BREAK ZONE (not a break: Game.put_card_into_graveyard). Same shape as countered():
+## `move` is the rules move, run at once; a stand-in keeps the card's field slot (its field look, tapped or not) and
+## the real card waits hidden in the pile until the tribute cue has burst the orb and flown the stand-in onto it
+## (VfxEvent.Kind.TRIBUTE). A card not drawn on the field (setup, a headless probe that never laid it out) just moves.
+func tributed(card: Card, move: Callable) -> void:
+	var staged: bool = is_instance_valid(card) and card.is_drawn_on_field() and card.visible
+	var visual: Dictionary = {}
+	if staged:
+		visual["transform"] = card.global_transform
+		hold_card(card, visual, false, Card.Zone.FIELD)
+	move.call()
+	if not staged or not is_instance_valid(card):
+		release_hold(null, visual)
+		return
+	card.set_hidden(true)
+	visual["hid_card"] = true
+	var event := VfxEvent.new(VfxEvent.Kind.TRIBUTE, [card], card.element, 0, null, "single")
 	event.target_visuals[card.get_instance_id()] = visual
 	_emit(event)
 
@@ -413,6 +435,8 @@ func _present(event: VfxEvent) -> void:
 	var cue: Node = null
 	if event.kind == VfxEvent.Kind.COUNTERED:
 		cue = (load(COUNTER_CUE_PATH) as Script).new()
+	elif event.kind == VfxEvent.Kind.TRIBUTE:
+		cue = (load(TRIBUTE_CUE_PATH) as Script).new()
 	else:
 		var scene: PackedScene = _scene_for(event, preset_for(event))
 		if scene != null:

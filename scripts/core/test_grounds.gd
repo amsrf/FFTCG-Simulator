@@ -81,6 +81,7 @@ const CLASH_B := 41      # Squall, no First Strike
 const BREAK_A := 29      # a plain Forward, fine for the shatter visual
 const BREAK_B := 41      # Squall, ice Forward
 const BREAK_C := 12      # Zack, fire Forward
+const BLACK_MAGE := 10   # Black Mage: 《火》《Dull》, put itself into the Break Zone: 4000 damage to a Forward
 
 
 static func clean() -> Dictionary:
@@ -356,6 +357,19 @@ static func clash_practice() -> Dictionary:
 	return cfg
 
 
+static func tribute() -> Dictionary:
+	## TRIBUTE VISUAL: a card put into the Break Zone by an effect, NOT broken (light orb, three arcs, the card lifting
+	## clear and flying onto the pile). Two ways in:
+	##   * the real effect: Black Mage's ability costs 《火》 + dull + putting ITSELF into the Break Zone (Red Mage pays
+	##     the fire), and its 4000 damage needs an opposing Forward;
+	##   * R tributes your first field card, Shift+R the opponent's, through Game.put_card_into_graveyard().
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_tribute"
+	cfg["player_field"] = [{"id": BLACK_MAGE}, {"id": FIRE_MANA}, {"id": BREAK_A}, {"id": BREAK_C}]
+	cfg["opponent_field"] = [{"id": ICE_A}, {"id": DARK_KNIGHT}, {"id": BARD}]
+	return cfg
+
+
 const GROUNDS := {
 	"party": {
 		"title": "Ground: Parties (you attack)",
@@ -376,6 +390,10 @@ const GROUNDS := {
 	"clash": {
 		"title": "Ground: Clash cinematic",
 		"blurb": "Press 1: attacker survives / defender dies. 2: defender survives / attacker dies. 3: both survive (damage shielded). 4: both die. 5: both survive from different columns.",
+	},
+	"tribute": {
+		"title": "Ground: Tribute (put into the Break Zone)",
+		"blurb": "Use Black Mage's ability (it puts itself into the Break Zone), or press R to tribute your first card and Shift+R the opponent's. Not a break: light orb, then the card flies onto the pile.",
 	},
 	"break": {
 		"title": "Ground: Break a card",
@@ -451,6 +469,8 @@ static func config(name: String) -> Dictionary:
 			return clash_practice()
 		"break":
 			return break_cards()
+		"tribute":
+			return tribute()
 		"clean":
 			return clean()
 		"mill":
@@ -505,6 +525,7 @@ const CATEGORY_OF := {
 	"break_zone": "Zones",
 	"clash": "Combat",
 	"break": "Zones",
+	"tribute": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",
 }

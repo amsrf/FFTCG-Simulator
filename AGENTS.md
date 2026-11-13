@@ -926,6 +926,12 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
   tree root that follows the card and frees itself, `sample(t)` deterministic, lifted with `lift_for()` so the card
   face never hides its lower half. Its width is bounded so it never reaches the neighbouring card (the probe measures
   it). `Card.is_unbreakable()` is the one predicate: `Game.break_card()`, the badge and this all read it.
+- **A card an effect puts into the Break Zone WITHOUT breaking it is a TRIBUTE, not a shatter.**
+  `Game.put_card_into_graveyard()` wraps its rules move in `Vfx.tributed(card, move)` (the `Vfx.countered` shape: move
+  at once, stand-in on the slot, real card hidden in the pile until `tribute_cue.gd` lands the stand-in on it). The
+  flight must RISE first, cross at `CLEARANCE` above both the slot and the pile, then drop: the pile sits 0.5 m above
+  the board, so a straight lerp passes under/through cards. A probe that times something queued after a removal must
+  await `Vfx.idle()`, not a fixed delay, because the tribute holds the serial queue ~0.75 s.
 - **"Cannot block" is presented by the shield tear** (`assets/vfx/status/block_disabled.tres` -> `shield_tear_cue.gd`
   -> `shield_tear.gd` + `shaders/shield_tear.gdshader`), built like the power-up swords: SVG pieces rasterised at runtime
   (the halves use an SVG `clipPath` along the zigzag, which Godot's rasterizer honours) on screen-plane quads. Never
@@ -1012,6 +1018,12 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **`Hand.update_card_positions()` tweens every card into its slot**, so anything that changes the layout — a draw, a reorder, a hover — animates for free through that one path. Prefer calling it over animating a card by hand.
 
 - **A shader that fails to compile is dropped SILENTLY, and no GDScript will tell you.** Writing `float darken = edge_colour.rgb;` (a `vec3` into a `float`) left every probe check green while the material itself vanished — the cards simply lost their rounding, with nothing the probe could see. Check it with the COUNT of `SHADER ERROR|SCRIPT ERROR|Parse Error` on a boot **and** a grep for the literal word `shader`; a narrow pattern of your own is what hides the message. Godot prints a shader error twice — once as a blank `--Main Shader--` frame and once naming the identifier — so widen the window before concluding the engine is being unhelpful.
+- **`smoothstep(e0, e1, x)` with `e0 == e1` is UNDEFINED in GLSL**, and on this renderer it drew grainy NaN wedges across
+  the board (the tribute ring, where a gap has width exactly 0). Guard any width-driven edge: `max(w, eps)` plus a mask.
+- **Judge an effect against the REFERENCE FRAMES side by side, not against its own previous render.** The tribute ring
+  was tuned for rounds toward "nicer" while the clip showed something else. Crop the matching reference frames at full
+  size into one sheet with the renders before tuning anything. Hand-drawn jagged shapes (the clip's lightning-like
+  arcs) did not come out of procedural noise; the tribute settled on three smooth symmetric crescents instead.
 - **`get_shader_parameter()` returns `null` for a miss, and `float(null)` is a hard error.** Guard every read-back with `is float` and a fallback. This is the same trap that once collapsed the targeting halo's quad to the card's exact size.
 - **Round a texture's corners in a `canvas_item` shader; a raw image has no `StyleBoxFlat`.** One shader therefore owns the rounding, the bottom line and the hover aura together, and every size in it is in UV so the same numbers work at 190 px and 363 px.
 - **A line that follows a rounded outline must be measured from the OUTLINE.** Measuring from `UV.y` gives a straight stripe the corner mask merely chops off; `inward = -dist` on the rounded rect's distance field gives constant width that turns with the corner. Its extent along the bottom is a `smoothstep` window (`0.82..0.96`) derived from the corner radius (0.07 UV), not chosen by feel.

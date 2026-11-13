@@ -5,6 +5,45 @@ All notable changes to the FF TCG Simulator project.
 ## [Unreleased] — 2026-11-13
 
 ### Added
+- **Tribute: an effect putting a card into the Break Zone (not a break) has its own presentation.**
+  `Game.put_card_into_graveyard()` (sacrifices, "put into the Break Zone", power 0, the Backup limit) now goes through
+  `Vfx.tributed(card, move)`, the same shape as `Vfx.countered`: the rules move happens at once, a stand-in keeps the
+  field slot and the real card waits hidden in the pile. `VfxEvent.Kind.TRIBUTE` (appended) plays
+  `scripts/vfx/tribute_cue.gd` (after `~/Desktop/Clips/tribute` frames 23-37): a warm orb charges on the card
+  with a vertical streak, a white bloom pops, a hot core sits inside an expanding ring, and the ring tears into arc
+  slashes with sparkles (~0.75 s; all one camera-facing quad, `shaders/tribute_burst.gdshader`, added to `EFFECT_SHADERS`).
+  The ring is THREE identical, evenly spaced, smooth crescents (`ARC_FILL`, `ARC_ROTATION`), born thick
+  (`ARC_BIRTH_WIDTH`) at the pop; they travel outward the whole time and lose THICKNESS, never length (one thinning
+  factor scales each arc's fixed profile, driven by `ring_life`). `FX_END` is 1.35 s of AUTHORED time, played `SPEED` (1.8) times faster: ~0.75 s, the card landing at ~0.58 s.
+  The card leaves at the pop: it rises STRAIGHT UP to `CLEARANCE` (0.7 m) above both its slot and the pile (which sits
+  0.5 m up), crosses at that height, and drops straight down onto its pile slot, so it never slides through the
+  cards beside it. Breaks keep their shatter. Viewing harness: `tools/tribute_demo.tscn`; `flow_probe` gains
+  `_check_tribute()` (rules first, stand-in on the slot, one event, crossing height above board and pile, landing at ~1 s,
+  cleanup, a break does not tribute).
+
+- **Test Mode → Zones → "Ground: Tribute"** (`TEST_GROUNDS.tribute()`, preset `ground_tribute`). Black Mage + Red
+  Mage on your side: Black Mage's ability (《火》, dull, put itself into the Break Zone: 4000 to a Forward) is the real
+  effect path; opposing Forwards give it a target. **R** tributes your first field card, **Shift+R** the opponent's
+  (`Game._debug_tribute_first_card()` -> `put_card_into_graveyard()`), Test Mode only. `test_grounds_probe` checks
+  the ability is usable at once and that R's path emits a TRIBUTE.
+
+### Fixed
+- **A dull card put into the Break Zone landed upside down** (Black Mage's own sacrifice on the Tribute ground).
+  `put_card_into_graveyard()` untaps the card just before moving it; the untap tween kept turning `rotation_degrees.y`
+  toward the FIELD's upright (a half turn) after `Card.enter_zone()` had set the pile's rotation. `enter_zone()` now
+  kills the tap/untap `tween` when a card leaves the field, like the hand and stack layout tweens. `flow_probe`'s
+  tribute check dulls the card first and asserts it lies straight (it fails at 180° without the fix).
+- Tribute ring simplified after several attempts at the clip's jagged arcs (noise tears, swirling crescents, kinked
+  eroding pieces) read as wavy worms or arcs collapsing to points. A zero-width gap fed `smoothstep(0, 0, d)`
+  (undefined in GLSL) and drew grainy NaN wedges; the stroke is guarded (`shaders/tribute_burst.gdshader`).
+- `flow_probe`: the stack-fan / review-link section now waits for its injected stack card to LAND (`Vfx.idle()`)
+  instead of one frame, and the "make room" Backup removal settles before the timed checks. A longer presentation
+  ahead in the queue (now a tribute) made the review-link check fail intermittently.
+
+### Known Issues
+- Several cards tributed at once (a mass "put into the Break Zone", several power-0 Forwards) play one after another
+  (~0.75 s each) because the presentation queue is serial; a batched variant could fly them together.
+
 - **Keyword badges.** A field card shows one badge per keyword it currently has — Brave, First Strike, then
   Indestructible ("cannot be broken"), then Cannot block — in a row along the bottom of its face from the left, closing up when one goes
   away. The glyphs are game-icons.net icons (CC BY 3.0, credited in `assets/icons/keywords/CREDITS.md`): Brave is

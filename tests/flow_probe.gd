@@ -90,6 +90,8 @@ func _ready() -> void:
 	var backups: Array = field.get_back_cards_for(Card.PLAYER).filter(func(b): return b.activation_skills().is_empty())
 	if field.get_back_cards_for(Card.PLAYER).size() >= game.MAX_BACKUPS and not backups.is_empty():
 		game.put_card_into_graveyard(backups[backups.size() - 1])
+		# Setup, not under test: let its tribute (orb burst + flight to the pile) finish before the timed checks below.
+		await Vfx.idle()
 		await get_tree().process_frame
 
 	# Character drag has two states: ordinary drag inside the hand band, and the
@@ -397,6 +399,10 @@ func _ready() -> void:
 		if stack.cards.size() < 2:
 			stack.create_card(4, "opponent", "when_cast", null)
 			await get_tree().process_frame
+		# The new card FLIES in through the presentation queue, behind whatever is still playing (a tribute, say); a
+		# card still in flight shows no review link, so wait for it to land rather than for a fixed time.
+		await Vfx.idle()
+		await get_tree().process_frame
 		_expect(stack.cards.size() >= 2, "there are at least two cards on the stack to fan")
 		if stack.cards.size() >= 2:
 			var top: Card = stack.cards.back()
@@ -528,6 +534,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await _check_simultaneous_triggers()
 	await _check_gadot_played_from_hand()
+	await _check_tribute()
 
 	_report()
 	get_tree().quit()
@@ -1095,6 +1102,77 @@ func _check_simultaneous_triggers() -> void:
 
 ## The REAL play: Gadot cast from hand, paid, teleported in, and his two abilities triggering while that presentation
 ## is still queued. Records each trigger card every frame so a missing flight shows up as "visible but never moved".
+## TRIBUTE: an effect putting a field card into the Break Zone (not a break). The rules move is immediate; on screen a
+## stand-in keeps the slot while a light orb bursts, RISES clear before it crosses (so it never slides through the
+## card beside it or under the raised pile), and drops onto the pile, where the real card then shows.
+func _check_tribute() -> void:
+	MatchSetup.config = TEST_GROUNDS.config("clean")
+	var game = GAME_SCENE.instantiate()
+	add_child(game)
+	await get_tree().process_frame
+	var field = game.field
+	var card: Card = game.create_card(5, "player")
+	game.add_child(card)
+	field.play_card(card, false, false)
+	var neighbour: Card = game.create_card(6, "player")
+	game.add_child(neighbour)
+	field.play_card(neighbour, false, false)
+	await Vfx.idle()
+	await get_tree().process_frame
+	# DULL IT FIRST, as Black Mage's own cost does: put_card_into_graveyard() untaps it, and that untap tween once kept
+	# turning the card after it reached the pile, so it lay there upside down.
+	card.tap()
+	await get_tree().create_timer(0.4).timeout
+	var slot: Vector3 = card.global_position
+	var pile: Node3D = game.player_graveyard
+	Vfx.clear_events()
+	game.put_card_into_graveyard(card)
+	_expect(card.current_zone == Card.Zone.GRAVEYARD and pile.graveyard_cards.has(card),
+		"RULES FIRST: the tributed card is in the Break Zone the moment the effect resolves")
+	var held: Array = game.find_children("HeldCard*", "Node3D", true, false)
+	_expect(held.size() == 1 and not card.visible and (held[0] as Card).global_position.distance_to(slot) < 0.01,
+		"a stand-in keeps the field slot while the real card waits hidden in the pile")
+	var events := Vfx.get_events().filter(func(e) -> bool: return e.kind == VfxEvent.Kind.TRIBUTE)
+	_expect(events.size() == 1, "putting a card into the Break Zone emits one TRIBUTE event (%d)" % events.size())
+	var stand_in: Card = held[0] if held.size() == 1 else null
+	var peak := -INF
+	var low_while_crossing := INF   # the lowest height while the card is away from BOTH the slot and the pile
+	var saw_burst := false
+	var waited := 0.0
+	var card_w: float = card._card_face_size().x * card.global_basis.x.length()
+	while is_instance_valid(stand_in) and waited < 5.0:
+		saw_burst = saw_burst or not Vfx.find_children("TributeBurst", "MeshInstance3D", true, false).is_empty()
+		var at: Vector3 = stand_in.global_position
+		peak = maxf(peak, at.y)
+		var flat_from_slot := Vector2(at.x - slot.x, at.z - slot.z).length()
+		var flat_to_pile := Vector2(at.x - card.global_position.x, at.z - card.global_position.z).length()
+		if flat_from_slot > card_w and flat_to_pile > card_w:
+			low_while_crossing = minf(low_while_crossing, at.y)
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	print("[FlowProbe] tribute flight: peak y %.2f, lowest while crossing %.2f, pile y %.2f, landed after %.2f s"
+		% [peak, low_while_crossing, card.global_position.y, waited])
+	_expect(saw_burst, "the light-orb burst quad plays on the slot")
+	_expect(low_while_crossing > maxf(slot.y, card.global_position.y) + 0.3,
+		"the card crosses ABOVE the board and the pile, never gliding through the cards beside it")
+	_expect(not is_instance_valid(stand_in) and card.visible and waited > 0.4 and waited < 1.0,
+		"after ~0.6 s the stand-in has landed and gone, and the real card shows in the pile")
+	await Vfx.idle()
+	await get_tree().process_frame
+	_expect(Vfx.find_children("TributeBurst", "MeshInstance3D", true, false).is_empty(),
+		"the burst quad is gone when the cue finishes")
+	await get_tree().create_timer(0.5).timeout
+	_expect(card.rotation.is_equal_approx(Card.ZONE_PRESENTATION[Card.Zone.GRAVEYARD]["rotation"]),
+		"a card that was DULL lies straight in the pile, not upside down (rotation %s)" % str(card.rotation_degrees))
+	# A BREAK is not a tribute: it keeps its own shatter.
+	Vfx.clear_events()
+	game.break_card(neighbour)
+	_expect(Vfx.get_events().filter(func(e) -> bool: return e.kind == VfxEvent.Kind.TRIBUTE).is_empty(),
+		"breaking a card does not play the tribute")
+	await Vfx.idle()
+	game.queue_free()
+	await get_tree().process_frame
+
 func _check_gadot_played_from_hand() -> void:
 	MatchSetup.config = TEST_GROUNDS.config("clean")
 	var game = GAME_SCENE.instantiate()
