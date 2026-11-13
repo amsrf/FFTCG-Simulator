@@ -23,14 +23,23 @@ const ELEMENTS := preload("res://scripts/core/elements.gd")
 ## change moves the tip, not the base. At 0.26 m its top tip was touching the card above it, and the render checks
 ## said the row then sat much closer to the board than to the hand — this is the centred position for this size.
 @export var cost_readout_offset: Vector3 = Vector3(0.0, 0.17, 0.38)
+## WHERE THE ROW SITS ON SCREEN, as a fraction of the viewport (0,0 top-left). It replaced the hand-relative offset
+## above, which put the row on top of the player's Backup row where card art swallowed the crystals: (0.5, 0.42) is
+## the centre column, on the river between the two boards. Projected through the board camera each frame, so it is the
+## same screen spot at any resolution. The offset is kept only as the fallback when there is no camera.
+@export var cost_readout_screen_anchor: Vector2 = Vector2(0.5, 0.42)
+## How far from the camera the row floats, metres. The board camera (BoardCameraRig, PERSPECTIVE at runtime, fov 30)
+## sits ~8 m from the board, so 3.0 keeps the row and its backing panel far above every card. Being perspective, this
+## also sets the row's on-screen size: ~670 px per metre at 3.0 on a 1080 p screen.
+@export var cost_readout_camera_depth: float = 3.0
 ## The crystal's height in metres. Not "the source art's pixel size" any more: the badge row this replaced drew
 ## 26 px icons at 0.14 m so they would not be upscaled, but a crystal is a 3D object whose facets have to stay
-## legible at gameplay distance. It has been 0.14 -> 0.26 -> 0.34 -> 0.42 and is back at 0.26 — about 49 px tall at
-## this camera's 187 px per metre.
+## legible at gameplay distance. It has been 0.14 -> 0.26 -> 0.34 -> 0.42 -> 0.26, and 0.18 since the row moved to the
+## screen centre, nearer the camera: about 80 px of visible crystal at ~670 px per metre.
 ##
 ## The label is sized from this as well (see the setter), so the word can never end up bigger than the crystals
 ## it introduces. The property name is a leftover from the badge row it replaced.
-@export var cost_readout_badge_size_m: float = 0.26:
+@export var cost_readout_badge_size_m: float = 0.18:
 	set(value):
 		cost_readout_badge_size_m = value
 		if cost_readout == null:
@@ -95,7 +104,14 @@ func _ready():
 func _process(_delta: float) -> void:
 	if cost_readout == null:
 		return
-	cost_readout.global_position = hand.global_position + cost_readout_offset
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		cost_readout.global_position = hand.global_position + cost_readout_offset
+		return
+	var screen: Vector2 = get_viewport().get_visible_rect().size * cost_readout_screen_anchor
+	# The crystals' origin is their BASE: drop it by half a crystal so the row's MIDDLE sits on the anchor.
+	cost_readout.global_position = cam.project_position(screen, cost_readout_camera_depth) \
+		- cam.global_basis.y * cost_readout.crystal_height_m * 0.5
 
 # ------------------------------------------------------------------
 # Unified modal API. All flows configure the two main buttons through

@@ -25,6 +25,7 @@ const ELEMENTS := preload("res://scripts/core/elements.gd")
 const LABEL_FONT := preload("res://assets/fonts/FOT-NewRodin Pro EB.otf")
 const LABEL_FONT_SIZE := 64
 const WILD := "neutral"
+const PANEL_SHADER := preload("res://shaders/cost_panel.gdshader")
 
 ## The crystal's height in metres — and therefore its footprint: the mesh is twice as tall as it is wide and it
 ## spins, so its widest diagonal is exactly half its height.
@@ -73,7 +74,21 @@ const WILD := "neutral"
 		paid = value
 		_apply_paid()
 
+## THE BACKING WINDOW: a rounded, semi-transparent black panel behind the row, so the crystals read against busy
+## card art. Built by _rebuild() from the row's own measured width, so it fits one crystal or eight.
+@export var panel_enabled: bool = true
+## Space between the crystals and the panel's edge, metres.
+@export var panel_padding_m: float = 0.05
+## How much of `crystal_height_m` is actually VISIBLE. Measured, not derived: a crystal fitted to 0.26 m (its mesh
+## bounds really are 0.26 m tall) drew ~115 px of crystal at 672 px/m, i.e. ~0.17 m - the tips thin into the edge
+## geometry. Sizing the panel from the nominal height made it twice as tall as what it framed.
+const CRYSTAL_VISIBLE_FRACTION := 0.66
+@export var panel_color: Color = Color(0.0, 0.0, 0.0, 0.55)
+## How far the panel sits BEHIND the crystals (away from the camera), metres; enough that no facet pokes through it.
+@export var panel_depth_m: float = 0.12
+
 var _label: Label3D = null
+var _panel: MeshInstance3D = null
 
 func _ready() -> void:
 	_rebuild()
@@ -158,6 +173,7 @@ func _rebuild() -> void:
 		remove_child(c)
 		c.queue_free()
 	_label = null
+	_panel = null
 
 	# One slot per point: the elemental points first, in the cost's own key order so the row is stable between
 	# rebuilds, then the wild ones, which have no element of their own and are drawn white.
@@ -207,9 +223,40 @@ func _rebuild() -> void:
 		crystal.element = str(slots[i])
 		crystal.position = Vector3(x + width * 0.5, 0.0, 0.0)
 		x += width + gap_m
+	_make_panel(total)
 	# Payment is applied through the same path the setters use, so there is exactly one definition of what "paid"
 	# means for a crystal — and the freshly built row shows any payment that already exists when it appears.
 	_apply_paid()
+
+## The window behind the row: centred on the crystals (their origin is their BASE, so the middle is half a height up),
+## padded on every side, pushed back along the row's local -z (the row faces the camera, so -z is away from it).
+func _make_panel(row_width: float) -> void:
+	if not panel_enabled:
+		return
+	var visible_h: float = crystal_height_m * CRYSTAL_VISIBLE_FRACTION
+	if not label_text.is_empty():
+		visible_h = maxf(visible_h, label_height_m)
+	var size := Vector2(row_width + panel_padding_m * 2.0, visible_h + panel_padding_m * 2.0)
+	var mat := ShaderMaterial.new()
+	mat.shader = PANEL_SHADER
+	mat.set_shader_parameter("panel_size", size)
+	mat.set_shader_parameter("corner_radius", minf(size.y * 0.3, 0.08))
+	mat.set_shader_parameter("fill_color", panel_color)
+	# After the board and the cards, which are in the transparent pass too (see the fire burst note in AGENTS.md).
+	mat.render_priority = 10
+	var quad := QuadMesh.new()
+	quad.size = size
+	_panel = MeshInstance3D.new()
+	_panel.name = "CostPanel"
+	_panel.mesh = quad
+	_panel.material_override = mat
+	_panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_panel.position = Vector3(0.0, crystal_height_m * 0.5, -panel_depth_m)
+	add_child(_panel)
+
+## Probe hook: the backing panel, or null.
+func panel() -> MeshInstance3D:
+	return _panel
 
 func _make_label() -> void:
 	if _label != null:

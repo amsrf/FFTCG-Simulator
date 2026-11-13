@@ -535,6 +535,7 @@ func _ready() -> void:
 	await _check_simultaneous_triggers()
 	await _check_gadot_played_from_hand()
 	await _check_tribute()
+	await _check_cost_row()
 
 	_report()
 	get_tree().quit()
@@ -1170,6 +1171,45 @@ func _check_tribute() -> void:
 	_expect(Vfx.get_events().filter(func(e) -> bool: return e.kind == VfxEvent.Kind.TRIBUTE).is_empty(),
 		"breaking a card does not play the tribute")
 	await Vfx.idle()
+	game.queue_free()
+	await get_tree().process_frame
+
+## THE MANA COST ROW sits at the SCREEN CENTRE (Assistant.cost_readout_screen_anchor: the river between the boards),
+## not on the player's Backup row where card art swallowed it, inside a dark window that frames the whole row from
+## BEHIND the crystals.
+func _check_cost_row() -> void:
+	MatchSetup.config = TEST_GROUNDS.config("clean")
+	var game = GAME_SCENE.instantiate()
+	add_child(game)
+	await get_tree().process_frame
+	var assistant = game.get_node("Assistant")
+	assistant._on_field_card_activated_ability({"火": 1, "neutral": 2})
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var row: Node3D = assistant.cost_readout
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var crystals: Array = row.crystals()
+	_expect(row.visible and crystals.size() == 3, "a payment shows its cost row (%d crystals)" % crystals.size())
+	if crystals.size() == 3 and cam != null:
+		var screen: Vector2 = get_viewport().get_visible_rect().size
+		var anchor: Vector2 = screen * assistant.cost_readout_screen_anchor
+		# The middle crystal's MIDDLE (its origin is its base).
+		var mid: Node3D = crystals[1]
+		var middle: Vector2 = cam.unproject_position(mid.global_position + cam.global_basis.y * row.crystal_height_m * 0.5)
+		print("[FlowProbe] cost row middle at %s, anchor %s (screen %s)" % [middle, anchor, screen])
+		_expect(middle.distance_to(anchor) < 3.0, "the cost row's middle sits on the screen anchor (%.1f px off)" % middle.distance_to(anchor))
+		var panel: MeshInstance3D = row.panel()
+		_expect(panel != null and panel.visible, "the row has its backing panel")
+		if panel != null:
+			var half: Vector2 = (panel.mesh as QuadMesh).size * 0.5
+			var left: float = cam.unproject_position(panel.global_transform * Vector3(-half.x, 0, 0)).x
+			var right: float = cam.unproject_position(panel.global_transform * Vector3(half.x, 0, 0)).x
+			var first_x: float = cam.unproject_position((crystals[0] as Node3D).global_position).x
+			var last_x: float = cam.unproject_position((crystals[2] as Node3D).global_position).x
+			_expect(left < first_x and right > last_x, "the panel frames every crystal (%.0f..%.0f around %.0f..%.0f)" % [left, right, first_x, last_x])
+			var cam_to_panel: float = cam.global_position.distance_to(panel.global_position)
+			var cam_to_crystal: float = cam.global_position.distance_to(mid.global_position)
+			_expect(cam_to_panel > cam_to_crystal, "and sits BEHIND the crystals, so it never darkens them")
 	game.queue_free()
 	await get_tree().process_frame
 

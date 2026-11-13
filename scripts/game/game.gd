@@ -824,6 +824,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/counter_overlay.gdshader"),
 	# The tribute burst (tribute_cue.gd): first rendered when an effect puts a card into the Break Zone.
 	preload("res://shaders/tribute_burst.gdshader"),
+	# The mana cost row's backing window (crystal_cost.gd): first rendered when a payment opens.
+	preload("res://shaders/cost_panel.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),

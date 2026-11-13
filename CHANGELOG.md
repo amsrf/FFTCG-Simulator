@@ -27,6 +27,16 @@ All notable changes to the FF TCG Simulator project.
   (`Game._debug_tribute_first_card()` -> `put_card_into_graveyard()`), Test Mode only. `test_grounds_probe` checks
   the ability is usable at once and that R's path emits a TRIBUTE.
 
+- **The mana cost row moved to the screen centre, in a dark window.** It sat on the player's Backup row, where card
+  art swallowed the crystals. `Assistant` now places it from `cost_readout_screen_anchor` (0.5, 0.42: the river
+  between the boards), projected through the camera at `cost_readout_camera_depth` (3.0 m), with the crystals' middle
+  on the anchor; `cost_readout_offset` remains only as the no-camera fallback. `CrystalCost` builds a rounded,
+  semi-transparent black `CostPanel` behind the row (`shaders/cost_panel.gdshader`, warmed in `EFFECT_SHADERS`),
+  sized from the row's measured width and the crystal's VISIBLE height (`CRYSTAL_VISIBLE_FRACTION` 0.66, measured:
+  the tips thin into the edge geometry); knobs `panel_padding_m`, `panel_color`, `panel_depth_m`, `panel_enabled`.
+  The camera is perspective, so the nearer row is bigger; crystals went 0.26 -> 0.18 m (~80 px visible).
+  `flow_probe._check_cost_row()`: middle on the anchor (0.0 px), panel frames every crystal and sits behind them.
+
 ### Fixed
 - **A dull card put into the Break Zone landed upside down** (Black Mage's own sacrifice on the Tribute ground).
   `put_card_into_graveyard()` untaps the card just before moving it; the untap tween kept turning `rotation_degrees.y`
