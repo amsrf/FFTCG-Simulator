@@ -258,6 +258,11 @@ func show_pass_priority_button():
 	)
 	if modal_mode:
 		passPhaseButton.hide_button()
+	elif auto_pass_hides_button():
+		# AUTO-PASS WILL ANSWER THIS WINDOW (LocalAgent._auto_pass_if_nothing_to_do): nothing can be played, so the disc
+		# stays down. Raising it only for the auto-pass to lower it 0.6 s later made it flip up and down through every
+		# skipped phase. LocalAgent raises it itself if a play turns up before the pass.
+		passPhaseButton.hide_button()
 	else:
 		# THE LABEL SAYS WHAT PRESSING IT WILL DO (rule 11.1.7). "Next Phase" when your pass ENDS the phase: the opponent
 		# has just passed and the stack is empty. Everywhere else it is "Pass": priority goes to the opponent, or (after
@@ -273,6 +278,15 @@ func show_pass_priority_button():
 			var ends_phase: bool = bool(get_parent().get("other_player_passed")) and waiting == 0
 			passPhaseButton.set_text("Next Phase" if ends_phase else "Pass")
 		passPhaseButton.show_button()
+
+## True while auto-pass is on and the local player has nothing to play: the window will be passed for them, so the
+## button is not offered. The SAME predicate LocalAgent uses to decide the auto-pass, so the two cannot disagree.
+func auto_pass_hides_button() -> bool:
+	var game = get_parent()
+	if game == null or not bool(game.get("auto_pass")):
+		return false
+	var field_now = game.get("field")
+	return field_now != null and not field_now.local_has_any_play()
 
 func _pass_priority():
 	passPhaseButton.hide_button()

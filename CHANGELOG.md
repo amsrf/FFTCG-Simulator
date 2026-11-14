@@ -50,6 +50,13 @@ All notable changes to the FF TCG Simulator project.
   adds `DRAW_LIFT` (2.6) of world Y to the path's start handle: the card leaves the deck almost straight up and arcs
   above the hand's plane (peak ~1.76), closer to the camera, so perspective supplies part of the in-flight growth and
   the scale swell is trimmed from 1.45x to `DRAW_SWELL` 1.3x. `draw_probe` asserts the card stays above the field
+- **The pass button no longer flips up and down through auto-passed phases.** It is raised only when the local
+  player holds priority AND has something to play: `Assistant.auto_pass_hides_button()` (same predicate as the
+  auto-pass) keeps it down in `show_pass_priority_button()`, and `Game.priority()` / `priority_round_only()` reset
+  `priority_holder` to 0 when a round ends, so a stale holder no longer re-raises it on every mode change during the
+  phase change. `LocalAgent._auto_pass_if_nothing_to_do()` raises the button itself if a play turns up during the pause,
+  and re-checks after an open modal instead of giving up (the button being down, giving up would hang the window).
+  `playable_probe` asserts the button stays down for an auto-passed window and with no holder.
   cards once it has left the deck (lowest 0.62).
 
 ### Fixed

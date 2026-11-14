@@ -2174,6 +2174,7 @@ func priority_round_only() -> void:
 			continue
 		break
 	_priority_lock = false
+	priority_holder = 0
 	LOG.info("Priority", "between-steps round over")
 	
 	
@@ -2449,6 +2450,9 @@ func enforce_game_state_rules() -> void:
 	#    not trigger. (Break Zone and Graveyard share a container here, but
 	#    the removal events are distinct.)
 	for card in field.get_zero_power_cards():
+	# NOBODY HOLDS PRIORITY BETWEEN ROUNDS. A stale holder of 1 kept the pass button raised through the phase change
+	# (every mode change re-shows it for the holder) until the next round asked someone again.
+	priority_holder = 0
 		put_card_into_graveyard(card)
 	# 2) Accumulated damage greater than current power: the card is broken.
 	# THE SWEEP HAS NO IDEA WHAT DEALT THE DAMAGE, so the card carries it (Card.last_damage_kind/controller) and the

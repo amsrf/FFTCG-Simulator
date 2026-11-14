@@ -92,12 +92,20 @@ func _ready() -> void:
 	var passer := func() -> void: result[0] = await agent.take_priority(1)
 	passer.call()
 	var waited := 0.0
+	var button_raised := false   # the pass disc must stay DOWN for a window auto-pass will answer (it used to flip up and down)
+	var pass_button = _game.get("assistant").passPhaseButton
 	while result[0] == null and waited < 3.0:
+		button_raised = button_raised or pass_button.visible
 		await get_tree().create_timer(0.1).timeout
 		waited += 0.1
 	print("[Playable] auto-pass after %.1fs: %s" % [waited, str(result[0])])
 	_expect(result[0] == false, "with nothing to do, the player is passed for automatically")
 	_expect(waited >= 0.5, "after a short pause, not instantly (%.1fs)" % waited)
+	_expect(not button_raised, "and the pass button is never raised for that window")
+	# Nobody holds priority once a round is over: a stale holder kept the button up through the phase change.
+	_game.set("priority_holder", 0)
+	await get_tree().process_frame
+	_expect(not pass_button.visible, "with no priority holder the pass button is down")
 
 	print("[Playable] %d checks | failures: %d" % [_checks, _fails])
 	print("[Playable] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

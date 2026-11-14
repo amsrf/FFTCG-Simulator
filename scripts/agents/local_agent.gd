@@ -61,19 +61,27 @@ func take_priority(_player_id: int) -> bool:
 	return acted
 
 ## AUTO-PASS: nothing in hand can be cast and no ability can be used, so pass for the player after a short pause. The
-## check runs again at the end of the pause, and the pass only happens if this is still the same window.
+## pass button is NOT raised for such a window (Assistant.auto_pass_hides_button), so the disc stays down through skipped
+## phases. Because the button is down, this must never just give up: if a play turns up during the pause the button is
+## raised here, and if a modal is open the check waits for it to close and runs again, or the window would hang with no
+## way to pass.
 func _auto_pass_if_nothing_to_do(serial: int) -> void:
 	if game.field.local_has_any_play():
 		return
-	await game.get_tree().create_timer(AUTO_PASS_DELAY).timeout
-	if serial != _window_serial or game == null or bool(game.get("match_over")):
-		return
-	if int(game.get("priority_holder")) != 1 or game.field.local_has_any_play():
-		return
-	var mode = GlobalVariables.get_player_mode()
-	if mode != GlobalVariables.Player_Mode.FREE and mode != GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
-		return   # something else is going on (a modal): leave it to the player
-	game.assistant._pass_priority()
+	while true:
+		await game.get_tree().create_timer(AUTO_PASS_DELAY).timeout
+		if serial != _window_serial or game == null or bool(game.get("match_over")):
+			return
+		if int(game.get("priority_holder")) != 1:
+			return
+		if game.field.local_has_any_play():
+			game.assistant.show_pass_priority_button()   # something became playable: hand the window back to the player
+			return
+		var mode = GlobalVariables.get_player_mode()
+		if mode == GlobalVariables.Player_Mode.FREE or mode == GlobalVariables.Player_Mode.INSTANT_SPEED_TIME:
+			game.assistant._pass_priority()
+			return
+		# something else is going on (a modal): check again once it has had time to close
 
 func decide_attacker(_player_id: int) -> Card:
 	# The human selects an attacker by clicking cards; the (Attack / No Attack)
