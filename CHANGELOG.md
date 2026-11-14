@@ -4,6 +4,26 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-14
 
+### Added
+- **Dull Backups read as spent, and the Active Phase untaps as a wave.** New `scripts/cards/card_dull_fx.gd`
+  (`Card.dull_fx`). `card.gdshader` gains `dull_amount`: a dull Backup's art is drawn toward grey and darkened, eased
+  in/out with the tap tilt and reset on any zone change; Forwards keep their colour when dull (only the tilt). The
+  Active Phase untap is a left-to-right wave on screen: the rules untap every card at once, while
+  `Card.untap(visual_delay, refresh)` staggers each card's turn back (`Field.UNTAP_STAGGER` 0.08 s) and a light band
+  (`refresh_sweep`) crosses its art as the colour returns. New `tests/dull_fx_probe.tscn`; verified by render (no
+  shader errors). (A Backup-to-crystal mana-drain stream was tried and removed.)
+- **No Forwards, no Attack Phase.** When the turn player controls no Forwards, `Game.next_phase()` goes from the First
+  Main Phase straight to the Second Main Phase (new `Game.turn_owner_has_forwards()`), and the combat loop does the
+  same once the last Forward is gone: no empty priority rounds and no "No Attack" click. A deliberate simplification:
+  "when your Attack Phase starts" triggers do not fire on such a turn. `test_grounds_probe` checks the `clean` ground
+  skips it and the `party` ground enters it.
+- **Double-click a hand card to play it.** Two clicks on the same card (no drag) within 0.35 s tween it into the cast
+  stance in 0.12 s and start mana charging, exactly as releasing a dragged card in the stance does (same legality and
+  priority gates, same `charge()`; Summons and Characters). New `Hand.quick_cast()`, `_is_double_click()`,
+  `DOUBLE_CLICK_SECONDS` / `CLICK_SLOP_PX` / `QUICK_CAST_SECONDS`; the stance is built from the card's fan slot. A
+  single click still only re-lays the hand out. `drop_area_probe`: single click, double click (charging, stance,
+  aura), cancel back to the hand, clicks on two different cards.
+
 ### Changed
 - **Deck and Break Zone lie flat on the wood, smaller, with the damage zone above the deck.** The piles floated 0.5 m
   up over a shallow wooden pocket and the deck read huge. New `Blender/fill_deck_pockets.py` (after
@@ -25,7 +45,18 @@ All notable changes to the FF TCG Simulator project.
   of both hands differs by 0.05/255 on average. `hand_hover_probe` and `flow_probe` convert their local lengths with
   the hand's scale.
 
+### Known Issues
+- `lockstep_probe` fails 2 checks ("every replayed decision was the kind the game asked for", "both machines hash every
+  turn identically") on the last commit too; not caused by the changes above.
+
 ### Fixed
+- **The pass button no longer flips up and down through auto-passed phases.** It is raised only when the local
+  player holds priority AND has something to play: `Assistant.auto_pass_hides_button()` (same predicate as the
+  auto-pass) keeps it down in `show_pass_priority_button()`, and `Game.priority()` / `priority_round_only()` reset
+  `priority_holder` to 0 when a round ends, so a stale holder no longer re-raises it on every mode change during the
+  phase change. `LocalAgent._auto_pass_if_nothing_to_do()` raises the button itself if a play turns up during the pause,
+  and re-checks after an open modal instead of giving up (the button being down, giving up would hang the window).
+  `playable_probe` asserts the button stays down for an auto-passed window and with no holder.
 - **Damage cards: one straight row over the deck, deck-sized, each in its own slot, with a clean flight.** From your
   screenshots: `DamageZone.draw()` tweened every new damage card to a hard-coded 1.2 (bigger than the rest) and started
   it at 1.4 (`enter_zone` ran inside the 1.4 Deck node before the reparent kept that size); all flights shared ONE
@@ -50,13 +81,6 @@ All notable changes to the FF TCG Simulator project.
   adds `DRAW_LIFT` (2.6) of world Y to the path's start handle: the card leaves the deck almost straight up and arcs
   above the hand's plane (peak ~1.76), closer to the camera, so perspective supplies part of the in-flight growth and
   the scale swell is trimmed from 1.45x to `DRAW_SWELL` 1.3x. `draw_probe` asserts the card stays above the field
-- **The pass button no longer flips up and down through auto-passed phases.** It is raised only when the local
-  player holds priority AND has something to play: `Assistant.auto_pass_hides_button()` (same predicate as the
-  auto-pass) keeps it down in `show_pass_priority_button()`, and `Game.priority()` / `priority_round_only()` reset
-  `priority_holder` to 0 when a round ends, so a stale holder no longer re-raises it on every mode change during the
-  phase change. `LocalAgent._auto_pass_if_nothing_to_do()` raises the button itself if a play turns up during the pause,
-  and re-checks after an open modal instead of giving up (the button being down, giving up would hang the window).
-  `playable_probe` asserts the button stays down for an auto-passed window and with no holder.
   cards once it has left the deck (lowest 0.62).
 
 ### Fixed

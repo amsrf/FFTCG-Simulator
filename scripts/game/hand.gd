@@ -349,6 +349,9 @@ func update_card_positions(ignore = -1):
 			continue
 		if(card.is_dragging):
 			continue
+		# Tweening into the cast stance from a double-click (quick_cast): the stance owns it, not the fan.
+		if card == _quick_cast_card:
+			continue
 		card.index = i
 		# Tilt with the arc, so the hand reads as a fan instead of a straight row — EXCEPT the hovered card, which
 		# STRAIGHTENS UP. That is the card being read, and the reference's hovered card is exactly vertical. The tilt
@@ -1419,8 +1422,76 @@ func on_card_grabbed(card: Card) -> void:
 			if card.matches_criteria(choose_card_criteria):
 				toggle_effect_card_selection(card)
 		_:
+			_press_pointer = get_viewport().get_mouse_position()
 			card.begin_drag()
 			begin_character_drag(card)
+
+## DOUBLE-CLICK TO PLAY. Two clicks on the same hand card within DOUBLE_CLICK_SECONDS start the cast exactly as a
+## drag released in the cast stance does: the card tweens into that stance in QUICK_CAST_SECONDS, then charge() opens
+## the payment. A "click" is a press and release that moved less than CLICK_SLOP_PX, so a short drag never counts.
+const DOUBLE_CLICK_SECONDS := 0.35
+const CLICK_SLOP_PX := 8.0
+const QUICK_CAST_SECONDS := 0.12
+var _press_pointer := Vector2.ZERO
+var _last_click_card: Card = null
+var _last_click_msec: int = -100000
+var _quick_cast_card: Card = null
+
+## True when this release completes a double-click on `card`; otherwise it is remembered as the first click.
+func _is_double_click(card: Card) -> bool:
+	if get_viewport().get_mouse_position().distance_to(_press_pointer) > CLICK_SLOP_PX:
+		_last_click_card = null
+		return false
+	var now: int = Time.get_ticks_msec()
+	if _last_click_card == card and now - _last_click_msec <= int(DOUBLE_CLICK_SECONDS * 1000.0):
+		_last_click_card = null
+		return true
+	_last_click_card = card
+	_last_click_msec = now
+	return false
+
+## Play `card` from a double-click: the same legality gates as a latched release, a very short tween into the cast
+## stance, then the same charge. Returns false (and leaves the card to the normal release) when it cannot be played.
+func quick_cast(card: Card) -> bool:
+	if card == null or not cards.has(card) or _quick_cast_card != null:
+		return false
+	if not (card.can_be_played() and field.has_priority()):
+		return false
+	if card != _character_drag_card:
+		begin_character_drag(card, get_viewport().get_mouse_position().y)
+	# The stance a drag latches into (update_character_drag), built from the card's FAN SLOT, which is where a drag
+	# starts: on the second click the card is still lifted from the first, and starting from there lifted it twice.
+	var slot: Vector3 = global_transform * calculate_card_position(cards.find(card), false)
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var screen_x: float = cam.unproject_position(slot).x if cam != null else 0.0
+	var stance: Transform3D = _build_character_drag_stance(screen_x)
+	stance.origin.y = slot.y + character_drag_lift_y * _hand_world_scale()
+	stance.origin.x = slot.x
+	stance = _fit_character_drag_bottom(card, stance, 0.94)
+	_character_drag_stance = stance
+	card.stop_hand_layout()
+	_quick_cast_card = card
+	var from: Transform3D = card.global_transform
+	var t: Tween = create_tween()
+	t.tween_method(func(k: float) -> void:
+		if is_instance_valid(card):
+			card.global_transform = from.interpolate_with(stance, k),
+		0.0, 1.0, QUICK_CAST_SECONDS).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.tween_callback(_finish_quick_cast.bind(card))
+	return true
+
+func _finish_quick_cast(card: Card) -> void:
+	_quick_cast_card = null
+	if not is_instance_valid(card) or not cards.has(card):
+		return
+	_character_drag_latched = true
+	# Re-checked: the 0.12 s tween is a window in which priority could have moved on.
+	if card.can_be_played() and field.has_priority() and charge(card):
+		begin_character_charge(card)
+		return
+	end_character_drag(card)
+	update_card_positions()
+	card.apply_zone_scale()
 
 func on_card_released(card: Card) -> void:
 	if card.controller != Card.PLAYER:
@@ -1446,6 +1517,9 @@ func on_card_released(card: Card) -> void:
 		card.is_dragging = false
 		update_card_positions()
 		card.apply_zone_scale()
+		return
+	# A SECOND CLICK on the same card plays it (see quick_cast).
+	if _is_double_click(card) and quick_cast(card):
 		return
 	# Below the ready boundary, release only reorders the hand.
 	var new_index = find_index(card)

@@ -677,6 +677,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	set_hidden(false)
 	# Leaving the field takes the sickness waves with it at once.
 	overlays.refresh_sickness()
+	# And the dull look: a card changing zone shows exactly its real state (after current_zone moved), mid-tween nothing.
+	dull_fx.sync()
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
 	# Local rotation: NOT always zero — see READABLE_ROTATION. The Field is an
 	# unflipped container, so its cards must carry the half turn themselves.
@@ -739,9 +741,13 @@ func tap():
 	# art and stats sideways on a board seen in perspective.
 	tween = create_tween()
 	tween.tween_property(self, "rotation_degrees:y", _upright_y + tap_angle, tap_speed)
+	# And it greys out with the tilt (card_dull_fx.gd).
+	dull_fx.set_dull(true)
 	overlays.refresh_sickness()
 
-func untap():
+## `visual_delay` holds only the PRESENTATION (the turn back and the colour returning): the rules state changes now.
+## `refresh` adds the Active Phase's light sweep. Field.untap_cards_for() uses both to stagger the untap across the row.
+func untap(visual_delay: float = 0.0, refresh: bool = false):
 	if not tapped: return
 	
 	tapped = false
@@ -750,7 +756,10 @@ func untap():
 		tween.kill()
 	
 	tween = create_tween()
-	tween.tween_property(self, "rotation_degrees:y", _upright_y, tap_speed)
+	tween.tween_property(self, "rotation_degrees:y", _upright_y, tap_speed).set_delay(visual_delay)
+	dull_fx.set_dull(false, visual_delay)
+	if refresh:
+		dull_fx.play_refresh(visual_delay)
 	overlays.refresh_sickness()
 
 ## Stop the hand's layout tween before another zone takes ownership of the card.
@@ -765,6 +774,9 @@ func stop_stack_layout() -> void:
 		stack_tween.kill()
 	stack_tween = null
 
+## Dull presentation (grey + dim, the mana drain, the Active Phase refresh sweep). See card_dull_fx.gd.
+const CARD_DULL_FX := preload("res://scripts/cards/card_dull_fx.gd")
+var dull_fx: CARD_DULL_FX = CARD_DULL_FX.new(self)
 ## Damage presentation (recoil + Earth launch). See card_damage_fx.gd.
 const CARD_DAMAGE_FX := preload("res://scripts/cards/card_damage_fx.gd")
 var damage_fx: CARD_DAMAGE_FX = CARD_DAMAGE_FX.new(self)

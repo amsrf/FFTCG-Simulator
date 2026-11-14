@@ -343,6 +343,27 @@ func _ready() -> void:
 	terra_game.queue_free()
 	await get_tree().process_frame
 
+	# --- NO FORWARDS, NO ATTACK PHASE ----------------------------------------------------------------------
+	# Ending the First Main Phase with no Forward goes straight to the Second Main Phase; with one, combat starts.
+	for case in [["clean", false], ["party", true]]:
+		MatchSetup.config = MatchSetup.build_config(case[0])
+		var phase_game = GAME_SCENE.instantiate()
+		add_child(phase_game)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		phase_game.turn_owner = 1
+		var has_forward: bool = phase_game.turn_owner_has_forwards()
+		phase_game.phase_index = 2  # FIRST_MAIN_PHASE
+		phase_game.next_phase()
+		await get_tree().process_frame
+		var want: int = GlobalVariables.Phase.ATTACK_PREPARATION_STEP if case[1] else GlobalVariables.Phase.SECOND_MAIN_PHASE
+		print("[Grounds] %s ground: P1 has Forwards=%s, after the First Main Phase: %s" % [
+			case[0], has_forward, phase_game.phase_to_string(phase_game.phase)])
+		_expect(has_forward == case[1] and phase_game.phase == want,
+			"%s: the Attack Phase is %s" % [case[0], "entered (a Forward can attack)" if case[1] else "skipped (no Forwards)"])
+		phase_game.queue_free()
+		await get_tree().process_frame
+
 	print("[Grounds] %d checks | failures: %d" % [_checks, _fails])
 	print("[Grounds] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

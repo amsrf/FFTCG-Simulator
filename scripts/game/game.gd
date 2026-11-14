@@ -2209,10 +2209,18 @@ func next_phase():
 			return
 		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
 			# Loop back to attack preparation so the turn player can declare
-			# additional attackers (FF-style combat loop).
-			phase_index = 3  # ATTACK_PREPARATION_STEP
+			# additional attackers (FF-style combat loop) — unless the last Forward is gone.
+			phase_index = 3 if turn_owner_has_forwards() else 7  # ATTACK_PREPARATION_STEP / SECOND_MAIN_PHASE
 			_enter_phase(phases[phase_index])
 			return
+		GlobalVariables.Phase.FIRST_MAIN_PHASE:
+			# NO FORWARDS, NO ATTACK PHASE: with nothing that could attack, the whole Attack Phase is skipped and the
+			# turn goes straight to the Second Main Phase (no "attack phase starts" window, no empty priority rounds).
+			if not turn_owner_has_forwards():
+				LOG.info("Phase", "P%s controls no Forwards: skipping the Attack Phase" % turn_owner)
+				phase_index = 7  # SECOND_MAIN_PHASE
+				_enter_phase(phases[phase_index])
+				return
 
 	phase_index += 1
 	if phase_index >= phases.size():
@@ -2227,6 +2235,10 @@ func next_phase():
 
 	# Enter new phase
 	_enter_phase(phases[phase_index])
+
+## Whether the turn player controls at least one Forward. With none, the Attack Phase is skipped (next_phase()).
+func turn_owner_has_forwards() -> bool:
+	return not field.get_front_cards_for(controller_for(turn_owner)).is_empty()
 
 func _enter_phase(phase_enum: GlobalVariables.Phase):
 	LOG.info("Phase", str("Entering: ", phase_enum))
@@ -2438,6 +2450,9 @@ func priority() -> void:
 	# Release the lock before advancing so the next phase can start its own
 	# priority round.
 	_priority_lock = false
+	# NOBODY HOLDS PRIORITY BETWEEN ROUNDS. A stale holder of 1 kept the pass button raised through the phase change
+	# (every mode change re-shows it for the holder) until the next round asked someone again.
+	priority_holder = 0
 	next_phase()
 
 func enforce_game_state_rules() -> void:
@@ -2450,9 +2465,6 @@ func enforce_game_state_rules() -> void:
 	#    not trigger. (Break Zone and Graveyard share a container here, but
 	#    the removal events are distinct.)
 	for card in field.get_zero_power_cards():
-	# NOBODY HOLDS PRIORITY BETWEEN ROUNDS. A stale holder of 1 kept the pass button raised through the phase change
-	# (every mode change re-shows it for the holder) until the next round asked someone again.
-	priority_holder = 0
 		put_card_into_graveyard(card)
 	# 2) Accumulated damage greater than current power: the card is broken.
 	# THE SWEEP HAS NO IDEA WHAT DEALT THE DAMAGE, so the card carries it (Card.last_damage_kind/controller) and the

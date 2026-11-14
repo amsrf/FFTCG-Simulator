@@ -864,6 +864,10 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 
 ## Rules Implemented
 
+- **No Forwards, no Attack Phase** (a deliberate simplification, the user's call): `Game.next_phase()` goes from
+  FIRST_MAIN straight to SECOND_MAIN when `turn_owner_has_forwards()` is false, and the combat loop
+  (DAMAGE_RES → ATTACK_PREP) does the same once the last Forward is gone. So "when your Attack Phase starts"
+  (`ATTACK_PHASE_START`) does not fire on a turn with no Forwards. `test_grounds_probe` covers both cases.
 - **Phases:** ACTIVE → DRAW → FIRST_MAIN → ATTACK_PREP → ATTACK_DECL → BLOCKER_DECL → DAMAGE_RES → (loop to ATTACK_PREP) → SECOND_MAIN → END. Turns **alternate** (`turn_owner = 3 - turn_owner` at end of turn); the turn owner untaps in ACTIVE and draws in DRAW. **Priority:** the turn player receives it first in a phase/step; a player with priority either **acts** (which hands priority to the other player) or **passes**. The game only moves on when both pass consecutively with no action in between — then the top of the stack resolves (after which the **turn player** has priority again) or, with an empty stack, the phase advances.
 - **Who acts is decided by the agent seam.** `Game.agent_for(player_id)` → `Agent` (`scripts/agents/`): `LocalAgent` (human: pass button, attacker clicks, **blocker clicks**), `MockAgent` (passes, never attacks/blocks), `AIAgent` (plays an affordable card in a main phase, **Summons included** — it picks their target through `choose_target()`; attacks with its strongest Forward that does not trade down, keeping one home to block; blocks only with a strictly bigger Forward). Chosen from `config["opponent_type"]`. Two method shapes: **pull** (`decide_attacker`, `decide_blocker`, `pay_cost` — return the answer) and **drive** (`choose_target`, `choose_card_in_hand` — perform the inputs a human would have clicked, then let the existing signal continuation run; `LocalAgent` does nothing for those because the human *is* the input). `take_priority()` additionally **returns bool**: `true` = the player performed an action, `false` = they passed.
 - **A Character (Forward/Backup) is the slow play:** only the **turn player** may play one, and only while the **stack is empty** (`Hand.charge()` → `Hand.can_play_character()`, and `Card.can_be_played()` asks the Hand for it). Summons and abilities are the instant-speed plays and are legal with a stack. A non-turn player playing a Character needs **Back Attack**, which is not implemented.
@@ -1091,6 +1095,20 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **The draw's whole shape lives in one block in `scripts/hand.gd`.** One cubic from the deck to the hand whose control point sits above and to the RIGHT of the destination (that offset IS the shape), 1.7 s of `QUAD EASE_OUT`, a 0.9 s flip finishing at ~76% of the path, and the fan tilt applied only after landing. `tests/draw_probe.gd` samples the flight and asserts all of it — read it before touching any of those numbers.
 
 - **A hover or drag that resizes a card must change the CARD's scale, not its mesh's.** The card's scale is what the zone system and the drag already use, and it is what has to be right when the card lands on the stack — `Hand.set_hovered()` grows a hovered card to `Card.STACK_CARD_SCALE` for exactly that reason. Growing the mesh leaves the card at hand size and loses the effect.
+- **A dull BACKUP is GREY, not just tilted** (`scripts/cards/card_dull_fx.gd`, `Card.dull_fx`). `card.gdshader`'s
+  `dull_amount` greys and dims the art (mixed, never added) — NOT for Forwards, which keep their colour and only tilt
+  (the user's call; `_greys()`), tweened by `Card.tap()` / `untap()` and snapped to the real
+  state by `enter_zone()` (AFTER `current_zone` moves). A Backup-to-crystal "mana drain" stream was built and removed
+  at the user's request; do not bring it back unasked. The Active
+  Phase untap (`Field.untap_cards_for()`) changes the RULES at once but presents a left-to-right wave:
+  `Card.untap(visual_delay, refresh)` delays the turn back and the colour, and `refresh_sweep` crosses the art with a
+  light band. `tests/dull_fx_probe.tscn` is the spec.
+- **A double-click on a hand card casts it** (`Hand.quick_cast()`): two press/release clicks on the same card within
+  `DOUBLE_CLICK_SECONDS` (0.35), each moving under `CLICK_SLOP_PX`, tween the card into the SAME stance a drag latches
+  into in `QUICK_CAST_SECONDS` (0.12), then run the same gates and `charge()` + `begin_character_charge()` as a latched
+  release. The stance is built from the card's FAN SLOT (on the second click it is still lifted from the first), and
+  `update_card_positions()` skips `_quick_cast_card` during the tween. `drop_area_probe` covers single click, double
+  click, cancel and clicks on two different cards.
 - **Casting by drag is a latch, not a drop area.** A hand card (Summon or Character) latches into the cast stance once the pointer rises above the hand band (`Hand.character_drag_trigger_y`); releasing it there starts payment, releasing below only reorders. There is no playmat hit test. The latch measures from the grab's pointer, so tests pass `Hand.begin_character_drag(card, start_pointer_y)` — a headless mouse reads (0, 0). `tests/drop_area_probe.tscn` covers Summon and Character casts, cancel back into the fan, and the missed-release fallback.
 - **A layout tween must die when its card leaves the zone that owns it.** The Stack's 0.3 s fan tween kept writing stack-local positions after a cancelled cast had reparented the card back to the Hand, so the returned card sat at the stack target (eventually `0,0,0`) until a manual reorder. `Stack.animate_card()` now records `Card.stack_tween`, and `Card.enter_zone()` calls `stop_stack_layout()` when leaving `Zone.STACK`; `stop_hand_layout()` does the same in the other direction.
 - **Clearing `hovered_card` on removal is part of leaving the hand.** The pointer is still over a card while it is dragged out, so `CardArea3D.mouse_exited` never fires. A stale `hovered_card` made `calculate_card_position()` add the hover lift/growth to the returned card, so a cancelled cast came back “stuck” at the hover pose until a reorder. `Hand._release_hover()` is called from every hand-removal path.

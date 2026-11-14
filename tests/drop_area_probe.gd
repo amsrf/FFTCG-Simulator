@@ -130,6 +130,39 @@ func _ready() -> void:
 			and not _hand.character_drag_latched()),
 		"cancelling a latched Character returns it to hand and clears the latch")
 
+	# DOUBLE-CLICK TO PLAY: two clicks on the same card (no drag) tween it into the cast stance in a very short time and
+	# start mana charging, exactly like a latched release. One click only re-lays the hand out.
+	_hand.on_card_grabbed(character)
+	character.release_drag()
+	await get_tree().process_frame
+	_expect(_hand.charging_card == null and _hand.cards.has(character),
+		"a single click on a hand card does not start a cast")
+	_hand.on_card_grabbed(character)
+	character.release_drag()
+	_expect(_hand.charging_card == null, "a double-click first tweens into the stance, before charging")
+	await get_tree().create_timer(Hand.QUICK_CAST_SECONDS + 0.1).timeout
+	_expect(_hand.charging_card == character and not _hand.cards.has(character),
+		"a double-click starts mana charging (%.2f s tween)" % Hand.QUICK_CAST_SECONDS)
+	# The stance is built at the card's own screen x; a charging card wavers by a few millimetres around it.
+	var quick_stance: Transform3D = _hand._character_drag_stance
+	_expect(character.global_transform.origin.distance_to(quick_stance.origin) < 0.02
+			and absf(character.global_basis.get_scale().x - quick_stance.basis.get_scale().x) < 0.01
+			and absf(quick_stance.origin.y - stance_pose.origin.y) < 0.01,
+		"and the card sits in the cast stance a drag latches into (same height, same size)")
+	_expect(character.ring_cast_pending(), "and wears the cast-pending aura")
+	_assistant.on_charge_cancelled()
+	await get_tree().create_timer(0.35).timeout
+	_expect(character.get_parent() == _hand and _hand.cards.has(character) and not _hand.character_drag_latched(),
+		"cancelling a double-click cast returns the card to the hand")
+	# Two clicks on DIFFERENT cards are not a double-click.
+	var other: Card = _hand.cards[1] if _hand.cards[0] == character else _hand.cards[0]
+	_hand.on_card_grabbed(character)
+	character.release_drag()
+	_hand.on_card_grabbed(other)
+	other.release_drag()
+	await get_tree().create_timer(Hand.QUICK_CAST_SECONDS + 0.1).timeout
+	_expect(_hand.charging_card == null, "clicks on two different cards do not cast")
+
 	# Confirm pays the mana cards FIRST; the marked Character must not start
 	# fading until their discard flight has landed.
 	_expect(_hand.charge(character), "the Character can be charged again")

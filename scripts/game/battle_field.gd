@@ -1204,10 +1204,20 @@ func get_back_cards_for(controller_name: String) -> Array[Card]:
 	# Backups of one side: the AI taps these to pay card costs.
 	return back_cards if controller_name == Card.PLAYER else opponent_back_cards
 
+## Seconds between two cards straightening in the Active Phase's refresh wave (presentation only).
+const UNTAP_STAGGER := 0.08
+
 func untap_cards_for(controller_name: String) -> void:
 	# Active Phase untaps only the turn player's cards.
 	var cards: Array[Card] = (front_cards + back_cards) if controller_name == Card.PLAYER else (opponent_front_cards + opponent_back_cards)
-	for card in cards:
+	# THE REFRESH WAVE. The rules untap everything NOW; the presentation runs left to right ON SCREEN, one card
+	# UNTAP_STAGGER after another, each straightening with a light sweep as its colour comes back.
+	var order: Array = cards.duplicate()
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		order.sort_custom(func(a, b): return cam.unproject_position(a.global_position).x < cam.unproject_position(b.global_position).x)
+	var wave: int = 0
+	for card in order:
 		# FROZEN: "does not activate during its controller's next Active Phase."
 		#
 		# The status is CONSUMED here rather than counted down in turn_end(). A duration would be the wrong clock:
@@ -1229,7 +1239,9 @@ func untap_cards_for(controller_name: String) -> void:
 			card.refresh_status_visuals()
 			LOG.info("Freeze", "%s does not activate" % card.card_name)
 			continue
-		card.untap()
+		if card.tapped:
+			card.untap(UNTAP_STAGGER * wave, true)
+			wave += 1
 		
 func request_target(targeting_criteria, card: Card, allow_cancel: bool = false, source_kind: String = ""):
 	targeting_started.emit(card)

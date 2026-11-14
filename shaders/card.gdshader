@@ -12,6 +12,12 @@ render_mode unshaded;
 
 uniform sampler2D texture_albedo : source_color;
 uniform bool effect_enabled = false;
+// DULL. 0 = active, 1 = dull: the art is drawn toward grey and darkened so a spent card reads at a glance even where the
+// small tap tilt is hard to see (Card.dull_fx tweens it with the tap). MIXED, never added.
+uniform float dull_amount : hint_range(0.0, 1.0) = 0.0;
+// REFRESH SWEEP. 0..1 while a soft light band crosses the card diagonally as it untaps in the Active Phase; outside
+// (0, 1) it draws nothing. Also MIXED toward white, never added.
+uniform float refresh_sweep : hint_range(0.0, 1.0) = 0.0;
 
 // Full rounded-card silhouettes, traced in world space toward the camera.
 // Four strongest nearby casters per receiver. Pixel depth rejects surfaces behind it.
@@ -394,6 +400,19 @@ void fragment() {
     vec3 base = original_color.rgb;
     if (effect_enabled && UV.y > 0.875) {
         base = vec3(0.1);
+    }
+
+    if (dull_amount > 0.001) {
+        float grey = dot(base, vec3(0.299, 0.587, 0.114));
+        base = mix(base, vec3(grey), 0.85 * dull_amount) * (1.0 - 0.28 * dull_amount);
+    }
+    if (refresh_sweep > 0.0 && refresh_sweep < 1.0) {
+        // Diagonal from the top-left corner (UV y = 1 is the bottom edge) to the bottom-right, fading at both ends.
+        float along = (UV.x + UV.y) * 0.5;
+        float centre = mix(-0.2, 1.2, refresh_sweep);
+        float band = 1.0 - smoothstep(0.0, 0.14, abs(along - centre));
+        float life = sin(refresh_sweep * 3.14159265);
+        base = mix(base, vec3(1.0), band * 0.45 * life);
     }
 
     float shade = card_silhouette_shadow(shadow_inverse, shadow_shape, shadow_strength, shadow_width);
