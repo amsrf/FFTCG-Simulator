@@ -2,6 +2,57 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-14
+
+### Added
+- **The match buttons are now part of the board: button stations set into each slab corner.** A stone housing bites
+  into the bottom-right corner of the local slab and spills onto the scenery around it. It holds a large disc
+  (Pass / Next Phase / Confirm / Declare) and a small one (Cancel / No Block). A button is never hidden: its disc turns
+  over on an axle, gem-up when offered and carved stone when not. The opponent has a mirrored station (top-left)
+  whose forward disc lights while they hold priority; its Cancel never lights.
+  - Blender: `Blender/build_button_housing.py` builds both stations on `board_landmarks.blend` (basalt + iron + lava
+    glow on the volcanic slab; grey stone + bronze + emerald glow on the forest slab), cuts the slabs and the ground
+    sheets (hole-tolerant boolean) and deletes the small props a station sits on. It renders the look study in
+    `Blender/button_housing/` and saves the disc-less export source `Blender/board_button_stations/`, which
+    `Blender/export_board_to_godot.py` now reads. Both seats are re-exported (`assets/board/*`).
+  - Godot: `scripts/ui/disc_socket.gd` (one disc, built from primitive meshes, with no glb import; a flip is
+    0.42 s; claims coalesced to the end of the frame), `scripts/ui/disc_button.gd`
+    (BigButton's API, drives a socket, has its own click area) and `scripts/ui/button_stations.gd` (gem colour by owner,
+    stone by biome, `configure_seat()` called from `Game.start_match()`). `ConfirmButton` / `CancelButton` /
+    `PassPhaseButton` keep their node paths; Confirm and Pass share the large disc.
+    `Assistant._refresh_opponent_station()` runs from `refresh_pass_button()` and `hide_buttons()`.
+  - `pass_button_probe` checks the disc states, the label, the opponent's read-out and that a same-frame hide + show
+    does not turn the disc. `may_probe` / `pass_button_probe` read the text through `get_text()`.
+- **Board buttons, second pass (after the reference clip's frames 50-100).**
+  - **Shape:** each button is a LENS (two shallow domes and a gold bezel) that fills its well, with its rim
+    tucked under the iron ring (`AXLE_LIFT`), so there is no gap. The baked glow disc is gone from the wells, which
+    are dark underneath.
+  - **Imprint:** the large local disc has its label printed in gold on the dome (`shaders/disc_face.gdshader`, from a
+    SubViewport projected down the dome's axis), and the label on the wood is gone. Cancel and the opponent's disc
+    carry a gold symbol (✕ / ▶). The stone dome has an engraved ring.
+  - **Hover and press:** hover lights the ring around the button (`shaders/disc_ring_glow.gdshader`, an additive
+    annulus, added to `EFFECT_SHADERS`) and a press flashes it. A press always spins the button, and only forward:
+    a full 360 if it stays offered, a half turn if the press takes it away. A button taken away under the pointer
+    releases the glow (`disc_button._on_hover`).
+  - `pass_button_probe` adds the spin, the half turn, the hover glow and its release (22 checks).
+  - **The gem is the old GemButton's stone** (`disc_face.gdshader`, `crystal`, after `gem_button.gdshader`): light
+    enters at the top middle and ramps from a pale crown to a deep bottom, with soft facet planes and a darker rim.
+    The ramp is built from the gem colour, so the teal, red and violet gems share it. Both faces wear a raised metal
+    band (`band_inner` 0.84 of the radius): polished silver on the gem side, painted with a chrome-like
+    bright-top/dark-bottom split and a crest; the station's iron or bronze on the stone side. Labels are white and
+    fit inside the band. The gem is SET in the metal: the vertex stage sinks the face inside the band below its lip
+    (`inset`), the band's inner wall (`setting_wall`) is painted as shaded metal, the gem's edge takes an inner
+    shadow (strongest on the far side) and the lip a bright bevel. `specular_disabled` removes
+    the overhead light's white highlight from the dome. The imprint has a dark engraved outline.
+
+### Changed
+- Disabled match buttons show their stone face (they used to be a greyed gem). The old floating `GemButton` is no
+  longer used by `game.tscn`; the scene and its probe remain.
+
+### Known Issues
+- The board is now exported with Blender 5.2, not the 4.4 the earlier passes used, and the bake was re-rendered.
+- The discs are lit by the live scene, while the housing is baked, so their shading is matched by eye.
+
 ## [Unreleased] — 2026-11-13
 
 ### Added

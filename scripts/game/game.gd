@@ -824,6 +824,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/counter_overlay.gdshader"),
 	# The tribute burst (tribute_cue.gd): first rendered when an effect puts a card into the Break Zone.
 	preload("res://shaders/tribute_burst.gdshader"),
+	# The board buttons (disc_socket.gd): the ring glow first renders on the first hover.
+	preload("res://shaders/disc_ring_glow.gdshader"),
 	# The mana cost row's backing window (crystal_cost.gd): first rendered when a payment opens.
 	preload("res://shaders/cost_panel.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
@@ -891,6 +893,8 @@ func start_match(config: Dictionary) -> void:
 	# ONLINE PERSPECTIVE: which seat this machine is. Must be set before any card is created (uids use it).
 	local_seat = int(config.get("local_seat", 1))
 	$Board/MeshInstance3D.configure_seat(local_seat)
+	# The button stations are part of the board: their stone follows the biome swap, their gems follow the owner.
+	$Assistant/ButtonStations.configure_seat(local_seat)
 	# Who goes first, in THIS machine's terms (1 = the local player).
 	turn_owner = int(config.get("starting_player", 1))
 	var match_seed: int = int(config.get("seed", 0))

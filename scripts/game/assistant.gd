@@ -3,13 +3,14 @@ class_name Assistant
 
 @onready var stack: Stack = get_parent().get_node("Stack")
 @onready var hand: Hand = get_parent().get_node("Player/Hand")
-# The three match buttons hang off ButtonRack, which owns their SHARED position; each button carries
-# only its own slot offset. So moving all three is one transform on the rack, and Confirm and PassPhase
-# share a slot by construction rather than by two numbers happening to agree. These paths go through
-# ButtonRack for that reason — the buttons are no longer direct children of Assistant.
-@onready var confirmButton: BigButton = $ButtonRack/ConfirmButton
-@onready var cancelButton: BigButton = $ButtonRack/CancelButton
-@onready var passPhaseButton: BigButton = $ButtonRack/PassPhaseButton
+# The three match buttons (scripts/ui/disc_button.gd) keep BigButton's API but draw nothing themselves: each
+# drives a disc in the local board button station. Confirm and PassPhase share the large disc, Cancel has the
+# small one. Untyped on purpose: the disc button has no class_name (headless runs lack a fresh class cache).
+@onready var confirmButton = $ButtonRack/ConfirmButton
+@onready var cancelButton = $ButtonRack/CancelButton
+@onready var passPhaseButton = $ButtonRack/PassPhaseButton
+## The board stations: the opponent's forward disc reads out who holds priority.
+@onready var button_stations = $ButtonStations
 
 # The "Pay ..." crystal cost readout. Built in code rather than added to game.tscn so the whole payment
 # UI stays owned by one node.
@@ -133,6 +134,7 @@ func show_modal(p_confirm_text: String, p_cancel_text: String = "", p_on_confirm
 func hide_buttons():
 	confirmButton.hide_button()
 	cancelButton.hide_button()
+	_refresh_opponent_station()   # the match end hides everything: the opponent's disc must go down too
 
 func show_choose_card_buttons(p_confirm_text: String = "Play card", p_cancel_text: String = "Don't play card"):
 	show_modal(p_confirm_text, p_cancel_text,
@@ -217,6 +219,7 @@ func local_holds_priority() -> bool:
 
 ## Re-derive the pass button from who holds priority now (Game.priority_holder calls this whenever it changes).
 func refresh_pass_button() -> void:
+	_refresh_opponent_station()
 	if local_holds_priority():
 		show_pass_priority_button()
 	else:
@@ -225,6 +228,14 @@ func refresh_pass_button() -> void:
 		if phase_now != GlobalVariables.Phase.ATTACK_DECLARATION_STEP \
 				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
 			passPhaseButton.hide_button()
+
+## The opponent's forward disc is up exactly while they hold priority (their Cancel never lights).
+func _refresh_opponent_station() -> void:
+	if button_stations == null:
+		return
+	var game = get_parent()
+	var theirs: bool = game != null and not bool(game.get("match_over")) and int(game.get("priority_holder")) == 2
+	button_stations.set_opponent_priority(theirs)
 
 func show_pass_priority_button():
 	# Only show the pass button when players actually hold priority. It must

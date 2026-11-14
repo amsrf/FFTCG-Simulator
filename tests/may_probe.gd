@@ -266,8 +266,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(_assistant.confirmButton.visible and _assistant.cancelButton.visible,
 		"a may instruction shows Confirm AND Refuse")
-	var confirm_label = _assistant.confirmButton.get_node("ButtonTextViewport/Control/CenterContainer/Label")
-	_expect(confirm_label.text == "Deal 6000", "and the confirm button carries the prompt")
+	_expect(_assistant.confirmButton.get_text() == "Deal 6000", "and the confirm button carries the prompt")
 	# A click runs the Area3D callback directly (the button_pressed SIGNAL only pulses the button), so invoke it.
 	var cancel_area = _assistant.cancelButton.get_node("Area3D")
 	cancel_area.get("_on_press_callback").call()
