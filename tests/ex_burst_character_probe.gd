@@ -63,18 +63,30 @@ func _to_damage(card_id: int) -> Card:
 	while waited < 4.0 and _stack.ex_burst_card != null:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
-	for _i in range(60):
-		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
-			break
-		await get_tree().process_frame
+	# BY TIME, NOT FRAMES: a resolution announces itself first (Stack's resolve pulse + resolve_lead_seconds) and holds
+	# the card after (resolve_trail_seconds), so the effect lands ~1 s after the commit. Wait until the burst either
+	# opens its target prompt or has fully resolved.
+	await _settle(6.0)
 	if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
 		var origin: Card = _field.get("source_card")
 		_expect(origin == flying and origin.visible and origin.get_parent() == _stack,
 			"the targeting arrow starts from the EX BURST card on the stack")
-	# A no-target code ETB resolves without opening a target window; give it time to finish before the test reads
-	# the board.
-	await get_tree().create_timer(0.2).timeout
 	return card
+
+
+## Until the stack is asking for a target, or has nothing left on it, resolving or waiting. Timeout in seconds.
+func _settle(timeout: float) -> void:
+	var waited := 0.0
+	while waited < timeout:
+		if GlobalVariables.get_player_mode() == GlobalVariables.Player_Mode.TARGET:
+			return
+		if _stack.stack_length() == 0 and _stack.resolving_card == null and not _stack.resolution_pending \
+				and _stack.ex_burst_card == null:
+			# One more frame so whatever the resolution queued last has run.
+			await get_tree().process_frame
+			return
+		await get_tree().process_frame
+		waited += get_process_delta_time()
 
 
 func _ready() -> void:
@@ -116,8 +128,9 @@ func _ready() -> void:
 		"Mustadio 118's EX BURST opens its targeting flow")
 	_field.set_target_card(dull_one)
 	_assistant.call("on_target_complete")
-	await get_tree().create_timer(0.3).timeout
+	# The pick resumes the resolution; let it finish (effect, hold, clean-up) before reading the board.
 	await get_tree().process_frame
+	await _settle(6.0)
 	print("[ExChar] Mustadio: target on field=%s, stack=%d" % [dull_one.is_on_field(), _stack.stack_length()])
 	_expect(not dull_one.is_on_field(), "and the chosen dull Forward is broken")
 	_expect(not mustadio.is_on_field() and mustadio.current_zone == Card.Zone.DAMAGE,

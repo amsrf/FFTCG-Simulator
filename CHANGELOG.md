@@ -52,11 +52,13 @@ All notable changes to the FF TCG Simulator project.
   the scale swell is trimmed from 1.45x to `DRAW_SWELL` 1.3x. `draw_probe` asserts the card stays above the field
   cards once it has left the deck (lowest 0.62).
 
-### Known Issues
-- `ex_burst_character_probe` fails 4 checks and `damage_zoom_probe` 1 on the current working tree
-  independently of this change (they fail with the pile changes backed out).
-
 ### Fixed
+- **`ex_burst_character_probe` passes again (24/24).** Its waits predated the resolve pulse: it allowed 60 FRAMES for
+  the target prompt and 0.2 s for a no-target burst, while a resolution now announces itself (pulse +
+  `resolve_lead_seconds`) and holds the card after (`resolve_trail_seconds`). New `_settle()` waits BY TIME until the
+  stack asks for a target or has nothing left resolving (`stack_length()`, `resolving_card`, `resolution_pending`,
+  `ex_burst_card`), and the Mustadio pick waits the same way. The "arrow starts from the EX BURST card" check now runs
+  (it was skipped because the prompt was never reached). `damage_zoom_probe`'s failure was fixed with the zoom rework.
 - **Activated abilities show their printed wording on the stack.** Aerith 64's Planet Protector carried her
   enter-the-field sentence as its `text`, so its stack card read "Choose up to 3 Backups ... Activate them." while the
   effect (activate all your Forwards, cannot be chosen) was right. Not a parser bug: `AbilitySpec.stack_wording()`
