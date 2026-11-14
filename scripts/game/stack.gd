@@ -300,6 +300,7 @@ func update_card_positions(previous_hover: Card = null, hover_changed := false):
 	# The stack just changed, so what is on display may have too: the default display is the TOP
 	# of the stack, and after an add or a resolve that is a different card.
 	refresh_target_display()
+	refresh_top_aura()
 	_shadow_track_seconds = 0.35
 	_update_stack_shadows()
 
@@ -631,7 +632,7 @@ func _on_choose_card_finished(play: bool) -> void:
 	if field.cost_is_free(cost):
 		field.continue_skill_activation_after_mana(skill_activation_proxy)
 		return
-	field.card_activated_ability.emit(cost)
+	field.card_activated_ability.emit(cost, s_cost_source)
 
 func add_skill_activation_proxy(source: Card, skill_index: int, x_value: int = -1) -> bool:
 	## Physical stack object for UI (pay + target). Costs apply later at de facto stack commit.
@@ -1284,7 +1285,14 @@ func enqueue_code_triggers(source: Card, event, data: Dictionary = {}, event_ctx
 	var event_id := EVENTS.normalize(event)
 	var indices: Array[int] = effect_obj.triggered_abilities(event_id, event_ctx, source)
 	indices.reverse()
+	var abilities: Array = effect_obj.auto_abilities()
 	for index in indices:
+		# NO LEGAL CHOICE, NO STACK OBJECT (rules 11.8.4 / 11.8.9). The rules put it on the stack and remove it at once
+		# with no response window, which on screen is exactly "nothing happens"; no prompt, no empty resolution.
+		var choice = abilities[index].choice
+		if choice != null and field != null and not field.has_viable_target(choice, source, "Ability"):
+			LOG.info("Stack", "%s: auto-ability %d has no legal target and is not put on the stack" % [source.card_name, index])
+			continue
 		out.append(enqueue_code_trigger(source, event_id, data, index))
 	return out
 
@@ -1317,6 +1325,12 @@ func cancel_stack_card(card: Card) -> void:
 		Vfx.countered(card, func() -> void: pile.add_card(card))
 	update_card_positions()
 
+## THE RESOLUTION'S RHYTHM: after the resolve pulse, a beat before the effect runs; after the effect (and its
+## animations) has finished, a beat before the next stack object. Presentation waits - fast mode skips them.
+@export_group("Resolution")
+@export var resolve_lead_seconds: float = 0.5
+@export var resolve_trail_seconds: float = 0.5
+
 func resolve_top_effect() -> void:
 	# No wait for a Summon's flight here: resolution always follows a priority decision, and every decision waits
 	# for the presentation queue (Agent._settle), so the flight has landed before anyone sees it resolve.
@@ -1337,6 +1351,12 @@ func resolve_top_effect() -> void:
 		skill_activation_proxy = null
 		skill_mana_deferred_until_target_confirm = false
 	LOG.info("Stack", str("resolve ", card.card_name))
+	# ANNOUNCE IT, THEN GIVE IT ROOM. The card pulses (it grows, its aura flares, a rectangle launches from its outline
+	# and fades with distance) and settles back; then a beat before the effect runs. These are presentation waits
+	# (PRESENTATION.wait), so fast mode / AI simulation runs straight through. The card is still on the stack for all
+	# of it, because nothing has resolved yet.
+	refresh_top_aura()
+	await _present_resolve_lead(card)
 	resolution_pending = true
 	execute_card_effect.emit(card)
 	if resolution_pending:
@@ -1353,9 +1373,36 @@ func resolve_top_effect() -> void:
 		# here — rather than never — is what stops the red ring from outliving the effect.
 		field.clear_targeted_highlights()
 		GlobalVariables.refresh_mode()
+	# The beat AFTER the effect is taken by Game before the card is disposed of (hold_resolved_card), so the card is
+	# still on the stack while its animations finish; nothing more to wait for here.
 
 	
 
+
+## THE CARD WATCHES ITS EFFECT LAND, THEN LEAVES. Called by Game after an effect's handler returns and its targeting
+## session is cleared, but BEFORE the card is freed or sent to the Break Zone: wait for the effect's animations (the
+## Vfx queue: strikes, bursts, tributes...), then `resolve_trail_seconds`. Presentation only - fast mode skips it.
+func hold_resolved_card() -> void:
+	await PRESENTATION.wait_for_queue()
+	await PRESENTATION.wait(get_tree().create_timer(resolve_trail_seconds))
+
+## The resolve pulse and the pause after it. Presentation only: in fast mode the pulse still plays but nothing waits.
+func _present_resolve_lead(card: Card) -> void:
+	if not is_instance_valid(card) or not card.is_inside_tree():
+		return
+	if PRESENTATION.fast_mode:
+		card.stack_aura.pulse()
+		return
+	await card.stack_aura.pulse()
+	await PRESENTATION.wait(get_tree().create_timer(resolve_lead_seconds))
+
+## THE TOP OF THE STACK WEARS THE AURA: the card resolving now, or else the one that will resolve next. Called from
+## update_card_positions() (every stack change ends there) and when a resolution starts.
+func refresh_top_aura() -> void:
+	var top: Card = resolving_card if is_instance_valid(resolving_card) else (cards.back() if not cards.is_empty() else null)
+	for c in layout_cards():
+		if is_instance_valid(c):
+			c.stack_aura.set_top(c == top)
 
 func _on_field_request_target_confirmation(target_card: Card, _allow_cancel: bool = false) -> void:
 	if summon_casting_card != null:

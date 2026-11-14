@@ -5,23 +5,30 @@ shader_type spatial;
 // draws lines. The script applies this with set_surface_override_material(0, ...), which leaves surface 1 exactly
 // as it was exported.
 //
-// TWO STATES:
-//   * UNPAID — flat colour and no glow. Red for a fire requirement, WHITE for the wild "any colour" slots.
-//   * PAID   — the same colour plus a glow. A wild crystal paid by a red source turns red and lights up; paid by a
-//              wild source it stays white and lights up.
+// TWO STATES, EMPTY AND FILLED (`paid` runs 0..1 continuously, so paying FILLS the crystal and unpaying DRAINS it):
+//   * OWED   - an EMPTY socket: a dark, desaturated, matte body with only a faint glow of the element's colour, rim
+//              strongest where the faces turn away, and the model's black edges. It still says WHICH element is asked
+//              for, but plainly not that it is there. (A flat 2D silhouette was tried and dropped for this.)
+//   * PAID   - the full saturated gem, shiny, with the breathing glow. Red-paid-by-red is now dark-red -> ruby, which
+//              the old "slightly brighter" cue could not show in a still.
+//   * `flash` is a brief white burst the script fires at the moment of filling (the pop).
 //
-// A TRANSPARENT WILD CRYSTAL WAS TRIED AND REMOVED. The idea was that an unfilled slot ought to look empty, and it
-// did read as glass — the model's own edges showed through it, which was rather nice — but it also came out as
-// SMOKED glass rather than clear, because the faces are genuinely shaded and therefore darkened. Meanwhile the row
-// already has a strong "not yet paid" signal in the flat-versus-glowing contrast. Back to white.
+// A TRANSPARENT WILD CRYSTAL WAS TRIED AND REMOVED. It read as SMOKED glass, because the faces are genuinely shaded.
+// The owed look keeps that idea - an empty slot - but as a dark opaque body, which sits well on the row's dark panel.
 //
 // NO ALPHA IS WRITTEN, so Godot treats this surface as fully opaque. Adding an ALPHA line here would make the
 // whole body transparent, including its black edges' backdrop.
 render_mode blend_mix, depth_draw_opaque, cull_back;
 
 uniform vec4 tint : source_color = vec4(0.94, 0.95, 1.0, 1.0);
-// 0 = unpaid, 1 = paid. Set by the script from `lit`; the glow keys off this.
+// 0 = owed (empty), 1 = paid (filled). Eased by the script, so it fills and drains rather than switching.
 uniform float paid : hint_range(0.0, 1.0) = 0.0;
+// The white burst at the moment of filling, 0..1.
+uniform float flash : hint_range(0.0, 1.0) = 0.0;
+// The OWED look: how much of the element's colour the dark body keeps, and its faint coloured glow + rim.
+uniform float owed_tint : hint_range(0.0, 1.0) = 0.2;
+uniform float owed_glow : hint_range(0.0, 1.0) = 0.12;
+uniform float owed_rim : hint_range(0.0, 2.0) = 0.55;
 
 // How much the paid glow breathes, and at what rate.
 uniform float pulse : hint_range(0.0, 1.0) = 0.16;
@@ -44,13 +51,18 @@ uniform float roughness_value : hint_range(0.0, 1.0) = 0.25;
 uniform float emission_energy : hint_range(0.0, 4.0) = 0.85;
 
 void fragment() {
-	ALBEDO = tint.rgb;
-	METALLIC = metallic_value;
-	SPECULAR = specular_value;
-	ROUGHNESS = roughness_value;
+	// Owed: near-black, keeping a little of the colour so the requirement is still readable.
+	vec3 owed_albedo = mix(vec3(0.045), tint.rgb, owed_tint);
+	ALBEDO = mix(owed_albedo, tint.rgb, paid);
+	METALLIC = metallic_value * paid;
+	// Matte while owed (no bright highlight to mistake for "lit"), the gem's shine once filled.
+	SPECULAR = mix(0.2, specular_value, paid);
+	ROUGHNESS = mix(0.7, roughness_value, paid);
 
-	// The glow, only when paid, and only ever ADDING light — so a paid crystal is brighter and more saturated but
-	// never darker than the same crystal unpaid, whichever way the light falls.
+	// Owed glow: faint, plus a rim on the faces turning away from the view, in the element's colour.
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+	vec3 owed_light = tint.rgb * (owed_glow + owed_rim * rim) * (1.0 - paid);
+	// The paid glow only ever ADDS light, so a filled crystal is never darker than an owed one.
 	float breathe = 1.0 + pulse * sin(TIME * pulse_speed + phase_offset);
-	EMISSION = tint.rgb * emission_energy * paid * breathe;
+	EMISSION = owed_light + tint.rgb * emission_energy * paid * breathe + vec3(1.0) * flash * 1.4;
 }

@@ -86,6 +86,9 @@ func _complete_target(card: Card) -> void:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"opponent_type": "ai",          # so the opponent's discard has an agent that can answer
 		"opponent_hand": [1, 2, 3],

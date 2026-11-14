@@ -47,6 +47,12 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	var card = hand.cards[hand.cards.size() - 1]
+	# NO SIZE JUMP OFF THE DECK: one frame into the flight the card must still be the size it was in the pile (world),
+	# not the hand's resting size. enter_zone(HAND) used to snap it from 1.0 to 1.35 on the first frame.
+	var pile_world: float = float(Card.ZONE_PRESENTATION[Card.Zone.DECK]["scale"]) * deck.global_transform.basis.get_scale().x
+	var first_world: float = card.global_transform.basis.get_scale().x
+	print("[DrawProbe] world scale in the pile %.3f, first frame of the flight %.3f" % [pile_world, first_world])
+	_expect(absf(first_world - pile_world) < 0.06 * pile_world, "the drawn card leaves the deck at the deck's size (no jump)")
 	print("[DrawProbe] drew %s as fan index %d of %d, parented to %s" % [
 		card.card_name, card.index, hand.cards.size(), card.get_parent().name])
 	print("[DrawProbe] sampling every %.2f s: LOCAL rot, GLOBAL rot" % SAMPLE_STEP)
@@ -139,6 +145,20 @@ func _ready() -> void:
 	#   * the SCREEN bow is the real test. This camera looks almost straight down, so a climb in world Y is
 	#     foreshortened away — the flight can bow two metres in 3D and still cross the board flat to the eye. The
 	#     reference draws a tall hump, so the path has to rise well above the straight line ON SCREEN.
+	# IT FLIES OVER THE FIELD, NOT UNDER IT. The deck lies on the wood, lower than the field cards; once the card has
+	# left the deck's footprint it must be above the field cards' height, or it visibly passes under them.
+	var field_y: float = game.get_node("Field/FrontrowCard").global_position.y
+	var deck_xz := Vector2(deck.global_position.x, deck.global_position.z)
+	var lowest_over_field: float = INF
+	for p in points:
+		if Vector2(p.x, p.z).distance_to(deck_xz) > 0.6:
+			lowest_over_field = minf(lowest_over_field, p.y)
+	var highest: float = -INF
+	for p in points:
+		highest = maxf(highest, p.y)
+	print("[DrawProbe] lowest height away from the deck %.2f (field cards at %.2f), highest %.2f" % [
+		lowest_over_field, field_y, highest])
+	_expect(lowest_over_field > field_y + 0.05, "the drawn card flies ABOVE the field cards, never under them")
 	var chord: Vector3 = points[points.size() - 1] - points[0]
 	var bow: float = 0.0
 	if chord.length() > 0.001:

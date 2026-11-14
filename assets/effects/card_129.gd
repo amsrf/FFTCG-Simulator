@@ -20,7 +20,7 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Strongest Sword 《S》《Dull》: Choose 1 Forward. Remove the top card of your deck from the game. If it is a Forward, break it; if not, deal 3000 damage."
+		text = "Strongest Sword 《S》《Dull》: Choose 1 Forward. Remove the top card of your deck from the game. If the removed card is a Forward, break it. If not, deal it 3000 damage."
 		cost = {}
 		tap = true
 		s_cost = true

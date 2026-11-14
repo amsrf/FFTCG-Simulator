@@ -563,18 +563,26 @@ const STACK_CONTAINER_SCALE := 2.305
 ## resting and hover sizes (Hand.HOVER_CARD_SCALE), and the stack is drawn at 1.2 in WORLD,
 ## the same as a field card, so a played card does not jump to an enlarged size under the
 ## perspective camera.
-## Deck, graveyard and removed piles are parented to nodes scaled 1.4 (see game.tscn), while a
-## field card is 1.2 in WORLD. `scale` in this table is LOCAL, so a pile card has to carry
-## 1.2 / 1.4 or it is drawn 17% larger than the cards on the board — which is exactly how the
-## deck and graveyard ended up looking oversized.
-const PILE_LOCAL_SCALE := 1.2 / 1.4
+## Deck, graveyard and removed piles are parented to nodes scaled 1.4 (see game.tscn). `scale` in this
+## table is LOCAL, so a pile card carries PILE_WORLD_SCALE / 1.4. The piles are drawn at 1.0 in WORLD,
+## a little smaller than a field card (1.2), and lie flat on the wood.
+## A hand card is 1.0 in WORLD. It used to be 1.35 at the hand's old place (y 0.95); the Hand nodes were moved TOWARD
+## THE CAMERA along its line of sight and scaled by HAND_CONTAINER_SCALE (a homothety about the camera, factor 1/1.35),
+## which leaves the picture exactly as it was while the card itself is 1.0. The hand's layout constants are in the
+## Hand's LOCAL units, so they scale with the node and did not change. Move/scale both Hand nodes together, about the
+## camera, or the hand's on-screen size changes.
+const HAND_CARD_SCALE := 1.0
+const HAND_CONTAINER_SCALE := 1.0 / 1.35
+const PILE_WORLD_SCALE := 1.0
+const PILE_LOCAL_SCALE := PILE_WORLD_SCALE / 1.4
 
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
 	Zone.DECK:      {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
-	# HAND is the RESTING size of a fan card, and Hand lays the fan out for it. Under the perspective rig the hand is
-	# 6.2 m from the camera and magnified by proximity; this keeps it readable while still larger than a field card.
-	Zone.HAND:      {"scale": 1.35, "rotation": Vector3.ZERO,     "power_ui": false},
+	# HAND is the RESTING size of a fan card (1.0 in WORLD; LOCAL 1.35 inside the 1/1.35 Hand node, see
+	# HAND_CONTAINER_SCALE), and Hand lays the fan out for it. The hand sits ~4.6 m from the camera, so proximity, not
+	# scale, is what makes it read larger than the field.
+	Zone.HAND:      {"scale": HAND_CARD_SCALE / HAND_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
 	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
 	# WORLD. See STACK_CONTAINER_SCALE.
@@ -586,7 +594,8 @@ const ZONE_PRESENTATION := {
 	# TODO: the damage-zone node is identity like the Field, so by this rule it
 	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
 	# the OPPONENT's damage zone is authored with a +90 deg frame instead.
-	Zone.DAMAGE:    {"scale": 1.2, "rotation": Vector3.ZERO,      "power_ui": false},
+	# Same size as the deck it sits above (PILE_WORLD_SCALE; the DamageZone node is unscaled).
+	Zone.DAMAGE:    {"scale": PILE_WORLD_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 }
 
 var current_zone: Zone = Zone.NONE
@@ -643,6 +652,9 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# so without this the card could arrive in the hand/Graveyard still lifted
 	# and tilted.
 	damage_fx.normalize()
+	# And the stack aura: a card changing zone (leaving the stack, or arriving on it) starts with none; the Stack lights
+	# the top card itself (Stack.refresh_top_aura).
+	stack_aura.normalize()
 	# Same for a power-up burst: the swords belong to the field slot the card just left.
 	power_fx.on_enter_zone(zone == Zone.FIELD)
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
@@ -756,6 +768,9 @@ func stop_stack_layout() -> void:
 ## Damage presentation (recoil + Earth launch). See card_damage_fx.gd.
 const CARD_DAMAGE_FX := preload("res://scripts/cards/card_damage_fx.gd")
 var damage_fx: CARD_DAMAGE_FX = CARD_DAMAGE_FX.new(self)
+## The top-of-stack aura and the resolve pulse. See card_stack_aura.gd.
+const CARD_STACK_AURA := preload("res://scripts/cards/card_stack_aura.gd")
+var stack_aura: CARD_STACK_AURA = CARD_STACK_AURA.new(self)
 ## Power-up presentation (swords + red gas, then the readout swells as it counts). See card_power_fx.gd.
 const CARD_POWER_FX := preload("res://scripts/cards/card_power_fx.gd")
 var power_fx: CARD_POWER_FX = CARD_POWER_FX.new(self)

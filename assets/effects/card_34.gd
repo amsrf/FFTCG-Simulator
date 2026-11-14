@@ -10,7 +10,7 @@ func _dull_all_opponent_forwards(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《氷》《氷》《氷》《Dull》: Dull all opponent Forwards."
+		text = "Celestial Stasis 《S》《Ice》《Ice》《Ice》《Dull》: Dull all the Forwards opponent controls."
 		cost = {"氷": 3}
 		tap = true
 

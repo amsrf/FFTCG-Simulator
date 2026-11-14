@@ -5,12 +5,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT))),
 	]
 
 
 func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	ctx.damage(targets, 2000)

@@ -5,14 +5,14 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack"),
+		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT))),
 	]
 
 
 func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
 	if not ctx.condition("party_has_named:King of Eblan"):
 		return
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	ctx.damage(targets, 5000)

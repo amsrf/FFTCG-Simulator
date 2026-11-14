@@ -91,7 +91,7 @@ signal target_picked(card: Card)
 ## A targeting session began for `source` (whose controller makes the picks). Online play uses it to tell the local
 ## player's sessions from the remote seat's.
 signal targeting_started(source: Card)
-signal card_activated_ability(cost:Dictionary)
+signal card_activated_ability(cost: Dictionary, source: Card)
 ## The local human started activating `card`'s ability (online play records it as a draft until it commits).
 signal skill_activation_begun(card: Card)
 ## Read-through to the match's phase (owned by `Game`); Field keeps no copy.
@@ -1090,7 +1090,7 @@ func begin_skill_activation(card: Card, skill_index: int = -1, by_agent: bool = 
 		# This is exactly the branch the Confirm button would have taken, so nothing is skipped but the modal.
 		continue_skill_activation_after_mana(stack.skill_activation_proxy)
 		return
-	card_activated_ability.emit(cost)
+	card_activated_ability.emit(cost, card)
 	if not by_ui:
 		# Same as Game.play_card_for(): the owner's agent pays, and the modal it opened is never shown here.
 		assistant.hide_buttons()

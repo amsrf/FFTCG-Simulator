@@ -11,7 +11,7 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《風》《風》《Dull》, put Archer into the Break Zone: Break 1 Backup of cost 3 or less."
+		text = "《Wind》《Wind》《Dull》, put Archer into the Break Zone: Choose 1 Backup of cost 3 or less. Break it."
 		cost = {"風": 2}
 		tap = true
 		sacrifice = {"is_source": true}

@@ -241,7 +241,9 @@ func _build() -> void:
 	# A unit hemisphere (y 0..1): the shader projects the imprint from its x/z.
 	var dome := SphereMesh.new()
 	dome.radius = 1.0; dome.height = 2.0; dome.is_hemisphere = true
-	dome.radial_segments = 64; dome.rings = 48     # enough rings for the setting's step to stay crisp
+	# 128 around keeps the outline a circle at ~200 px; 96 rings put several rings across the setting's 0.03-wide wall
+	# (48 put fewer than two there, so the vertex-displaced step was a coarse zigzag).
+	dome.radial_segments = 128; dome.rings = 96
 	var gem := _add_mesh("GemDome", dome, _gem_material)
 	gem.scale = Vector3(radius, dome_height, radius)
 	var stone := _add_mesh("StoneDome", dome, _stone_material)
@@ -251,10 +253,13 @@ func _build() -> void:
 	_bezel_material = StandardMaterial3D.new()
 	_bezel_material.albedo_color = Color(0.82, 0.84, 0.88)
 	_bezel_material.metallic = 1.0
-	_bezel_material.roughness = 0.3
+	# Rougher than a mirror on purpose: a thin, tightly curved chrome tube packs its highlight into a pixel or two,
+	# which flickers and steps no matter how many MSAA samples there are (specular aliasing).
+	_bezel_material.roughness = 0.45
 	var bezel := TorusMesh.new()
-	bezel.inner_radius = radius - 0.012; bezel.outer_radius = radius
-	bezel.rings = 64; bezel.ring_segments = 8
+	# ~0.02 m wide: thick enough to stay 3+ px from the board camera.
+	bezel.inner_radius = radius - 0.02; bezel.outer_radius = radius
+	bezel.rings = 128; bezel.ring_segments = 12
 	_add_mesh("Bezel", bezel, _bezel_material)
 
 	# The ring glow belongs to the STATION, not the button: it is a child of the socket, not of the pivot.

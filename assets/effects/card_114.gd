@@ -12,7 +12,7 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Hammer Blow 《S》《土》《土》: Choose 1 Forward. Deal it 4000 damage. Barret gains +4000 power."
+		text = "Hammer Blow 《S》《Earth》《Earth》: Choose 1 Forward. Deal it 4000 damage. Barret gains +4000 power until the end of the turn."
 		s_cost = true
 		cost = {"土": 2}
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))

@@ -10,9 +10,8 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《氷》《氷》《Dull》: Deal 1000 damage to all opponent Forwards."
+		text = "《Ice》《Ice》: Deal 1000 damage to all the Forwards opponent controls."
 		cost = {"氷": 2}
-		tap = true
 
 	func on_resolve(ctx: EFFECT_CONTEXT) -> void:
 		await _owner._activate(ctx)

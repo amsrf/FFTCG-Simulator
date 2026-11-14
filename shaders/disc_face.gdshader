@@ -102,7 +102,9 @@ vec3 metal_band(vec2 p, float r, vec3 metal) {
 	float from_top = mix(0.45, 1.15, smoothstep(-0.6, 0.6, up));
 	// The crest: a thin bright line along the band's middle, strongest where it faces up.
 	from_top += 0.45 * pow(sin(t * PI), 10.0) * (0.5 + 0.5 * up);
-	float groove = smoothstep(0.0, 0.08, t) * smoothstep(1.0, 0.9, t);
+	// The edge grooves are a few pixels wide on screen: widen them to at least a pixel (fwidth) so they never step.
+	float aa = fwidth(t);
+	float groove = smoothstep(0.0, 0.08 + aa, t) * smoothstep(1.0, 0.9 - aa, t);
 	return metal * rounded * from_top * mix(0.25, 1.0, groove);
 }
 
@@ -112,8 +114,13 @@ void fragment() {
 	float rough = roughness;
 	vec3 emit = emission_color.rgb * emission_energy;
 	float gem_edge = band_inner - setting_wall;
+	// EVERY EDGE INSIDE THE FACE IS BLENDED OVER ONE PIXEL. MSAA only smooths triangle silhouettes; a boundary drawn by
+	// the shader inside a triangle (gem -> metal, wall -> band, the groove) gets no help from it and stair-steps.
+	// `px` is one screen pixel in face units.
+	float px = max(fwidth(r), 1e-5);
 	// The metal: the band itself, and the inner wall of the setting between the band's lip and the sunk face.
-	bool in_band = band_inner > 0.0 && r > gem_edge;
+	float band_mix = band_inner > 0.0 ? smoothstep(gem_edge - px, gem_edge + px, r) : 0.0;
+	bool in_band = band_mix >= 1.0;
 	float up = face.y / max(r, 1e-3);
 	if (crystal && !in_band) {
 		vec3 c = gem_ramp(face / max(gem_edge, 1e-3));
@@ -140,31 +147,30 @@ void fragment() {
 		rough = mix(rough, 0.35, ink);
 	}
 	if (groove_radius > 0.0 && !in_band) {
+		// At least ~1.5 px wide, with a one-pixel soft edge: a thinner engraved line breaks into steps.
 		float d = abs(r - groove_radius);
-		float g = 1.0 - smoothstep(0.012, 0.03, d);
+		float half_w = max(0.022, px * 0.75);
+		float g = 1.0 - smoothstep(half_w - px, half_w + px, d);
 		albedo = mix(albedo, groove_color.rgb, g);
 		rough = mix(rough, 0.4, g);
 		// The stone face is sunk in its setting too.
 		albedo *= 1.0 - smoothstep(gem_edge - 0.16, gem_edge, r) * (0.55 + 0.45 * max(up, 0.0)) * 0.5;
 	}
-	if (in_band) {
+	if (band_mix > 0.0) {
 		// The gem side wears polished silver metal, the stone side its station's metal (iron or bronze).
 		vec3 metal = crystal ? band_color.rgb : groove_color.rgb;
-		vec3 m;
-		if (r < band_inner) {
-			// The setting's inner wall: metal facing inward, in its own shadow; brightest on the far side, which is
-			// the side of the wall that faces the camera.
-			float w = (r - gem_edge) / max(setting_wall, 1e-3);
-			m = metal * mix(0.12, 0.5, w) * (0.55 + 0.45 * max(up, 0.0));
-		} else {
-			m = metal_band(face, r, metal);
-			// The lip: a bright bevel where the band turns down into the setting.
-			float t = (r - band_inner) / max(1.0 - band_inner, 1e-3);
-			m += metal * 0.45 * (1.0 - smoothstep(0.0, 0.14, t));
-		}
-		albedo = m * 0.4;
-		emit = m * 0.85;
-		rough = 0.35;
+		// The setting's inner wall: metal facing inward, in its own shadow; brightest on the far side, which is the
+		// side of the wall that faces the camera.
+		float w = clamp((r - gem_edge) / max(setting_wall, 1e-3), 0.0, 1.0);
+		vec3 wall = metal * mix(0.12, 0.5, w) * (0.55 + 0.45 * max(up, 0.0));
+		vec3 band = metal_band(face, r, metal);
+		// The lip: a bright bevel where the band turns down into the setting.
+		float t = (r - band_inner) / max(1.0 - band_inner, 1e-3);
+		band += metal * 0.45 * (1.0 - smoothstep(0.0, 0.14, max(t, 0.0)));
+		vec3 m = mix(wall, band, smoothstep(band_inner - px, band_inner + px, r));
+		albedo = mix(albedo, m * 0.4, band_mix);
+		emit = mix(emit, m * 0.85, band_mix);
+		rough = mix(rough, 0.35, band_mix);
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = rough;

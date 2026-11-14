@@ -10,7 +10,7 @@ func _free_summon(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《Dull》, put Summoner into the Break Zone: Cast 1 Summon of cost 6 or less from your hand for free."
+		text = "《Dull》, put Summoner into the Break Zone: Cast 1 Summon of cost 6 or less from your hand without paying its cost."
 		cost = {}
 		tap = true
 		sacrifice = {"is_source": true}

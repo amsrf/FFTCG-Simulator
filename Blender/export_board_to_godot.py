@@ -4,8 +4,8 @@ from mathutils import Matrix, Vector
 from bpy_extras.object_utils import world_to_camera_view
 HERE=os.path.dirname(os.path.abspath(__file__))
 ROOT=os.path.dirname(HERE); OUT=os.path.join(ROOT,'assets','board'); os.makedirs(OUT,exist_ok=True)
-SOURCE=os.path.join(HERE,'board_button_stations')
-bpy.ops.wm.open_mainfile(filepath=os.path.join(SOURCE,'board_button_stations.blend'))
+SOURCE=os.path.join(HERE,'board_filled_pockets')
+bpy.ops.wm.open_mainfile(filepath=os.path.join(SOURCE,'board_filled_pockets.blend'))
 scene=bpy.context.scene
 seat_two='--seat2' in sys.argv
 suffix='_seat2' if seat_two else ''

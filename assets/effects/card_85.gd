@@ -16,7 +16,7 @@ func allows_blocker(_owner: Card, blocker: Card) -> bool:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《S》《Dull》 Choose up to 3 Forwards. Divide 6000 damage among them as you like."
+		text = "Bloodfest 《S》《Dull》: Choose up to 3 Forwards. Divide 6000 damage among them as you like. (Unit must be 1000.)"
 		cost = {}
 		tap = true
 		s_cost = true

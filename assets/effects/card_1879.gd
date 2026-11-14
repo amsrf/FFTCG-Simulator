@@ -5,12 +5,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack"),
+		trigger(EVENTS.Event.PARTY_ATTACK, "when_party_attack").chooses(TARGET_REQUEST.field(CARD_QUERY.new().character(true))),
 	]
 
 
 func when_party_attack(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().character(true)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	ctx.dull(targets)

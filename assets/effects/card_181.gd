@@ -9,7 +9,7 @@ func activated_abilities() -> Array:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《1》《Dull》, return Onion Knight to its owner's hand: You may play 1 Onion Knight from your hand onto the field. Use only during your turn."
+		text = "《1》《Dull》, return Onion Knight to its owner's hand: You may play 1 Onion Knight from your hand onto the field. You can only use this ability during your turn."
 		cost = {"neutral": 1}
 		tap = true
 		return_self = true

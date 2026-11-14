@@ -24,7 +24,7 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Planet Protector 《S》《Dull》: Choose up to 3 Backups you control other than Aerith. Activate them."
+		text = "Planet Protector 《S》《Dull》: Activate all Forwards you control. They cannot be chosen by Summons or abilities this turn."
 		cost = {}
 		tap = true
 		s_cost = true

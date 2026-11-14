@@ -27,6 +27,9 @@ func _expect(ok: bool, what: String) -> void:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	MatchSetup.config = MatchSetup.build_config("ai")
 	_game = GAME_SCENE.instantiate()
 	add_child(_game)

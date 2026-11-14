@@ -11,6 +11,7 @@ const MOCK := preload("res://scripts/agents/mock_agent.gd")
 const KIMAHRI := 103
 const SHANTOTTO := 107
 const MIME := 173
+const ZACK := 12
 
 
 class ChoiceAgent extends MockAgent:
@@ -130,6 +131,21 @@ func _ready() -> void:
 	mime.turn_end()
 	_expect(mime.is_element("水") and not mime.status_effects.has("element_override"),
 		"the override expires with the turn")
+
+	# --- 12 Zack: an auto-ability with no legal choice never reaches the stack (rules 11.8.4 / 11.8.9) ------------
+	await _boot()
+	var zack: Card = _make(ZACK, "player")
+	_make(41, "player")   # a Forward of OURS: not a legal "Forward opponent controls"
+	_field.execute_card_effect(zack, "when_enter_field")
+	_expect(_game.stack.stack_length() == 0,
+		"Zack's ETB with no opponent Forward is not put on the stack")
+	var target_forward: Card = _make(1, "opponent")
+	_field.execute_card_effect(zack, "when_enter_field")
+	_expect(_game.stack.stack_length() == 1, "with an opponent Forward, Zack's ETB is a stack object")
+	# The target leaves while the ability waits: it still resolves (to nothing) and does not hang.
+	_game.put_card_into_graveyard(target_forward)
+	await _game.stack.resolve_top_effect()
+	_expect(_game.stack.stack_length() == 0, "an ETB whose target vanished on the stack resolves to nothing")
 
 	print("[CodeEffect] %d checks | failures: %d" % [_checks, _fails])
 	print("[CodeEffect] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

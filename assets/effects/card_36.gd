@@ -10,7 +10,7 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《氷》《Dull》, put Bard into the Break Zone: Your opponent discards 1 card."
+		text = "《Ice》《Dull》, put Bard into the Break Zone: Your opponent discards 1 card from his/her hand."
 		cost = {"氷": 1}
 		tap = true
 		sacrifice = {"is_source": true}

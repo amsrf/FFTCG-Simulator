@@ -108,6 +108,7 @@ func dispatch(event: int, ctx: EFFECT_CONTEXT, index: int = -1) -> void:
 		push_error("CardEffect.dispatch: ability %d is event %d, not %d" % [index, spec.event, event])
 		return
 	if spec.handler.is_valid():
+		ctx.trigger_choice = spec.choice
 		await spec.handler.call(ctx)
 
 

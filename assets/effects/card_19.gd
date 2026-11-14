@@ -11,7 +11,7 @@ func _untap_target(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《火》《Dull》: Choose 1 Fire Backup you control. Activate it."
+		text = "《Fire》《Dull》: Choose 1 Fire Backup. Activate it."
 		cost = {"火": 1}
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").of_element("Fire").controlled_by(CARD_QUERY.Controller.PLAYER))

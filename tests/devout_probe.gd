@@ -73,6 +73,9 @@ func _await_window(timeout_frames: int = 120) -> Node:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"player_field": [{"id": DEVOUT_ICE}, {"id": DEVOUT_WIND}],
 		"player_graveyard": [SQUALL, TERRA, CID],

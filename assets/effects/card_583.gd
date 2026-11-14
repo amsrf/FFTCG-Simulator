@@ -7,12 +7,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.PARTY_ATTACKS, "when_party_attacks"),
+		trigger(EVENTS.Event.PARTY_ATTACKS, "when_party_attacks").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false))),
 	]
 
 
 func when_party_attacks(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT).tapped(false)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	ctx.damage(targets, 8000)

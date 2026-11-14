@@ -10,7 +10,7 @@ func _play_from_break_zone(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Dull, put Devout into the Break Zone: Play 1 Forward of cost 4 or less from your Break Zone."
+		text = "《Dull》, put Devout into the Break Zone: Choose 1 Forward of cost 4 or less from your Break Zone. Play it onto the field. You can only use this ability during your turn."
 		cost = {}
 		tap = true
 		sacrifice = {"is_source": true}

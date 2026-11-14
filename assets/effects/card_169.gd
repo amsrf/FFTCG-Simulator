@@ -10,7 +10,7 @@ func _look_top(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《Dull》: Look at the top card of your deck. You may put it on the bottom."
+		text = "《Dull》: Look at the top card of your deck. You may place the card at the bottom of your deck."
 		cost = {}
 		tap = true
 

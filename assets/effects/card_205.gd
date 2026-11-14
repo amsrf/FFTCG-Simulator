@@ -10,7 +10,7 @@ func _damage_all_opponent_forwards(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Grenade Bomb 《S》: Deal 2000 damage to all opponent Forwards."
+		text = "Grenade Bomb 《S》: Deal 2000 damage to all the Forwards opponent controls."
 		s_cost = true
 		cost = {}
 

@@ -86,7 +86,9 @@ func _ready() -> void:
 		_finish()
 		return
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	var px_per_metre: float = _px_per_metre_at(cam, hand.global_position, view)
+	# Pixels per LOCAL hand unit: every length this probe converts (card_width, a card's local scale) is in the Hand's
+	# own space, and the Hand node is scaled (Card.HAND_CONTAINER_SCALE).
+	var px_per_metre: float = _px_per_metre_at(cam, hand.global_position, view) * hand.global_basis.get_scale().x
 
 	var resting: float = hand.hand_scale
 	var face: Vector2 = hand.cards[0]._card_face_size()
@@ -402,7 +404,8 @@ func _ready() -> void:
 	var hover_world: float = card.global_transform.basis.get_scale().x
 	var hover_px: float = absf(hover_box["bottom"] - hover_box["top"])
 	print("[HandHover] hovered card is %.3f world scale and %.0f px tall" % [hover_world, hover_px])
-	_expect(absf(hover_world - Hand.HOVER_CARD_SCALE) < 0.03,
+	# HOVER_CARD_SCALE is LOCAL to the Hand node, which is itself scaled (Card.HAND_CONTAINER_SCALE).
+	_expect(absf(hover_world - Hand.HOVER_CARD_SCALE * hand.global_basis.get_scale().x) < 0.03,
 		"the hover uses the hand's dedicated hover scale")
 	_expect(hover_px > view.y * 0.22 and hover_px < view.y * 0.45,
 		"and its screen height stays in the readable band, not the old 2.8x size")

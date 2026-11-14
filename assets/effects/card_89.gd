@@ -14,7 +14,7 @@ func _mill_two_draw(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《風》《Dull》: Your opponent mills 1."
+		text = "《Wind》《Dull》: Your opponent puts 1 card from the top of his/her deck into the Break Zone."
 		cost = {"風": 1}
 		tap = true
 
@@ -24,7 +24,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 class Ability1 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《S》《風》《Dull》: Your opponent mills 2. You draw 1."
+		text = "Mug 《S》《Wind》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone. You draw 1 card."
 		s_cost = true
 		cost = {"風": 1}
 		tap = true

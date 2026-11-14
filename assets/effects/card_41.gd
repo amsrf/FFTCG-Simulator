@@ -5,8 +5,8 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.BLOCKS, "when_blocks"),
-		trigger(EVENTS.Event.BLOCKED, "when_blocked"),
+		trigger(EVENTS.Event.BLOCKS, "when_blocks").chooses(_any_forward()),
+		trigger(EVENTS.Event.BLOCKED, "when_blocked").chooses(_any_forward()),
 	]
 
 
@@ -18,8 +18,12 @@ func when_blocked(ctx: EFFECT_CONTEXT) -> void:
 	await _may_deal_6000(ctx)
 
 
+func _any_forward():
+	return TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))
+
+
 func _may_deal_6000(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	if await ctx.may("Deal 6000"):

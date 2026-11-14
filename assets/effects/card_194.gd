@@ -5,12 +5,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.BLOCKS, "when_blocks"),
+		trigger(EVENTS.Event.BLOCKS, "when_blocks").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))),
 	]
 
 
 func when_blocks(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward")))
+	var targets: Array = await ctx.choose_trigger_targets()
 	ctx.dull(targets)
 
 
@@ -23,7 +23,7 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Vendetta 《S》《Ice》: Until the end of the turn, Snow gains +2000 power and First Strike. Use only while Snow is blocking."
+		text = "Vendetta 《S》《Ice》: Until the end of the turn, Snow gains +2000 power and First Strike. You can only use this ability while Snow is blocking."
 		cost = {"氷": 1}
 		s_cost = true
 		only_if_blocking = true

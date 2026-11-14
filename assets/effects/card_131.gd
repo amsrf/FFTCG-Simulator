@@ -5,12 +5,12 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field"),
+		trigger(EVENTS.Event.ENTER_FIELD, "when_enter_field").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").cost_at_most(1))),
 	]
 
 
 func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Backup").cost_at_most(1)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	if targets.is_empty():
 		return
 	ctx.break_cards(targets)
@@ -27,7 +27,7 @@ func _skill_0(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Slots 《S》《Lightning》《Dull》: Remove the top card of your deck from the game. If it is a Forward, deal 7000 damage to all active Forwards opponent controls."
+		text = "Slots 《S》《Lightning》《Dull》: Remove the top card of your deck from the game. If it's a Forward, deal 7000 damage to all the active Forwards opponent controls."
 		cost = {"雷": 1}
 		tap = true
 		s_cost = true

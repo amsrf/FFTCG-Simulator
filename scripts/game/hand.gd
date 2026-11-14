@@ -124,7 +124,7 @@ func fly_returned_card(card: Card) -> Tween:
 	var toward_camera: Vector3 = Vector3.UP
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam != null:
-		toward_camera = global_transform.basis.inverse() * cam.global_transform.basis.z.normalized()
+		toward_camera = _local_dir(cam.global_transform.basis.z)
 	var stage: Vector3 = destination + toward_camera * return_stage_lift
 
 	var t: Tween = create_tween()
@@ -163,6 +163,12 @@ func draw(card):
 ## close together (the Draw Phase followed by a "draw 1" effect) fought over its progress and teleported the first card.
 ##
 ## Returns the flight tween (finished = the cards have landed), for a caller that must not move on mid-flight.
+## How hard a drawn card climbs off the deck (metres of world Y on the start handle). See draw_many().
+const DRAW_LIFT := 2.6
+## The in-flight size swell, as a ratio of the hand's resting size. Was 1.45 while the flight stayed low; the card now
+## flies above the hand's plane, closer to the camera, and perspective supplies part of the growth.
+const DRAW_SWELL := 1.3
+
 func draw_many(drawn: Array) -> Tween:
 	drawn = drawn.filter(func(c): return c != null and is_instance_valid(c))
 	if drawn.is_empty():
@@ -170,7 +176,12 @@ func draw_many(drawn: Array) -> Tween:
 	var count: int = drawn.size()
 	var first_index: int = cards.size()
 	var starts: Array = []
+	# The size each card has IN THE DECK, in world. add_card_to_tree() runs enter_zone(HAND), which assigns the hand's
+	# resting scale at once; without restoring this the card visibly jumped from pile size to hand size on the first
+	# frame of the draw. The flight's own grow-and-settle (below) takes it to hand size from here instead.
+	var start_scales: Array = []
 	for card in drawn:
+		start_scales.append(card.global_transform.basis.get_scale().x if card.is_inside_tree() else hand_scale)
 		add_card_to_tree(card)
 		starts.append(card.position)
 
@@ -203,7 +214,11 @@ func draw_many(drawn: Array) -> Tween:
 	curve.add_point(start)
 	curve.add_point(landing)
 	# Both handles at the two thirds a quadratic Bezier takes when written as a cubic — exactly one arc, no kink.
-	curve.set_point_out(0, (control - start) * (2.0 / 3.0))
+	# PLUS A CLIMB OFF THE DECK (DRAW_LIFT, world Y = this node's Y): the deck lies on the wood, BELOW the field cards
+	# (y 0.5), and a path that only rose gradually toward the hand (y 0.95) flew under the field cards it crossed. The
+	# lift makes the card leave the deck nearly straight up and arc ABOVE the hand's plane (~0.3 higher mid-flight),
+	# i.e. towards the camera, which is also what makes it read bigger on the way.
+	curve.set_point_out(0, (control - start) * (2.0 / 3.0) + Vector3(0.0, DRAW_LIFT, 0.0))
 	curve.set_point_in(1, (control - landing) * (2.0 / 3.0))
 	# SMALL, or the path is a bent polyline through the control points rather than a curve.
 	curve.bake_interval = 0.05
@@ -213,7 +228,7 @@ func draw_many(drawn: Array) -> Tween:
 	path_follow.position = start
 
 	# THE ROW. Neighbours sit ROW_STEP card widths apart, centred on the group — measured in CARD WIDTHS, not hand
-	# slots, because the slots tighten as the hand fills and the in-flight 1.45x zoom widens the cards: at 0.9 about
+	# slots, because the slots tighten as the hand fills and the in-flight DRAW_SWELL zoom widens the cards: at 0.9 about
 	# 60% of the card underneath stays visible at the peak of the zoom. A slight lift per card keeps the later card on
 	# top, as in the fan. The hand spacing takes over as they settle.
 	const ROW_STEP := 0.9
@@ -231,6 +246,8 @@ func draw_many(drawn: Array) -> Tween:
 		# hand's rotation (zero) — so without this the card would be face-up from the first frame. Y stays ZERO, not
 		# the fan tilt: a card in the air must not wear its hand tilt (see _tilt_into_hand()).
 		card.rotation = Vector3(PI, 0.0, 0.0)
+		# Leave the deck at the deck's size (see start_scales): scale is local to the path follower.
+		card.scale = Vector3.ONE * (float(start_scales[i]) / maxf(path_follow.global_transform.basis.get_scale().x, 0.0001))
 
 	# Laid out only now: the cards in flight are parented to the path, so the layout leaves them alone and only makes
 	# room for them among the cards already in hand.
@@ -251,7 +268,7 @@ func draw_many(drawn: Array) -> Tween:
 		# leaving the deck and arriving in the hand. A RATIO on the hand's resting size (hand_scale), its own tween so
 		# it does not fight the flight tween.
 		var bump: Tween = create_tween()
-		bump.tween_property(card, "scale", Vector3.ONE * hand_scale * 1.45, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		bump.tween_property(card, "scale", Vector3.ONE * hand_scale * DRAW_SWELL, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		bump.tween_property(card, "scale", Vector3.ONE * hand_scale, 1.2).set_trans(Tween.TRANS_SINE)
 
 	# The cards only BECOME hand cards here — at the end of the flight.
@@ -475,7 +492,9 @@ func _px_per_metre_at(world_pos: Vector3) -> float:
 ## `fits` test is in screen terms because that is where "off the side of the screen" means anything.
 func _available_width() -> float:
 	var view: Vector2 = get_viewport().get_visible_rect().size
-	return view.x / maxf(_px_per_metre_at(global_position), 0.001)
+	# In THIS node's units: the Hand is scaled (Card.HAND_CONTAINER_SCALE) and spacing() compares against card_width,
+	# which is local.
+	return view.x / maxf(_px_per_metre_at(global_position), 0.001) / maxf(global_basis.get_scale().x, 0.001)
 
 ## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and against the arc it sits on it is
 ## NEGATED: a card's up axis is its local -Z, so its arc position and its tilt run opposite ways. Flip only one of the
@@ -567,7 +586,20 @@ func _screen_down() -> Vector3:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam == null:
 		return Vector3(0.0, 0.0, 1.0)
-	return global_transform.basis.inverse() * (-cam.global_transform.basis.y.normalized())
+	return _local_dir(-cam.global_transform.basis.y)
+
+## A WORLD direction as a UNIT vector in this node's local space. The Hand node is SCALED (Card.HAND_CONTAINER_SCALE), so
+## basis.inverse() alone returns a vector 1/scale long, and every LOCAL amount multiplied by it (the sag, the depth ramp,
+## the hover lift) came out that much too strong. Normalised, a local amount stays a local amount. A WORLD distance (the
+## screen fits in _sink_offset / _hover_offset) still goes through basis.inverse() un-normalised, which is right.
+## The Hand node's own scale (Card.HAND_CONTAINER_SCALE). The character-drag stance is built in WORLD space, so its
+## exported lift and scale (tuned when the Hand was unscaled at y 0.95) are multiplied by this to keep the same picture
+## now that the hand sits nearer the camera.
+func _hand_world_scale() -> float:
+	return global_basis.get_scale().x
+
+func _local_dir(world_dir: Vector3) -> Vector3:
+	return (global_transform.basis.inverse() * world_dir).normalized()
 
 func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 	if i < 0 or i >= cards.size():
@@ -609,7 +641,7 @@ func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 	# behind Garland and Evoker behind Aerith" was. The screen is the thing that has to be consistent, not the index.
 	var rightward: float = t
 	if cam_now != null:
-		toward_cam = global_transform.basis.inverse() * cam_now.global_transform.basis.z.normalized()
+		toward_cam = _local_dir(cam_now.global_transform.basis.z)
 		var to_screen_right: float = global_transform.basis.x.dot(cam_now.global_transform.basis.x.normalized())
 		rightward = t * (1.0 if to_screen_right >= 0.0 else -1.0)
 	# THE ARC IS MIRRORED, AND THIS IS THE LINE THAT DOES IT. Their row curves the opposite way up from ours — ends
@@ -628,7 +660,7 @@ func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 	if include_hover and hovered_card != null and is_instance_valid(hovered_card) and i >= 0 and i < cards.size() \
 			and cards[i] == hovered_card:
 		spot += _hover_offset(i, spot)
-		spot += global_basis.inverse() * Vector3(0.0, 0.0, _hover_drift_amount)
+		spot += _local_dir(Vector3(0.0, 0.0, 1.0)) * _hover_drift_amount
 	return spot
 
 
@@ -798,8 +830,7 @@ func _hover_offset(i: int, base: Vector3) -> Vector3:
 		# WORLD camera axis -> LOCAL offset. `base` is local and the player hand is yawed 180 degrees, so adding the
 		# world vector directly would tilt the lift away from the view axis and the leftmost card would stop clearing
 		# its neighbours.
-		lift = global_transform.basis.inverse() \
-			* (cam.global_transform.basis.z.normalized() * _hover_lift())
+		lift = _local_dir(cam.global_transform.basis.z) * _hover_lift()
 	if cam == null:
 		return lift
 	var card: Card = cards[i]
@@ -897,7 +928,8 @@ func begin_character_drag(card: Card, start_pointer_y: float = -1.0) -> void:
 	_release_hover(card)
 	card.stop_hand_layout()
 	_character_drag_start = card.global_transform
-	_character_drag_start.origin.y += character_drag_lift_y
+	# The lift is in the Hand's units (see _hand_world_scale): world Y times the node's scale.
+	_character_drag_start.origin.y += character_drag_lift_y * _hand_world_scale()
 	card.set_cast_pending_highlight(false)
 	var camera := get_viewport().get_camera_3d()
 	if camera != null:
@@ -1018,7 +1050,7 @@ func _build_character_drag_stance(pointer_x: float) -> Transform3D:
 	var ray := camera.project_ray_normal(screen)
 	# ABOVE THE HAND, not at the mat surface — otherwise the fan (at hand height) draws over the stance card. Lifting
 	# from the hand's own Y keeps the card in front of every fan card as well as larger.
-	var plane_y: float = global_position.y + character_drag_lift_y
+	var plane_y: float = global_position.y + character_drag_lift_y * _hand_world_scale()
 	var hit = Plane(Vector3.UP, plane_y).intersects_ray(ray_origin, ray)
 	var position := ray_origin + ray * 6.0
 	if hit != null:
@@ -1030,7 +1062,7 @@ func _build_character_drag_stance(pointer_x: float) -> Transform3D:
 	var screen_basis := Basis(cam_basis.x, cam_basis.z, -cam_basis.y)
 	var pitch := Basis(Vector3.RIGHT, deg_to_rad(character_drag_pitch_degrees))
 	var basis := screen_basis * pitch
-	return Transform3D(basis.scaled(Vector3.ONE * character_drag_scale), position)
+	return Transform3D(basis.scaled(Vector3.ONE * character_drag_scale * _hand_world_scale()), position)
 
 func _resume_normal_character_drag(card: Card) -> void:
 	card.stop_hand_layout()
@@ -1082,7 +1114,7 @@ func stage_cast_card_at_middle(card: Card) -> void:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam != null:
 		# A hair toward the camera so it reads as sitting on top of the middle card.
-		card.global_position += cam.global_transform.basis.z.normalized() * 0.02
+		card.global_position += cam.global_transform.basis.z.normalized() * 0.02 * global_basis.get_scale().x
 
 func remove_card(card):
 	_release_hover(card)

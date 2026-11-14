@@ -1,0 +1,105 @@
+extends Node3D
+## Viewing harness for the TOP-OF-STACK AURA and the RESOLVE PULSE (scripts/cards/card_stack_aura.gd): the card wears
+## the standing aura; each replay plays the pulse (the card grows, the aura flares, a rectangle launches from its
+## outline and fades with distance). No match, no rules.
+##   Space  replay     A  auto-replay on/off     S  slow motion (x0.25)
+## Screenshots: tools/shot.tscn ... -- --scene res://tools/resolve_pulse_demo.tscn --as-scene 1 --freeze=<seconds>
+
+const CARD_SCENE := preload("res://scenes/cards/card.tscn")
+const CARD_ID := 25
+const AUTO_SECONDS := 1.8
+
+var _auto := false
+var _auto_timer := 0.0
+var _camera: Camera3D
+var _label: Label
+var _card: Card = null
+
+func _ready() -> void:
+	_camera = Camera3D.new()
+	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_camera.size = 2.6
+	add_child(_camera)
+	_camera.current = true
+	_camera.rotation_degrees = Vector3(-80.0, 180.0, 0.0)
+	_camera.position = _camera.basis.z * 6.0
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	add_child(light)
+	var env := WorldEnvironment.new()
+	env.environment = Environment.new()
+	env.environment.background_mode = Environment.BG_COLOR
+	env.environment.background_color = Color(0.10, 0.10, 0.12)
+	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.environment.ambient_light_color = Color.WHITE
+	env.environment.ambient_light_energy = 0.35
+	add_child(env)
+	var ground := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(6.0, 6.0)
+	ground.mesh = plane
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.45, 0.33, 0.24)
+	wood.roughness = 0.9
+	ground.material_override = wood
+	ground.position.y = -0.4
+	add_child(ground)
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_label = Label.new()
+	_label.position = Vector2(16, 12)
+	layer.add_child(_label)
+	var freeze := -1.0
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--freeze="):
+			freeze = argument.trim_prefix("--freeze=").to_float()
+	_play()
+	if freeze >= 0.0:
+		await get_tree().create_timer(freeze).timeout
+		Engine.time_scale = 0.0
+
+func _process(delta: float) -> void:
+	if not _auto:
+		return
+	_auto_timer += delta
+	if _auto_timer >= AUTO_SECONDS:
+		_play()
+
+func _new_card() -> Card:
+	var card: Card = CARD_SCENE.instantiate()
+	add_child(card)
+	card.initialize(CARD_ID, "player")
+	card.enter_zone(Card.Zone.FIELD)
+	card.position = Vector3.ZERO
+	# The stack draws its cards at about 2.3x a field card.
+	card.scale = Vector3.ONE * 2.3
+	card.hide_power_display()
+	return card
+
+func _play() -> void:
+	_auto_timer = 0.0
+	if not is_instance_valid(_card):
+		_card = _new_card()
+		_card.stack_aura.set_top(true)
+	_card.stack_aura.pulse()
+	_update_label()
+
+func _update_label() -> void:
+	_label.text = "RESOLVE PULSE  |  auto %s  |  %s\nSpace replay   A auto   S slow" % [
+		"ON" if _auto else "off", "SLOW x0.25" if is_equal_approx(Engine.time_scale, 0.25) else "normal speed"]
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	match event.keycode:
+		KEY_SPACE:
+			_play()
+		KEY_A:
+			_auto = not _auto
+			_auto_timer = 0.0
+		KEY_S:
+			Engine.time_scale = 0.25 if is_equal_approx(Engine.time_scale, 1.0) else 1.0
+	_update_label()
+
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0

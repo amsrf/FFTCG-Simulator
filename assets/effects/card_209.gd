@@ -11,7 +11,7 @@ func _first_strike_target(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《雷》《Dull》: Choose 1 attacking Lightning Forward. It gains First Strike."
+		text = "《Lightning》《Dull》: Choose 1 attacking Lightning Forward. It gains First Strike until the end of the turn."
 		cost = {"雷": 1}
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").attacking(true).of_element("雷"))

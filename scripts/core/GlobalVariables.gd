@@ -130,3 +130,13 @@ func set_card_width(value):
 
 func set_card_spacing(value):
 	_card_spacing = value
+
+
+## F11: fullscreen <-> windowed. The project starts FULLSCREEN (project.godot window/size/mode=3) because on a
+## 1920x1080 monitor a 1920x1080 window cannot fit beside the title bar and panel, so the window manager shrinks it.
+## Windowed is for debugging next to the editor; the viewport still renders at 1920x1080 and is scaled into it.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
+		var fullscreen := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_MAXIMIZED if fullscreen else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		get_viewport().set_input_as_handled()

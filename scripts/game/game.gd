@@ -389,6 +389,7 @@ func put_hand_card_on_bottom() -> void:
 	d.deck_cards.append(picked)
 	picked.reparent(d, false)
 	picked.enter_zone(Card.Zone.DECK)
+	d.update_card_positions()
 	_last_action_succeeded = true
 
 ## "Cast 1 Summon of cost 6 or less from your hand without paying its cost." The card goes through the SAME charge
@@ -828,6 +829,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/disc_ring_glow.gdshader"),
 	# The mana cost row's backing window (crystal_cost.gd): first rendered when a payment opens.
 	preload("res://shaders/cost_panel.gdshader"),
+	# The top-of-stack aura and resolve pulse (card_stack_aura.gd): first rendered when something reaches the stack.
+	preload("res://shaders/stack_aura.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
@@ -1737,15 +1740,13 @@ const DAMAGE_CAMERAS := {
 @export var damage_zoom_in_seconds: float = 0.35
 @export var damage_zoom_hold_seconds: float = 1.0
 @export var damage_zoom_out_seconds: float = 0.4
+## How close the damage shot comes: metres from the landing slot along the board camera's line of sight (the board
+## view itself is ~8 m away).
+@export var damage_zoom_distance: float = 3.2
 
 ## The board view to come back to. Captured on the first zoom, because at that moment it IS the board view.
 var _board_camera: Camera3D = null
 var _damage_tween: Tween = null
-## Each damage camera's HAND-PLACED pose, remembered the first time it is used. The return leg must go back to
-## THIS, not to the board's pose: tweening a damage camera onto the board view parks it there, so the next zoom
-## reads its position from the board, computes a target beside the board, and the view never leaves the board
-## again. That is precisely "it zoomed once and then stopped".
-var _damage_home: Dictionary = {}
 
 
 ## The world point the NEXT damage card will occupy in `zone` — the same formula the zone uses for an incoming
@@ -1815,30 +1816,24 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 		return
 
 	var cards: Array = zone.get("cards")
-	var next_index: int = cards.size() if cards != null else 0
-	# THE CAMERA'S OWN POSE, REMEMBERED ON FIRST USE. Reading its LIVE position — which is what this did — works
-	# exactly once: the return leg parks the camera on the board view, so on the second zoom this would read the
-	# board's position and aim the shot at the board. The first zoom is the only moment the camera is guaranteed
-	# to still be in its hand-placed pose.
-	if not _damage_home.has(cam):
-		_damage_home[cam] = cam.global_transform
-	var home: Transform3D = _damage_home[cam]
-	# The pose to land on: the hand-placed framing, shifted by the slot's drift from slot zero.
-	var drift: Vector3 = _damage_slot_world(zone, next_index) - _damage_slot_world(zone, 0)
+	# The card that JUST LANDED: the zoom runs on `damaged`, after DamageZone.draw() has already added it to the row, so
+	# cards.size() is the slot AFTER it (the shot used to aim one card too far).
+	var next_index: int = maxi((cards.size() if cards != null else 0) - 1, 0)
 	var slot: Vector3 = _damage_slot_world(zone, next_index)
-	var target: Transform3D = home
-	target.origin = home.origin + drift
-	# TURN TO FACE THE SLOT. Translating alone only centres the shot if the hand-placed rotation happened to point
-	# at the first slot; as the row grows the camera would slide sideways while still looking where slot zero was.
-	# looking_at() aims the camera at the slot and leaves the position alone, and it takes the camera's own up
-	# vector so a deliberately rolled camera keeps its roll. Godot cameras look down -Z, which looking_at handles.
-	if target.origin.distance_to(slot) > 0.01:
-		target = target.looking_at(slot, home.basis.y)
-
+	# THE BOARD VIEW, DOLLIED IN. The shot keeps the board camera's ORIENTATION and LENS exactly and only moves along
+	# its line of sight until the landing slot sits at the centre, damage_zoom_distance away. The old shot flew to a
+	# hand-placed pose inside the zone (rolled ~90 degrees, a different fov) and swung the whole board round on the way;
+	# now nothing turns, the board just comes closer and goes back.
 	var board_pose: Transform3D = _board_camera.global_transform
+	var target := Transform3D(board_pose.basis, slot + board_pose.basis.z.normalized() * damage_zoom_distance)
 	if _damage_tween != null and _damage_tween.is_valid():
 		_damage_tween.kill()
 	# Tweening the DAMAGE camera rather than the board one means the board's own transform is never touched.
+	cam.projection = _board_camera.projection
+	cam.fov = _board_camera.fov
+	cam.keep_aspect = _board_camera.keep_aspect
+	cam.near = _board_camera.near
+	cam.far = _board_camera.far
 	cam.global_transform = board_pose
 	cam.current = true
 	LOG.info("DamageZoom", "%s -> %s (slot %d)" % [which, cam.name, next_index])
@@ -1847,10 +1842,8 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	_damage_tween.set_trans(Tween.TRANS_SINE)
 	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
 	_damage_tween.tween_interval(hold)
-	# BACK TO ITS OWN POSE, not the board's. Ending on the board pose was half of the "works once" bug: it puts the
-	# board view back on screen (correct) but leaves THIS camera parked there, which poisons the next zoom's
-	# read-back. The handoff to the board view happens in the callback below; this just puts it back where it lives.
-	_damage_tween.tween_property(cam, "global_transform", home, damage_zoom_out_seconds).set_ease(Tween.EASE_IN)
+	# Back out to the BOARD pose, then hand the view back. Ending exactly on the board pose makes the handoff invisible.
+	_damage_tween.tween_property(cam, "global_transform", board_pose, damage_zoom_out_seconds).set_ease(Tween.EASE_IN_OUT)
 	_damage_tween.tween_callback(_end_damage_zoom)
 
 
@@ -1904,7 +1897,11 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 		await assistant.target_complete
 	# IMMEDIATELY: no priority round, nobody responds. The stack's own resolution does the work - the same code every
 	# other effect goes through, so instructions, targets and cleanup all behave identically.
-	if stack.stack_length() > 0:
+	# A code burst with no legal target was never put on the stack (11.8.4): resolving "the top" would run some other
+	# stack object instead.
+	if code_event and burst_card == null:
+		LOG.info("ExBurst", "%s: no legal target, the burst does nothing" % card.card_name)
+	elif stack.stack_length() > 0:
 		await stack.resolve_top_effect()
 
 	# The burst is spent; leave nothing behind for the next effect to inherit.
@@ -2863,6 +2860,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		# old pre-clear could wipe the very session the code handler had just opened.
 		await _resolve_code_effect(card)
 		field.call("finish_targeting_state")
+		await stack.hold_resolved_card()
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
@@ -2876,6 +2874,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		var summon_ctx = card.make_effect_context(EVENTS.Event.CAST, {}, card, summon_picks)
 		await card.effect().dispatch(EVENTS.Event.CAST, summon_ctx)
 		field.call("finish_targeting_state")
+		await stack.hold_resolved_card()
 		if card.controller == Card.PLAYER:
 			player_graveyard.add_card(card)
 		else:
@@ -2893,6 +2892,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 			var ability_ctx = ability_source.make_effect_context("activated_ability", {}, card, ability_picks)
 			await card.ability_spec.resolve(ability_ctx)
 		field.call("finish_targeting_state")
+		await stack.hold_resolved_card()
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
@@ -2903,6 +2903,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		field.call("finish_targeting_state")
 		await _resolve_event_trigger(card)
 		field.call("finish_targeting_state")
+		await stack.hold_resolved_card()
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
@@ -2942,6 +2943,7 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 	# animation (return to hand) or on a modal — otherwise the next effect can resolve while this one is still moving
 	# cards, and resolve_top_effect() returns before the board has changed.
 	await _execute_instructions_and_wait(instructions)
+	await stack.hold_resolved_card()
 
 	if card.effect_source == null:
 		# A real card cast from hand (Summon) resolves to its controller's

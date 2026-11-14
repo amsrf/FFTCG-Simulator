@@ -27,6 +27,8 @@ var controller: String = ""
 var owner_id: int = 1
 var event_name = ""
 var event_data: Dictionary = {}
+## The resolving auto-ability's declared TargetRequest (TriggerSpec.chooses), set by CardEffect.dispatch().
+var trigger_choice = null
 
 
 ## Typed access to the event payload. Cards should read these instead of poking at event_data.
@@ -158,6 +160,15 @@ func choose_targets(criteria: Variant, count: int = 1, allow_cancel: bool = fals
 	var picks: Array = field.targeting_picked.duplicate()
 	field.finish_targeting_state()
 	return picks
+
+
+## Choose the targets the resolving auto-ability declared with TriggerSpec.chooses(). The board can change while the
+## ability waits on the stack, so a target that vanished since it triggered still yields [] here.
+func choose_trigger_targets() -> Array:
+	if trigger_choice == null:
+		push_error("choose_trigger_targets: %s's ability declares no .chooses() request" % (source.card_name if source != null else "?"))
+		return []
+	return await choose_targets(trigger_choice)
 
 
 ## Targets for a Summon's when_cast. A real cast already has them on the card; an EX BURST has none and asks now,

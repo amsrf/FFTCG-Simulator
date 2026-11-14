@@ -96,6 +96,9 @@ func _pick_many(cards: Array) -> void:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	# --- data shapes that cannot be inferred from a card being present --------------------------------
 	var lulu_specs: Array = load("res://assets/effects/card_149.gd").new().activated_abilities()
 	_expect(lulu_specs.size() == 2, "Lulu 149 has two code abilities")

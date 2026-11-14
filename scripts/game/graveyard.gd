@@ -7,8 +7,10 @@ const PRESENTATION := preload("res://scripts/core/presentation.gd")
 ## with no field readout, which is what Card.enter_zone() guarantees — without it
 ## a card arriving from the field keeps the field's scale, its rotation and its
 ## power/accumulated-damage readout.
-var card_offset = Vector3(0, 0.005, 0)
-var randomness_range = Vector3(0.015, 0.005, 0.015)
+## Per-card rise (local; x1.4 in world = 2.5 mm). The pile rests on the felt of a deck-station well
+## (Blender/build_deck_stations.py), and a thick step would push a long Break Zone out over the rim.
+var card_offset = Vector3(0, 0.0018, 0)
+var randomness_range = Vector3(0.008, 0.0018, 0.008)
 @export var graveyard_cards = []
 ## Which zone a card is in once it lands here. The Break Zone and "removed from the game" are the same KIND of pile
 ## but not the same place, and the difference matters: a card removed from the game must not be findable by anything

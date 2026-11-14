@@ -105,6 +105,9 @@ func _pick(card: Card) -> void:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	_expect(load("res://assets/effects/card_106.gd").new().has_method("when_cast"),
 		"Golem 106's blocking-conditional cast effect is code-owned")
 	var snow_specs: Array = load("res://assets/effects/card_194.gd").new().activated_abilities()

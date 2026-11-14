@@ -16,7 +16,7 @@ func damage_caused_riders() -> Array:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Highwind 《S》《Dull》: Your opponent puts the top 2 cards of their deck into the Break Zone."
+		text = "Highwind 《S》《Dull》: Your opponent puts the top 2 cards of his/her deck into the Break Zone."
 		cost = {}
 		tap = true
 		s_cost = true

@@ -4,6 +4,97 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-14
 
+### Changed
+- **Deck and Break Zone lie flat on the wood, smaller, with the damage zone above the deck.** The piles floated 0.5 m
+  up over a shallow wooden pocket and the deck read huge. New `Blender/fill_deck_pockets.py` (after
+  `build_button_housing.py`, read by `export_board_to_godot.py`) fills the old pockets so the wood is plain; both
+  seats re-exported. (A stone deck station with card beds was built and then removed at the user's request.)
+  `game.tscn`: player Deck (3.31, 0.07, -1.3) outermost, Graveyard (2.76, 0.07, -1.3) beside it, DamageZone above the
+  deck at (3.31, 0.5, -0.28); opponent the seat-2 turn (Deck (-3.31, 0.07, 1.9), Graveyard (-2.76, 0.07, 1.9),
+  DamageZone (-3.31, 0.5, 0.88)). Piles are 1.0 in world (`Card.PILE_WORLD_SCALE`, was 1.2), a pile card rises 2.5 mm
+  (was 4.6 mm deck / 7 mm Break Zone) and scatters ±0.008 local. `deck.gd` lays the pile out from its BOTTOM (the
+  node's origin) with a per-card scatter keyed to the card, and `Game.put_hand_card_on_bottom()` re-lays it out.
+
+- **Hand cards are 1.0 in world, and the hand looks exactly as before.** Both `Hand` nodes in `game.tscn` were moved
+  toward the camera along its line of sight and scaled by the new `Card.HAND_CONTAINER_SCALE` (1/1.35): player hand
+  (0, 0.95, -2.15) -> (0, 2.798, -2.508), opponent (0, 0.95, 1.75) -> (0, 2.798, 0.381). `Zone.HAND` is now
+  `HAND_CARD_SCALE / HAND_CONTAINER_SCALE` (the Stack's pattern). `hand.gd`: new `_local_dir()` normalises camera
+  directions brought into the scaled node (sag, depth ramp, hover lift and drift, return lift), `_available_width()`
+  returns local units, and the character-drag stance's lift and scale go through `_hand_world_scale()`. Measured:
+  every resting and hovered hand card lands on the same pixels as before (`hand_hover_probe` diff), and a screenshot
+  of both hands differs by 0.05/255 on average. `hand_hover_probe` and `flow_probe` convert their local lengths with
+  the hand's scale.
+
+### Fixed
+- **Damage cards: one straight row over the deck, deck-sized, each in its own slot, with a clean flight.** From your
+  screenshots: `DamageZone.draw()` tweened every new damage card to a hard-coded 1.2 (bigger than the rest) and started
+  it at 1.4 (`enter_zone` ran inside the 1.4 Deck node before the reparent kept that size); all flights shared ONE
+  `Path3D`, so a 2-damage hit rewrote the curve the first card was riding and every card of the hit landed on the last
+  slot; the waypoints were built for the zone's old place beside the deck (out 1.2 m sideways, in from the side); and
+  the turn tweened Euler angles (a wobble through all three axes). Now: start transform captured first, scale tweened
+  to the zone table, a Path3D per flight (the scene's shared one is removed) and `_land()` re-lays the row out, one arc
+  that lifts `FLIGHT_LIFT` (0.6) off the deck and drops onto the slot, and a pitch (the flip) plus a turn in the board
+  plane together. The row is ONE straight line (no per-card shift; a per-card screen-column correction was tried and
+  slanted the row into a zig-zag), and the zone sits a little right of the deck's centre on screen at a fixed x:
+  player (3.434, 0.08, -0.28), opponent (-3.128, 0.08, 0.88). `flow_probe` checks the zone over its deck and one world
+  x per row; `damage_zoom_probe` checks a 2-damage hit lands in distinct slots on one line.
+  Damage cards are the deck's size: `Zone.DAMAGE` scale is `Card.PILE_WORLD_SCALE` (1.0, was 1.2), and both
+  `DamageZone`s came down onto the wood (y 0.08, was 0.5).
+- **The setup deck was drawn at 1.4x.** `Deck.add_cards()` never called `enter_zone(DECK)`, so every deck card kept
+  scale 1.0 inside the 1.4 Deck node, unlike the Break Zone. It does now.
+- **A drawn card no longer jumps in size as it leaves the deck.** `Hand.add_card_to_tree()`'s `enter_zone(HAND)`
+  snapped it from pile size (1.0) to hand size (1.35) on the first frame; `Hand.draw_many()` now starts the flight at
+  the card's pile size and its grow-and-settle tween carries it to 1.35. `draw_probe` checks the first frame (1.02).
+- **A drawn card no longer flies under the field cards.** With the deck on the wood (y ~0.07-0.2) and the field cards
+  at y 0.5, the draw path's gradual climb toward the hand (y 0.95) crossed the field below them. `Hand.draw_many()`
+  adds `DRAW_LIFT` (2.6) of world Y to the path's start handle: the card leaves the deck almost straight up and arcs
+  above the hand's plane (peak ~1.76), closer to the camera, so perspective supplies part of the in-flight growth and
+  the scale swell is trimmed from 1.45x to `DRAW_SWELL` 1.3x. `draw_probe` asserts the card stays above the field
+  cards once it has left the deck (lowest 0.62).
+
+### Known Issues
+- `ex_burst_character_probe` fails 4 checks and `damage_zoom_probe` 1 on the current working tree
+  independently of this change (they fail with the pile changes backed out).
+
+### Fixed
+- **Activated abilities show their printed wording on the stack.** Aerith 64's Planet Protector carried her
+  enter-the-field sentence as its `text`, so its stack card read "Choose up to 3 Backups ... Activate them." while the
+  effect (activate all your Forwards, cannot be chosen) was right. Not a parser bug: `AbilitySpec.stack_wording()`
+  only cuts the cost off the hand-written `text`. New `tools/ability_text_check.py` matches every coded ability's text
+  against the card's printed ACTIVATED abilities (by S-ability name, else best match) and `--fix` rewrites it to the
+  printed wording; 30 texts were corrected (Aerith 64 the only wrong-ability one; the rest were paraphrased or used
+  kanji elements). It also caught a rules bug: **Dark Knight 54** is printed 《Ice》《Ice》 with no 《Dull》, but
+  the code also dulled it (`tap = true`, removed).
+- **A resolving card stays on the stack until its effect has played out, then 0.5 s more.** The trail beat used to
+  run AFTER the card had been freed / sent to the Break Zone, so the card vanished while its VFX were still playing.
+  New `Stack.hold_resolved_card()` (Vfx queue idle + `resolve_trail_seconds`) is awaited in all five branches of
+  `Game._on_stack_execute_card_effect()` before disposal; `resolve_top_effect()` no longer waits afterwards.
+  `flow_probe` measures the gap between the damage landing and the card leaving (1.21 s for Ifrit).
+- **The game now starts fullscreen** (`project.godot` `window/size/mode=3`). On a 1920x1080 monitor a 1920x1080
+  window cannot fit beside the title bar and panel, so the window manager shrank it and the 1920x1080 viewport was
+  scaled down into it. **F11** (`GlobalVariables._unhandled_key_input`) toggles fullscreen / maximized window.
+- **Board buttons: smoother circular edges.** `shaders/disc_face.gdshader` drew the gem -> metal band boundary and the
+  wall -> band step with hard branches inside a triangle, which MSAA cannot smooth; both are now blended over one
+  pixel (`fwidth`), and the stone side's engraved ring is at least ~1.5 px wide with a soft edge. `disc_socket.gd`: dome
+  128 x 96 segments (was 64 x 48), bezel 0.02 m wide (was 0.012), 128 x 12 segments, roughness 0.45 (was 0.3) against
+  specular aliasing.
+- **The opponent's payment no longer shows the mana crystal row on this screen.** The row is the payer's own UI.
+  `Assistant._payment_is_local` is set when a payment opens (`_on_hand_charge_start`, `_on_field_card_activated_ability`)
+  from `Game.agent_for(...).is_human()`; `_show_cost_readout()` and `commit_cost_readout()` respect it.
+  `Field.card_activated_ability` now carries the ability's source card. `flow_probe` asserts an opponent payment draws
+  no row and leaves no hold.
+- **An auto-ability that must choose, with nothing legal to choose, no longer reaches the stack** (rules 11.8.4 /
+  11.8.9). Zack 12 entering with no opponent Forward used to put a dead stack object up, pass priority around it and
+  resolve to nothing. `TriggerSpec.chooses(request)` declares the ability's mandatory choice;
+  `Stack.enqueue_code_triggers()` asks `Field.has_viable_target()` before creating the stack object and skips it
+  otherwise. Handlers pick with `EffectContext.choose_trigger_targets()` (the request is set by `CardEffect.dispatch()`
+  from the spec), so the query is written once. Migrated the 38 code cards whose trigger mandatorily chooses
+  (12, 21, 31, 32, 41, 43, 58, 59, 65, 67, 9, 108, 112, 115, 118, 125, 127, 131, 132, 136, 137, 140, 142, 161, 176, 186,
+  191, 192, 194, 210, 211, 212, 216, 583, 719, 1879, 3023, 3261). "Up to N" choices (47, 63, 64, 90, 141, 193, 199) and
+  Hope 82 (chooses only in one branch) are untouched. `Game.run_ex_burst()` no longer resolves "the top of the stack"
+  when a code burst was skipped. Cecil 108 now chooses before its "you may" (printed order).
+  `tests/code_effect_probe.gd` covers Zack with/without a legal target and a target that leaves while on the stack.
+
 ### Added
 - **The match buttons are now part of the board: button stations set into each slab corner.** A stone housing bites
   into the bottom-right corner of the local slab and spills onto the scenery around it. It holds a large disc
@@ -88,7 +179,59 @@ All notable changes to the FF TCG Simulator project.
   The camera is perspective, so the nearer row is bigger; crystals went 0.26 -> 0.18 m (~80 px visible).
   `flow_probe._check_cost_row()`: middle on the anchor (0.0 px), panel frames every crystal and sits behind them.
 
+- **The top of the stack wears an aura, and resolving it pulses — with room to breathe.** (After
+  `~/Desktop/Clips/stack_activate` frames 24-50.) `scripts/cards/card_stack_aura.gd` (owned as `Card.stack_aura`,
+  normalised in `Card.enter_zone()`) + `shaders/stack_aura.gdshader` (one card-plane quad under the HandMesh, mix blend,
+  warmed in `EFFECT_SHADERS`) draw two rectangles from the card's rounded outline: the AURA, a soft smoky
+  white-lavender rim that stands on the top card (`Stack.refresh_top_aura()`, from `update_card_positions()`: the
+  resolving card, else the next to resolve), and the WAVE, a rectangle launched from the outline that grows outward and
+  fades with distance. `Stack.resolve_top_effect()` now has a rhythm: the pulse (card grows to 1.08x, aura flares, wave
+  travels), then `resolve_lead_seconds` (0.5) before the effect runs, and once the effect AND its animations have
+  finished (`PRESENTATION.wait_for_queue()`), `resolve_trail_seconds` (0.5) before the next stack object. All are
+  `PRESENTATION.wait`s, so fast mode skips them; because the rules now wait for the pulse, the card is still on the
+  stack while it plays (the first version's hold stand-in is gone). Tweens run on the tree. `flow_probe` checks the
+  standing aura, the pulse and wave, the effect NOT having run during the beat, the timing, and the aura moving to the
+  next card; its ETB targeting step now waits for the arrow by time. Demo: `tools/resolve_pulse_demo.tscn`.
+  Eleven RULES probes that wait a fixed number of frames after resolving (terra47, argath, ability, b1,
+  cards_100_batch1, kimahri, devout, may, party_cards, valefor, cards_100_216) now set `PRESENTATION.fast_mode` at
+  start, as presentation.gd prescribes for rules probes; they failed on the new beats, not on rules.
+
+- **Owed and paid mana crystals are now clearly different.** Paid used to be only a slightly brighter, faster owed
+  crystal, which a still frame could not tell apart (a fire crystal paid by fire stayed red). Now: OWED = an empty
+  socket (dark, matte, faintly tinted, a dim rim in the element's colour, black edges kept) that stands still, RESTING
+  face-on at `rest_angle_deg` 30 (a flat face front-on, side faces symmetric; 0 puts a corner and a seam down the
+  middle); PAID = the full saturated glowing gem. Paying FILLS the crystal (`ManaCrystal._fill`, `fill_seconds` 0.14)
+  with a scale pop (`pop_scale` 0.22 over `pop_seconds` 0.24) and a white flash (`flash_seconds`); only paid crystals
+  spin. Taking the source back drains it with no pop and the crystal glides FORWARD onto the next rest pose (target
+  chosen once, never re-aimed, so it cannot lurch). Shader: continuous `paid`, `flash`, `owed_tint` / `owed_glow` /
+  `owed_rim`. (A flat 2D silhouette and edge-less owed crystals were tried and dropped.)
+  A WILD (white) crystal takes the colour of the mana that paid it (`ManaCrystal.display_colour()`, from the row's
+  `paid_element`): a water card discarded for 2 CP turns two white crystals blue. It keeps that colour while draining
+  and turns white once empty; "any"-colour mana stays white; elemental crystals keep their own colour. The shatter
+  shards and `tools/shot.gd`'s crystal log use the displayed colour. A crystal created this frame takes its state silently,
+  so the colour picker's (always lit) buttons and a rebuilt row never pop. `flow_probe._check_cost_row()` covers
+  face-on rest, empty start, pop, fill, spin-only-when-paid, drain back onto a rest pose, wild crystals coloured by a 2-CP water card (and back to white), and a same-cost
+  second payment.
+
 ### Fixed
+- **Paid colours jumped between crystals.** Cost 1 fire + 4: a fire card (2 CP) turned the fire crystal and the
+  first wild one red; adding an ice card then showed fire / ice / ice / fire, because `Assistant.payment_breakdown()`
+  is recomputed from the pooled mana and hands spare mana to the wild points in element-sorted order. The row now picks
+  WHICH wild crystal shows each payer (`CrystalCost._stable_payers()`): a wild crystal keeps the payer it already shows
+  while the breakdown still spends that element on a wild point, and the rest fill the empty wild crystals left to
+  right. The counts are exactly the breakdown's; rules code is unchanged. `flow_probe` replays the case (it showed
+  fire / ice / ice / fire before the fix).
+- **Confirming a cast burst only ONE crystal.** `Assistant.commit_cost_readout()` dropped `cost_row_hold` and then
+  awaited the staggered shatter; the cast changes the input mode meanwhile, and each change runs
+  `_hide_cost_readout()`, which now empties the row (`CrystalCost.clear()`) and freed the crystals not yet burst. A
+  separate `_cost_row_shattering` flag keeps the row until the last crystal has gone (the hold still prevents a double
+  commit). `flow_probe` commits a full payment, changes the mode mid-shatter and counts 3 bursts (it counted 1
+  before the fix).
+- **The mana cost row replaced every crystal on every click.** `CrystalCost.cost`'s setter rebuilt unconditionally and
+  `Assistant._refresh_cost_readout()` assigns it on each payment change, so selecting a source destroyed and rebuilt
+  the row (each crystal restarting at angle 0). It now rebuilds only on a changed cost; `Assistant._hide_cost_readout()`
+  calls `CrystalCost.clear()` at the end of a payment so a same-cost payment still gets fresh crystals (the probe check
+  fails without it).
 - **A dull card put into the Break Zone landed upside down** (Black Mage's own sacrifice on the Tribute ground).
   `put_card_into_graveyard()` untaps the card just before moving it; the untap tween kept turning `rotation_degrees.y`
   toward the FIELD's upright (a half turn) after `Card.enter_zone()` had set the pile's rotation. `enter_zone()` now
@@ -102,6 +245,8 @@ All notable changes to the FF TCG Simulator project.
   ahead in the queue (now a tribute) made the review-link check fail intermittently.
 
 ### Known Issues
+- `tests/damage_zoom_probe.tscn` fails "after the hold the BOARD view comes back on its own"; it fails the same way on
+  commit 0b57393 (before this session's stack work), so it is pre-existing and not caused by the stack changes.
 - Several cards tributed at once (a mass "put into the Break Zone", several power-0 Forwards) play one after another
   (~0.75 s each) because the presentation queue is serial; a batched variant could fly them together.
 

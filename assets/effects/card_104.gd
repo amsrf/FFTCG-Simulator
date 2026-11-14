@@ -12,7 +12,7 @@ func _kefka_pump(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《Dull》: Choose 1 Forward you control. It gains +5000 power. At the end of the turn, break it."
+		text = "《Dull》: Choose 1 Forward you control. It gains +5000 power until the end of the turn. At the end of the turn, break it."
 		cost = {}
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.YOUR))

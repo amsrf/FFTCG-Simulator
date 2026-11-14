@@ -10,7 +10,7 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《Dull》: Deal 1000 damage to all opponent Forwards."
+		text = "《Dull》: Deal 1000 damage to all the Forwards opponent controls."
 		cost = {}
 		tap = true
 

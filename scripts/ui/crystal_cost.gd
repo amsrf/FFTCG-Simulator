@@ -64,7 +64,13 @@ const PANEL_SHADER := preload("res://shaders/cost_panel.gdshader")
 ## The FULL cost: {'火': 1, 'neutral': 3}. Fixed for the whole payment, so this is allowed to rebuild.
 @export var cost: Dictionary = {}:
 	set(value):
-		cost = value
+		# ONLY A DIFFERENT COST REBUILDS. Assistant._refresh_cost_readout() assigns the cost on EVERY payment change,
+		# so an unconditional rebuild replaced every crystal on every click - the snap this class exists to prevent,
+		# and it also meant a paid crystal could never pop (a crystal built this frame takes its state silently).
+		# Compared against a COPY: the caller may hand over the same Dictionary object, mutated.
+		if value == cost:
+			return
+		cost = value.duplicate()
 		_rebuild()
 
 ## One entry per point, in row order, from Assistant.payment_breakdown(). Changes on every selection, so this must
@@ -104,6 +110,11 @@ func _align_to_camera() -> void:
 	if cam != null:
 		global_transform = Transform3D(cam.global_transform.basis, global_position)
 
+## Empty the row (a payment ended). The next cost assigned is then always a change, so it builds fresh crystals.
+func clear() -> void:
+	paid = []
+	cost = {}
+
 ## The crystals on show, in row order.
 func crystals() -> Array:
 	var out: Array = []
@@ -122,13 +133,55 @@ func _apply_paid() -> void:
 	if not is_inside_tree():
 		return
 	var shown: Array = crystals()
+	var payers: Array = _stable_payers(shown)
 	for i in range(shown.size()):
 		var crystal: Node3D = shown[i]
-		var payer: String = ""
-		if i < paid.size() and paid[i] is Dictionary:
-			payer = str((paid[i] as Dictionary).get("paid_by", ""))
+		var payer: String = payers[i]
 		crystal.paid_element = payer
 		crystal.lit = not payer.is_empty()
+
+## WHO PAYS EACH CRYSTAL ON SCREEN, kept STABLE across clicks.
+##
+## Assistant.payment_breakdown() is rules arithmetic: it is recomputed from the pooled mana on every change and hands
+## the spare mana to the WILD points in element-sorted order. Drawn literally, a crystal already paid red could turn
+## blue when an ice card was added (ice sorted first) while the red moved to another crystal. So the row keeps, for
+## each wild crystal, the payer it already shows as long as the new breakdown still spends that element on a wild
+## point, and gives the rest to the empty wild crystals left to right. Elemental crystals are taken as given: only
+## their own element (or any-colour mana) can pay them, so they cannot move. The NUMBER of each payer is exactly the
+## breakdown's - only which wild crystal shows it is chosen here.
+func _stable_payers(shown: Array) -> Array:
+	var result: Array = []
+	result.resize(shown.size())
+	result.fill("")
+	var wild_slots: Array = []
+	var wild_pool: Dictionary = {}     # payer -> how many wild points the breakdown spends it on
+	var wild_order: Array = []         # the breakdown's own wild payers, in its order
+	for i in range(shown.size()):
+		var entry: Dictionary = paid[i] if i < paid.size() and paid[i] is Dictionary else {}
+		var payer: String = str(entry.get("paid_by", ""))
+		if str(entry.get("element", "")).is_empty() and (shown[i] as Node3D).call("is_wild"):
+			wild_slots.append(i)
+			if not payer.is_empty():
+				wild_pool[payer] = int(wild_pool.get(payer, 0)) + 1
+				wild_order.append(payer)
+		else:
+			result[i] = payer
+	# 1) A wild crystal keeps what it already shows, while the breakdown still has that payer to spend.
+	for i in wild_slots:
+		var had: String = str((shown[i] as Node3D).get("paid_element"))
+		if not had.is_empty() and int(wild_pool.get(had, 0)) > 0:
+			result[i] = had
+			wild_pool[had] = int(wild_pool[had]) - 1
+	# 2) What is left fills the EMPTY wild crystals, left to right, in the breakdown's order.
+	var left: Array = []
+	for payer in wild_order:
+		if int(wild_pool.get(payer, 0)) > 0:
+			left.append(payer)
+			wild_pool[payer] = int(wild_pool[payer]) - 1
+	for i in wild_slots:
+		if str(result[i]).is_empty() and not left.is_empty():
+			result[i] = left.pop_front()
+	return result
 
 ## Bursts every crystal that has been paid, ONE AFTER ANOTHER, left to right.
 ##

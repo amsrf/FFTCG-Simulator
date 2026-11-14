@@ -43,6 +43,34 @@ func _ready() -> void:
 	# tree loaded.
 	add_child(game)
 	await get_tree().process_frame
+	# THE DAMAGE ZONE STANDS ABOVE ITS DECK, a little to the right (mirrored for the opponent), as ONE STRAIGHT ROW of
+	# deck-sized cards. Its x in game.tscn is fixed for 1920x1080; under perspective an equal world x is not an equal
+	# screen x at another depth, which is why it differs from the Deck's. Every card shares one world x: a per-card
+	# shift onto the deck's screen column slanted the row and read as a zig-zag.
+	const DAMAGE_RIGHT_OF_DECK_PX := 12.0
+	var board_cam: Camera3D = get_viewport().get_camera_3d()
+	await get_tree().create_timer(0.3).timeout
+	for side in ["Player", "Opponent"]:
+		var side_deck: Node3D = game.get_node(side + "/Deck")
+		var side_damage: Node3D = game.get_node(side + "/DamageZone")
+		var deck_x: float = board_cam.unproject_position(side_deck.global_position + Vector3(0, 0.06, 0)).x
+		var damage_x: float = board_cam.unproject_position(side_damage.global_position).x
+		var want: float = deck_x + DAMAGE_RIGHT_OF_DECK_PX * (1.0 if side == "Player" else -1.0)
+		print("[FlowProbe] %s deck centre x %.1f, damage zone centre x %.1f (want %.1f)" % [side, deck_x, damage_x, want])
+		_expect(absf(want - damage_x) < 4.0, "%s damage zone stands over its deck, a little to its right" % side)
+		var off_row := 0
+		var wrong_size := 0
+		for dmg in side_damage.get("cards"):
+			if absf(dmg.global_position.x - side_damage.global_position.x) > 0.001:
+				off_row += 1
+			if absf(dmg.global_basis.get_scale().x - 1.0) > 0.02:
+				wrong_size += 1
+		print("[FlowProbe] %s damage row: %d cards, %d off the straight row, %d not deck-sized" % [
+			side, side_damage.get("cards").size(), off_row, wrong_size])
+		_expect(off_row == 0 and wrong_size == 0, "%s damage cards form one straight row, deck-sized" % side)
+	_expect(is_equal_approx(float(Card.ZONE_PRESENTATION[Card.Zone.DAMAGE]["scale"]),
+		float(Card.ZONE_PRESENTATION[Card.Zone.DECK]["scale"]) * game.get_node("Player/Deck").global_basis.get_scale().x),
+		"damage cards are the same world size as deck cards")
 	var board_visual = game.get_node("Board/MeshInstance3D")
 	_expect(board_visual.mesh != null and board_visual.mesh.get_surface_count() == 1,
 		"the scenery geometry loads on the existing Board node path")
@@ -185,10 +213,11 @@ func _ready() -> void:
 	await get_tree().create_timer(0.1).timeout
 	if field.arrow == null and stack.stack_length() > 0:
 		stack.resolve_top_effect()
-	for _i in range(60):
-		if field.arrow != null:
-			break
+	# The effect runs only after the resolve pulse and its beat (Stack.resolve_lead_seconds): wait by TIME, not frames.
+	var arrow_wait := 0.0
+	while field.arrow == null and arrow_wait < stack.resolve_lead_seconds + 3.0:
 		await get_tree().process_frame
+		arrow_wait += get_process_delta_time()
 
 	var arrow = field.arrow
 	_expect(arrow != null, "targeting started an arrow")
@@ -536,6 +565,7 @@ func _ready() -> void:
 	await _check_gadot_played_from_hand()
 	await _check_tribute()
 	await _check_cost_row()
+	await _check_resolve_pulse()
 
 	_report()
 	get_tree().quit()
@@ -635,7 +665,7 @@ func _check_demo_stack_fan() -> void:
 	var earth := stack.cards.back() as Card
 	var earth_face := earth.get_node("StackAbilityFace")
 	_expect(earth_face.get_node("Panel").texture != face.get_node("Panel").texture
-		and earth_face.get_node("Ability").text.begins_with("Choose 1 Forward blocking."),
+		and earth_face.get_node("Ability").text.begins_with("Choose 1 blocking Forward."),
 		"Earth ability has its own palette and cost-free effect text")
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	var local_hand: Hand = demo.game.get_node("Player/Hand")
@@ -814,7 +844,8 @@ func _check_hover_shadow(hand: Hand) -> void:
 	_expect(is_equal_approx(upper.scale.x, hand.HOVER_CARD_SCALE) and upper.rotation.is_zero_approx(),
 		"hand hover enlarges and straightens immediately")
 	await get_tree().create_timer(0.45).timeout
-	_expect(upper.global_position.z > hover_start.z + 0.03 and is_equal_approx(upper.global_position.x, hover_start.x)
+	# The drift is in the Hand's units, and the Hand node is scaled (Card.HAND_CONTAINER_SCALE).
+	_expect(upper.global_position.z > hover_start.z + 0.75 * Hand.HOVER_DRIFT_DISTANCE * hand.global_basis.get_scale().x and is_equal_approx(upper.global_position.x, hover_start.x)
 		and is_equal_approx(upper.global_position.y, hover_start.y), "enlarged hand card drifts slightly along world Z")
 	# Reproduce a physics mouse-exit while the pointer is in the retained footprint.
 	hand._pointer_hover_region = Rect2(hand.get_viewport().get_mouse_position() - Vector2.ONE * 5, Vector2.ONE * 10)
@@ -1210,6 +1241,192 @@ func _check_cost_row() -> void:
 			var cam_to_panel: float = cam.global_position.distance_to(panel.global_position)
 			var cam_to_crystal: float = cam.global_position.distance_to(mid.global_position)
 			_expect(cam_to_panel > cam_to_crystal, "and sits BEHIND the crystals, so it never darkens them")
+		# OWED vs PAID: empty and still until paid; paying FILLS the crystal with a pop, and only it turns.
+		var fire: Node3D = crystals[0]
+		var owed: Node3D = crystals[1]
+		_expect(crystals.all(func(c) -> bool: return c.fill_amount() == 0.0 and not c.is_popping()),
+			"every crystal starts EMPTY, and nothing pops just for appearing")
+		_expect(crystals.all(func(c) -> bool: return is_equal_approx(fposmod(c.spin_angle_degrees() - 30.0, 60.0), 0.0)),
+			"owed crystals REST face-on (30 deg + a multiple of 60): %s" % str(crystals.map(func(c): return c.spin_angle_degrees())))
+		var owed_angle: float = owed.spin_angle_degrees()
+		var fire_angle: float = fire.spin_angle_degrees()
+		assistant.charge(1, "火")
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_expect(fire.is_popping() and fire.scale.x > 1.01, "paying the fire point POPS its crystal (scale %.2f)" % fire.scale.x)
+		await get_tree().create_timer(0.4).timeout
+		_expect(is_equal_approx(fire.fill_amount(), 1.0) and not fire.is_popping() and is_equal_approx(fire.scale.x, 1.0),
+			"it FILLS to the paid gem and settles back to its size")
+		_expect(not is_equal_approx(fire.spin_angle_degrees(), fire_angle), "the paid crystal turns")
+		_expect(is_equal_approx(owed.spin_angle_degrees(), owed_angle) and owed.fill_amount() == 0.0,
+			"an owed crystal stays empty and STILL")
+		assistant.charge(-1, "火")
+		await get_tree().create_timer(1.2).timeout
+		_expect(fire.fill_amount() == 0.0 and not fire.is_popping(), "taking the source back DRAINS it, with no pop")
+		var rest: float = fire.spin_angle_degrees()
+		await get_tree().create_timer(0.2).timeout
+		_expect(is_equal_approx(fposmod(rest - 30.0, 60.0), 0.0) and is_equal_approx(fire.spin_angle_degrees(), rest),
+			"and it glides back onto a face-on rest pose and stops there (%.2f deg)" % rest)
+		# A WILD crystal takes the colour that paid it: a water card discarded for 2 CP turns BOTH white crystals blue.
+		# The fire crystal is untouched (water cannot pay fire). Drained, they fade back to white once empty.
+		var water: Color = fire.CRYSTAL_TINT[fire.ELEMENTS.NAMES.find("water")]
+		assistant.charge(2, "水")
+		await get_tree().create_timer(0.3).timeout
+		var wilds: Array = [crystals[1], crystals[2]]
+		_expect(wilds.all(func(c) -> bool: return c.lit and c.display_colour().is_equal_approx(water)),
+			"a 2-CP water card turns BOTH white crystals blue: %s" % str(wilds.map(func(c): return c.display_colour())))
+		_expect(not fire.lit and fire.display_colour().is_equal_approx(fire.colour_now()), "and leaves the fire crystal alone")
+		assistant.charge(-2, "水")
+		await get_tree().process_frame
+		_expect(wilds.all(func(c) -> bool: return not c.lit and c.display_colour().is_equal_approx(water)),
+			"while draining they keep the blue (no white flash)")
+		await get_tree().create_timer(0.5).timeout
+		_expect(wilds.all(func(c) -> bool: return c.display_colour().is_equal_approx(c.WILD_COLOUR)),
+			"and are white again once empty")
+		# A NEXT PAYMENT OF THE SAME COST builds fresh crystals: the row only rebuilds on a changed cost, so the end of
+		# a payment must empty it, or shattered (hidden) crystals would come back.
+		assistant.charge(1, "火")
+		await get_tree().process_frame
+		await row.shatter_paid()
+		assistant.on_charge_cancelled()
+		await get_tree().process_frame
+		assistant._on_field_card_activated_ability({"火": 1, "neutral": 2})
+		await get_tree().process_frame
+		var again: Array = row.crystals()
+		_expect(again.size() == 3 and not again.has(fire)
+			and again.all(func(c) -> bool: return c._spin_node != null and c._spin_node.visible and c.fill_amount() == 0.0),
+			"a second payment of the SAME cost gets fresh, empty, visible crystals")
+		# CONFIRMING A CAST bursts EVERY paid crystal, one after another. The cast changes the input mode while that
+		# staggered shatter is still running, and a mode change hides (and empties) the row: it once freed the crystals
+		# not yet burst, so only the first one broke.
+		var count_shards := func() -> int:
+			return row.get_parent().get_children().filter(func(n) -> bool: return n is CrystalShards).size()
+		var shards_before: int = count_shards.call()
+		assistant.charge(1, "火")
+		assistant.charge(2, "水")
+		await get_tree().process_frame
+		assistant.on_charge_complete()
+		assistant.commit_cost_readout()
+		await get_tree().process_frame
+		GlobalVariables.push_modal(GlobalVariables.Player_Mode.TARGET)   # the cast moving on, mid-shatter
+		GlobalVariables.pop_modal(GlobalVariables.Player_Mode.TARGET)
+		await get_tree().create_timer(0.6).timeout
+		var burst: int = count_shards.call() - shards_before
+		_expect(burst == 3, "confirming the cast bursts ALL THREE paid crystals, even if the mode changes mid-shatter (%d)" % burst)
+		_expect(not row.visible, "and the row is hidden once the last one has burst")
+		# COLOURS STAY WHERE THEY WERE PAID. The reported case: a cost of 1 fire + 4, a fire card (2 CP) turns the fire
+		# crystal and the first wild one red; an ice card (2 CP) then turned the first two WILD crystals blue and moved
+		# the red to the fourth, because the breakdown hands spare mana out in element-sorted order. Now the red stays
+		# and the ice fills the next empty crystals.
+		assistant._on_field_card_activated_ability({"火": 1, "neutral": 4})
+		await get_tree().process_frame
+		assistant.charge(2, "火")
+		await get_tree().process_frame
+		var five: Array = row.crystals()
+		var before: Array = five.map(func(c): return str(c.paid_element))
+		assistant.charge(2, "氷")
+		await get_tree().process_frame
+		var after: Array = five.map(func(c): return str(c.paid_element))
+		print("[FlowProbe] payers after fire: %s | after ice: %s" % [before, after])
+		_expect(before[1] == after[1] and after[1] != "" and after[2] != "" and after[2] == after[3]
+			and after[2] != after[1] and after[4] == "",
+			"adding an ice card leaves the red wild crystal red and fills the NEXT two (%s -> %s)" % [before, after])
+	# AN OPPONENT'S PAYMENT IS PRIVATE: the same modal opens for a non-human payer, but no crystal row is drawn here.
+	assistant.on_charge_cancelled()
+	await get_tree().process_frame
+	var theirs: Card = game.create_card(3, "opponent")
+	game.add_child(theirs)
+	assistant._on_field_card_activated_ability({"火": 1, "neutral": 2}, theirs)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(not row.visible, "an opponent's payment shows no crystal row on this screen")
+	assistant.on_charge_complete()
+	assistant.commit_cost_readout()
+	await get_tree().process_frame
+	_expect(not row.visible and not assistant.cost_row_hold, "and committing it leaves no row and no hold")
+	game.queue_free()
+	await get_tree().process_frame
+
+## THE TOP OF THE STACK and ITS RESOLUTION'S RHYTHM: the top card wears a standing aura; resolving it plays the pulse
+## (the card grows, the aura flares, a rectangle launches and fades) while it is still on the stack, then a beat BEFORE
+## the effect runs and a beat AFTER it has finished, and then the next card wears the aura.
+func _check_resolve_pulse() -> void:
+	MatchSetup.config = TEST_GROUNDS.config("clean")
+	var game = GAME_SCENE.instantiate()
+	add_child(game)
+	await get_tree().process_frame
+	game.player_agent = MockAgent.new()
+	game.player_agent.bind(game)
+	game.opponent_agent = MockAgent.new()
+	game.opponent_agent.bind(game)
+	var stack: Stack = game.stack
+	var target: Card = game.create_card(41, "player")     # Squall, a Forward for Ifrit to hit
+	game.add_child(target)
+	game.field.play_card(target, false, false)
+	var below: Card = stack.create_card(4, "opponent", "when_cast", null)
+	below.set_effect_targets([target])
+	var ifrit: Card = stack.create_card(4, "opponent", "when_cast", null)
+	ifrit.set_effect_targets([target])
+	stack.update_card_positions()
+	await Vfx.idle()
+	await get_tree().create_timer(0.5).timeout
+	_expect(ifrit.stack_aura.is_top() and ifrit.stack_aura.intensity() > 0.5 and ifrit.stack_aura.aura().visible,
+		"the TOP of the stack wears the standing aura (%.2f)" % ifrit.stack_aura.intensity())
+	_expect(not below.stack_aura.is_top() and below.stack_aura.intensity() == 0.0, "and the card below it does not")
+	var started: int = Time.get_ticks_msec()
+	var done := {"v": false}
+	var run := func() -> void:
+		await stack.resolve_top_effect()
+		done["v"] = true
+	run.call()
+	var peak_scale := 0.0
+	var saw_wave_start := false
+	var saw_wave_far := false
+	var on_stack_through_pulse := true
+	var t := 0.0
+	while t < stack.resolve_lead_seconds * 0.5 + 0.7:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if not is_instance_valid(ifrit):
+			on_stack_through_pulse = false
+			break
+		peak_scale = maxf(peak_scale, ifrit.hand_mesh.scale.x)
+		var w: float = ifrit.stack_aura.wave()
+		saw_wave_start = saw_wave_start or (w >= 0.0 and w < 0.3)
+		saw_wave_far = saw_wave_far or w > 0.7
+		on_stack_through_pulse = on_stack_through_pulse and ifrit.current_zone == Card.Zone.STACK
+	print("[FlowProbe] resolve pulse: peak scale %.3f, wave start %s, wave far %s" % [peak_scale, saw_wave_start, saw_wave_far])
+	_expect(peak_scale > 1.06 and peak_scale < 1.1, "resolving pulses the card (grows to %.3f)" % peak_scale)
+	_expect(saw_wave_start and saw_wave_far, "and launches a rectangle that travels outward")
+	_expect(on_stack_through_pulse and target.accumulated_damage == 0,
+		"the card stays on the stack and the effect has NOT run yet (pulse, then a beat)")
+	# THE CARD WATCHES ITS EFFECT LAND, THEN LEAVES: from the moment the damage lands to the moment the card is gone
+	# from the stack is at least the trail beat.
+	var landed_ms: int = -1
+	var left_ms: int = -1
+	while not done["v"] and Time.get_ticks_msec() - started < 8000:
+		await get_tree().process_frame
+		if landed_ms < 0 and target.accumulated_damage > 0:
+			landed_ms = Time.get_ticks_msec()
+		if left_ms < 0 and (not is_instance_valid(ifrit) or ifrit.current_zone != Card.Zone.STACK):
+			left_ms = Time.get_ticks_msec()
+	var stayed: float = (left_ms - landed_ms) / 1000.0
+	print("[FlowProbe] the resolved card stayed %.2f s after its damage landed" % stayed)
+	_expect(landed_ms >= 0 and left_ms >= 0 and stayed >= stack.resolve_trail_seconds - 0.05,
+		"the card stays on the stack until its effect has played out, then %.1f s more (%.2f s)" % [stack.resolve_trail_seconds, stayed])
+	var took: float = (Time.get_ticks_msec() - started) / 1000.0
+	var minimum: float = stack.resolve_lead_seconds + stack.resolve_trail_seconds + 0.5
+	print("[FlowProbe] one resolution took %.2f s (lead %.1f + trail %.1f + pulse)" % [took, stack.resolve_lead_seconds, stack.resolve_trail_seconds])
+	_expect(target.accumulated_damage > 0, "then the effect runs (Squall took %d damage)" % target.accumulated_damage)
+	_expect(took >= minimum, "and the resolution gives it room before and after (%.2f s >= %.2f s)" % [took, minimum])
+	# The trail beat now happens BEFORE the card leaves, so the next card's aura is only starting to fade in when
+	# resolve_top_effect() returns; give it its fade.
+	var fade := 0.0
+	while below.stack_aura.intensity() <= 0.3 and fade < 0.6:
+		await get_tree().process_frame
+		fade += get_process_delta_time()
+	_expect(below.stack_aura.is_top() and below.stack_aura.intensity() > 0.3,
+		"the next card on the stack now wears the aura (%.2f after %.2f s)" % [below.stack_aura.intensity(), fade])
 	game.queue_free()
 	await get_tree().process_frame
 

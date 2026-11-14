@@ -118,7 +118,27 @@ func _ready() -> void:
 			+ float(game.get("damage_zoom_hold_seconds")) \
 			+ float(game.get("damage_zoom_out_seconds"))
 		tw.pause()
-		tw.custom_step(total + 0.05)
+		# ZOOMED IN: the shot is the board view dollied in — same orientation, same lens — with the slot centred.
+		tw.custom_step(float(game.get("damage_zoom_in_seconds")) + 0.01)
+		await get_tree().process_frame
+		var shot: Camera3D = get_viewport().get_camera_3d()
+		var view: Vector2 = get_viewport().get_visible_rect().size
+		# Where the card that just landed sits NOW: the row re-centres as it grows, so the pre-hit slot has moved.
+		var landed: Vector3 = zone.global_transform * (
+			zone.call("calculate_card_position", zone.get("cards").size() - 1) as Vector3)
+		var slot_px: Vector2 = shot.unproject_position(landed)
+		var turned: float = shot.global_basis.orthonormalized().get_rotation_quaternion().angle_to(
+			board.global_basis.orthonormalized().get_rotation_quaternion())
+		print("[DamageZoom] zoomed in: turned %.3f rad from the board view, fov %.1f vs %.1f, slot at %s of %s, %.2f m away" % [
+			turned, shot.fov, board.fov, slot_px, view, shot.global_position.distance_to(landed)])
+		_expect(turned < 0.01 and is_equal_approx(shot.fov, board.fov),
+			"the zoom does not turn or re-lens the view: it is the board view dollied in")
+		_expect(slot_px.distance_to(view * 0.5) < 3.0, "and the landing slot sits at the centre of the shot")
+		_expect(shot.global_position.distance_to(landed) < board.global_position.distance_to(landed),
+			"and it is closer than the board view")
+		# Past any hold: a card with an EX BURST holds the shot for its reveal, longer than damage_zoom_hold_seconds.
+		total = 9.0
+		tw.custom_step(total)
 		await get_tree().process_frame
 		print("[DamageZoom] after stepping %.2fs the current camera is '%s'" % [
 			total, get_viewport().get_camera_3d().name if get_viewport().get_camera_3d() != null else "?"])
@@ -147,6 +167,21 @@ func _ready() -> void:
 		tw2.custom_step(9.0)
 		await get_tree().process_frame
 		_expect(get_viewport().get_camera_3d() == board, "and the view comes back again")
+
+	# --- 4. TWO damage in one hit: each card gets its OWN slot -----------------------------------------------
+	# The zone used to share one flight path, so the second flight rewrote the curve the first card was riding and both
+	# landed on the last slot.
+	player_side.take_damage(2)
+	await get_tree().create_timer(DamageZone.FLIGHT_SECONDS + 0.6).timeout
+	var slots: Dictionary = {}
+	var row_x: Dictionary = {}
+	for c in zone.get("cards"):
+		slots[str(c.position.snapped(Vector3.ONE * 0.001))] = true
+		row_x[snappedf(c.global_position.x, 0.001)] = true
+	print("[DamageZoom] after a 2-damage hit: %d cards, %d distinct slots, %d distinct world x" % [
+		zone.get("cards").size(), slots.size(), row_x.size()])
+	_expect(slots.size() == zone.get("cards").size(), "a 2-damage hit lands each card in its own slot")
+	_expect(row_x.size() == 1, "and the row is one straight line (one world x)")
 
 	_finish()
 

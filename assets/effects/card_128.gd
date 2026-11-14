@@ -13,7 +13,7 @@ func _morphing_time(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Gilgamesh Morphing Time 《S》《雷》《雷》: Double its power, gain First Strike and Brave, and attack twice."
+		text = "Gilgamesh Morphing Time 《S》《Lightning》《Lightning》: Until the end of the turn, Gilgamesh doubles its power and gains First Strike and Brave. Gilgamesh can attack twice this turn. You can use this ability only during your turn."
 		s_cost = true
 		cost = {"雷": 2}
 		only_your_turn = true

@@ -19,7 +19,7 @@ func _skill_1(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all Forwards opponent controls."
+		text = "Meteorain 《S》《1》《Dull》: Deal 4000 damage to all the Forwards opponent controls."
 		cost = {"neutral": 1}
 		tap = true
 		s_cost = true

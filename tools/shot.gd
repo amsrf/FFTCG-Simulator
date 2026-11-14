@@ -260,7 +260,7 @@ func _ready() -> void:
 							continue
 						print("[Shot]   crystal for='%s' paid_by='%s' lit=%s colour=%s"
 							% [str(c.get("element")), str(c.get("paid_element")),
-							   str(c.get("lit")), str(c.call("colour_now"))])
+							   str(c.get("lit")), str(c.call("display_colour") if c.has_method("display_colour") else c.call("colour_now"))])
 	else:
 		await _build_subject()
 

@@ -14,7 +14,7 @@ func _sazh(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《Dull》: Choose 1 Forward. Deal it 4000 damage if you cast Brynhildr this turn; otherwise 2000."
+		text = "《Dull》: Choose 1 Forward. Deal it 2000 damage. Sazh will not activate during your next Active Phase. If you have cast Brynhildr this turn, deal that Forward 4000 damage instead. Sazh will not activate during your next Active Phase."
 		cost = {}
 		tap = true
 		targets = TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward"))

@@ -11,7 +11,7 @@ func _activate(ctx: EFFECT_CONTEXT) -> void:
 class Ability0 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "《土》《Dull》, put Monk into the Break Zone: Choose 1 Forward. It gains +2000 power."
+		text = "《Earth》《Dull》, put Monk into the Break Zone: Choose 1 Forward. It gains +2000 power until the end of the turn."
 		cost = {"土": 1}
 		tap = true
 		sacrifice = {"is_source": true}

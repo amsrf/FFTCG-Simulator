@@ -5,7 +5,7 @@ const TARGET_REQUEST := preload("res://scripts/effects/target_request.gd")
 
 func trigger_specs() -> Array:
 	return [
-		trigger(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER, "when_cause_damage_to_player"),
+		trigger(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER, "when_cause_damage_to_player").chooses(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT))),
 	]
 
 
@@ -19,5 +19,5 @@ func keywords() -> Array[String]:
 	return ["haste"]
 
 func when_cause_damage_to_player(ctx: EFFECT_CONTEXT) -> void:
-	var targets: Array = await ctx.choose_targets(TARGET_REQUEST.field(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT)))
+	var targets: Array = await ctx.choose_trigger_targets()
 	ctx.dull(targets)

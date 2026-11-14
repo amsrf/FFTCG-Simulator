@@ -27,7 +27,7 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 class Ability1 extends "res://scripts/effects/card_ability.gd":
 	func _init(owner = null) -> void:
 		super(owner)
-		text = "Divider 《S》《雷》《雷》: Choose 1 Forward. Break it. Use only if you have received 4+ damage."
+		text = "Divider 《S》《Lightning》《Lightning》: Choose 1 Forward. Break it. You can only use this ability if you have received 4 points of damage or more."
 		cost = {"雷": 2}
 		s_cost = true
 		only_if_damage_received = 4

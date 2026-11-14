@@ -21,6 +21,12 @@ var requires_active: bool = false
 ## What the stack face says. Empty = derived from the printed text (TriggerText); set it with .text() only when the
 ## printed wording does not parse.
 var wording: String = ""
+## What this auto-ability must CHOOSE (a TargetRequest), or null. Rules 11.8.4 / 11.8.9: an auto-ability that requires
+## choosing with no legal choice is removed from the stack at once, with no chance to respond - so the engine checks
+## this BEFORE creating the stack object (Stack.enqueue_code_triggers) and the ability simply never appears. The
+## handler picks with ctx.choose_trigger_targets(), so the request is written once. "Up to N" never needs a target and
+## must not declare one.
+var choice = null
 
 
 func _init(p_event: int, p_handler: Callable) -> void:
@@ -57,6 +63,12 @@ func opponent_only():
 
 func active_only():
 	requires_active = true
+	return self
+
+
+## This ability must choose `request` (a TargetRequest); no legal candidate = the ability is not put on the stack.
+func chooses(request):
+	choice = request
 	return self
 
 

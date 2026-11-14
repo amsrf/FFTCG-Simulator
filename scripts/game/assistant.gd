@@ -57,6 +57,9 @@ var cost_readout: CrystalCost = null
 ## crystals vanish BEFORE the play, and the shatter later appears out of nothing. Committing hides the row and breaks
 ## the crystals in one step; cancelling just hides it.
 var cost_row_hold: bool = false
+## True while commit_cost_readout() is bursting the paid crystals one by one; the row must not be hidden or emptied
+## until the last one has gone.
+var _cost_row_shattering: bool = false
 
 const MANA_ZERO : Dictionary = {
 		'火': 0, '風': 0, '土': 0, '水': 0, 
@@ -295,6 +298,10 @@ func _on_player_mode_change(pm: GlobalVariables.Player_Mode):
 func _show_cost_readout() -> void:
 	if cost_readout == null:
 		return
+	# THE ROW IS THE PAYER'S OWN UI. An opponent (AI/remote) paying goes through the same PAYING_COST modal, but the
+	# local player never sees which crystals they are choosing - only the play that results.
+	if not _payment_is_local:
+		return
 	_refresh_cost_readout()
 	cost_readout.visible = true
 
@@ -303,10 +310,13 @@ func _hide_cost_readout() -> void:
 	# Summon still has to choose a target and an ability still has to commit its activation, and the crystals have to
 	# be on screen when they finally break. Guarding it HERE rather than at the call sites means every hide path
 	# respects the hold, including ones that do not exist yet.
-	if cost_row_hold:
+	if cost_row_hold or _cost_row_shattering:
 		return
 	if cost_readout != null:
 		cost_readout.visible = false
+		# THE PAYMENT IS OVER: empty the row. The row only rebuilds when the cost CHANGES, so without this a next
+		# payment of the same cost would reuse these crystals - shattered (hidden) ones included.
+		cost_readout.clear()
 
 ## Rebuilds the row. Called whenever the selection changes, so the crystals light up as they are paid.
 ##
@@ -399,12 +409,36 @@ func on_target_cancel():
 func commit_cost_readout(target_card: Card = null) -> void:
 	if not cost_row_hold:
 		return
+	if not _payment_is_local:
+		# Nobody saw this row, so there is nothing to shatter.
+		cost_row_hold = false
+		_hide_cost_readout()
+		return
+	# The hold is dropped at once (so this payment cannot be committed twice), and `_cost_row_shattering` keeps the row
+	# alive instead: the crystals burst one after another, and the cast changes the input mode meanwhile - each change
+	# calls _hide_cost_readout(), which empties the row and freed the crystals not yet burst (only one ever broke).
 	cost_row_hold = false
+	_cost_row_shattering = true
 	if cost_readout != null:
 		await cost_readout.shatter_paid(target_card)
+	_cost_row_shattering = false
 	_hide_cost_readout()
 
+## Whether the payment in progress belongs to a local human. Set when a payment opens; the crystal row is shown only
+## when true (an opponent's payment is private).
+var _payment_is_local: bool = true
+
+func _is_local_payer(card: Card) -> bool:
+	if card == null:
+		return true
+	var game = get_parent()
+	if game == null or not game.has_method("agent_for"):
+		return card.controller == Card.PLAYER
+	var agent = game.agent_for(1 if card.controller == Card.PLAYER else 2)
+	return agent == null or agent.is_human()
+
 func _on_hand_charge_start(card: Card) -> void:
+	_payment_is_local = _is_local_payer(card)
 	# THE BOARD DECIDES THE COST, not just the card: Terra raises the cost of the opponent's Summons by 1. The
 	# surcharge is baked into this dictionary, so the crystal row, remaining_cost(), can_pay_cost() and pay_cost() all
 	# follow without knowing that modifiers exist.
@@ -417,7 +451,8 @@ func _on_hand_charge_start(card: Card) -> void:
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	_refresh_cost_readout()
 
-func _on_field_card_activated_ability(cost: Dictionary) -> void:
+func _on_field_card_activated_ability(cost: Dictionary, source: Card = null) -> void:
+	_payment_is_local = _is_local_payer(source)
 	mana_cost = cost
 	show_modal("Confirm", "Cancel",
 		func(): on_charge_complete(),

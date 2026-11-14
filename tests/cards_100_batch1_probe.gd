@@ -81,6 +81,9 @@ func _complete_target(card: Card) -> void:
 
 
 func _ready() -> void:
+	# A RULES probe: presentation waits (the stack's resolve pulse and its beats, Stack.resolve_lead_seconds /
+	# resolve_trail_seconds) are not what it tests, and its frame-count waits cannot outlast them.
+	preload("res://scripts/core/presentation.gd").fast_mode = true
 	# The data-shape checks do not need a game, so they run first and cannot be disturbed by board state.
 	_expect(load("res://assets/effects/card_23.gd").new().ex_burst_event() == EVENTS.Event.CAST,
 		"Brynhildr (23) is EX BURST -> when_cast")
