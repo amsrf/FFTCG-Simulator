@@ -1,4 +1,8 @@
 extends Label3D
+## The field readout "power/damage". It is drawn as TWO child labels laid side by side - the power digits and the
+## "/damage" part - so an emphasis (the power-up swell, the power-down deflate, a change pulse) moves only the number
+## that changed. This node keeps `text` = the whole readout for anything that reads it (probes, logs), but its own
+## glyphs are transparent; visibility and the card's transform still flow to the parts as children.
 
 var power: int
 var accumulated_damage: int
@@ -9,12 +13,19 @@ var target_power: int
 var _power_tween: Tween = null
 var _damage_tween: Tween = null
 var _pulse_tween: Tween = null
-## The power-up swell (animate_power_up). Owns `scale`, `modulate` and the render priorities while it runs.
+## The power-up swell (animate_power_up). Owns the POWER part's `scale`, `modulate` and render priorities while it runs.
 var _boost_tween: Tween = null
+var _damage_pulse_tween: Tween = null
 var _rest_scale := Vector3.ONE
 var _rest_modulate := Color.WHITE
 var _rest_priority := 0
 var _rest_outline_priority := 0
+var _power_part: Label3D = null
+var _damage_part: Label3D = null
+## Label3D settings the parts copy from this node (as authored in card.tscn).
+const PART_PROPERTIES := ["font", "font_size", "pixel_size", "outline_size", "outline_modulate", "modulate",
+	"billboard", "double_sided", "no_depth_test", "fixed_size", "alpha_cut", "texture_filter", "shaded",
+	"render_priority", "outline_render_priority", "vertical_alignment", "line_spacing"]
 
 ## POWER-UP NUMBER (the third beat of Card.power_fx): the count runs while the readout SWELLS, holds big for a moment
 ## and settles back, so the eye lands on the new value. Tinted warm while big; the gas puff sits behind it.
@@ -24,6 +35,13 @@ const BOOST_COUNT_SECONDS := 0.85
 const BOOST_HOLD_SECONDS := 0.30
 const BOOST_SETTLE_SECONDS := 0.28
 const BOOST_TINT := Color(1.0, 0.86, 0.55)
+## POWER-DOWN NUMBER (power_down_drain.gd): squashed and smaller, RED - deflating rather than swelling.
+const DRAIN_SCALE := Vector3(1.08, 0.74, 1.0)
+const DRAIN_SHRINK_SECONDS := 0.16
+const DRAIN_COUNT_SECONDS := 0.55
+const DRAIN_HOLD_SECONDS := 0.18
+const DRAIN_SETTLE_SECONDS := 0.30
+const DRAIN_TINT := Color(1.0, 0.30, 0.26)
 ## Above the power-up gas/swords (power_up_burst.gd draws at 18..24), so the number is never painted over.
 const BOOST_RENDER_PRIORITY := 40
 
@@ -32,11 +50,54 @@ func _ready() -> void:
 	power = get_parent().power
 	target_power = power
 	accumulated_damage = get_parent().accumulated_damage
-	_rest_scale = scale
-	_rest_modulate = modulate
-	_rest_priority = render_priority
-	_rest_outline_priority = outline_render_priority
-	self.text = '%s/%s' % [power, accumulated_damage]
+	# The number is anchored at its RIGHT edge (and the damage part at its left, on the same seam), so a swell grows
+	# the number leftward, away from "/damage", instead of over it.
+	_power_part = _make_part("PowerNumber", HORIZONTAL_ALIGNMENT_RIGHT)
+	_damage_part = _make_part("DamagePart", HORIZONTAL_ALIGNMENT_LEFT)
+	_rest_scale = _power_part.scale
+	_rest_modulate = _power_part.modulate
+	_rest_priority = _power_part.render_priority
+	_rest_outline_priority = _power_part.outline_render_priority
+	# This node now only carries the text; the parts draw it.
+	modulate = Color(modulate.r, modulate.g, modulate.b, 0.0)
+	outline_modulate = Color(outline_modulate.r, outline_modulate.g, outline_modulate.b, 0.0)
+	_refresh_text()
+
+
+## The power digits (probes: this is what swells, deflates and tints).
+func power_part() -> Label3D:
+	return _power_part
+
+
+func damage_part() -> Label3D:
+	return _damage_part
+
+
+func _make_part(part_name: String, align: HorizontalAlignment) -> Label3D:
+	var part := Label3D.new()
+	part.name = part_name
+	for property in PART_PROPERTIES:
+		part.set(property, get(property))
+	part.horizontal_alignment = align
+	add_child(part)
+	return part
+
+
+func _refresh_text() -> void:
+	var power_text := str(power)
+	var damage_text := "/%s" % accumulated_damage
+	self.text = power_text + damage_text
+	if _power_part == null:
+		return
+	_power_part.text = power_text
+	_damage_part.text = damage_text
+	# Lay the two out as ONE centred string would be: measured at rest, so a swollen number never shoves the rest.
+	var used_font: Font = font if font != null else ThemeDB.fallback_font
+	var w_power: float = used_font.get_string_size(power_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * pixel_size
+	var w_damage: float = used_font.get_string_size(damage_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * pixel_size
+	var seam: float = -(w_power + w_damage) * 0.5 + w_power
+	_power_part.position = Vector3(seam, 0.0, 0.0)
+	_damage_part.position = Vector3(seam, 0.0, 0.0)
 
 func changePower(newPower):
 	animate_power_change(newPower)
@@ -58,31 +119,42 @@ func animate_power_change(end_power: int, duration: float = 0.75):
 ## The power-up count: wait `delay` (the swords' beat), then swell, count from what is shown to `end_power`, hold and
 ## settle. Calling it again mid-run re-aims the count at the new value without restarting the swell.
 func animate_power_up(end_power: int, delay: float = 0.0) -> void:
+	_animate_emphasis(end_power, delay, Vector3.ONE * BOOST_SCALE, BOOST_TINT, BOOST_GROW_SECONDS,
+		BOOST_COUNT_SECONDS, BOOST_HOLD_SECONDS, BOOST_SETTLE_SECONDS)
+
+## The power-DOWN count (power_down_drain.gd): the readout DEFLATES - squashed, smaller, red - while it counts
+## down, then recovers its rest. Same slot as the swell, so cancel_power_up() and a zone change stop either.
+func animate_power_down(end_power: int, delay: float = 0.0) -> void:
+	_animate_emphasis(end_power, delay, DRAIN_SCALE, DRAIN_TINT, DRAIN_SHRINK_SECONDS,
+		DRAIN_COUNT_SECONDS, DRAIN_HOLD_SECONDS, DRAIN_SETTLE_SECONDS)
+
+func _animate_emphasis(end_power: int, delay: float, scale_k: Vector3, tint: Color, grow: float, count: float,
+		hold: float, settle: float) -> void:
 	target_power = end_power
 	if _power_tween != null and _power_tween.is_valid():
 		_power_tween.kill()
 	if _pulse_tween != null and _pulse_tween.is_valid():
 		_pulse_tween.kill()
-		scale = _rest_scale
+		_power_part.scale = _rest_scale
 	var already_big: bool = _boost_tween != null and _boost_tween.is_valid()
 	if already_big:
 		_boost_tween.kill()
 	else:
-		render_priority = BOOST_RENDER_PRIORITY
-		outline_render_priority = BOOST_RENDER_PRIORITY - 1
+		_power_part.render_priority = BOOST_RENDER_PRIORITY
+		_power_part.outline_render_priority = BOOST_RENDER_PRIORITY - 1
 	_boost_tween = create_tween()
 	if delay > 0.0:
 		_boost_tween.tween_interval(delay)
-	_boost_tween.tween_property(self, "scale", _rest_scale * BOOST_SCALE, BOOST_GROW_SECONDS) \
+	_boost_tween.tween_property(_power_part, "scale", _rest_scale * scale_k, grow) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_boost_tween.parallel().tween_property(self, "modulate", BOOST_TINT, BOOST_GROW_SECONDS)
-	_boost_tween.parallel().tween_method(update_power_display, power, end_power, BOOST_COUNT_SECONDS) \
+	_boost_tween.parallel().tween_property(_power_part, "modulate", tint, grow)
+	_boost_tween.parallel().tween_method(update_power_display, power, end_power, count) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	# A parallel step lasts as long as its LONGEST member (the count), so the hold starts when the count ends.
-	_boost_tween.tween_interval(BOOST_HOLD_SECONDS)
-	_boost_tween.tween_property(self, "scale", _rest_scale, BOOST_SETTLE_SECONDS) \
+	_boost_tween.tween_interval(hold)
+	_boost_tween.tween_property(_power_part, "scale", _rest_scale, settle) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_boost_tween.parallel().tween_property(self, "modulate", _rest_modulate, BOOST_SETTLE_SECONDS)
+	_boost_tween.parallel().tween_property(_power_part, "modulate", _rest_modulate, settle)
 	_boost_tween.tween_callback(_restore_rest)
 
 func is_boosting() -> bool:
@@ -91,6 +163,10 @@ func is_boosting() -> bool:
 ## Seconds from the start of animate_power_up(…, delay) until the readout is back at rest.
 static func boost_seconds(delay: float) -> float:
 	return delay + BOOST_COUNT_SECONDS + BOOST_HOLD_SECONDS + BOOST_SETTLE_SECONDS
+
+## Seconds from the start of animate_power_down(…, delay) until the readout is back at rest.
+static func drain_seconds(delay: float) -> float:
+	return delay + DRAIN_COUNT_SECONDS + DRAIN_HOLD_SECONDS + DRAIN_SETTLE_SECONDS
 
 ## Drop a running swell at once (a zone change, or a plain change superseding it), showing the target value.
 func _stop_boost() -> void:
@@ -106,10 +182,10 @@ func cancel_power_up() -> void:
 	_stop_boost()
 
 func _restore_rest() -> void:
-	scale = _rest_scale
-	modulate = _rest_modulate
-	render_priority = _rest_priority
-	outline_render_priority = _rest_outline_priority
+	_power_part.scale = _rest_scale
+	_power_part.modulate = _rest_modulate
+	_power_part.render_priority = _rest_priority
+	_power_part.outline_render_priority = _rest_outline_priority
 	_boost_tween = null
 
 func animate_accumulated_damage_change(end_damage: int, duration: float = 0.75):
@@ -117,22 +193,32 @@ func animate_accumulated_damage_change(end_damage: int, duration: float = 0.75):
 		_damage_tween.kill()
 	_damage_tween = create_tween()
 	_damage_tween.tween_method(update_accumulated_damage_display, accumulated_damage, end_damage, duration).set_ease(Tween.EASE_OUT)
-	_damage_tween.tween_callback(pulse_label)
+	_damage_tween.tween_callback(_pulse_damage)
 
 func update_power_display(newPower: int):
 	power = newPower
-	self.text = '%s/%s' % [power, accumulated_damage]
+	_refresh_text()
 
 func update_accumulated_damage_display(newDamage: int):
 	accumulated_damage = newDamage
-	self.text = '%s/%s' % [power, accumulated_damage]
+	_refresh_text()
 
+## The power number's pulse after a plain change.
 func pulse_label():
-	# The swell owns the scale while it runs; a damage pulse must not record a swollen size as "rest".
+	# The swell owns the number's scale while it runs; a pulse must not record a swollen size as "rest".
 	if is_boosting():
 		return
 	if _pulse_tween != null and _pulse_tween.is_valid():
 		_pulse_tween.kill()
 	_pulse_tween = create_tween()
-	_pulse_tween.tween_property(self, "scale", _rest_scale * 1.4, 0.1)
-	_pulse_tween.tween_property(self, "scale", _rest_scale, 0.1)
+	_pulse_tween.tween_property(_power_part, "scale", _rest_scale * 1.4, 0.1)
+	_pulse_tween.tween_property(_power_part, "scale", _rest_scale, 0.1)
+
+## The damage part's own pulse: it changes on its own, and it never touches the power number.
+func _pulse_damage() -> void:
+	if _damage_pulse_tween != null and _damage_pulse_tween.is_valid():
+		_damage_pulse_tween.kill()
+	_damage_part.scale = Vector3.ONE
+	_damage_pulse_tween = create_tween()
+	_damage_pulse_tween.tween_property(_damage_part, "scale", Vector3.ONE * 1.4, 0.1)
+	_damage_pulse_tween.tween_property(_damage_part, "scale", Vector3.ONE, 0.1)

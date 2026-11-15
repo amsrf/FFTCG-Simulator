@@ -24,10 +24,14 @@ enum Kind {
 	## Element-independent. (Appended: values are stable.)
 	COUNTERED,
 	## A card an EFFECT put from the field into the Break Zone WITHOUT breaking it (Game.put_card_into_graveyard:
-	## sacrifice, "put into the Break Zone", power 0, the Backup limit). The rules already moved it; a stand-in holds
+	## sacrifice, "put into the Break Zone", the Backup limit). The rules already moved it; a stand-in holds
 	## its field slot while a light orb bursts on it, then lifts clear and flies onto the pile (tribute_cue.gd).
 	## Element-independent. (Appended: values are stable.)
 	TRIBUTE,
+	## A Forward whose POWER DROP killed it (power to 0, or to/below its damage). The rules already moved it; a
+	## stand-in holds its slot while its power is drained into a vortex, then it turns cyan, cracks and shatters
+	## (drain_death_cue.gd). `amount` is the drop. (Appended: values are stable.)
+	DRAINED,
 }
 
 var kind: Kind = Kind.STATUS_APPLIED

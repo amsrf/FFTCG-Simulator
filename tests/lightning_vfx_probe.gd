@@ -151,8 +151,10 @@ func _check_effect_break(game: Node, field, origin: Card) -> void:
 		"the bolt lands where the card was, not on the Break Zone pile")
 	await get_tree().create_timer(0.25).timeout
 	_expect(_shard_count() > shards_before, "the card shatters at the impact")
-	_expect(victim.visible and get_tree().root.find_children("HeldCard*", "", true, false).is_empty(),
-		"and then the stand-in is gone and the real card shows in the Break Zone")
+	# A Break Zone PIT keeps the card hidden (it has gone in); any other pile shows it.
+	var in_pit: bool = victim.get_parent() != null and victim.get_parent().has_method("swallow_stand_in")
+	_expect(victim.visible != in_pit and get_tree().root.find_children("HeldCard*", "", true, false).is_empty(),
+		"and then the stand-in is gone and the real card is where its pile puts it (hidden in a pit: %s)" % in_pit)
 
 	# A card protection keeps on the field is struck all the same, and survives it.
 	await Vfx.idle()

@@ -1039,8 +1039,9 @@ func _check_opponent_translation(game) -> void:
 		"electric arcs crackle over the held card while the real card stays hidden")
 	await get_tree().create_timer(1.2).timeout
 	_expect(Vfx.find_children("CounterShard*", "MeshInstance3D", true, false).size() > 20
-		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and card.visible,
-		"it shatters into cyan pieces, the stand-in goes and the real card shows in the Break Zone")
+		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and not card.visible
+		and card.current_zone == Card.Zone.GRAVEYARD,
+		"it shatters into cyan pieces, the stand-in goes, and the real card stays hidden IN the Break Zone pit")
 	await Vfx.idle()
 	await get_tree().process_frame
 	_expect(Vfx.find_children("CounterShard*", "MeshInstance3D", true, false).is_empty(),
@@ -1187,8 +1188,10 @@ func _check_tribute() -> void:
 	_expect(saw_burst, "the light-orb burst quad plays on the slot")
 	_expect(low_while_crossing > maxf(slot.y, card.global_position.y) + 0.3,
 		"the card crosses ABOVE the board and the pile, never gliding through the cards beside it")
-	_expect(not is_instance_valid(stand_in) and card.visible and waited > 0.4 and waited < 1.0,
-		"after ~0.6 s the stand-in has landed and gone, and the real card shows in the pile")
+	_expect(not is_instance_valid(stand_in) and not card.visible and waited > 0.4 and waited < 1.4,
+		"after ~1 s the stand-in has flown to the pit, been pulled in and gone; the real card stays hidden IN the pit")
+	var pit = pile.get("pit")
+	_expect(pit != null and int(pit.get("flare_count")) >= 1, "the pit flared as the stand-in went in")
 	await Vfx.idle()
 	await get_tree().process_frame
 	_expect(Vfx.find_children("TributeBurst", "MeshInstance3D", true, false).is_empty(),

@@ -3,6 +3,7 @@ extends Node
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
+const CLASH_SCRIPT := preload("res://scripts/vfx/clash_cinematic.gd")
 
 const SCENARIO_ATTACKER_WINS := 0
 const SCENARIO_DEFENDER_WINS := 1
@@ -40,7 +41,9 @@ func _boot() -> void:
 func _cinematics() -> int:
 	var count: int = 0
 	for node in _game.find_children("*", "Node3D", true, false):
-		if str(node.name).begins_with("ClashCinematic"):
+		# By SCRIPT, not name: a second cinematic added while the first is still queued for deletion is auto-renamed
+		# to "@Node3D@N".
+		if node.get_script() == CLASH_SCRIPT:
 			count += 1
 	return count
 
@@ -136,6 +139,29 @@ func _ready() -> void:
 	_expect((_game.get("_deferred_break_zone_triggers") as Array).is_empty(),
 		"and the deferred queue is empty")
 
+	# FIRST STRIKE, LETHAL: only the attacker has it and its first blow breaks the defender. One one-sided strike,
+	# by the attacker, and no reply.
+	_game.queue_free()
+	await get_tree().process_frame
+	await _boot()
+	var strikes: Array = await _watch_strikes(5)
+	_expect(_attacker.is_on_field() and not _defender.is_on_field(),
+		"scenario 5 (lethal First Strike) keeps the attacker and breaks the defender")
+	_expect(strikes == [1], "scenario 5 plays ONE strike, by the attacker (saw %s)" % str(strikes))
+	_expect(not _attacker.status_effects.has("first_strike"), "scenario 5 removes its debug First Strike")
+
+	# FIRST STRIKE, NOT LETHAL: the attacker strikes first, the defender survives and answers.
+	_game.queue_free()
+	await get_tree().process_frame
+	await _boot()
+	strikes = await _watch_strikes(6)
+	_expect(not _attacker.is_on_field() and _defender.is_on_field(),
+		"scenario 6 (First Strike survived) breaks the attacker on the reply")
+	_expect(strikes == [1, 2], "scenario 6 plays the attacker's strike, THEN the defender's (saw %s)" % str(strikes))
+	_expect(_cinematics() == 0, "the strike cinematics clean up after themselves")
+	_expect((_game.get("_clash_suppressed_cards") as Dictionary).is_empty(),
+		"break shatter suppression is released after a First Strike clash")
+
 	print("[Clash] %d checks | failures: %d" % [_checks, _fails])
 	print("[Clash] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
@@ -159,3 +185,29 @@ func _check_power_choreography() -> void:
 	strong.free()
 	cinema.free()
 
+
+
+## Run a debug scenario and record, in order, the `_strike_by` of every cinematic that plays (0 = exchange,
+## 1 = the attacker strikes, 2 = the defender strikes).
+func _watch_strikes(scenario: int) -> Array:
+	var seen: Dictionary = {}
+	var order: Array = []
+	var done: Array = [false]
+	var run := func() -> void:
+		await _game.call("_debug_clash", scenario, false)
+		done[0] = true
+	run.call()
+	for _i in range(3000):
+		for node in _game.find_children("*", "Node3D", true, false):
+			if node.get_script() != CLASH_SCRIPT:
+				continue
+			var key: int = node.get_instance_id()
+			if not seen.has(key) and not node.is_queued_for_deletion():
+				seen[key] = true
+				order.append(int(node.get("_strike_by")))
+		if done[0]:
+			break
+		await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	return order

@@ -36,6 +36,7 @@ const CARD_FILTER := preload("res://scripts/core/card_filter.gd")
 const CARD_SHARDS := preload("res://scenes/cards/card_shards.tscn")
 ## The cinematic clash presentation. Cards are cinematics proxies; game state stays here.
 const CLASH_CINEMATIC := preload("res://scenes/game/clash_cinematic.tscn")
+const CLASH_CINEMATIC_SCRIPT := preload("res://scripts/vfx/clash_cinematic.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
@@ -825,12 +826,18 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/counter_overlay.gdshader"),
 	# The tribute burst (tribute_cue.gd): first rendered when an effect puts a card into the Break Zone.
 	preload("res://shaders/tribute_burst.gdshader"),
+	# The power drain (power_down_drain.gd): first rendered when a Forward loses power.
+	preload("res://shaders/power_drain.gdshader"),
+	# The pit's swallow flare (pit.gd): first rendered when a card goes into the Break Zone / Removed pit.
+	preload("res://shaders/pit_flare.gdshader"),
 	# The board buttons (disc_socket.gd): the ring glow first renders on the first hover.
 	preload("res://shaders/disc_ring_glow.gdshader"),
 	# The mana cost row's backing window (crystal_cost.gd): first rendered when a payment opens.
 	preload("res://shaders/cost_panel.gdshader"),
 	# The top-of-stack aura and resolve pulse (card_stack_aura.gd): first rendered when something reaches the stack.
 	preload("res://shaders/stack_aura.gdshader"),
+	# The board shadow under a card lifted by effect damage (card_damage_fx.gd): first rendered on the first hit.
+	preload("res://shaders/card_lift_shadow.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
 	preload("res://shaders/absorb_ring.gdshader"),
@@ -1115,6 +1122,10 @@ func _input(event):
 				_debug_clash(3)
 			Key.KEY_5:
 				_debug_clash(4)
+			Key.KEY_6:
+				_debug_clash(5)
+			Key.KEY_7:
+				_debug_clash(6)
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == Key.KEY_B:
 		# DEBUG: only in Test Mode. B breaks the first player Forward; Shift+B breaks the opponent's.
 		if str(MatchSetup.config.get("preset", "")).begins_with("ground_"):
@@ -1233,6 +1244,17 @@ func _debug_clash(scenario: int, reset_ground: bool = true) -> void:
 			blocker.add_status_effect("next_receiving_damage", 1, {"operation": "set", "value": 0})
 			attacker.global_position.x -= 0.90
 			blocker.global_position.x += 0.90
+		5:
+			# First Strike, lethal: only the attacker has it and its first blow breaks the defender, so the
+			# defender never strikes back.
+			attacker.add_status_effect("first_strike", 1)
+			attacker.set_base_power(9000)
+			blocker.set_base_power(6000)
+		6:
+			# First Strike, not lethal: the attacker strikes first and the defender survives to answer (and wins).
+			attacker.add_status_effect("first_strike", 1)
+			attacker.set_base_power(5000)
+			blocker.set_base_power(9000)
 
 	field.set_attacker(attacker)
 	field.blocker_card = blocker
@@ -1244,6 +1266,8 @@ func _debug_clash(scenario: int, reset_ground: bool = true) -> void:
 	# inspecting the board afterwards cannot look like a stat change caused by the clash.
 	if is_instance_valid(attacker):
 		attacker.set_base_power(attacker_base)
+		attacker.status_effects.erase("first_strike")
+		attacker.refresh_status_visuals()
 	if is_instance_valid(blocker):
 		blocker.set_base_power(blocker_base)
 	field.reset_blocker()
@@ -1437,6 +1461,11 @@ var _clash_suppressed_cards: Dictionary = {}
 ## still playing. Flushed by resolve_blocked_clash() after the animation.
 var _clash_cinematic_active: bool = false
 var _deferred_break_zone_triggers: Array = []
+## True while resolve_blocked_clash() is presenting: a First Strike clash then plays each damage step as its own
+## one-sided strike (the striker hits first; the reply only if the target survived), instead of one exchange.
+var _clash_stepwise: bool = false
+## Set once a step has been presented, so resolve_blocked_clash() does not replay the whole clash afterwards.
+var _clash_presented: bool = false
 
 func event_trigger_already_fired(key: String) -> bool:
 	return _event_triggers_fired.has(key)
@@ -2009,12 +2038,17 @@ func resolve_blocked_clash() -> void:
 	# Turned on BEFORE damage: a defeated card reaches the Break Zone inside clash_attacker_blocker(), and its
 	# break-zone trigger must be held until the presentation is over.
 	_clash_cinematic_active = true
+	_clash_stepwise = true
+	_clash_presented = false
 	await clash_attacker_blocker()
+	_clash_stepwise = false
 
 	var survives_a: bool = is_instance_valid(attacker) and attacker.is_on_field()
 	var survives_b: bool = is_instance_valid(blocker) and blocker.is_on_field()
-	# The cinematic is pure presentation: the clash is already resolved above. Fast mode skips it.
-	if not PRESENTATION.fast_mode and is_instance_valid(attacker) and is_instance_valid(blocker):
+	# The cinematic is pure presentation: the clash is already resolved above. Fast mode skips it. A First Strike
+	# clash has already shown its strikes one by one (_present_clash_step), so it is not replayed as an exchange.
+	if not _clash_presented and not PRESENTATION.fast_mode \
+			and is_instance_valid(attacker) and is_instance_valid(blocker):
 		var cinema = CLASH_CINEMATIC.instantiate()
 		add_child(cinema)
 		await cinema.play(attacker, blocker, snap_a, snap_b, survives_a, survives_b)
@@ -2067,25 +2101,81 @@ func clash_attacker_blocker() -> void:
 		enforce_game_state_rules()
 		return
 
-	# Otherwise the side with First Strike deals first, the other answers only if still alive.
+	# Otherwise the side with First Strike deals first, the other answers only if still alive. Each step is
+	# presented as its own one-sided strike right after it resolves, so the player sees the first blow land (and,
+	# if it was lethal, the end of the fight) before the priority window and the reply.
 	if party_fs:
+		var first: Dictionary = _clash_snapshot(blocker)
 		_apply_party_damage(blocker)
+		await _present_clash_step(first, CLASH_CINEMATIC_SCRIPT.STRIKE_ATTACKER)
 		if not _combat_still_live(blocker):
 			return
-		await priority_round_only()
+		await _between_strikes_priority(blocker)
 		if not _combat_still_live(blocker):
 			return
-		_apply_blocker_split(await _blocker_split(blocker))
+		var split: Array = await _blocker_split(blocker)
+		var reply: Dictionary = _clash_snapshot(blocker)
+		_apply_blocker_split(split)
 		enforce_game_state_rules()
+		await _present_clash_step(reply, CLASH_CINEMATIC_SCRIPT.STRIKE_DEFENDER)
 	else:
-		_apply_blocker_split(await _blocker_split(blocker))
+		var split: Array = await _blocker_split(blocker)
+		var first: Dictionary = _clash_snapshot(blocker)
+		_apply_blocker_split(split)
 		enforce_game_state_rules()
+		await _present_clash_step(first, CLASH_CINEMATIC_SCRIPT.STRIKE_DEFENDER)
 		if not _combat_still_live(blocker):
 			return
-		await priority_round_only()
+		await _between_strikes_priority(blocker)
 		if not _combat_still_live(blocker):
 			return
+		var reply: Dictionary = _clash_snapshot(blocker)
 		_apply_party_damage(blocker)
+		await _present_clash_step(reply, CLASH_CINEMATIC_SCRIPT.STRIKE_ATTACKER)
+
+## The two cards a First Strike step is presented with, captured BEFORE its damage: a defeated card is already in
+## the Break Zone when the rules finish, and the strike must start from where the player last saw it.
+func _clash_snapshot(blocker: Card) -> Dictionary:
+	var attacker: Card = field.attacker_card
+	if attacker == null or not is_instance_valid(attacker) or not attacker.is_on_field():
+		attacker = null
+	if blocker == null or not is_instance_valid(blocker) or not blocker.is_on_field():
+		blocker = null
+	return {
+		"attacker": attacker,
+		"blocker": blocker,
+		"snap_a": attacker.global_transform if attacker != null else Transform3D.IDENTITY,
+		"snap_b": blocker.global_transform if blocker != null else Transform3D.IDENTITY,
+	}
+
+## Play one First Strike damage step: `strike_by` hits, the other card only takes it. Only while
+## resolve_blocked_clash() is presenting (a probe calling clash_attacker_blocker() directly gets no animation).
+func _present_clash_step(snap: Dictionary, strike_by: int) -> void:
+	if not _clash_stepwise or PRESENTATION.fast_mode:
+		return
+	var attacker: Card = snap.get("attacker")
+	var blocker: Card = snap.get("blocker")
+	if attacker == null or blocker == null or not is_instance_valid(attacker) or not is_instance_valid(blocker):
+		return
+	_clash_presented = true
+	var cinema = CLASH_CINEMATIC.instantiate()
+	add_child(cinema)
+	await cinema.play(attacker, blocker, snap["snap_a"], snap["snap_b"],
+		attacker.is_on_field(), blocker.is_on_field(), strike_by)
+	cinema.queue_free()
+
+## The priority window between the two First Strike steps. Nothing is being animated during it, so a card that
+## breaks there (a Summon cast in the window) must shatter and fire its Break Zone triggers normally.
+func _between_strikes_priority(blocker: Card) -> void:
+	var presenting: bool = _clash_cinematic_active
+	var cards: Array = [field.attacker_card, blocker]
+	if presenting:
+		_flush_deferred_break_zone_triggers()
+		_release_clash_fx(cards)
+	await priority_round_only()
+	if presenting:
+		_suppress_clash_fx(cards)
+		_clash_cinematic_active = true
 
 ## Both sides still in the fight? The blocker can die to First Strike, and so can every member of the party.
 func _combat_still_live(blocker: Card) -> bool:
@@ -2465,7 +2555,7 @@ func enforce_game_state_rules() -> void:
 	#    not trigger. (Break Zone and Graveyard share a container here, but
 	#    the removal events are distinct.)
 	for card in field.get_zero_power_cards():
-		put_card_into_graveyard(card)
+		put_card_into_graveyard(card, card.power_fx.is_drop_lethal_cause())
 	# 2) Accumulated damage greater than current power: the card is broken.
 	# THE SWEEP HAS NO IDEA WHAT DEALT THE DAMAGE, so the card carries it (Card.last_damage_kind/controller) and the
 	# same protection question an explicit break asks can be answered here too.
@@ -2662,7 +2752,8 @@ func _enforce_backup_limit() -> void:
 			LOG.info("Rules", "P%d has %d Backups: %s goes to the Break Zone (12.4.8)" % [owner_id, backups.size(), chosen.card_name])
 			put_card_into_graveyard(chosen)
 
-func put_card_into_graveyard(card: Card) -> void:
+## `drained`: the card's power drop is what put it there (the zero-power sweep) - presented as a drain, not a tribute.
+func put_card_into_graveyard(card: Card, drained: bool = false) -> void:
 	# Removal that is NOT a break (e.g. power reduced to 0). The "unbreakable" status does not apply, because the
 	# card did not break — but it still ARRIVES in the Break Zone, so `when_enter_break_from_field` fires and
 	# `when_break` does not. That difference is carried by the flag, not by a separate code path.
@@ -2671,9 +2762,13 @@ func put_card_into_graveyard(card: Card) -> void:
 	card.broken = false
 	# PRESENTED AS A TRIBUTE, not a shatter: the card did not break. The rules move happens inside, at once; a stand-in
 	# keeps the slot while a light orb bursts, then flies onto the pile (Vfx.tributed -> scripts/vfx/tribute_cue.gd).
-	Vfx.tributed(card, func() -> void:
+	var move := func() -> void:
 		card.untap()
-		move_card_from_field(card, Card.Zone.GRAVEYARD, "REMOVAL"))
+		move_card_from_field(card, Card.Zone.GRAVEYARD, "REMOVAL")
+	if drained:
+		Vfx.drained(card, move, card.power_fx.drain_elapsed(), card.power_fx.pending_drop())
+	else:
+		Vfx.tributed(card, move)
 
 ## Break `card`. `source_kind`/`source_controller` describe the CAUSE ("Summon"/"Ability" and who controlled it), so
 ## continuous protection rules can be asked before anything moves; the state-based sweep passes the card's recorded
@@ -2697,6 +2792,13 @@ func break_card(card: Card, source_controller: String = "", source_kind: String 
 	# same frame; the shard burst lives independently in Game space.
 	# UNLESS the source's element stages the break (lightning, earth): then a stand-in holds the card on its slot and
 	# the element's cue breaks it at its own moment (the bolt landing, the spike withdrawing).
+	# THE POWER DROP KILLED IT (its damage now reaches a lowered power): drained, cracked and shattered, not burst.
+	# Asked before the element's staged hold: the damage that hit it earlier has finished presenting, so nothing
+	# would claim that hold. The clash still owns its own defeats.
+	if card.power_fx.is_drop_lethal_cause() and not _clash_suppressed_cards.has(card.get_instance_id()):
+		Vfx.drained(card, func() -> void: move_card_from_field(card, Card.Zone.GRAVEYARD, "BREAK"),
+			card.power_fx.drain_elapsed(), card.power_fx.pending_drop())
+		return
 	var held: bool = Vfx.hold_for_break(card, source_card)
 	if not held:
 		_play_break_shatter(card)

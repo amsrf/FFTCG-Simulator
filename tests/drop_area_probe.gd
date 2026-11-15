@@ -182,9 +182,13 @@ func _ready() -> void:
 		"the payment card is already in the Break Zone")
 	_expect(_param(character, "teleport_glow") <= 0.001,
 		"the Character fade waits for the discard flight")
-	await get_tree().create_timer(0.65).timeout
+	# The discard is the whole pit intake (flight + hover + sink), read from the pile rather than hard-coded.
+	var pile = _hand.graveyard
+	var intake: float = float(pile.get("discard_seconds")) + float(pile.get("intake_hover_seconds")) \
+			+ float(pile.get("intake_sink_seconds"))
+	await get_tree().create_timer(intake - 0.15 + 0.25).timeout
 	_expect(_param(character, "teleport_glow") > 0.001,
-		"the fade starts only after the discard flight")
+		"the fade starts only after the discard has gone into the pit (%.2f s)" % intake)
 
 	print("[DropArea] %d checks | failures: %d" % [_checks, _fails])
 	if _fails == 0:

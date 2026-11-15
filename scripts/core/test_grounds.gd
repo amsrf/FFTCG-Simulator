@@ -389,7 +389,7 @@ const GROUNDS := {
 	},
 	"clash": {
 		"title": "Ground: Clash cinematic",
-		"blurb": "Press 1: attacker survives / defender dies. 2: defender survives / attacker dies. 3: both survive (damage shielded). 4: both die. 5: both survive from different columns.",
+		"blurb": "Press 1: attacker survives / defender dies. 2: defender survives / attacker dies. 3: both survive (damage shielded). 4: both die. 5: both survive from different columns. 6: attacker's First Strike is lethal (one blow). 7: First Strike survived, defender answers.",
 	},
 	"tribute": {
 		"title": "Ground: Tribute (put into the Break Zone)",

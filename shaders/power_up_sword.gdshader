@@ -10,9 +10,11 @@ uniform vec4 tint : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float intensity = 1.0;
 // 0..1: how white the sword is (1 at the pop-in, gone within its appear time).
 uniform float flash = 0.0;
+// The colour of that flash: warm white for the red swords, lilac white for the obsidian one.
+uniform vec4 flash_color : source_color = vec4(1.0, 0.92, 0.88, 1.0);
 
 void fragment() {
 	vec4 t = texture(sword_tex, UV);
-	ALBEDO = mix(t.rgb * tint.rgb, vec3(1.0, 0.92, 0.88), flash * 0.85);
+	ALBEDO = mix(t.rgb * tint.rgb, flash_color.rgb, flash * 0.85);
 	ALPHA = clamp(t.a * intensity, 0.0, 1.0);
 }

@@ -3,8 +3,9 @@ extends VfxCue
 ##   1. SHOCK  - violet/white electric arcs crackle over the face and off its edges, re-struck every few frames, while
 ##               the card glitches (small jumps in its own plane) and flickers violet. After Clips/negate2 frames 128+.
 ##   2. CYAN   - it turns solid cyan, and a crack network spreads out from its centre. After Clips/die frames 32+.
-##   3. SHATTER - it breaks along exactly those cracks into flat cyan pieces that burst out a little, tumble and fall
-##               DOWN THE SCREEN (the board camera looks nearly straight down, so world gravity would barely show).
+##   3. SHATTER - it breaks along exactly those cracks into flat cyan pieces that burst out a little, tumble and "fall"
+##               UPWARD: they accelerate along world +Y, toward the board camera, growing as they rise and shrinking
+##               away before they reach it.
 ## The real card is already in the Break Zone, hidden; it is shown when the card shatters (Vfx.release_hold).
 ## Driven from play() frame by frame, so freezing time (Engine.time_scale = 0) freezes the frame for screenshots.
 
@@ -42,6 +43,7 @@ var _arcs: MeshInstance3D = null
 var _arc_mat: ShaderMaterial = null
 var _shards: Array = []   # [{node, velocity, axis, spin, delay, basis}]
 var _released := false
+var _next_arc := 0.0
 
 
 func play(event: VfxEvent) -> void:
@@ -57,19 +59,18 @@ func play(event: VfxEvent) -> void:
 		return
 	_rng.seed = event.seed if event.seed != 0 else 7919
 	_build()
+	_begin(event)
 	var t := 0.0
-	var next_arc := 0.0
-	var cyan_at := SHOCK_SECONDS
+	var cyan_at := _lead_seconds()
 	var break_at := cyan_at + CYAN_IN + CRACK_SECONDS + CRACK_HOLD
-	var end_at := break_at + FALL_SECONDS
+	var end_at := maxf(break_at + FALL_SECONDS, _min_seconds())
 	while t < end_at:
 		# Something else released the hold (the match ended, the scene changed): nothing left to animate on.
 		if not _released and not is_instance_valid(_stand_in):
 			break
+		_tick(t)
 		if t < cyan_at:
-			if t >= next_arc:
-				next_arc = t + ARC_REFRESH
-				_strike(t / SHOCK_SECONDS)
+			_lead(t, t / cyan_at)
 		elif t < break_at:
 			_turn_cyan(t - cyan_at)
 		else:
@@ -79,6 +80,33 @@ func play(event: VfxEvent) -> void:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	_finish()
+
+
+## THE FIRST BEAT is what makes this a counter: the shock. A subclass that dies the same way for another reason
+## (drain_death_cue.gd: power drained to nothing) replaces only these hooks and keeps the cyan crack + shatter.
+func _begin(_event: VfxEvent) -> void:
+	pass
+
+
+func _lead_seconds() -> float:
+	return SHOCK_SECONDS
+
+
+## Every frame, before the beat's own work.
+func _tick(_t: float) -> void:
+	pass
+
+
+## The shock, `u` 0..1 through it.
+func _lead(t: float, u: float) -> void:
+	if t >= _next_arc:
+		_next_arc = t + ARC_REFRESH
+		_strike(u)
+
+
+## How long the cue must run at least (a subclass with its own tail).
+func _min_seconds() -> float:
+	return 0.0
 
 
 ## Overlay + arc nodes on the stand-in's face, and the crack sites.
@@ -233,7 +261,6 @@ func _shatter() -> void:
 	_released = true
 	var camera := get_viewport().get_camera_3d()
 	var screen_up: Vector3 = camera.global_basis.y if camera != null else Vector3.BACK
-	var toward_camera: Vector3 = camera.global_basis.z if camera != null else Vector3.UP
 	var world_h: float = (_face_xf.basis.z).length() * _size.y
 	var max_r: float = _size.length() * 0.5
 	var material := StandardMaterial3D.new()
@@ -270,14 +297,13 @@ func _shatter() -> void:
 		var outward := (basis * Vector3(centre.x, 0.0, centre.y))
 		outward = outward.normalized() if outward.length() > 0.0001 else screen_up
 		var velocity := outward * world_h * (0.12 + 0.55 * r) * _rng.randf_range(0.7, 1.2) \
-			+ toward_camera * world_h * _rng.randf_range(0.0, 0.35) \
-			+ screen_up * world_h * _rng.randf_range(0.10, 0.50)
+			+ Vector3.UP * world_h * _rng.randf_range(0.10, 0.45)
 		var axis := Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), _rng.randf_range(-1, 1)).normalized()
 		if axis.length() < 0.1:
 			axis = Vector3.RIGHT
 		_shards.append({"node": piece, "origin": piece.global_position, "velocity": velocity, "axis": axis,
 			"spin": _rng.randf_range(2.0, 9.0) * (0.4 + r), "delay": r * 0.08, "basis": basis,
-			"gravity": -screen_up * world_h * _rng.randf_range(4.5, 6.5)})
+			"gravity": Vector3.UP * world_h * _rng.randf_range(4.5, 6.5)})
 	# The card itself is gone: the stand-in goes and the real card shows in the Break Zone.
 	Vfx.release_hold(_card, _visual, false)
 

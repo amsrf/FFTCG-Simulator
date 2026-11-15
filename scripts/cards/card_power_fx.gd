@@ -1,6 +1,7 @@
 extends RefCounted
 ## POWER-UP PRESENTATION for one card (reference: Desktop/Clips/powerup.mp4). When a Forward on the field gains
 ## power, three red swords rise around it in a burst of red gas, and then the power readout counts up while it swells.
+## A LOSS is the opposite: its power is DRAINED into a vortex under it (power_down_drain.gd) while the readout deflates.
 ## Pure presentation — the power itself is Card.recompute_power(). Owned by Card as `card.power_fx`.
 ##
 ## recompute_power() reports every change here instead of driving the label itself, and this COALESCES a frame's
@@ -11,6 +12,7 @@ extends RefCounted
 
 const PRESENTATION := preload("res://scripts/core/presentation.gd")
 const POWER_UP_BURST := preload("res://scripts/vfx/power_up_burst.gd")
+const POWER_DOWN_DRAIN := preload("res://scripts/vfx/power_down_drain.gd")
 
 ## A card that has only just arrived takes its buffs WITHOUT the fanfare: setup boards, a Forward entering under an
 ## aura, and a teleport-in all land their continuous power in the arrival frames, and celebrating those would set
@@ -22,6 +24,7 @@ var _card: Node3D
 var _flush_queued := false
 var _field_since_ms := -1
 var _burst: Node3D = null
+var _drain: Node3D = null
 
 
 func _init(card: Node3D) -> void:
@@ -34,11 +37,14 @@ func on_enter_zone(is_field: bool) -> void:
 	normalize()
 
 
-## Stop a running burst and put the readout back at rest.
+## Stop a running burst or drain and put the readout back at rest.
 func normalize() -> void:
 	if _burst != null and is_instance_valid(_burst):
 		_burst.queue_free()
 	_burst = null
+	if _drain != null and is_instance_valid(_drain):
+		_drain.queue_free()
+	_drain = null
 	var label = _card.power_label if _card != null else null
 	if label != null and label.has_method("cancel_power_up"):
 		label.cancel_power_up()
@@ -60,6 +66,34 @@ func burst() -> Node3D:
 	return _burst if is_playing() else null
 
 
+func is_draining() -> bool:
+	return _drain != null and is_instance_valid(_drain)
+
+
+func drain() -> Node3D:
+	return _drain if is_draining() else null
+
+
+## How far the running drain has got (0 when none): a LETHAL drain picks the look up from there on a stand-in.
+func drain_elapsed() -> float:
+	return float(_drain.call("elapsed")) if is_draining() else 0.0
+
+
+## Power this card has lost that the readout has not caught up with yet (0 when none). The rules sweep runs in the
+## same frame as the change, before the end-of-frame flush, so a positive value here means "the power drop is what
+## is killing it" - Game presents that death as a drain (Vfx.drained) instead of a tribute or a plain shatter.
+func pending_drop() -> int:
+	var label = _card.power_label if _card != null else null
+	if label == null:
+		return 0
+	return maxi(0, int(label.target_power) - int(_card.power))
+
+
+## Is a power loss what this card is dying of? A drop not yet shown, or one still being drained on screen.
+func is_drop_lethal_cause() -> bool:
+	return pending_drop() > 0 or is_draining()
+
+
 func _flush() -> void:
 	_flush_queued = false
 	if _card == null or not is_instance_valid(_card):
@@ -73,6 +107,8 @@ func _flush() -> void:
 		return
 	if final_power > heading and can_celebrate():
 		_play(final_power)
+	elif final_power < heading and can_celebrate() and not is_playing():
+		_play_drain(final_power, heading - final_power)
 	else:
 		label.changePower(final_power)
 
@@ -103,3 +139,16 @@ func _play(final_power: int) -> void:
 	_card.add_child(_burst)
 	_burst.call("setup", _card, int(_card.get_instance_id()))
 	label.animate_power_up(final_power, POWER_UP_BURST.NUMBER_START)
+
+
+func _play_drain(final_power: int, drop: int) -> void:
+	var label = _card.power_label
+	if is_draining():
+		# A second loss during the drain: keep the one vortex and re-aim the count at the new total.
+		label.animate_power_down(final_power, maxf(0.0, POWER_DOWN_DRAIN.NUMBER_START - _drain.call("elapsed")))
+		return
+	_drain = POWER_DOWN_DRAIN.new()
+	_drain.name = "PowerDownDrain"
+	_card.add_child(_drain)
+	_drain.call("setup", _card, int(_card.get_instance_id()) ^ drop, VfxEvent.damage_tier_for(drop))
+	label.animate_power_down(final_power, POWER_DOWN_DRAIN.NUMBER_START)

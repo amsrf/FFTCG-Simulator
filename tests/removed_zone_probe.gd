@@ -56,7 +56,9 @@ func _ready() -> void:
 
 	# --- the two piles are physically apart -------------------------------------------------------------
 	var gap: float = removed.global_position.distance_to(grave.global_position)
-	_expect(gap > 1.0, "the two piles are in different places on the board (%.2f m apart)" % gap)
+	# They are PITS on a diagonal beside the deck: apart by more than their two radii, so the two never overlap.
+	var radii: float = float(grave.get("pit_radius")) + float(removed.get("pit_radius"))
+	_expect(gap > radii, "the two pits are in different places on the board (%.2f m apart, radii %.2f)" % [gap, radii])
 
 	# --- SAME APPARENT SIZE AS A DECK CARD ---------------------------------------------------------------
 	# The camera is orthographic, so distance from it changes NOTHING about apparent size: the only thing that makes
@@ -97,6 +99,79 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(_game.get_child_count() > before_right, "RIGHT click on a removed card opens it too")
 
+	await _check_pits(grave, removed)
+
 	print("[Removed] %d checks | failures: %d" % [_checks, _fails])
 	print("[Removed] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
+
+
+## THE PITS (scripts/game/pit.gd): both piles are drawn as pits, BESIDE THE DECK TO ITS RIGHT on screen (Break Zone
+## first, then Removed), mirrored for the opponent; a card in a pit is hidden; a discard is pulled in and flares it;
+## clicking the pit opens the zone window.
+func _check_pits(grave: Node3D, removed: Node3D) -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var g_pit = grave.get("pit")
+	var r_pit = removed.get("pit")
+	_expect(g_pit != null and r_pit != null, "both piles have a pit")
+	if g_pit == null or r_pit == null or cam == null:
+		return
+	_expect(g_pit.get("kind") == "graveyard" and r_pit.get("kind") == "removed",
+		"the Break Zone pit is the blue one, the Removed pit the purple one")
+	for side in [["Player", false], ["Opponent", true]]:
+		var deck: Vector2 = cam.unproject_position(_game.get_node("%s/Deck" % side[0]).global_position)
+		var g_node: Node3D = _game.get_node("%s/Graveyard" % side[0])
+		var r_node: Node3D = _game.get_node("%s/Removed" % side[0])
+		var g: Vector2 = cam.unproject_position(g_node.global_position)
+		var r: Vector2 = cam.unproject_position(r_node.global_position)
+		# From that player's seat: screen right/down for the player, screen left/up for the opponent.
+		var dir: float = -1.0 if side[1] else 1.0
+		var g_r_px: float = _radius_px(cam, g_node.get("pit"))
+		var r_r_px: float = _radius_px(cam, r_node.get("pit"))
+		print("[Removed] %s: deck (%.0f, %.0f), Break Zone pit (%.0f, %.0f) r %.0f px, Removed pit (%.0f, %.0f) r %.0f px"
+			% [side[0], deck.x, deck.y, g.x, g.y, g_r_px, r.x, r.y, r_r_px])
+		_expect((g.x - deck.x) * dir > 0.0 and (g.y - deck.y) * dir > 0.0,
+			"%s: the Break Zone pit is right of the deck and lower, from that seat" % side[0])
+		_expect((r.x - g.x) * dir > 0.0 and (r.y - g.y) * dir < 0.0,
+			"%s: the Removed pit is up and to the right of it - a diagonal, as in Master Duel" % side[0])
+		_expect(r_r_px < g_r_px * 0.9, "%s: the Removed pit is the smaller one (%.0f vs %.0f px)" % [side[0], r_r_px, g_r_px])
+		_expect(g.distance_to(r) > g_r_px + r_r_px, "%s: the two pits do not overlap" % side[0])
+		_expect(g.distance_to(deck) > g_r_px, "%s: the Break Zone pit does not sit on the deck" % side[0])
+
+	# Every card resting in a pit is hidden.
+	var shown := 0
+	for pile in [grave, removed]:
+		for c in pile.graveyard_cards:
+			if is_instance_valid(c) and c.get_parent() == pile and c.visible:
+				shown += 1
+	_expect(shown == 0, "no card resting in a pit is drawn (%d shown)" % shown)
+
+	# A discard is pulled in: it lands in the rules list at once, ends hidden, flares the pit, and is not left white.
+	var hand = _game.get_node("Player/Hand")
+	if hand.cards.is_empty():
+		_expect(false, "the debug hand has a card to discard")
+		return
+	var card: Card = hand.cards[0]
+	var flares: int = int(g_pit.get("flare_count"))
+	hand.discard_card(card)
+	_expect(grave.graveyard_cards.has(card), "a discarded card is in the Break Zone at once")
+	await get_tree().create_timer(0.3).timeout
+	_expect(card.visible, "while it flies to the pit it is drawn")
+	await Vfx.idle()
+	await get_tree().process_frame
+	var white = (card.get("mat") as ShaderMaterial).get_shader_parameter("whiteout")
+	_expect(not card.visible and card.get_parent() == grave, "once in, it is hidden in the pit")
+	_expect(int(g_pit.get("flare_count")) == flares + 1, "the pit flared as it went in")
+	_expect(white is float and is_zero_approx(white), "and the white wash is cleared for when it comes back out")
+
+	# The pit is the click target now: it opens the zone window.
+	var before: int = _game.get_child_count()
+	g_pit.emit_signal("clicked")
+	await get_tree().process_frame
+	_expect(_game.get_child_count() > before, "clicking the Break Zone pit opens the zone window")
+
+
+func _radius_px(cam: Camera3D, pit: Node3D) -> float:
+	var r: float = float(pit.get("radius"))
+	return cam.unproject_position(pit.global_position + Vector3(r, 0, 0)).distance_to(
+		cam.unproject_position(pit.global_position))

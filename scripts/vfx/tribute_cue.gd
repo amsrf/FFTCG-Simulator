@@ -158,7 +158,7 @@ func _sample_flight(t: float) -> void:
 		_stand_in.global_transform = Transform3D(_home.basis.scaled_local(Vector3.ONE * sink), _home.origin)
 		_note_height()
 		return
-	var target: Transform3D = destination.global_transform if is_instance_valid(destination) else _home
+	var target: Transform3D = _landing_target()
 	var u := clampf((t - LAUNCH_AT) / FLIGHT_SECONDS, 0.0, 1.0)
 	var start := _home.origin
 	var finish := target.origin
@@ -189,11 +189,30 @@ func _note_height() -> void:
 	peak_height = maxf(peak_height, _stand_in.global_position.y)
 
 
-## Landed: the stand-in goes and the real card shows in the pile.
+## Where the flight ends: the real card's pile slot, or, for a PIT, the point above its mouth (the pit then pulls the
+## stand-in in).
+func _landing_target() -> Transform3D:
+	if not is_instance_valid(destination):
+		return _home
+	var pile: Node = destination.get_parent()
+	if pile != null and pile.has_method("mouth_transform"):
+		return pile.call("mouth_transform")
+	return destination.global_transform
+
+
+## Landed: into a pit, the stand-in is handed over and pulled in (the real card stays hidden there); onto any other
+## pile, the stand-in goes and the real card shows.
 func _land(target: Transform3D) -> void:
 	_landed = true
 	landed_transform = target
-	if _card != null:
+	var pile: Node = destination.get_parent() if is_instance_valid(destination) else null
+	if _card != null and pile != null and pile.has_method("swallow_stand_in") and is_instance_valid(_stand_in):
+		var stand_in: Card = _stand_in
+		_visual.erase("stand_in")
+		_stand_in = null
+		pile.call("swallow_stand_in", stand_in)
+		Vfx.release_hold(_card, _visual, false)
+	elif _card != null:
 		Vfx.release_hold(_card, _visual, false)
 	elif is_instance_valid(_stand_in):
 		_stand_in.global_transform = target

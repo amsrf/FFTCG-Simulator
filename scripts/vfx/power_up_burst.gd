@@ -21,9 +21,9 @@ const LIFETIME := 1.95
 
 ## Swords: [screen offset of the centre (x, y) in card heights, roll in degrees (+ = leaning left), height, delay].
 const SWORDS := [
-	[Vector2(0.0, 0.66), 0.0, 0.84, 0.0],
-	[Vector2(-0.56, 0.22), 36.0, 0.72, 0.05],
-	[Vector2(0.56, 0.22), -36.0, 0.72, 0.05],
+	[Vector2(0.0, 0.58), 0.0, 0.56, 0.0],
+	[Vector2(-0.46, 0.20), 36.0, 0.48, 0.05],
+	[Vector2(0.46, 0.20), -36.0, 0.48, 0.05],
 ]
 const SWORD_ASPECT := 120.0 / 220.0
 const SWORD_APPEAR := 0.16
@@ -39,7 +39,6 @@ const RENDER_GAS := 18
 const RENDER_STREAK := 21
 const RENDER_SWORD := 22
 
-static var _sword_texture: Texture2D = null
 
 var _card: Node3D
 var _t := 0.0
@@ -256,28 +255,50 @@ static func _ease_out_back(u: float) -> float:
 
 ## The sword glyph, rasterised once from SVG at runtime (no import step, so a headless run never meets a missing
 ## .import). Blade up; a wide guard whose ends hook down; grip; round pommel. Three passes: a wide faint stroke for
-## the glow, a translucent red fill with a red outline, and a thin pale inner line that makes the outline read as lit.
+## the glow, a translucent fill with an outline, and a thin pale inner line that makes the outline read as lit.
+## The same glyph comes in two PALETTES: the power-up's red, and the power-down's obsidian with a violet edge
+## (power_down_drain.gd).
 const SWORD_SHAPES := """<path d="M60,8 L82,38 L77,138 L43,138 L38,38 Z"/>
 <path d="M9,153 Q9,137 26,138 L94,138 Q111,137 111,153 L111,170 Q105,159 94,159 L26,159 Q15,159 9,170 Z"/>
 <rect x="51" y="159" width="18" height="34" rx="3"/>
 <circle cx="60" cy="203" r="11"/>"""
 const SWORD_SVG := """<svg xmlns="http://www.w3.org/2000/svg" width="120" height="220" viewBox="0 0 120 220">
-<g fill="none" stroke="#ff2a1a" stroke-opacity="0.28" stroke-width="15" stroke-linejoin="round">%s</g>
-<g fill="#e0141a" fill-opacity="0.58" stroke="#ff3826" stroke-width="6" stroke-linejoin="round">%s</g>
-<g fill="none" stroke="#ffd2c4" stroke-opacity="0.9" stroke-width="1.4" stroke-linejoin="round">%s</g>
-<path d="M60,30 L60,128" stroke="#ff8a70" stroke-opacity="0.8" stroke-width="2.5" stroke-linecap="round"/>
+<g fill="none" stroke="{glow}" stroke-opacity="{glow_opacity}" stroke-width="15" stroke-linejoin="round">{shapes}</g>
+<g fill="{fill}" fill-opacity="{fill_opacity}" stroke="{outline}" stroke-width="6" stroke-linejoin="round">{shapes}</g>
+<g fill="none" stroke="{inner}" stroke-opacity="0.9" stroke-width="1.4" stroke-linejoin="round">{shapes}</g>
+<path d="M60,30 L60,128" stroke="{centre}" stroke-opacity="0.8" stroke-width="2.5" stroke-linecap="round"/>
 </svg>"""
+const RED_SWORD := {"glow": "#ff2a1a", "glow_opacity": "0.28", "fill": "#e0141a", "fill_opacity": "0.58",
+	"outline": "#ff3826", "inner": "#ffd2c4", "centre": "#ff8a70"}
+## Near-black glassy blade, a violet-magenta edge and glow, a pale lilac lit line, a violet fuller.
+const OBSIDIAN_SWORD := {"glow": "#b02cff", "glow_opacity": "0.42", "fill": "#14081f", "fill_opacity": "0.94",
+	"outline": "#b54bff", "inner": "#f1d2ff", "centre": "#8c3cff"}
+
+static var _sword_textures: Dictionary = {}
 
 
+## The power-up's red sword.
 static func sword_texture() -> Texture2D:
-	if _sword_texture != null:
-		return _sword_texture
+	return _sword_texture_for("red", RED_SWORD)
+
+
+## The power-down's obsidian sword.
+static func obsidian_sword_texture() -> Texture2D:
+	return _sword_texture_for("obsidian", OBSIDIAN_SWORD)
+
+
+static func _sword_texture_for(key: String, palette: Dictionary) -> Texture2D:
+	if _sword_textures.has(key):
+		return _sword_textures[key]
+	var values: Dictionary = palette.duplicate()
+	values["shapes"] = SWORD_SHAPES
 	var image := Image.new()
-	var err: Error = image.load_svg_from_string(SWORD_SVG % [SWORD_SHAPES, SWORD_SHAPES, SWORD_SHAPES], 2.0)
+	var err: Error = image.load_svg_from_string(SWORD_SVG.format(values), 2.0)
 	if err != OK or image.is_empty():
-		push_error("power_up_burst: the sword SVG did not rasterise (%s)" % error_string(err))
+		push_error("power_up_burst: the %s sword SVG did not rasterise (%s)" % [key, error_string(err)])
 		image = Image.create(8, 8, false, Image.FORMAT_RGBA8)
 		image.fill(Color(1, 0.2, 0.15, 0.7))
 	image.generate_mipmaps()
-	_sword_texture = ImageTexture.create_from_image(image)
-	return _sword_texture
+	var texture := ImageTexture.create_from_image(image)
+	_sword_textures[key] = texture
+	return texture

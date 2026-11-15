@@ -297,8 +297,9 @@ func _check_earth_launch(game: Node) -> void:
 		"the card is still whole while the crystal sinks and vanishes from the top down")
 	await get_tree().create_timer(0.75 + preload("res://scripts/vfx/earth_break_crystal.gd").BUILDUP).timeout
 	_expect(game.find_children("CardShards*", "Node3D", true, false).size() == shards_before + 1
-		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and card.visible,
-		"it shatters once the crystal has gone back down, and the real card shows in the Break Zone")
+		and game.find_children("HeldCard*", "Node3D", true, false).is_empty() and not card.visible
+		and card.current_zone == Card.Zone.GRAVEYARD,
+		"it shatters once the crystal has gone back down, and the real card stays hidden IN the Break Zone pit")
 	await Vfx.idle()
 	# A break BY EFFECT from an Earth source gets the same impale.
 	var victim: Card = game.create_card(41, "opponent")

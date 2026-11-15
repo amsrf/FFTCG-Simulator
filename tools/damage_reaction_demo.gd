@@ -51,7 +51,37 @@ func _ready() -> void:
 	_create_target_labels()
 	_select(1)
 	await get_tree().create_timer(0.55).timeout
+	var capture_arg: int = args.find("--capture")
+	if capture_arg >= 0 and capture_arg + 1 < args.size():
+		await _capture_hit(args[capture_arg + 1])
+		return
 	_hit_selected()
+
+
+## `-- --capture <dir>`: hit the selected card once and save a frame every 1/60 s of the reaction (1 s), then quit. Needs a
+## real window (not --headless). Saving a PNG is slower than the reaction, so the tween is paused and STEPPED.
+func _capture_hit(out_dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(out_dir)
+	_hud.visible = false
+	for label in _labels:
+		label.visible = false
+	for card in _targets:
+		card.set_selected_highlight(false)
+	await RenderingServer.frame_post_draw
+	var card: Card = _targets[_selected]
+	card.suffer_damage(_damage_amount(), "Ability", "player")
+	var motion: Tween = card.damage_fx.tween
+	motion.pause()
+	var stepped := 0.0
+	for frame in range(0, 60):
+		var moment := float(frame) / 60.0
+		motion.custom_step(moment - stepped)
+		stepped = moment
+		await RenderingServer.frame_post_draw
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(out_dir.path_join("f%02d.png" % frame))
+	print("[DamageDemo] wrote 60 frames to %s" % out_dir)
+	get_tree().quit()
 
 
 func _input(event: InputEvent) -> void:

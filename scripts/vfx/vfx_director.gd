@@ -24,6 +24,7 @@ const CARD_SHARDS_PATH := "res://scenes/cards/card_shards.tscn"
 ## Loaded on first use, like the card scenes above (an autoload must not preload into the card's own load).
 const COUNTER_CUE_PATH := "res://scripts/vfx/counter_cue.gd"
 const TRIBUTE_CUE_PATH := "res://scripts/vfx/tribute_cue.gd"
+const DRAIN_DEATH_CUE_PATH := "res://scripts/vfx/drain_death_cue.gd"
 
 const ELEMENT_PRESET_DIR := "res://assets/vfx/elements"
 const STATUS_PRESET_DIR := "res://assets/vfx/status"
@@ -234,6 +235,27 @@ func tributed(card: Card, move: Callable) -> void:
 	_emit(event)
 
 
+## A FORWARD DRAINED TO DEATH (Game: its power drop is what killed it). Same shape as tributed(): `move` is the rules
+## move (a break or a removal, decided by the caller), run at once; a stand-in keeps the field slot and the real card
+## waits hidden in the pile until drain_death_cue.gd has drained, cracked and shattered the stand-in.
+## `elapsed` continues the card's own on-screen drain, if one was running; `drop` sizes it.
+func drained(card: Card, move: Callable, elapsed: float = 0.0, drop: int = 0) -> void:
+	var staged: bool = is_instance_valid(card) and card.is_drawn_on_field() and card.visible
+	var visual: Dictionary = {"drain_elapsed": elapsed}
+	if staged:
+		visual["transform"] = card.global_transform
+		hold_card(card, visual, false, Card.Zone.FIELD)
+	move.call()
+	if not staged or not is_instance_valid(card):
+		release_hold(null, visual)
+		return
+	card.set_hidden(true)
+	visual["hid_card"] = true
+	var event := VfxEvent.new(VfxEvent.Kind.DRAINED, [card], card.element, drop, null, "single")
+	event.target_visuals[card.get_instance_id()] = visual
+	_emit(event)
+
+
 func hold_card(card: Card, visual: Dictionary, hide: bool = true, zone: Card.Zone = Card.Zone.FIELD) -> void:
 	if not is_instance_valid(card) or not visual.has("transform") or visual.has("stand_in"):
 		return
@@ -274,8 +296,14 @@ func release_hold(card: Card, visual: Dictionary, shatter: bool = false) -> void
 		stand_in.queue_free()
 	if visual.get("hid_card", false):
 		visual.erase("hid_card")
-		if is_instance_valid(card):
+		# A card that now rests in a PIT (Break Zone / Removed) stays hidden: it has gone in.
+		if is_instance_valid(card) and not _rests_in_pit(card):
 			card.set_hidden(false)
+
+
+func _rests_in_pit(card: Card) -> bool:
+	var pile: Node = card.get_parent()
+	return pile != null and pile.has_method("swallow_stand_in")
 
 
 func _release_leftover_holds(event: VfxEvent) -> void:
@@ -437,6 +465,8 @@ func _present(event: VfxEvent) -> void:
 		cue = (load(COUNTER_CUE_PATH) as Script).new()
 	elif event.kind == VfxEvent.Kind.TRIBUTE:
 		cue = (load(TRIBUTE_CUE_PATH) as Script).new()
+	elif event.kind == VfxEvent.Kind.DRAINED:
+		cue = (load(DRAIN_DEATH_CUE_PATH) as Script).new()
 	else:
 		var scene: PackedScene = _scene_for(event, preset_for(event))
 		if scene != null:

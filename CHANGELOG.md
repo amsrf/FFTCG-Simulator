@@ -2,9 +2,107 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-15
+
+### Changed
+- **Effect damage knocks the card loose instead of wobbling in place.** Modelled on the reference clip (`damage`,
+  the wolf), whose motion tracks as authored curves plus a spring landing: `card_damage_fx.gd` `reaction_envelope()`
+  snaps the card up ~0.3-0.45 m, tips it ~20° toward the camera about its bottom edge with a slight turn to the left,
+  hangs, and eases it back down; `landing_spring()` then rocks it edge to edge (weakly damped, ~6-7 swings) with two
+  hops, settled within ~0.9 s. Every hit is rolled (`roll_reaction()`): height, tip, turn size and direction, landing
+  edge, rock size/speed/damping, hop height and the hang/fall timing all vary within `VARY_*` ranges, so no two hits
+  look the same. New `face_light` in `card.gdshader` brightens the face as it turns toward the light (~+15% at the tip, as
+  measured on the reference) and flickers through the rock; a soft `LiftShadow` (`shaders/card_lift_shadow.gdshader`)
+  falls beside the lifted card. The thickness edge, cost crystal and power readout ride with the card
+  (`CHROME_NODES`; the Earth launch now carries the cost crystal too). `damage_reaction_demo` gained
+  `-- --capture <dir>`. (Several other versions were tried and reverted the same day; the lessons are in AGENTS.md.)
+- **A First Strike clash is shown as two blows, not one exchange.** When only one side has First Strike,
+  `Game.clash_attacker_blocker()` now presents each damage step right after it resolves (`_clash_snapshot()` before
+  the damage, `_present_clash_step()` after): the striker alone winds up and charges while the other card braces and
+  takes it (`clash_cinematic.gd` `play(..., strike_by)` -> `_choreograph_strike()`, `STRIKE_ATTACKER` /
+  `STRIKE_DEFENDER`). A lethal first blow ends the fight there (the target tumbles and shatters); otherwise the target
+  is knocked back, both return home, and after the between-steps priority window the other card strikes back. Both
+  or neither with First Strike keeps the simultaneous exchange. `resolve_blocked_clash()` skips its single cinematic
+  when a step was presented (`_clash_presented`). New exports: `brace_fraction`, `strike_recoil_distance`,
+  `strike_recoil_seconds`.
+- Clash ground: keys 6 (lethal First Strike) and 7 (First Strike survived, defender answers) — `_debug_clash(5/6)`.
+  `clash_cinematic_probe` checks the strike order for both (`[1]` and `[1, 2]`).
+
+### Fixed
+- The between-steps priority window no longer runs with the clash's break suppression on
+  (`_between_strikes_priority()`): a card broken by a Summon cast in that window shatters and fires its Break Zone
+  triggers normally instead of having them deferred.
+- `ClashCinematic._cleanup()` restores a defeated card's hidden state instead of always un-hiding it, so a card
+  already swallowed by its pit is not drawn back on top of it.
+
 ## [Unreleased] — 2026-11-14
 
 ### Added
+- **Power DOWN is the power-up's mirror: one sword comes DOWN and stabs the card.** `scripts/vfx/power_down_drain.gd`
+  (the power-up's sword glyph turned over, in an OBSIDIAN palette - near-black blade, violet-magenta edge and glow:
+  `power_up_burst.obsidian_sword_texture()`; the SVG is now a template with `RED_SWORD` / `OBSIDIAN_SWORD` palettes,
+  and `power_up_sword.gdshader` takes a `flash_color`): it pops in above the card, draws back
+  and drives its point into the card's centre; at the impact (`IMPACT_AT` 0.36 s) a mini light explosion (flash bloom +
+  sparks, `shaders/power_drain.gdshader`, violet-magenta with lilac-white cores to match the sword) ruptures it, 6 large orbs of light hop away radially on parabolas, and colour
+  leaves the art in soft grey blobs with a lavender rim that come back (`drain_blobs` / `drain_seed`). The power-up's gas
+  rides along recoloured violet (`power_up_gas.gdshader` with `GAS_RIM` / `GAS_CORE`): a haze around the sword as it
+  appears, streaks falling past the stab, a burst of mist at the impact and a puff behind the number. Sized by
+  the drop (`VfxEvent.damage_tier_for`: 6/8/11/14 sparks, more blob cover). The power number DEFLATES - squashed,
+  red - while it counts down (`PowerDisplay.animate_power_down`). `Card.power_fx._flush()` routes a net loss on a
+  settled field Forward there; a card that just arrived, or one mid power-up, keeps the plain count.
+- **A Forward drained TO DEATH dies like a countered card.** Power to 0, or a drop that brings power to/below its
+  damage: `Game.put_card_into_graveyard(card, drained)` / `break_card()` ask `power_fx.is_drop_lethal_cause()` (a drop
+  the readout has not shown yet, or a drain still playing) and present through `Vfx.drained()` (new
+  `VfxEvent.Kind.DRAINED`): a stand-in holds the slot, `scripts/vfx/drain_death_cue.gd` plays the lethal drain on it
+  (continuing the card's own via `drain_elapsed`): the stab and rupture, the art going fully cold via `drain_amount`
+  with the sword still in, then the counter's cyan crack + shatter. `counter_cue.gd`'s
+  shock is now an overridable first beat (`_begin` / `_lead_seconds` / `_lead` / `_tick` / `_min_seconds`). Rules are
+  unchanged: a 0-power card is still a removal, the other a break.
+- `tests/power_down_probe.tscn` (36 checks) and `tools/power_down_demo.tscn` (`-- --shots <dir>`).
+- **The Break Zone and the Removed pile are PITS beside the deck** (after Master Duel's graveyard/banish pits,
+  `~/Desktop/Clips/pits`). New `scripts/game/pit.gd` (a low dark drum whose top is `shaders/pit_top.gdshader`: three
+  dashed neon rings, a slate lip, a charcoal well with slow smoke; blue for the Break Zone, purple for Removed) and
+  `shaders/pit_flare.gdshader` (whirling crescents on the rim when a card goes in). `Graveyard._ready()` builds it.
+  Layout per side, as Master Duel's DIAGONAL, from that player's seat: the Break Zone pit right of the deck and lower,
+  straddling the wood's near edge onto the rocks/greenery, and the smaller Removed pit up and to its right
+  (`game.tscn`: player (2.76, -1.62) / (2.4, -1.3), opponent mirrored; Removed used to sit on the far side of the
+  board). Radii are per pile (`Graveyard.pit_radius`): Break Zone 0.21 m, Removed 0.16 m. A card in a pit is
+  HIDDEN; the rules list is unchanged, and clicking the pit (`Pit.clicked`) opens the zone view.
+- **Discarded and milled cards are pulled into the pit** (`Graveyard._swallow()` / `_intake()` / `_intake_pose()`):
+  flight to a point above the mouth (lifted along the line of sight, so it hangs over the pit on screen), a short
+  hover shrinking a little, a wash to white (new `whiteout` uniform in `card.gdshader`), then a near-edge-on turn and
+  an accelerating sink the opaque pit top clips, and the flare. Mill stays 1.0 s per card in total; a discard batch
+  staggers 0.09 s per card. `receive()` (revealed card removed) uses the same intake. Tributes fly to
+  `Graveyard.mouth_transform()` and hand their stand-in to `swallow_stand_in()`. Breaks are unchanged (shatter), and
+  the card is then simply in the pit.
+- **The pits are set into a stone housing, the same as the Pass/Cancel button stations.** New
+  `Blender/build_pit_housing.py` (on top of `board_filled_pockets`, output `Blender/board_pit_stations/`): per side one
+  low-poly stone drum per pit joined by a web, a metal ring round each well, the slab bitten and the scenery under it
+  removed - materials taken from the button housings (player basalt + iron, opponent grey stone + bronze). The board
+  is re-exported from it (`export_board_to_godot.py` now reads `board_pit_stations`; `assets/board/` both seats).
+  `Pit.HEIGHT` 0.08 -> 0.035 so the pit sits inside the well; the flare rides above the stone (`FLARE_LIFT`).
+- `tools/pit_demo.tscn`: the real game on `debug`, discards / mills / removes on a key, and `--shots=` saves a frame
+  sequence after the action.
+
+### Changed
+- **The power readout is two labels: the power number and "/damage".** `power_display.gd` builds `PowerNumber`
+  (right-anchored) and `DamagePart` (left-anchored) on one seam, measured from the font so the pair sits exactly where
+  the single string did; the `PowerDisplay` node keeps `text` but draws nothing. The power-up swell, the power-down
+  deflate and the power pulse now move only the NUMBER (it grows leftward, never over "/damage"); a damage change
+  pulses only its own part. Probes read `power_part()` / `damage_part()`.
+- **Counter / drained shatter pieces "fall" UPWARD** (`counter_cue.gd` `_shatter`): gravity is world +Y, toward the
+  camera, instead of down the screen.
+- The power-up swords are smaller (`power_up_burst.gd` `SWORDS`: heights 0.84/0.72 -> 0.56/0.48 card heights, drawn
+  in closer).
+- `VfxDirector.release_hold()` no longer shows a held card that now rests in a pit (`_rests_in_pit()`): counter,
+  tribute and staged breaks leave it hidden there.
+- `removed_zone_probe` checks the pits (the diagonal from each seat, Removed smaller, no overlap, cards hidden, discard flare,
+  white wash cleared, pit click); `flow_probe`'s tribute and counter checks expect the card hidden in the pit.
+
+### Known Issues
+- The pit has no card count and no hover cue; the only way to see what is in it is the click / G key view.
+- Breaks do not flare the pit (the shatter is their whole presentation for now).
+
 - **Dull Backups read as spent, and the Active Phase untaps as a wave.** New `scripts/cards/card_dull_fx.gd`
   (`Card.dull_fx`). `card.gdshader` gains `dull_amount`: a dull Backup's art is drawn toward grey and darkened, eased
   in/out with the tap tilt and reset on any zone change; Forwards keep their colour when dull (only the tilt). The

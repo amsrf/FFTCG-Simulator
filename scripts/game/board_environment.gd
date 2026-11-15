@@ -4,8 +4,16 @@ extends MeshInstance3D
 const GEOMETRY_PATH := "res://assets/board/board_mesh.bin"
 const APPEARANCE_PATH := "res://assets/board/board_appearance.png"
 const RIVER_SHADER := preload("res://shaders/board_river.gdshader")
+## Multiplies the baked board (wood, stone, river). 1.0 = the texture as baked; lower = a darker scene.
+## The cards are unshaded and unaffected, so they keep their contrast against it.
+@export_range(0.2, 1.0, 0.01) var brightness: float = 0.7:
+	set(value):
+		brightness = value
+		_apply_brightness()
 var displayed_seat: int = 0
 var river: MeshInstance3D
+var _board_material: StandardMaterial3D
+var _river_material: ShaderMaterial
 
 func _ready() -> void:
 	configure_seat(1)
@@ -30,6 +38,7 @@ func configure_seat(seat: int) -> void:
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	material.texture_repeat = false
 	board_mesh.surface_set_material(0, material)
+	_board_material = material
 	mesh = board_mesh
 	var river_path := geometry_path.replace("board_mesh", "river_mesh")
 	var river_mesh := _load_geometry(river_path)
@@ -46,9 +55,17 @@ func configure_seat(seat: int) -> void:
 	water.set_shader_parameter("flow_direction", -1.0 if next_seat == 2 else 1.0)
 	water.set_shader_parameter("river_center_z", 0.31 if next_seat == 2 else 0.29)
 	river_mesh.surface_set_material(0, water)
+	_river_material = water
+	_apply_brightness()
 	river.mesh = river_mesh
 	displayed_seat = next_seat
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+func _apply_brightness() -> void:
+	if _board_material != null:
+		_board_material.albedo_color = Color(brightness, brightness, brightness)
+	if _river_material != null:
+		_river_material.set_shader_parameter("brightness", brightness)
 
 func _load_geometry(geometry_path: String) -> ArrayMesh:
 	var file := FileAccess.open(geometry_path, FileAccess.READ)

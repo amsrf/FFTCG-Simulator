@@ -17,7 +17,18 @@ uniform bool effect_enabled = false;
 uniform float dull_amount : hint_range(0.0, 1.0) = 0.0;
 // REFRESH SWEEP. 0..1 while a soft light band crosses the card diagonally as it untaps in the Active Phase; outside
 // (0, 1) it draws nothing. Also MIXED toward white, never added.
+// 0..1: the card washes out to flat white (Graveyard's pit intake, just before it is pulled in).
+uniform float whiteout : hint_range(0.0, 1.0) = 0.0;
 uniform float refresh_sweep : hint_range(0.0, 1.0) = 0.0;
+// POWER DRAIN (power_down_drain.gd): the art goes cold and dim while its power is pulled out. Mixed, never added.
+uniform float drain_amount : hint_range(0.0, 1.0) = 0.0;
+// POWER DOWN (power_down_drain.gd): colour leaves the art in soft BLOBS for a moment. `drain_blobs` is how much of the
+// art has gone (0 = none, 1 = most of it); `drain_seed` moves the blobs so two drains never look the same.
+uniform float drain_blobs : hint_range(0.0, 1.0) = 0.0;
+uniform float drain_seed = 0.0;
+// FACE LIGHT (card_damage_fx.gd): how much the face is turned TOWARD (+) or AWAY from (-) the scene's light while a
+// hit tips it, -1..1: the art is scaled by (1 + face_light), so +0.15 is ~15% brighter, as the reference measured.
+uniform float face_light : hint_range(-1.0, 1.0) = 0.0;
 
 // Full rounded-card silhouettes, traced in world space toward the camera.
 // Four strongest nearby casters per receiver. Pixel depth rejects surfaces behind it.
@@ -223,6 +234,18 @@ vec3 crystal_tri(vec2 a, vec2 b, vec2 c, vec3 l, vec2 id, int salt, vec3 normal,
     return col;
 }
 
+float drain_hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float drain_noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(drain_hash(i), drain_hash(i + vec2(1.0, 0.0)), u.x),
+        mix(drain_hash(i + vec2(0.0, 1.0)), drain_hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
 float teleport_hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -406,6 +429,24 @@ void fragment() {
         float grey = dot(base, vec3(0.299, 0.587, 0.114));
         base = mix(base, vec3(grey), 0.85 * dull_amount) * (1.0 - 0.28 * dull_amount);
     }
+    if (drain_blobs > 0.001) {
+        // Two octaves of value noise in card space (the card is ~0.7:1), thresholded so the blobs GROW from their
+        // centres as drain_blobs rises instead of fading in as one flat wash.
+        vec2 q = vec2(UV.x * 0.715, UV.y) * 4.2 + vec2(drain_seed * 7.3, drain_seed * 3.1);
+        float n = drain_noise(q) * 0.68 + drain_noise(q * 2.3 + 11.0) * 0.32;
+        float cut = 1.0 - drain_blobs;
+        float blob = smoothstep(cut - 0.06, cut + 0.06, n);
+        float blob_grey = dot(base, vec3(0.299, 0.587, 0.114));
+        // A pale rim where a blob is still growing reads as colour being LIFTED off, not just faded.
+        float rim = smoothstep(cut - 0.10, cut - 0.02, n) * (1.0 - smoothstep(cut + 0.02, cut + 0.10, n));
+        base = mix(base, vec3(blob_grey) * 0.62, blob);
+        base = mix(base, vec3(0.86, 0.74, 1.0), rim * 0.35 * drain_blobs);
+    }
+    if (drain_amount > 0.001) {
+        float drained_grey = dot(base, vec3(0.299, 0.587, 0.114));
+        vec3 cold = vec3(drained_grey) * vec3(0.66, 0.74, 1.0);
+        base = mix(base, cold, 0.8 * drain_amount) * (1.0 - 0.38 * drain_amount);
+    }
     if (refresh_sweep > 0.0 && refresh_sweep < 1.0) {
         // Diagonal from the top-left corner (UV y = 1 is the bottom edge) to the bottom-right, fading at both ends.
         float along = (UV.x + UV.y) * 0.5;
@@ -422,6 +463,11 @@ void fragment() {
     shade = clamp(shade, 0.0, 0.82);
 
     vec3 art = base * (1.0 - shade);
+    // Proportional, like real light (a SCREEN lifted dark art 2x and washed the card out); clamped so a white
+    // border saturates instead of overflowing.
+    if (face_light != 0.0) {
+        art = min(art * (1.0 + face_light), vec3(1.0));
+    }
     // The build is pure silhouette. During the final reveal the artwork is
     // mixed in progressively as the glow falls, rather than popping on at 1.
     // `block_color` keeps the chosen tint while the glow brightens it.
@@ -432,5 +478,5 @@ void fragment() {
     if (teleport_reveal < 0.9999) {
         shaded = mix(shaded, block_color, teleport_glow * 0.20);
     }
-    ALBEDO = shaded;
+    ALBEDO = mix(shaded, vec3(1.0), whiteout);
 }

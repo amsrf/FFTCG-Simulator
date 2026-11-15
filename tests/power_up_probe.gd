@@ -43,10 +43,12 @@ func _ready() -> void:
 	card.set_base_power(5000)
 	await _wait(1.0)
 	var label = card.power_label
+	var num: Label3D = label.power_part()
+	var dmg: Label3D = label.damage_part()
 	_expect(label != null and label.visible and label.text.begins_with("5000/"), "the Forward shows 5000")
-	var rest_scale: Vector3 = label.scale
-	var rest_priority: int = label.render_priority
-	var rest_modulate: Color = label.modulate
+	var rest_scale: Vector3 = num.scale
+	var rest_priority: int = num.render_priority
+	var rest_modulate: Color = num.modulate
 
 	# --- A BUFF: swords first, then the number. ---
 	card.add_power_modifier("probe:a", 3000)
@@ -60,24 +62,28 @@ func _ready() -> void:
 	await _wait(0.30)
 	var alphas: Array = burst.call("sword_alphas") if is_instance_valid(burst) else []
 	_expect(alphas.size() == 3 and alphas.all(func(a): return float(a) > 0.9), "all three swords are up at 0.3 s %s" % [alphas])
-	_expect(label.text.begins_with("5000/") and label.scale.is_equal_approx(rest_scale),
+	_expect(label.text.begins_with("5000/") and num.scale.is_equal_approx(rest_scale),
 		"the readout waits, unchanged, while the swords play (%s)" % label.text)
 
 	await _wait(BURST.NUMBER_START - 0.30 + 0.45)
 	alphas = burst.call("sword_alphas") if is_instance_valid(burst) else [0.0, 0.0, 0.0]
 	_expect(alphas.all(func(a): return float(a) < 0.05), "the swords are gone once the count runs %s" % [alphas])
-	var grown: float = label.scale.x / rest_scale.x
+	var grown: float = num.scale.x / rest_scale.x
 	print("[PowerUp] mid-count: '%s' at %.2fx" % [label.text, grown])
 	_expect(grown > 1.3, "the readout swells while it counts (%.2fx)" % grown)
-	_expect(label.render_priority > rest_priority, "the swollen readout draws above the gas")
+	_expect(num.render_priority > rest_priority, "the swollen readout draws above the gas")
+	_expect(dmg.scale.is_equal_approx(Vector3.ONE) and dmg.modulate.is_equal_approx(rest_modulate),
+		"only the POWER number swells: the /damage part is untouched (%s %s)" % [dmg.scale, dmg.modulate])
+	_expect(label.modulate.a == 0.0 and dmg.text.begins_with("/") and not num.text.contains("/"),
+		"the readout is drawn as two parts ('%s' + '%s'); the parent draws nothing" % [num.text, dmg.text])
 	var mid: int = int(label.text.split("/")[0])
 	_expect(mid > 5000 and mid <= 8000, "the count is under way (%d)" % mid)
 
 	await _wait(DISPLAY.boost_seconds(BURST.NUMBER_START) - BURST.NUMBER_START - 0.45 + 0.15)
 	_expect(label.text.begins_with("8000/"), "the readout lands on 8000 (%s)" % label.text)
-	_expect(label.scale.is_equal_approx(rest_scale) and label.modulate.is_equal_approx(rest_modulate)
-		and label.render_priority == rest_priority, "and is back at rest: scale, tint and draw order (%s %s %d)"
-		% [label.scale, label.modulate, label.render_priority])
+	_expect(num.scale.is_equal_approx(rest_scale) and num.modulate.is_equal_approx(rest_modulate)
+		and num.render_priority == rest_priority, "and is back at rest: scale, tint and draw order (%s %s %d)"
+		% [num.scale, num.modulate, num.render_priority])
 	await _wait(maxf(0.0, BURST.LIFETIME - DISPLAY.boost_seconds(BURST.NUMBER_START)) + 0.1)
 	_expect(not card.power_fx.is_playing() and not is_instance_valid(burst), "the burst has freed itself")
 
@@ -107,8 +113,8 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(first != null and card.power_fx.burst() == first, "a second buff during the swords keeps the one burst")
 	await _wait(DISPLAY.boost_seconds(BURST.NUMBER_START) + 0.1)
-	_expect(label.text.begins_with("7000/") and label.scale.is_equal_approx(rest_scale),
-		"and the readout lands on the total, at rest (%s, %s vs %s)" % [label.text, label.scale, rest_scale])
+	_expect(label.text.begins_with("7000/") and num.scale.is_equal_approx(rest_scale),
+		"and the readout lands on the total, at rest (%s, %s vs %s)" % [label.text, num.scale, rest_scale])
 	await _wait(0.3)
 
 	# --- Just arrived: no fanfare. ---
@@ -131,7 +137,7 @@ func _ready() -> void:
 	card.enter_zone(Card.Zone.GRAVEYARD)
 	await get_tree().process_frame
 	_expect(not card.power_fx.is_playing() and not is_instance_valid(doomed), "leaving the field removes the burst")
-	_expect(label.scale.is_equal_approx(rest_scale) and not label.is_boosting() and label.text.begins_with("8000/"),
+	_expect(num.scale.is_equal_approx(rest_scale) and not label.is_boosting() and label.text.begins_with("8000/"),
 		"and leaves the readout at rest on the final value (%s)" % label.text)
 
 	print("[PowerUp] %d checks | failures: %d" % [_checks, _fails])

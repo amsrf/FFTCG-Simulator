@@ -11,6 +11,8 @@ uniform float river_center_z = 0.29;
 uniform float still_bank_width : hint_range(0.0, 0.06) = 0.014;
 // Fixed time is useful for comparing shader frames in a rendering harness.
 uniform float preview_time = -1.0;
+// Same multiplier as the board material (board_environment.gd `brightness`).
+uniform float brightness : hint_range(0.0, 1.0) = 1.0;
 varying vec2 river_position;
 
 float hash(vec2 p) {
@@ -76,5 +78,5 @@ void fragment() {
 		+ vec3(0.10, 0.25, 0.23) * (shimmer + foam * 0.18)
 		+ vec3(0.28, 0.55, 0.49) * streaks * streak_strength
 		+ vec3(0.38, 0.62, 0.55) * (patches * side_pools + entrance_wake * 0.7) * foam_strength;
-	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre);
+	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre) * brightness;
 }

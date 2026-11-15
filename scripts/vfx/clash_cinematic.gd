@@ -12,6 +12,12 @@ extends Node3D
 
 signal finished
 
+## Who strikes. BOTH is the simultaneous exchange; the other two are one First Strike damage step, in which only the
+## striker winds up and charges while the other card braces and takes the blow (Game._present_clash_step).
+const STRIKE_BOTH := 0
+const STRIKE_ATTACKER := 1
+const STRIKE_DEFENDER := 2
+
 const CARD_SCENE := preload("res://scenes/cards/card.tscn")
 const CARD_SHARDS := preload("res://scenes/cards/card_shards.tscn")
 const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
@@ -34,6 +40,13 @@ const HALO_SHADER := preload("res://shaders/orb_halo.gdshader")
 @export var recovery_seconds: float = 0.32
 ## Time spent tumbling intact before the airborne shatter.
 @export var defeat_seconds: float = 0.55
+
+@export_group("First Strike")
+## How far the card being struck leans back to brace, as a fraction of windup_distance.
+@export var brace_fraction: float = 0.18
+## A surviving target is knocked back this far (metres, scaled by the striker's knockback) before it recovers.
+@export var strike_recoil_distance: float = 0.28
+@export var strike_recoil_seconds: float = 0.12
 
 @export_group("Defeat")
 @export var knockback_speed: float = 2.4
@@ -80,11 +93,16 @@ var _defeated: Dictionary = {}
 ## Strength 0..1 of the attacker (a) and the defender (b), from their power when the clash started.
 var _strength_a: float = 0.5
 var _strength_b: float = 0.5
+var _strike_by: int = STRIKE_BOTH
+## Each real card's hidden state when the cinematic began, restored for a defeated card: one that broke is already
+## swallowed (hidden) by its pit, and un-hiding it would draw it on top of the pit.
+var _was_hidden_a: bool = false
+var _was_hidden_b: bool = false
 
 
 ## Start the cinematic. `survives_*` comes from the already-resolved game state.
 func play(attacker: Card, defender: Card, snap_a: Transform3D, snap_b: Transform3D,
-		survives_a: bool, survives_b: bool) -> void:
+		survives_a: bool, survives_b: bool, strike_by: int = STRIKE_BOTH) -> void:
 	if _running:
 		return
 	_running = true
@@ -94,6 +112,7 @@ func play(attacker: Card, defender: Card, snap_a: Transform3D, snap_b: Transform
 	_snap_b = snap_b
 	_survives_a = survives_a
 	_survives_b = survives_b
+	_strike_by = strike_by
 	_rng.seed = random_seed if random_seed != 0 else int(Time.get_ticks_usec())
 	_strength_a = strength_for(attacker)
 	_strength_b = strength_for(defender)
@@ -109,11 +128,16 @@ func play(attacker: Card, defender: Card, snap_a: Transform3D, snap_b: Transform
 		return
 
 	if attacker != null and is_instance_valid(attacker):
+		_was_hidden_a = not attacker.visible
 		attacker.set_hidden(true)
 	if defender != null and is_instance_valid(defender):
+		_was_hidden_b = not defender.visible
 		defender.set_hidden(true)
 
-	await _choreograph()
+	if _strike_by == STRIKE_BOTH:
+		await _choreograph()
+	else:
+		await _choreograph_strike()
 	_cleanup()
 
 
@@ -237,6 +261,79 @@ func _choreograph() -> void:
 
 
 
+## ONE FIRST STRIKE STEP. Both cards lift (and turn to face each other across columns, as in the exchange); only
+## the striker draws back, holds, and charges, while the target leans back to brace and stays where it is. The hit
+## lands on the target's top edge. A target that survives is knocked back and both return home; a defeated target
+## tumbles and shatters exactly like a loser of the exchange.
+func _choreograph_strike() -> void:
+	var striker_is_a: bool = _strike_by == STRIKE_ATTACKER
+	var s: Card = _proxy_a if striker_is_a else _proxy_b
+	var t: Card = _proxy_b if striker_is_a else _proxy_a
+	var s_strength: float = _strength_a if striker_is_a else _strength_b
+	var t_survives: bool = _survives_b if striker_is_a else _survives_a
+	var s0: Vector3 = s.position
+	var t0: Vector3 = t.position
+	var s_rot0: Vector3 = s.rotation
+	var t_rot0: Vector3 = t.rotation
+	var s_scale0: Vector3 = s.scale
+	var t_scale0: Vector3 = t.scale
+	var aligned: bool = not _same_column(s0, t0)
+	var s_pose: Vector3 = s_rot0
+	var t_pose: Vector3 = t_rot0
+	if aligned:
+		s_pose = Vector3(0.0, _yaw_towards(s0, t0), 0.0)
+		t_pose = Vector3(0.0, _yaw_towards(t0, s0), 0.0)
+
+	var travel: Vector3 = t0 - s0
+	travel.y = 0.0
+	if travel.length_squared() < 0.0001:
+		travel = Vector3.RIGHT
+	var axis: Vector3 = travel.normalized()
+	var lift: Vector3 = Vector3.UP * lift_height
+	var card_height: float = 0.60 * maxf(s.global_transform.basis.get_scale().x,
+			t.global_transform.basis.get_scale().x)
+	var half_extent: float = card_height * 0.5 + 0.03
+
+	var lift_time: float = maxf(lift_seconds, align_seconds) if aligned else lift_seconds
+	await _move_pair(s, t, s0 + lift, t0 + lift, s_pose, t_pose, lift_time, Tween.TRANS_SINE, Tween.EASE_OUT)
+
+	var pitch: float = deg_to_rad(-windup_pitch_degrees if s.controller == Card.OPPONENT else windup_pitch_degrees)
+	var s_windup: Vector3 = (Basis.from_euler(s_pose) * Basis(Vector3.RIGHT, pitch)).get_euler()
+	var t_brace: Vector3 = t0 + lift + axis * windup_distance * brace_fraction
+	await _move_pair(s, t, s0 + lift - axis * windup_distance * _windup_scale(s_strength), t_brace,
+		s_windup, t_pose, windup_seconds, Tween.TRANS_BACK, Tween.EASE_OUT)
+
+	await _wait(windup_hold_seconds)
+
+	# The striker alone closes the whole gap, onto the braced target's near edge.
+	var contact: Vector3 = t_brace - axis * half_extent
+	var charge: Tween = create_tween().set_parallel(true)
+	charge.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	charge.tween_property(s, "position", contact - axis * half_extent, _charge_time(s_strength))
+	charge.tween_property(s, "rotation", s_pose, _charge_time(s_strength))
+	await charge.finished
+
+	_impact_flash(contact)
+	_shake_camera(s_strength)
+	await _wait(hitstop_seconds)
+
+	var recovery: Array[Tween] = []
+	if t_survives:
+		var force: float = lerpf(knockback_scale_range.x, knockback_scale_range.y, s_strength)
+		var knock: Tween = create_tween()
+		knock.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		knock.tween_property(t, "position", t_brace + axis * strike_recoil_distance * force, strike_recoil_seconds)
+		await knock.finished
+		recovery.append(_start_recovery(t, t0, t_rot0, t_scale0))
+	else:
+		_start_defeat(t, axis, s_strength)
+	recovery.append(_start_recovery(s, s0, s_rot0, s_scale0))
+	for tween in recovery:
+		await tween.finished
+	while not _defeated.is_empty():
+		await get_tree().process_frame
+
+
 ## Same column means the two centres project to the same screen x. That is the case where the
 ## cards should simply close vertically, with no in-plane turn and no sideways lean.
 func _same_column(a_pos: Vector3, b_pos: Vector3) -> bool:
@@ -260,16 +357,22 @@ func _yaw_towards(from_pos: Vector3, to_pos: Vector3) -> float:
 func _move_both(a_pos: Vector3, b_pos: Vector3, a_rot: Vector3, b_rot: Vector3,
 		seconds: float, trans: Tween.TransitionType, ease_type: Tween.EaseType,
 		a_scale: Vector3 = Vector3.ZERO, b_scale: Vector3 = Vector3.ZERO) -> void:
+	await _move_pair(_proxy_a, _proxy_b, a_pos, b_pos, a_rot, b_rot, seconds, trans, ease_type, a_scale, b_scale)
+
+
+func _move_pair(p: Node3D, q: Node3D, p_pos: Vector3, q_pos: Vector3, p_rot: Vector3, q_rot: Vector3,
+		seconds: float, trans: Tween.TransitionType, ease_type: Tween.EaseType,
+		p_scale: Vector3 = Vector3.ZERO, q_scale: Vector3 = Vector3.ZERO) -> void:
 	var tween: Tween = create_tween().set_parallel(true)
 	tween.set_trans(trans).set_ease(ease_type)
-	tween.tween_property(_proxy_a, "position", a_pos, seconds)
-	tween.tween_property(_proxy_b, "position", b_pos, seconds)
-	tween.tween_property(_proxy_a, "rotation", a_rot, seconds)
-	tween.tween_property(_proxy_b, "rotation", b_rot, seconds)
-	if a_scale != Vector3.ZERO:
-		tween.tween_property(_proxy_a, "scale", a_scale, seconds)
-	if b_scale != Vector3.ZERO:
-		tween.tween_property(_proxy_b, "scale", b_scale, seconds)
+	tween.tween_property(p, "position", p_pos, seconds)
+	tween.tween_property(q, "position", q_pos, seconds)
+	tween.tween_property(p, "rotation", p_rot, seconds)
+	tween.tween_property(q, "rotation", q_rot, seconds)
+	if p_scale != Vector3.ZERO:
+		tween.tween_property(p, "scale", p_scale, seconds)
+	if q_scale != Vector3.ZERO:
+		tween.tween_property(q, "scale", q_scale, seconds)
 	await tween.finished
 
 
@@ -410,11 +513,11 @@ func _cleanup() -> void:
 	_proxy_b = null
 	_defeated.clear()
 	if _attacker != null and is_instance_valid(_attacker):
-		_attacker.set_hidden(false)
+		_attacker.set_hidden(_was_hidden_a and not _survives_a)
 		if _survives_a and _attacker.is_drawn_on_field():
 			_attacker.global_transform = _snap_a
 	if _defender != null and is_instance_valid(_defender):
-		_defender.set_hidden(false)
+		_defender.set_hidden(_was_hidden_b and not _survives_b)
 		if _survives_b and _defender.is_drawn_on_field():
 			_defender.global_transform = _snap_b
 	if _camera != null and is_instance_valid(_camera):
