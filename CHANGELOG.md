@@ -2,6 +2,23 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-16
+
+### Added
+- `card_flip` sound event: `Hand.set_hovered()` plays one of 22 `flip_distant` variants at random (no immediate repeat) when a local hand preview expands, with no repeat for unchanged hover or closing. Assets: `assets/audio/sfx/cards/flip_distant/`; hover playback checks added to `flow_probe.gd`.
+- `SoundManager` autoload (`scripts/audio/sound_manager.gd`): named sound events, independent cosmetic RNG, no consecutive variant repeats, a bounded voice pool and SFX bus volume/mute controls.
+- 22 draw sound variants in `assets/audio/sfx/cards/draw/`, with source and organization notes in `assets/audio/README.md`. `Hand.draw_many()` plays one random sound per valid card at departure, reducing gain for simultaneous draws.
+
+### Changed
+- Pressing a board button is now a flick: the disc spins `DiscSocket.PRESS_SPIN_TURNS` (3) extra full turns, fast at first and slowing over `PRESS_SPIN_SECONDS` (1.5 s, quartic ease-out) to a stop on the right face (gem if the button stays offered, stone if the press took it away). State changes with no press keep the plain half/full turn. `pass_button_probe.gd` updated (not run here).
+- Casting from hand is now press, hold, release on the field. Pressing and holding a hand card (`Hand.HOLD_SECONDS` 0.15) animates it by itself into the cast stance (`Hand._update_character_hold()` / `_enter_cast_stance()`); the card stays there while the pointer goes to the board. Over the local wood slab (and only when the card can be played with priority) the card wears the gold aura and the slab's rim glows gold; releasing there starts payment, releasing anywhere else returns the card. A sideways move inside the hand band before the hold still reorders; double-click still casts. New `scripts/game/field_drop_zone.gd` (slab outline + hit test + rim) and `shaders/field_drop_glow.gdshader` (added to `Game.EFFECT_SHADERS`). `flow_probe.gd` and `drop_area_probe.gd` updated.
+
+### Fixed
+- Hand hover no longer flickers or goes dark under the pointer near the bottom of the screen. `Hand.HOVER_BOTTOM_MARGIN` is 34 → 5 px, so the enlarged card sits ~11 px (with the drift) above the screen edge instead of ~40. The retained hover region (`Hand._hold_pointer_hover()`) now runs from the enlarged card down to the screen edge, so a pointer in that strip no longer drops the hover → card falls back under the pointer → re-hover loop. `Hand._pointer_area_card` records the Area3D enter/exit the region swallows; when the region lets go, `_input()` hands the hover to the card actually under the pointer (`_pointer_target()`) instead of clearing, since physics picking never re-sends that card's `mouse_entered`. Checks added to `flow_probe.gd`.
+
+### Known Issues
+- Audio controls have no settings UI or persistence yet.
+
 ## [Unreleased] — 2026-11-15
 
 ### Changed

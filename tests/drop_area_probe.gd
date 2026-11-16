@@ -26,6 +26,12 @@ func _expect(ok: bool, what: String) -> void:
 		print("[DropArea] FAIL %s" % what)
 
 
+## Press-and-hold: the hold delay, then the stance animation, as Hand._process would run them.
+func _hold_into_stance(card: Card) -> void:
+	_hand.update_character_drag(card, _hand._character_drag_start_pointer)
+	_hand._update_character_hold(Hand.HOLD_SECONDS)
+	_hand._update_character_hold(Hand.STANCE_SECONDS)
+
 func _param(card: Card, key: String) -> float:
 	if card.mat == null:
 		return -1.0
@@ -50,7 +56,9 @@ func _ready() -> void:
 	_hand.add_card(summon)
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
 	var grab_y: float = viewport_size.y * 0.95  # inside the hand band
-	var cast_point: Vector2 = viewport_size * Vector2(0.5, 0.2)  # well above it
+	# Over the local wood slab: a release here plays the held card (scripts/game/field_drop_zone.gd).
+	var cast_point: Vector2 = get_viewport().get_camera_3d().unproject_position(
+		Vector3(0.0, preload("res://scripts/game/field_drop_zone.gd").SLAB_TOP_Y, -0.6))
 
 	var card: Card = summon
 	_expect(card != null, "the test Summon is in hand")
@@ -61,8 +69,9 @@ func _ready() -> void:
 	_expect(_hand.hovered_card == card, "the card is hovered before the drag")
 	card.begin_drag()
 	_hand.begin_character_drag(card, grab_y)
-	_expect(_hand.update_character_drag(card, cast_point) and _hand.character_drag_latched(),
-		"a Summon latches into the cast stance above the hand band")
+	_hold_into_stance(card)
+	_expect(_hand.update_character_drag(card, cast_point) and _hand.character_drag_latched() and _hand.cast_armed(),
+		"a held Summon reaches the cast stance and is armed over the wood slab")
 	card.release_drag()
 	await get_tree().process_frame
 	_expect(_hand.charging_card == card,
@@ -113,8 +122,19 @@ func _ready() -> void:
 	# the Stack. Cancelling returns it to the fan and clears the latch.
 	character.begin_drag()
 	_hand.begin_character_drag(character, grab_y)
+	_hold_into_stance(character)
+	# Released OFF the field, the held card goes back to the hand.
+	_hand.update_character_drag(character, Vector2(viewport_size.x * 0.5, grab_y))
+	_expect(not _hand.cast_armed(), "a held Character over the hand band is not armed")
+	character.release_drag()
+	await get_tree().create_timer(0.35).timeout
+	_expect(_hand.charging_card == null and _hand.cards.has(character) and not character.is_dragging,
+		"releasing the stance off the field returns the card to the hand")
+	character.begin_drag()
+	_hand.begin_character_drag(character, grab_y)
+	_hold_into_stance(character)
 	_expect((_hand.update_character_drag(character, cast_point)
-			and _hand.character_drag_latched()), "a Character latches into the cast stance above the hand band")
+			and _hand.character_drag_latched() and _hand.cast_armed()), "a held Character is armed over the wood slab")
 	var stance_pose: Transform3D = character.global_transform
 	character.release_drag()
 	await get_tree().process_frame

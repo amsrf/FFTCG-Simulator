@@ -4,6 +4,7 @@ extends Node
 ## - "Pass": otherwise (priority goes to the opponent, or the top of the stack resolves).
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const DISC_SOCKET := preload("res://scripts/ui/disc_socket.gd")
 
 var _checks := 0
 var _fails := 0
@@ -86,17 +87,20 @@ func _ready() -> void:
 	game.priority_holder = 1
 	_expect(button.visible and _label(button) == "Pass", "the opponent's turn, they acted: Pass (got %s)" % _label(button))
 
-	# A PRESS ALWAYS SPINS, AND ONLY FORWARD: a full turn when the button stays offered, a half turn when the press
-	# takes it away. The angle never runs backwards.
+	# A PRESS IS A FLICK, AND ONLY FORWARD: several fast turns that slow to a stop on the right face — the gem when the
+	# button stays offered, the stone when the press takes it away. The angle never runs backwards.
 	await _settle()
 	_expect(mine.is_active() and is_zero_approx(pivot.rotation.x), "settled gem-up before the press test")
 	mine.pulse()
-	await get_tree().create_timer(0.35).timeout
-	var mid: float = pivot.rotation.x
-	_expect(mid > PI * 0.5 and mid < PI * 1.75, "a press that keeps the button offered spins it (mid-spin %.2f rad)" % mid)
-	await get_tree().create_timer(0.6).timeout
+	await get_tree().create_timer(0.25).timeout
+	var early: float = pivot.rotation.x
+	_expect(early > TAU, "a press flings the disc: more than a full turn in the first 0.25 s (%.2f rad)" % early)
+	await get_tree().create_timer(0.5).timeout
+	var later: float = pivot.rotation.x
+	_expect(later > early and later - early < early, "and it slows down (%.2f rad then +%.2f rad)" % [early, later - early])
+	await get_tree().create_timer(DISC_SOCKET.PRESS_SPIN_SECONDS).timeout
 	_expect(mine.is_active() and is_zero_approx(pivot.rotation.x),
-		"and it comes all the way round to the gem: a full 360 (rotation %.3f)" % pivot.rotation.x)
+		"and it stops on the gem after %d extra turns (rotation %.3f)" % [DISC_SOCKET.PRESS_SPIN_TURNS, pivot.rotation.x])
 	var glow: ShaderMaterial = (mine.get_node("RingGlow") as MeshInstance3D).material_override
 	button._on_hover(true)
 	await get_tree().create_timer(0.3).timeout
@@ -106,7 +110,7 @@ func _ready() -> void:
 	mine.pulse()
 	await get_tree().create_timer(0.35).timeout
 	var went_forward: bool = pivot.rotation.x > 0.3
-	await _settle()
+	await get_tree().create_timer(DISC_SOCKET.PRESS_SPIN_SECONDS).timeout
 	_expect(went_forward and not mine.is_active() and is_equal_approx(pivot.rotation.x, PI),
 		"a press that takes the button away turns it forward to the stone (rotation %.3f)" % pivot.rotation.x)
 	_expect(float(glow.get_shader_parameter("intensity")) < 0.05, "and the ring glow goes out with it")

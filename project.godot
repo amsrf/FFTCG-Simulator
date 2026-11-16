@@ -24,6 +24,7 @@ CardDatabase="*res://scripts/core/CardDatabase.gd"
 GlobalVariables="*res://scripts/core/GlobalVariables.gd"
 MatchSetup="*res://scripts/core/match_setup.gd"
 Vfx="*res://scripts/vfx/vfx_director.gd"
+SoundManager="*res://scripts/audio/sound_manager.gd"
 
 [display]
 

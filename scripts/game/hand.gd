@@ -20,6 +20,10 @@ var _hover_drift: Tween
 var _hover_drift_amount := 0.0
 var _pointer_hover_region := Rect2()
 var _pointer_hover_active := false
+## The card whose Area3D the pointer is inside, by the physics picking's own enter/exit events — recorded even while
+## the retained hover region swallows those events. When the region lets go, this is who the pointer is really on:
+## physics picking will NOT send that card a second mouse_entered, so without it the hover goes dark under the pointer.
+var _pointer_area_card: Card = null
 ## A Character drag has its own lower-band cast stance. These fields hold the
 ## one active drag, the X position where it latched, and whether the card has
 ## already been committed to mana charging.
@@ -33,6 +37,24 @@ var _character_drag_restore_scale := 1.0
 var _character_drag_stance := Transform3D()
 var _character_drag_start := Transform3D()
 var _character_drag_start_pointer_y := 0.0
+## PRESS, HOLD, RELEASE ON THE FIELD. A press on a hand card is PENDING until it either holds still for HOLD_SECONDS
+## (or the pointer rises out of the press) -> the card animates by itself into the cast STANCE, or the pointer moves
+## sideways inside the hand band first -> an ordinary REORDER drag. In the stance the card stays put; the POINTER goes to
+## the field, and a release over the local wood slab (FieldDropZone) plays it. While a release there would play it,
+## the card wears the gold aura and the slab's rim glows gold.
+enum DragMode { NONE, PENDING, REORDER, STANCE }
+const HOLD_SECONDS := 0.15
+const STANCE_SECONDS := 0.18
+const REORDER_SLOP_PX := 12.0
+var _drag_mode: int = DragMode.NONE
+var _character_drag_start_pointer := Vector2.ZERO
+var _hold_elapsed := 0.0
+var _stance_progress := 0.0
+var _cast_armed := false
+## The pointer the drag last saw (Card._process passes the real mouse every frame). The release decides from this, so
+## a test can drive the whole flow without a real mouse.
+var _last_drag_pointer := Vector2(-1, -1)
+var _drop_zone: Node = null
 ## The size a hovered hand card grows to: about 225 x 315 px under the perspective camera — bigger than the resting
 ## hand, readable, and still clear of the field.
 const HOVER_CARD_SCALE := 1.85
@@ -46,7 +68,7 @@ const HOVER_CARD_SCALE := 1.85
 ## depends on how many cards are in the hand. See _hover_lift() below.
 ## How much clean board a hovered card keeps BELOW it, in screen pixels. Fitting to the window's edge exactly would put
 ## the card's bottom border and power box on the last pixel row; a short strip of board underneath keeps them readable.
-const HOVER_BOTTOM_MARGIN := 34.0
+const HOVER_BOTTOM_MARGIN := 5.0
 
 var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
@@ -174,6 +196,10 @@ func draw_many(drawn: Array) -> Tween:
 	if drawn.is_empty():
 		return null
 	var count: int = drawn.size()
+	# One sound per departing card; simultaneous draws share a quieter mix.
+	var draw_gain_db: float = linear_to_db(1.0 / sqrt(float(count)))
+	for _card in drawn:
+		SoundManager.play(&"card_draw", draw_gain_db)
 	var first_index: int = cards.size()
 	var starts: Array = []
 	# The size each card has IN THE DECK, in world. add_card_to_tree() runs enter_zone(HAND), which assigns the hand's
@@ -367,6 +393,7 @@ func update_card_positions(ignore = -1):
 ## Recompute shadows while the hand is animating. This is a short, bounded window, not
 ## permanent polling: only hover growth, re-fans and draw landings need it.
 func _process(delta: float) -> void:
+	_update_character_hold(delta)
 	_update_character_waver(delta)
 	if _shadow_track_seconds <= 0.0:
 		return
@@ -676,13 +703,39 @@ func calculate_card_position(i, include_hover: bool = true) -> Vector3:
 ## Pointer hover retains the whole enlarged footprint while the card drifts.
 ## Programmatic calls to set_hovered still clear immediately (payment, drag, etc.).
 func pointer_hover(card: Card, entered: bool) -> void:
+	if entered:
+		_pointer_area_card = card
+	elif _pointer_area_card == card:
+		_pointer_area_card = null
 	var pointer := get_viewport().get_mouse_position()
 	if _pointer_hover_active and _pointer_hover_region.has_point(pointer):
 		return
 	set_hovered(card, entered)
 	if entered and hovered_card == card:
-		_pointer_hover_region = _card_screen_rect(card).grow(3.0)
-		_pointer_hover_active = true
+		_hold_pointer_hover(card)
+
+## Hover `card` from the pointer and retain its enlarged footprint as the stable region.
+## The region runs from the enlarged card DOWN TO THE SCREEN EDGE: the fit leaves HOVER_BOTTOM_MARGIN (plus the drift)
+## of board under the card, and a pointer in that strip is still on the card's own slot. Dropping the hover there let
+## the card fall back under the pointer, hover again and flicker.
+func _hold_pointer_hover(card: Card) -> void:
+	var region := _card_screen_rect(card)
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	if region.has_area() and region.end.y < view_h:
+		region.size.y = view_h - region.position.y
+	_pointer_hover_region = region.grow(3.0)
+	_pointer_hover_active = true
+
+## The card the pointer is actually over, for re-hovering once the retained region lets go: the frontmost RESTING card
+## (what the fan will be once the hover shrinks), else the card whose Area3D last reported the pointer inside.
+func _pointer_target(pointer: Vector2) -> Card:
+	var resting := _resting_card_at(pointer)
+	if resting != null:
+		return resting
+	if is_instance_valid(_pointer_area_card) and cards.has(_pointer_area_card) \
+			and _pointer_area_card.get_parent() == self and not _pointer_area_card.is_dragging:
+		return _pointer_area_card
+	return null
 
 func _card_screen_rect(card: Card) -> Rect2:
 	var camera := get_viewport().get_camera_3d()
@@ -693,6 +746,13 @@ func _card_screen_rect(card: Card) -> Rect2:
 	for corner in [Vector3(half.x, 0, -half.y), Vector3(half.x, 0, half.y), Vector3(-half.x, 0, half.y)]:
 		rect = rect.expand(camera.unproject_position(card.hand_mesh.to_global(corner)))
 	return rect
+
+## Where card `i`'s face lies once the fan is at rest (no hover spread, no lift), in world.
+func _resting_face(i: int) -> Transform3D:
+	var resting := global_transform * Transform3D(
+		Basis.from_euler(Vector3(0.0, fan_angle_for(i), 0.0)).scaled(Vector3.ONE * hand_scale),
+		calculate_card_position(i, false))
+	return resting * (cards[i] as Card).hand_mesh.transform
 
 func _resting_card_at(pointer: Vector2) -> Card:
 	var camera := get_viewport().get_camera_3d()
@@ -706,10 +766,7 @@ func _resting_card_at(pointer: Vector2) -> Card:
 		var card: Card = cards[i]
 		if not is_instance_valid(card) or card.get_parent() != self or card.is_dragging:
 			continue
-		var resting := global_transform * Transform3D(
-			Basis.from_euler(Vector3(0.0, fan_angle_for(i), 0.0)).scaled(Vector3.ONE * hand_scale),
-			calculate_card_position(i, false))
-		var face := resting * card.hand_mesh.transform
+		var face := _resting_face(i)
 		var plane := Plane(face.basis.y.normalized(), face.origin)
 		var hit = plane.intersects_ray(ray_origin, ray)
 		if hit == null:
@@ -725,15 +782,32 @@ func _resting_card_at(pointer: Vector2) -> Card:
 	return nearest
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and _pointer_hover_active:
+	if not event is InputEventMouseMotion:
+		return
+	if _pointer_hover_active:
 		var next := _resting_card_at(event.position)
 		if next != null and next != hovered_card:
 			set_hovered(next, true)
 			if hovered_card == next:
-				_pointer_hover_region = _card_screen_rect(next).grow(3.0)
-				_pointer_hover_active = true
+				_hold_pointer_hover(next)
 		elif not _pointer_hover_region.has_point(event.position):
+			# Leaving the region must hand over to whatever is under the pointer, not just clear: the enter event for
+			# that card was swallowed while the region held, and physics picking will not send it again.
+			var under := _pointer_target(event.position)
+			if under != null and under != hovered_card:
+				set_hovered(under, true)
+				if hovered_card == under:
+					_hold_pointer_hover(under)
+					return
 			set_hovered(hovered_card, false)
+	elif hovered_card == null and _pointer_area_card != null:
+		# Nothing hovered while the pointer sits inside a card's area (its enter was swallowed, or arrived while the
+		# hover was gated): the next movement picks it up instead of waiting for a fresh enter.
+		var under := _pointer_target(event.position)
+		if under != null:
+			set_hovered(under, true)
+			if hovered_card == under:
+				_hold_pointer_hover(under)
 
 func set_hovered(card: Card, entered: bool) -> void:
 	if entered and (not is_instance_valid(card) or not cards.has(card) or card.get_parent() != self):
@@ -768,6 +842,7 @@ func set_hovered(card: Card, entered: bool) -> void:
 		_size_card(was, false)
 		_set_hover_edge(was, true)
 	if hovered_card != null:
+		SoundManager.play(&"card_flip")
 		_size_card(hovered_card, true)
 		_set_hover_edge(hovered_card, false)
 	update_card_positions()
@@ -917,8 +992,9 @@ func move_element(arr: Array, from_index: int, to_index: int) -> Array:
 ## World-Y lift for the latched card, so it leaves the mat and reads larger.
 @export_range(0.0, 2.0) var character_drag_lift_y: float = 0.45
 
-## `start_pointer_y` is where the grab happened, in screen pixels; it defaults to the real mouse. The latch measures
-## how far the pointer has risen from here, so tests pass it explicitly (a headless mouse sits at the top of the screen).
+## A press on `card` starts PENDING: nothing moves yet (the card keeps its hover pose) until the hold or the pointer
+## decides. `start_pointer_y` is where the grab happened, in screen pixels; it defaults to the real mouse, and tests
+## pass it explicitly (a headless mouse sits at the top of the screen).
 func begin_character_drag(card: Card, start_pointer_y: float = -1.0) -> void:
 	_character_waver_time = 0.0
 	_character_drag_original_index = cards.find(card)
@@ -928,33 +1004,43 @@ func begin_character_drag(card: Card, start_pointer_y: float = -1.0) -> void:
 	_character_drag_lock_x = 0.0
 	_character_drag_restore_scale = card.scale.x if card != null else 1.0
 	_character_drag_stance = Transform3D()
+	_drag_mode = DragMode.PENDING
+	_hold_elapsed = 0.0
+	_stance_progress = 0.0
+	_set_cast_armed(false)
 	_release_hover(card)
 	card.stop_hand_layout()
 	_character_drag_start = card.global_transform
-	# The lift is in the Hand's units (see _hand_world_scale): world Y times the node's scale.
-	_character_drag_start.origin.y += character_drag_lift_y * _hand_world_scale()
 	card.set_cast_pending_highlight(false)
-	var camera := get_viewport().get_camera_3d()
-	if camera != null:
-		var axes := camera.global_basis.orthonormalized()
-		_character_drag_start.basis = Basis(axes.x, axes.z, -axes.y).scaled(card.global_basis.get_scale())
-	_character_drag_start_pointer_y = start_pointer_y if start_pointer_y >= 0.0 else get_viewport().get_mouse_position().y
-	_character_drag_start = _fit_character_drag_bottom(card, _character_drag_start, 1.10)
-	card.global_transform = _character_drag_start
+	var mouse := get_viewport().get_mouse_position()
+	_character_drag_start_pointer = Vector2(mouse.x, start_pointer_y if start_pointer_y >= 0.0 else mouse.y)
+	_last_drag_pointer = _character_drag_start_pointer
+	_character_drag_start_pointer_y = _character_drag_start_pointer.y
 
 func character_drag_latched() -> bool:
 	return _character_drag_latched
+
+## True once the press has become the cast stance (animating into it, or there).
+func in_cast_stance() -> bool:
+	return _drag_mode == DragMode.STANCE
+
+## True while a release here would play the card: in the stance, over the slab, and legal to play.
+func cast_armed() -> bool:
+	return _cast_armed
 
 func begin_character_charge(card: Card) -> void:
 	_character_drag_card = card
 	_character_drag_latched = true
 	_character_drag_charging = true
+	_set_cast_armed(false)
+	# The payment window has the card now; the aura says "waiting for mana" (Stack sets it on charge_start).
 
 func end_character_drag(card: Card = null) -> void:
 	if card != null and card != _character_drag_card:
 		return
 	if is_instance_valid(_character_drag_card):
 		_character_drag_card.set_cast_pending_highlight(false)
+	_set_cast_armed(false)
 	_character_waver_time = 0.0
 	_character_drag_card = null
 	_character_drag_latched = false
@@ -962,38 +1048,111 @@ func end_character_drag(card: Card = null) -> void:
 	_character_drag_lock_x = 0.0
 	_character_drag_restore_scale = 1.0
 	_character_drag_stance = Transform3D()
+	_drag_mode = DragMode.NONE
+	_hold_elapsed = 0.0
+	_stance_progress = 0.0
 
-## Returns true while the stance owns the card's transform. False means the
-## caller should run the ordinary mouse-plane drag update.
+## Called every frame by the dragged Card. Returns true while the Hand owns the card's transform; false means the
+## caller should run the ordinary mouse-plane drag (the REORDER mode).
 func update_character_drag(card: Card, pointer: Vector2) -> bool:
 	if card == null or not is_instance_valid(card):
 		return false
 	if card != _character_drag_card:
 		begin_character_drag(card)
+	_last_drag_pointer = pointer
 	if _character_drag_charging:
 		_apply_character_waver()
 		return true
-	var viewport_size := get_viewport().get_visible_rect().size
-	var threshold: float = viewport_size.y * character_drag_trigger_y
-	# Reach full pitch at the cast boundary; allow a short motion for a grab above it.
-	var finish_y: float = minf(threshold, _character_drag_start_pointer_y - viewport_size.y * 0.02)
-	var progress := clampf((_character_drag_start_pointer_y - pointer.y) / maxf(1.0, _character_drag_start_pointer_y - finish_y), 0.0, 1.0)
-	if not _character_drag_latched:
-		_character_drag_stance = _build_character_drag_stance(pointer.x)
-		_character_drag_stance.origin.y = _character_drag_start.origin.y
-		# Hold the horizontal position during the pitch, then lock the completed stance.
-		_character_drag_stance.origin.x = _character_drag_start.origin.x
-		_character_drag_stance = _fit_character_drag_bottom(card, _character_drag_stance, 0.94)
-	_character_drag_latched = progress >= 1.0
-	card.set_cast_pending_highlight(_character_drag_latched and card.can_be_played())
-	var amount := smoothstep(0.0, 1.0, progress)
-	card.global_transform = _character_drag_start.interpolate_with(_character_drag_stance, amount)
-	if _character_drag_latched:
-		_apply_character_waver()
-	else:
-		_character_waver_time = 0.0
-
+	match _drag_mode:
+		DragMode.PENDING:
+			var dx: float = pointer.x - _character_drag_start_pointer.x
+			var rise: float = _character_drag_start_pointer.y - pointer.y
+			var band: float = get_viewport().get_visible_rect().size.y * character_drag_trigger_y
+			if absf(dx) > REORDER_SLOP_PX and absf(dx) > rise and pointer.y >= band:
+				_drag_mode = DragMode.REORDER
+				_resume_normal_character_drag(card)
+				return false
+			if rise > REORDER_SLOP_PX:
+				_enter_cast_stance(card)
+			return true
+		DragMode.REORDER:
+			return false
+		DragMode.STANCE:
+			_set_cast_armed(_release_would_cast(card, pointer))
+			return true
 	return true
+
+## The hold timer and the stance animation. Time-driven, so a press held perfectly still still becomes the stance.
+func _update_character_hold(delta: float) -> void:
+	if not is_instance_valid(_character_drag_card) or _character_drag_charging:
+		return
+	if _drag_mode == DragMode.PENDING:
+		_hold_elapsed += delta
+		if _hold_elapsed >= HOLD_SECONDS:
+			# The animation starts on the NEXT frame, from the pose the card has now.
+			_enter_cast_stance(_character_drag_card)
+	elif _drag_mode == DragMode.STANCE and not _character_drag_latched:
+		_advance_cast_stance(delta)
+
+## PENDING -> STANCE: the card leaves its hover pose for the cast stance above its own fan slot.
+func _enter_cast_stance(card: Card) -> void:
+	if _drag_mode == DragMode.STANCE:
+		return
+	_drag_mode = DragMode.STANCE
+	_stance_progress = 0.0
+	card.stop_hand_layout()
+	_character_drag_start = card.global_transform
+	_character_drag_stance = _cast_stance_for(card)
+	_set_cast_armed(_release_would_cast(card, _last_drag_pointer))
+
+func _advance_cast_stance(delta: float) -> void:
+	var card := _character_drag_card
+	if not is_instance_valid(card):
+		return
+	_stance_progress = minf(1.0, _stance_progress + delta / STANCE_SECONDS)
+	card.global_transform = _character_drag_start.interpolate_with(_character_drag_stance, smoothstep(0.0, 1.0, _stance_progress))
+	if _stance_progress >= 1.0:
+		_character_drag_latched = true
+		_character_waver_time = 0.0
+		_apply_character_waver()
+
+## The cast stance for `card`, built from its FAN SLOT: the card rises straight up out of its own place in the hand.
+func _cast_stance_for(card: Card) -> Transform3D:
+	var index: int = cards.find(card)
+	var slot: Vector3 = global_transform * calculate_card_position(index if index >= 0 else _character_drag_original_index, false)
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var screen_x: float = cam.unproject_position(slot).x if cam != null else 0.0
+	var stance: Transform3D = _build_character_drag_stance(screen_x)
+	stance.origin.y = slot.y + character_drag_lift_y * _hand_world_scale()
+	stance.origin.x = slot.x
+	return _fit_character_drag_bottom(card, stance, 0.94)
+
+## A release at `pointer` plays the card: above the hand band, looking at the local wood slab, and legal right now.
+func _release_would_cast(card: Card, pointer: Vector2) -> bool:
+	if pointer.y >= get_viewport().get_visible_rect().size.y * character_drag_trigger_y:
+		return false
+	var zone := _field_drop_zone()
+	if zone == null or not zone.contains_pointer(get_viewport().get_camera_3d(), pointer):
+		return false
+	return card.can_be_played() and field.has_priority()
+
+func _set_cast_armed(value: bool) -> void:
+	_cast_armed = value
+	if is_instance_valid(_character_drag_card) and not _character_drag_charging:
+		_character_drag_card.set_cast_pending_highlight(value)
+	var zone := _field_drop_zone() if value or _drop_zone != null else null
+	if zone != null:
+		zone.set_lit(value)
+
+## Built lazily, only for the interactive hand. World-space (top_level), so the parent does not matter.
+func _field_drop_zone() -> Node:
+	if mirror_presentation:
+		return null
+	if _drop_zone == null or not is_instance_valid(_drop_zone):
+		_drop_zone = preload("res://scripts/game/field_drop_zone.gd").new()
+		_drop_zone.name = "FieldDropZone"
+		add_child(_drop_zone)
+	return _drop_zone
 
 ## Small, bounded motion layered over the ready pose; never accumulated into it.
 func _update_character_waver(delta: float) -> void:
@@ -1459,15 +1618,11 @@ func quick_cast(card: Card) -> bool:
 		return false
 	if card != _character_drag_card:
 		begin_character_drag(card, get_viewport().get_mouse_position().y)
-	# The stance a drag latches into (update_character_drag), built from the card's FAN SLOT, which is where a drag
-	# starts: on the second click the card is still lifted from the first, and starting from there lifted it twice.
-	var slot: Vector3 = global_transform * calculate_card_position(cards.find(card), false)
-	var cam: Camera3D = get_viewport().get_camera_3d()
-	var screen_x: float = cam.unproject_position(slot).x if cam != null else 0.0
-	var stance: Transform3D = _build_character_drag_stance(screen_x)
-	stance.origin.y = slot.y + character_drag_lift_y * _hand_world_scale()
-	stance.origin.x = slot.x
-	stance = _fit_character_drag_bottom(card, stance, 0.94)
+	# The same stance a hold animates into, built from the card's FAN SLOT: on the second click the card is still lifted
+	# from the first, and starting from there lifted it twice.
+	var stance: Transform3D = _cast_stance_for(card)
+	# The tween owns the card now, not the hold timer.
+	_drag_mode = DragMode.NONE
 	_character_drag_stance = stance
 	card.stop_hand_layout()
 	_quick_cast_card = card
@@ -1502,17 +1657,23 @@ func on_card_released(card: Card) -> void:
 		update_card_positions()
 		card.apply_zone_scale()
 		return
-	# RELEASING A HAND CARD FROM THE CAST STANCE STARTS PAYMENT.
-	# The stance itself is the drop confirmation: the pointer has already left
-	# the hand band, so there is no extra "is the pointer over the mat" check.
-	if character_drag_latched():
-		# ONLY WHILE YOU HOLD PRIORITY. Against the AI this never shows, because it answers its priority at once; online
-		# the other player may still be holding it, and a cast made then would happen on this machine only.
-		if card.can_be_played() and field.has_priority() and charge(card):
-			begin_character_charge(card)
-			card.is_dragging = false
-			return
-		# Illegal or failed charge: put the card back in the hand.
+	# RELEASING FROM THE CAST STANCE: over the wood slab it starts payment, anywhere else the card goes back.
+	if in_cast_stance():
+		var pointer := _last_drag_pointer
+		# ONLY WHILE YOU HOLD PRIORITY (checked inside _release_would_cast). Against the AI this never shows, because it
+		# answers its priority at once; online the other player may still be holding it, and a cast made then would
+		# happen on this machine only.
+		if _release_would_cast(card, pointer):
+			# A release before the stance animation finished still casts from the finished pose.
+			if not _character_drag_latched:
+				_stance_progress = 1.0
+				card.global_transform = _character_drag_stance
+				_character_drag_latched = true
+			if charge(card):
+				begin_character_charge(card)
+				card.is_dragging = false
+				return
+		# Not over the field, illegal, or a failed charge: put the card back in the hand.
 		end_character_drag(card)
 		card.is_dragging = false
 		update_card_positions()

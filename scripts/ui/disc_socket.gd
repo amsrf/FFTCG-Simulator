@@ -16,6 +16,11 @@ extends Node3D
 
 const HALF_TURN_SECONDS := 0.42
 const FULL_TURN_SECONDS := 0.7
+## A PRESS IS A FLICK: the disc spins this many extra full turns, fast at first and slowing to a stop on the face it
+## should show (gem if the button stays offered, stone if the press took it away). A state change with no press keeps
+## the plain half/full turn.
+const PRESS_SPIN_TURNS := 3
+const PRESS_SPIN_SECONDS := 1.5
 const GLOW_FADE_SECONDS := 0.15
 const HOVER_GLOW := 1.0
 const PRESS_GLOW := 1.8
@@ -134,9 +139,10 @@ func _apply() -> void:
 	var target := wants_active()
 	_refresh_imprint(target)
 	var goal := _goal
-	if _spin_pending:
-		# At least one half turn past where it was heading: an extra full turn when the state does not change.
-		goal = _next_angle(_goal + 0.01, target)
+	var flick := _spin_pending
+	if flick:
+		# PRESS_SPIN_TURNS full turns past where it was heading, then on to the next angle showing the wanted face.
+		goal = _next_angle(_goal + PRESS_SPIN_TURNS * TAU + 0.01, target)
 	elif target != _active:
 		goal = _next_angle(_goal, target)
 	_spin_pending = false
@@ -147,9 +153,14 @@ func _apply() -> void:
 	_goal = goal
 	if _turn_tween != null and _turn_tween.is_valid():
 		_turn_tween.kill()
-	var seconds := FULL_TURN_SECONDS if goal - from > PI * 1.5 else HALF_TURN_SECONDS
-	_turn_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_turn_tween.tween_property(_pivot, "rotation:x", goal, seconds)
+	if flick:
+		# Flung: full speed at once, then a long deceleration into the resting face (no ease-in, no overshoot).
+		_turn_tween = create_tween().set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		_turn_tween.tween_property(_pivot, "rotation:x", goal, PRESS_SPIN_SECONDS)
+	else:
+		var seconds := FULL_TURN_SECONDS if goal - from > PI * 1.5 else HALF_TURN_SECONDS
+		_turn_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		_turn_tween.tween_property(_pivot, "rotation:x", goal, seconds)
 	_turn_tween.tween_callback(_normalise)
 
 ## The next angle at or beyond `from` that shows the wanted face: gem-up at even multiples of PI, stone-up at odd.

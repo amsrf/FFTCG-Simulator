@@ -821,6 +821,8 @@ var priority_holder: int = 0:
 ##
 ## Anything added to the payment/absorb effects belongs in this list.
 const EFFECT_SHADERS: Array[Shader] = [
+	# The wood slab's gold rim (field_drop_zone.gd): first rendered when a held hand card is pointed at the field.
+	preload("res://shaders/field_drop_glow.gdshader"),
 	preload("res://shaders/ex_burst_aura.gdshader"),
 	preload("res://shaders/counter_arc.gdshader"),
 	preload("res://shaders/counter_overlay.gdshader"),

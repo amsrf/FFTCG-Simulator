@@ -126,46 +126,69 @@ func _ready() -> void:
 	# latched cast stance once the pointer crosses above it.
 	var screen_size := get_viewport().get_visible_rect().size
 	var in_hand_band := screen_size * Vector2(0.5, 0.9)
-	var above_band := screen_size * Vector2(0.5, 0.1)
+	var flips: Array[int] = []
+	var observe_flip := func(event: StringName, variant: int):
+		if event == &"card_flip":
+			flips.append(variant)
+	SoundManager.sound_played.connect(observe_flip)
 	hand.set_hovered(chemist, true)
-	var before_lift := chemist.global_position.y
-	hand.begin_character_drag(chemist)
-	hand._character_drag_start_pointer_y = in_hand_band.y
-	_expect(chemist.global_position.y > before_lift, "Character grab lifts immediately in world Y")
-	_expect(hand._card_screen_rect(chemist).end.y > screen_size.y, "Character grab starts with its bottom below the screen")
-	var lifted_pose := chemist.global_transform
-	hand.update_character_drag(chemist, screen_size * Vector2(0.5, 0.84))
-	_expect(not chemist.global_transform.is_equal_approx(lifted_pose) and not hand.character_drag_latched(),
-		"partial upward drag moves and pitches before reaching the final stance")
-	_expect(not chemist.ring_cast_pending(), "partial pitch has no cast-ready gold aura")
-	hand.update_character_drag(chemist, screen_size * Vector2(0.5, hand.character_drag_trigger_y))
-	_expect(hand.character_drag_latched() and chemist.ring_cast_pending(), "full pitch and gold aura coincide with the cast boundary")
-	var boundary_bottom: float = hand._card_screen_rect(chemist).end.y
-	_expect(absf(boundary_bottom - screen_size.y * 0.94) < 1.0, "cast boundary leaves a small bottom margin")
-	hand.update_character_drag(chemist, screen_size * Vector2(0.5, hand.character_drag_trigger_y - 0.08))
-	_expect(absf(hand._card_screen_rect(chemist).end.y - boundary_bottom) < 1.0 and chemist.ring_cast_pending(),
-		"full rotation and maximum bottom gap are reached together")
-	_expect(chemist.global_basis.get_scale().x < lifted_pose.basis.get_scale().x,
-		"casting preview shrinks from the enlarged hand preview")
-	_expect(hand.update_character_drag(chemist, above_band) and hand.character_drag_latched(),
-		"crossing above the hand band latches the cast stance")
-	_expect(absf(hand._card_screen_rect(chemist).end.y - screen_size.y * 0.94) < 1.0, "full casting pose places the bottom edge at the screen boundary")
-	var preview_pose := chemist.global_transform
-	var cam_basis: Basis = get_viewport().get_camera_3d().global_transform.basis.orthonormalized()
+	_expect(flips.size() == 1, "expanding a hand card plays the flip sound")
+	hand.set_hovered(chemist, true)
+	_expect(flips.size() == 1, "continued hover does not repeat the flip sound")
+	hand.set_hovered(chemist, false)
+	_expect(flips.size() == 1, "closing a hand preview does not play a flip")
+	hand.set_hovered(chemist, true)
+	_expect(flips.size() == 2, "reopening a hand preview plays the flip again")
+	SoundManager.sound_played.disconnect(observe_flip)
+	# PRESS -> HOLD -> CAST STANCE -> RELEASE OVER THE WOOD SLAB. A press is pending (nothing moves); holding still for
+	# HOLD_SECONDS animates the card into the stance by itself; the card then stays put while the pointer goes to the
+	# field, and only over the local slab do the gold aura and the slab's gold rim say "release here".
+	var drop_cam: Camera3D = get_viewport().get_camera_3d()
+	hand.begin_character_drag(chemist, in_hand_band.y)
+	hand._character_drag_start_pointer = in_hand_band
+	var press_pose := chemist.global_transform
+	_expect(hand._drag_mode == Hand.DragMode.PENDING and hand.update_character_drag(chemist, in_hand_band)
+		and chemist.global_transform.is_equal_approx(press_pose), "a press is pending: the card keeps its pose")
+	hand._update_character_hold(Hand.HOLD_SECONDS * 0.5)
+	_expect(not hand.in_cast_stance() and chemist.global_transform.is_equal_approx(press_pose),
+		"before the hold delay the card stays where it is")
+	hand._update_character_hold(Hand.HOLD_SECONDS * 0.6)
+	_expect(hand.in_cast_stance() and not hand.character_drag_latched(), "holding still starts the cast stance animation")
+	hand._update_character_hold(Hand.STANCE_SECONDS * 0.5)
+	var mid_pose := chemist.global_transform
+	_expect(not mid_pose.is_equal_approx(press_pose) and not hand.character_drag_latched(),
+		"the card animates into the stance by itself (no pointer movement)")
+	hand._update_character_hold(Hand.STANCE_SECONDS)
+	_expect(hand.character_drag_latched(), "the stance animation finishes and latches")
+	_expect(absf(hand._card_screen_rect(chemist).end.y - screen_size.y * 0.94) < 2.0,
+		"the cast stance leaves a small bottom margin")
+	var cam_basis: Basis = drop_cam.global_transform.basis.orthonormalized()
 	var expected_basis := Basis(cam_basis.x, cam_basis.z, -cam_basis.y) * Basis(Vector3.RIGHT, deg_to_rad(hand.character_drag_pitch_degrees))
 	_expect(chemist.global_basis.orthonormalized().is_equal_approx(expected_basis.orthonormalized()),
-		"the latched card is screen-facing with the negative X pitch")
+		"the stance card is screen-facing with the negative X pitch")
 	var face_normal := chemist.global_basis.y.normalized()
 	_expect(face_normal.dot(cam_basis.z) < 0.75 and face_normal.dot(cam_basis.y) > 0.5,
 		"casting pose visibly lays back with its top edge receding from the camera")
-	hand.update_character_drag(chemist, screen_size * Vector2(0.85, 0.1))
-	_expect(chemist.global_transform.is_equal_approx(preview_pose),
-		"a latched Character stance does not move horizontally")
-	_expect(hand.update_character_drag(chemist, in_hand_band) and not hand.character_drag_latched(),
-		"returning to the hand band before payment resumes the normal drag")
-	_expect(not chemist.ring_cast_pending(), "retreating below the cast boundary removes the gold aura")
-	# Re-latch and verify that payment keeps this pose without parking it in the Stack.
-	hand.update_character_drag(chemist, above_band)
+	_expect(not chemist.ring_cast_pending() and not hand.cast_armed(),
+		"in the stance with the pointer still on the hand: no gold aura")
+	var drop_zone_script := preload("res://scripts/game/field_drop_zone.gd")
+	var on_slab := drop_cam.unproject_position(Vector3(0.0, drop_zone_script.SLAB_TOP_Y, -0.6))
+	var stance_hold := chemist.global_transform
+	hand.update_character_drag(chemist, on_slab)
+	_expect(hand.cast_armed() and chemist.ring_cast_pending() and hand._drop_zone != null and hand._drop_zone.lit
+		and hand._drop_zone.visible, "pointer over the wood slab: gold aura on the card and the slab rim lights")
+	_expect(chemist.global_transform.is_equal_approx(stance_hold), "the stance card stays at the bottom while the pointer travels")
+	var off_slab := drop_cam.unproject_position(Vector3(0.0, drop_zone_script.SLAB_TOP_Y, 1.4))
+	hand.update_character_drag(chemist, off_slab)
+	_expect(not hand.cast_armed() and not chemist.ring_cast_pending() and not hand._drop_zone.lit,
+		"pointer over the opponent's slab: no aura, rim off")
+	hand.update_character_drag(chemist, on_slab)
+	hand.update_character_drag(chemist, in_hand_band)
+	_expect(not hand.cast_armed() and not chemist.ring_cast_pending(), "back over the hand: disarmed")
+	_expect(hand._release_would_cast(chemist, on_slab) and not hand._release_would_cast(chemist, in_hand_band)
+		and not hand._release_would_cast(chemist, off_slab), "only a release over the local slab casts")
+	hand.update_character_drag(chemist, on_slab)
+	# Payment keeps this pose without parking it in the Stack.
 	var stance_pose := chemist.global_transform
 	var original_hand_index: int = hand.cards.find(chemist)
 	hand.remove_card(chemist)
@@ -181,9 +204,10 @@ func _ready() -> void:
 	_expect(hand.cards.has(chemist) and chemist.current_zone == Card.Zone.HAND,
 		"cancelled Character preview returns to hand")
 
-	hand.begin_character_drag(chemist)
-	hand._character_drag_start_pointer_y = in_hand_band.y
-	hand.update_character_drag(chemist, above_band)
+	hand.begin_character_drag(chemist, in_hand_band.y)
+	hand._update_character_hold(Hand.HOLD_SECONDS)
+	hand._update_character_hold(Hand.STANCE_SECONDS)
+	_expect(hand.character_drag_latched(), "hold then the stance time reaches the finished stance")
 	var still_pose := chemist.global_transform
 	hand._update_character_waver(0.4)
 	_expect(not chemist.global_transform.is_equal_approx(still_pose) and chemist.global_position.distance_to(still_pose.origin) < 0.015,
@@ -192,9 +216,27 @@ func _ready() -> void:
 	hand._update_character_waver(0.3)
 	_expect(not chemist.global_transform.is_equal_approx(still_pose), "Character waver continues during mana payment")
 	hand.end_character_drag(chemist)
+	_expect(not hand._drop_zone.lit, "ending the drag puts the slab rim out")
 	var stopped_pose := chemist.global_transform
 	hand._update_character_waver(0.4)
 	_expect(chemist.global_transform.is_equal_approx(stopped_pose), "ending the Character preview stops its waver")
+	hand.update_card_positions()
+	# A sideways move inside the hand band before the hold delay is a REORDER drag, not a cast.
+	await get_tree().create_timer(0.35).timeout
+	hand.begin_character_drag(chemist, in_hand_band.y)
+	hand._character_drag_start_pointer = in_hand_band
+	_expect(not hand.update_character_drag(chemist, in_hand_band + Vector2(40, 0)) and hand._drag_mode == Hand.DragMode.REORDER,
+		"a sideways move in the hand band becomes a reorder drag")
+	hand._update_character_hold(1.0)
+	_expect(not hand.in_cast_stance(), "a reorder drag never turns into the cast stance")
+	hand.end_character_drag(chemist)
+	# Moving UP out of the press goes straight to the stance, without waiting for the hold.
+	hand.begin_character_drag(chemist, in_hand_band.y)
+	hand._character_drag_start_pointer = in_hand_band
+	hand.update_character_drag(chemist, in_hand_band - Vector2(0, 40))
+	_expect(hand.in_cast_stance(), "rising out of the press enters the stance at once")
+	hand.end_character_drag(chemist)
+	chemist.is_dragging = false
 	hand.update_card_positions()
 
 	# Exactly what Field.play_card() schedules when a card enters the field.
@@ -559,6 +601,7 @@ func _ready() -> void:
 	await _check_demo_stack_fan()
 	# A fresh, clean board for the simultaneous-trigger check: the AI board above has its own stack history.
 	await Vfx.idle()
+	await _check_draw_audio(game)
 	game.queue_free()
 	await get_tree().process_frame
 	await _check_simultaneous_triggers()
@@ -569,6 +612,45 @@ func _ready() -> void:
 
 	_report()
 	get_tree().quit()
+
+func _check_draw_audio(game) -> void:
+	var played: Array[int] = []
+	var observe := func(event: StringName, variant: int):
+		if event == &"card_draw":
+			played.append(variant)
+	SoundManager.sound_played.connect(observe)
+	var seen: Dictionary = {}
+	for attempt in range(220):
+		SoundManager.play(&"card_draw")
+	for index in range(played.size()):
+		seen[played[index]] = true
+		if index > 0:
+			_expect(played[index] != played[index - 1], "consecutive draw variants differ")
+	_expect(seen.size() == 22, "all 22 draw variants load and can play")
+	var flip_seen: Dictionary = {}
+	var observe_flip := func(event: StringName, variant: int):
+		if event == &"card_flip":
+			flip_seen[variant] = true
+	SoundManager.sound_played.connect(observe_flip)
+	for attempt in range(220):
+		SoundManager.play(&"card_flip")
+	SoundManager.sound_played.disconnect(observe_flip)
+	_expect(flip_seen.size() == 22, "all 22 flip_distant hover variants load and can play")
+	SoundManager.set_sfx_muted(true)
+	var before: int = played.size()
+	SoundManager.play(&"card_draw")
+	_expect(played.size() == before, "SFX mute suppresses playback")
+	SoundManager.set_sfx_muted(false)
+	for owner in [1, 2]:
+		before = played.size()
+		var flight: Tween = game.draw_cards(2, owner)
+		_expect(played.size() == before + 2, "P%d draw two triggers one sound per card" % owner)
+		if flight != null:
+			flight.custom_step(1.71)
+	before = played.size()
+	game.draw_cards(0, 1)
+	_expect(played.size() == before, "empty draw plays no sound")
+	SoundManager.sound_played.disconnect(observe)
 
 func _check_demo_stack_fan() -> void:
 	var demo = preload("res://tools/opponent_summon_demo.tscn").instantiate()
@@ -671,9 +753,9 @@ func _check_demo_stack_fan() -> void:
 	var local_hand: Hand = demo.game.get_node("Player/Hand")
 	var local_summon: Card = demo.game.create_card(62, "player")
 	local_hand.add_card(local_summon)
-	local_hand.begin_character_drag(local_summon)
-	local_hand._character_drag_start_pointer_y = get_viewport().get_visible_rect().size.y * 0.9
-	local_hand.update_character_drag(local_summon, get_viewport().get_visible_rect().size * Vector2(0.5, 0.1))
+	local_hand.begin_character_drag(local_summon, get_viewport().get_visible_rect().size.y * 0.9)
+	local_hand._update_character_hold(Hand.HOLD_SECONDS)
+	local_hand._update_character_hold(Hand.STANCE_SECONDS)
 	var printed_face = local_summon.mat.get_shader_parameter("texture_albedo")
 	local_hand.remove_card(local_summon)
 	local_hand.charging_card = local_summon
@@ -868,6 +950,33 @@ func _check_hover_shadow(hand: Hand) -> void:
 	var transferred := hand.hovered_card
 	hand.pointer_hover(upper, false)
 	_expect(hand.hovered_card == transferred, "old card exit does not clear transferred hover")
+	# The enlarged card sits HOVER_BOTTOM_MARGIN (+ drift) above the screen edge; the pointer in that strip is still on
+	# the card's own slot. The hover must stay open rather than drop, fall back under the pointer, re-hover and flicker.
+	var view_h: float = get_viewport().get_visible_rect().size.y
+	var lifted_rect: Rect2 = hand._card_screen_rect(transferred)
+	var gap: float = view_h - lifted_rect.end.y
+	_expect(gap >= Hand.HOVER_BOTTOM_MARGIN - 1.0 and gap <= Hand.HOVER_BOTTOM_MARGIN + 12.0,
+		"enlarged hand card sits %d-%d px above the screen edge (%.1f)" % [Hand.HOVER_BOTTOM_MARGIN - 1.0, Hand.HOVER_BOTTOM_MARGIN + 12.0, gap])
+	var low := Vector2(lifted_rect.get_center().x, view_h - 2.0)
+	_expect(not lifted_rect.has_point(low) and hand._pointer_hover_region.has_point(low),
+		"retained hover region covers the strip below the enlarged card")
+	var stay := InputEventMouseMotion.new()
+	stay.position = low
+	hand._input(stay)
+	_expect(hand.hovered_card == transferred, "pointer on the hovered card's resting slot keeps the hover (no flicker)")
+	# An enter swallowed by the retained region is not lost: leaving the region hands the hover to that card.
+	hand._pointer_hover_region = Rect2(hand.get_viewport().get_mouse_position() - Vector2.ONE * 5, Vector2.ONE * 10)
+	hand.pointer_hover(upper, true)
+	_expect(hand.hovered_card == transferred and hand._pointer_area_card == upper,
+		"enter inside the retained region is recorded, not applied")
+	var away := InputEventMouseMotion.new()
+	away.position = Vector2(-100, -100)
+	hand._input(away)
+	_expect(hand.hovered_card == upper, "leaving the region hovers the card the pointer is really inside")
+	hand.pointer_hover(upper, false)
+	hand.set_hovered(upper, false)
+	_expect(hand.hovered_card == null and hand._pointer_area_card == null, "exit clears the recorded pointer card")
+	hand.set_hovered(transferred, true)
 	hand.set_hovered(transferred, false)
 	hand.set_hovered(upper, true)
 	await get_tree().create_timer(0.45).timeout
