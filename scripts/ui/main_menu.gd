@@ -37,12 +37,21 @@ func _ready() -> void:
 		button.pressed.connect(func(): MatchSetup.start_match(preset))
 		box.add_child(button)
 
-	var auto_pass := CheckBox.new()
-	auto_pass.text = "Auto-pass when I have nothing to play"
-	auto_pass.tooltip_text = "When you get priority and no card or ability can be used, pass for you after a short pause"
-	auto_pass.button_pressed = MatchSetup.auto_pass
-	auto_pass.toggled.connect(func(on: bool): MatchSetup.set_auto_pass(on))
-	box.add_child(auto_pass)
+	# The same three modes as the selector under the pass button in a match (scripts/ui/pass_mode_selector.gd).
+	var pass_row := HBoxContainer.new()
+	var pass_label := Label.new()
+	pass_label.text = "Priority:"
+	pass_row.add_child(pass_label)
+	var pass_mode := OptionButton.new()
+	# Pass All is not offered here: it only lasts until your next turn, so it is chosen in a match.
+	var modes: Array = ["stop_all", "smart", "react"]
+	pass_mode.add_item("Stop All — stop at every window (bluff)")
+	pass_mode.add_item("Smart — pass when I have nothing to play")
+	pass_mode.add_item("React — pass unless my opponent puts something on the stack")
+	pass_mode.selected = maxi(modes.find(MatchSetup.pass_mode), 0)
+	pass_mode.item_selected.connect(func(i: int): MatchSetup.set_pass_mode(modes[i]))
+	pass_row.add_child(pass_mode)
+	box.add_child(pass_row)
 
 	box.add_child(HSeparator.new())
 	_add_online_section(box)

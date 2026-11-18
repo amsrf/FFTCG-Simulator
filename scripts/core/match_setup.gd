@@ -131,25 +131,35 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 
 func start_match(preset: String, overrides: Dictionary = {}) -> void:
 	config = build_config(preset, overrides)
-	config["auto_pass"] = auto_pass
+	config["pass_mode"] = pass_mode
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 # --- player settings ---------------------------------------------------------
 
 const SETTINGS_PATH := "user://settings.cfg"
-## Pass automatically when you get priority and have nothing you could do. On by default; the menu toggles it.
-var auto_pass: bool = true
+## How much priority the player wants to be asked for: "stop_all", "smart" (the default) or "react" (see
+## Game.pass_mode). Saved, and changed from the menu or from the selector under the pass button in a match.
+var pass_mode: String = "smart"
 
 func _ready() -> void:
 	var settings := ConfigFile.new()
 	if settings.load(SETTINGS_PATH) == OK:
-		auto_pass = bool(settings.get_value("play", "auto_pass", true))
+		if settings.has_section_key("play", "pass_mode"):
+			pass_mode = str(settings.get_value("play", "pass_mode", "smart"))
+		else:
+			# The old on/off setting: on was what SMART is now.
+			pass_mode = "smart" if bool(settings.get_value("play", "auto_pass", true)) else "stop_all"
+		if not pass_mode in ["stop_all", "smart", "react"]:
+			pass_mode = "smart"
 
-func set_auto_pass(enabled: bool) -> void:
-	auto_pass = enabled
+func set_pass_mode(mode: String) -> void:
+	# PASS ALL is never saved: it only lasts until the player's next turn.
+	if not mode in ["stop_all", "smart", "react"]:
+		return
+	pass_mode = mode
 	var settings := ConfigFile.new()
 	settings.load(SETTINGS_PATH)
-	settings.set_value("play", "auto_pass", enabled)
+	settings.set_value("play", "pass_mode", mode)
 	settings.save(SETTINGS_PATH)
 
 func go_to_menu() -> void:
@@ -222,7 +232,7 @@ func online_config(seed_value: int, local_seat: int, starting_seat: int, seat1_d
 	var opening_theirs: int = mini(5, theirs.size())
 	return {
 		"preset": "online",
-		"auto_pass": auto_pass,
+		"pass_mode": pass_mode,
 		"player_type": "local",
 		"opponent_type": "mock",   # replaced by the session's RemoteAgent
 		"local_seat": local_seat,

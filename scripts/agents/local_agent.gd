@@ -54,11 +54,23 @@ func take_priority(_player_id: int) -> bool:
 	var assistant: Assistant = game.assistant
 	assistant.show_pass_priority_button()
 	_window_serial += 1
-	if bool(game.get("auto_pass")):
-		_auto_pass_if_nothing_to_do(_window_serial)
+	_in_window = true
+	_auto_pass_if_nothing_to_do(_window_serial)
 	var acted: bool = await game.priority_window_ended
+	_in_window = false
 	_window_serial += 1
 	return acted
+
+var _in_window: bool = false
+
+## The pass mode changed while the player may hold a window: re-decide it. A NEW serial cancels a pending auto-pass
+## (STOP_ALL must not pass a moment later), the button is re-offered or lowered, and the auto-pass runs again.
+func on_pass_mode_changed() -> void:
+	if not _in_window or game == null or int(game.get("priority_holder")) != 1:
+		return
+	_window_serial += 1
+	game.assistant.show_pass_priority_button()
+	_auto_pass_if_nothing_to_do(_window_serial)
 
 ## AUTO-PASS: nothing in hand can be cast and no ability can be used, so pass for the player after a short pause. The
 ## pass button is NOT raised for such a window (Assistant.auto_pass_hides_button), so the disc stays down through skipped
@@ -66,7 +78,7 @@ func take_priority(_player_id: int) -> bool:
 ## raised here, and if a modal is open the check waits for it to close and runs again, or the window would hang with no
 ## way to pass.
 func _auto_pass_if_nothing_to_do(serial: int) -> void:
-	if game.field.local_has_any_play():
+	if not game.assistant.auto_pass_would_answer():
 		return
 	while true:
 		await game.get_tree().create_timer(AUTO_PASS_DELAY).timeout
@@ -74,7 +86,7 @@ func _auto_pass_if_nothing_to_do(serial: int) -> void:
 			return
 		if int(game.get("priority_holder")) != 1:
 			return
-		if game.field.local_has_any_play():
+		if not game.assistant.auto_pass_would_answer():
 			game.assistant.show_pass_priority_button()   # something became playable: hand the window back to the player
 			return
 		var mode = GlobalVariables.get_player_mode()
@@ -221,13 +233,20 @@ func choose_deck_cards(_owner_id: int, ids: Array, filter: Dictionary, request, 
 	window.open_multi(ids, filter, request, prompt)
 	return await window.finished_multi
 
-func choose_discard(player_id: int, _cards: Array) -> Card:
+func choose_discard(player_id: int, cards: Array) -> Card:
 	var hand: Hand = game.hand_for(player_id)
 	if hand == null:
 		return null
 	var assistant: Assistant = game.assistant
 	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
 	hand.begin_choose_card({})
+	# Only the cards still on offer (a multi-card discard has already taken some); the ones already chosen keep their
+	# orange ring so the player sees what is going.
+	hand.choose_card_allowed = cards.duplicate()
+	for card in hand.cards:
+		if not cards.has(card):
+			card.set_selected_highlight(true)
+	hand.refresh_highlights()
 	assistant.show_choose_card_buttons("Discard", "Cancel")
 	var play: bool = await assistant.choose_card_finished
 	var chosen: Card = hand.selected_card_for_effect

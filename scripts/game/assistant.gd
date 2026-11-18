@@ -87,6 +87,9 @@ var onCancel: Callable
 var confirm_text := "Confirm"
 var cancel_text := "Cancel"
 
+const PASS_MODE_SELECTOR := preload("res://scripts/ui/pass_mode_selector.gd")
+var pass_mode_selector: CanvasLayer = null
+
 func _ready():
 	passPhaseButton.set_text('Next Phase')
 	passPhaseButton.set_on_press_callback(func(): _pass_priority())
@@ -97,6 +100,12 @@ func _ready():
 	cost_readout.badge_size_m = cost_readout_badge_size_m
 	add_child(cost_readout)
 	cost_readout.visible = false
+	# The pass mode (Stop All / Smart / Pass All) sits under the local pass disc.
+	var station: Node3D = get_node_or_null("ButtonStations/LocalForward") as Node3D
+	if station != null:
+		pass_mode_selector = PASS_MODE_SELECTOR.new()
+		add_child(pass_mode_selector)
+		pass_mode_selector.setup(get_parent(), station)
 
 ## Keeps the readout above the hand. It faces the camera by itself; this only places it.
 ##
@@ -279,16 +288,43 @@ func show_pass_priority_button():
 			passPhaseButton.set_text("Next Phase" if ends_phase else "Pass")
 		passPhaseButton.show_button()
 
-## True while auto-pass is on and the local player has nothing to play: the window will be passed for them, so the
-## button is not offered. The SAME predicate LocalAgent uses to decide the auto-pass, so the two cannot disagree.
+## True while the local player's pass mode will answer this priority window for them, so the button is not offered.
+## The SAME predicate LocalAgent uses to decide the auto-pass, so the two cannot disagree.
 func auto_pass_hides_button() -> bool:
+	return auto_pass_would_answer()
+
+## Game.pass_mode, applied to the window the local player holds now:
+##   STOP_ALL never; SMART when nothing can be played; PASS_ALL also when something could be, unless it is their
+##   own main phase with an empty stack (their turn to play cards is never skipped); REACT as PASS_ALL, but it stops
+##   when the opponent's object is on top of the stack.
+func auto_pass_would_answer() -> bool:
 	var game = get_parent()
-	if game == null or not bool(game.get("auto_pass")):
+	if game == null:
+		return false
+	var mode: String = str(game.get("pass_mode"))
+	if mode == "stop_all" or mode == "":
 		return false
 	var field_now = game.get("field")
-	return field_now != null and not field_now.local_has_any_play()
+	if field_now == null:
+		return false
+	if not field_now.local_has_any_play():
+		return true
+	if mode != "pass_all" and mode != "react":
+		return false
+	var stack_now = game.get("stack")
+	# REACT: the opponent did something (their object is on top of the stack) and there is an answer: stop.
+	if mode == "react" and stack_now != null and stack_now.stack_length() > 0:
+		var top = stack_now.cards.back()
+		if top != null and is_instance_valid(top) and top.controller == Card.OPPONENT:
+			return false
+	var phase_now = game.get("phase")
+	var own_main: bool = int(game.get("turn_owner")) == 1 and (phase_now == GlobalVariables.Phase.FIRST_MAIN_PHASE \
+			or phase_now == GlobalVariables.Phase.SECOND_MAIN_PHASE)
+	var empty_stack: bool = stack_now == null or stack_now.stack_length() == 0
+	return not (own_main and empty_stack)
 
 func _pass_priority():
+	SoundManager.play(&"priority_pass")
 	passPhaseButton.hide_button()
 	pressed_pass_priority.emit()
 
