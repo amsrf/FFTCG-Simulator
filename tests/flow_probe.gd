@@ -254,6 +254,13 @@ func _ready() -> void:
 		_report()
 		get_tree().quit()
 		return
+	var trigger_face := copy.get_node_or_null("StackAbilityFace") as SubViewport
+	var trigger_art := trigger_face.get_node("Artwork") as TextureRect if trigger_face != null else null
+	var trigger_crop := trigger_art.texture as AtlasTexture if trigger_art != null else null
+	_expect(trigger_crop != null and trigger_crop.atlas == FIELD_CARD_FACE.portrait_texture(chemist.code)
+		and trigger_art.size.y == trigger_face.get_node("Panel").position.y
+		and trigger_face.get_node("Panel").offset_bottom == trigger_face.size.y,
+		"the triggered stack face uses the field portrait above its full-height ability panel")
 
 	# Code ETBs are resolved by the stack. Start the resolution and wait until the target window opens.
 	await get_tree().create_timer(0.1).timeout
@@ -891,8 +898,10 @@ func _check_demo_stack_fan() -> void:
 	demo._preview_ability(3)
 	var ability_copy: Card = stack.cards.back()
 	var face := ability_copy.get_node_or_null("StackAbilityFace") as SubViewport
+	var ability_crop := face.get_node("Artwork").texture as AtlasTexture if face != null else null
 	_expect(face != null and face.get_node("Ability").text.replace("\n", " ") == "Choose 1 Forward. It cannot block this turn."
 		and ability_copy.mat.get_shader_parameter("texture_albedo") == face.get_texture()
+		and ability_crop != null and ability_crop.atlas == FIELD_CARD_FACE.portrait_texture(ability_copy.code)
 		and not ability_copy.effect_source.has_node("StackAbilityFace"), "Red Mage proxy displays only the chosen effect on its own face")
 	demo._preview_ability(100)
 	var earth := stack.cards.back() as Card
@@ -930,6 +939,11 @@ func _check_demo_stack_fan() -> void:
 	local_summon = stack.cards.back()
 	_expect(local_summon != printed_summon and printed_summon.is_queued_for_deletion(),
 		"local entrance creates a new stack card after fading the printed card")
+	var summon_face := local_summon.get_node_or_null("StackAbilityFace") as SubViewport
+	var summon_art := summon_face.get_node("Artwork") as TextureRect if summon_face != null else null
+	_expect(summon_art != null and summon_art.texture == printed_face and summon_art.size.y == summon_face.size.y
+		and summon_face.get_node("Panel").offset_bottom == 584.0,
+		"the Summon stack copy keeps the original printed face and panel layout")
 	var entrance_camera := get_viewport().get_camera_3d()
 	var entrance_screen := entrance_camera.unproject_position(local_summon.global_position)
 	var entrance_size := get_viewport().get_visible_rect().size

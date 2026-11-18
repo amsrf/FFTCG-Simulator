@@ -5,6 +5,7 @@ All notable changes to the FF TCG Simulator project.
 ## [Unreleased] — 2026-11-18
 
 ### Changed
+- Triggered and activated abilities on the stack use the restored field portrait above the ability text. `StackAbilityFace.configure()` uses an illustration crop when an ability card has no restored portrait.
 - Field bands use colors sampled from the printed Opus I stripes, with a wide central highlight across all eight elements (`field_card_face.gd`, `field_card_face.gdshaderinc`). Earth, Ice, and Wind use outlined white labels, and Light uses dark labels for contrast (`power_display.gd`). Refined the FFIII and Tactics portrait crops for more consistent framing.
 - **Field cards rest on the wood** instead of floating 0.44 m above it (`battle_field.tscn` row markers y 0.5 -> 0.0846). The rows moved down along the camera ray, so `Card.ZONE_PRESENTATION[Zone.FIELD]` scale (1.2 -> 1.266) and `Field.ROW_CARD_STEP` (0.65 -> 0.686) grew by the distance ratio 1.0551 and the screen layout is unchanged.
 

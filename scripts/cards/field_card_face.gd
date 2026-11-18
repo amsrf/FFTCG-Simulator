@@ -41,7 +41,7 @@ func enter_zone(mesh_instance: MeshInstance3D, material: ShaderMaterial, on_fiel
 	if on_field:
 		var index: int = ELEMENTS.index_of(element)
 		material.set_shader_parameter("field_band_color", PALETTE[index] if index >= 0 else Color("#39363f"))
-		var portrait := _field_portrait(code)
+		var portrait := portrait_texture(code)
 		material.set_shader_parameter("field_art_texture", portrait if portrait != null else texture)
 		material.set_shader_parameter("field_art_rect",
 			Vector4(0.0, 0.0, 1.0, 1.0) if portrait != null else illustration_crop(texture.get_size(), code))
@@ -76,7 +76,7 @@ static func label_outline_size(element: String) -> int:
 
 
 ## Optional clean portraits use the printed card code. The source JPEG fallback also works before editor import.
-static func _field_portrait(code: String) -> Texture2D:
+static func portrait_texture(code: String) -> Texture2D:
 	if _portraits.has(code):
 		return _portraits[code]
 	var path := "res://assets/field_art/%s.jpg" % code

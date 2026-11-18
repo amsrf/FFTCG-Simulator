@@ -1,5 +1,7 @@
 extends SubViewport
 
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
+
 # Representative rules-box colours sampled across the bundled Opus I character art.
 const PANEL_COLORS := {
 	"氷": [Color("#094e68"), Color("#368fae"), Color("#59b8db"), Color("#368fae"), Color("#07516c")],
@@ -11,8 +13,11 @@ const PANEL_COLORS := {
 	"闇": [Color("#251f1c"), Color("#595051"), Color("#858687"), Color("#595051"), Color("#201a18")],
 }
 
-func configure(artwork: Texture2D, element: String, wording: String) -> void:
-	$Artwork.texture = artwork
+func configure(printed: Texture2D, element: String, wording: String, portrait_code: String = "") -> void:
+	if portrait_code.is_empty():
+		$Artwork.texture = printed
+	else:
+		_configure_portrait(printed, portrait_code)
 	if PANEL_COLORS.has(element):
 		var panel_texture: GradientTexture2D = $Panel.texture.duplicate()
 		var gradient := Gradient.new()
@@ -31,3 +36,30 @@ func configure(artwork: Texture2D, element: String, wording: String) -> void:
 	while font_size > 10 and font.get_multiline_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, label.size.x, font_size).y > label.size.y - 12:
 		font_size -= 1
 	label.add_theme_font_size_override("font_size", font_size)
+
+
+func _configure_portrait(printed: Texture2D, code: String) -> void:
+	var artwork: TextureRect = $Artwork
+	var panel: TextureRect = $Panel
+	var lower_rule: TextureRect = $LowerGoldRule
+	artwork.offset_bottom = panel.offset_top
+	artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	panel.offset_bottom = size.y
+	lower_rule.position.y = panel.offset_bottom - lower_rule.size.y
+	$Ability.offset_bottom = panel.offset_bottom - 12.0
+
+	var illustration := AtlasTexture.new()
+	illustration.filter_clip = true
+	var portrait := FIELD_CARD_FACE.portrait_texture(code)
+	if portrait != null:
+		var portrait_size := portrait.get_size()
+		# Preserve the field portrait's top framing. The ability panel takes the lower part of the face.
+		var visible_height := minf(portrait_size.y, portrait_size.x * artwork.size.y / artwork.size.x)
+		illustration.atlas = portrait
+		illustration.region = Rect2(0.0, 0.0, portrait_size.x, visible_height)
+	else:
+		var printed_size := printed.get_size()
+		var crop := FIELD_CARD_FACE.illustration_crop(printed_size, code)
+		illustration.atlas = printed
+		illustration.region = Rect2(Vector2(crop.x, crop.y) * printed_size, Vector2(crop.z, crop.w) * printed_size)
+	artwork.texture = illustration

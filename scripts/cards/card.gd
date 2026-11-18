@@ -650,7 +650,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	if zone == Zone.STACK and _stack_face == null:
 		_stack_face = preload("res://scenes/cards/stack_ability_face.tscn").instantiate()
 		add_child(_stack_face)
-		_stack_face.configure(_printed_texture, element, stack_wording if not stack_wording.is_empty() else text)
+		var portrait_code := "" if type == SUMMON else code
+		_stack_face.configure(_printed_texture, element, stack_wording if not stack_wording.is_empty() else text, portrait_code)
 		mat.set_shader_parameter("texture_albedo", _stack_face.get_texture())
 	elif zone != Zone.STACK and _stack_face != null:
 		mat.set_shader_parameter("texture_albedo", _printed_texture)
