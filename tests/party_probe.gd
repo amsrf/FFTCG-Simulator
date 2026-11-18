@@ -145,14 +145,14 @@ func _ready() -> void:
 	var hits: int = 0
 	for arc in _field.block_arrows:
 		for member in pair4:
-			if arc.locked_target.distance_to(member.get_global_face_centre()) < 0.01:
+			if arc.start_pos.distance_to(arc.attacker_top_edge(member, blocker_arc.get_global_face_centre())) < 0.01:
 				hits += 1
-	_expect(hits == 2, "each arc lands on a different party member (%d matched)" % hits)
-	var from_blocker: bool = true
+	_expect(hits == 2, "each link starts at a different party member's top edge (%d matched)" % hits)
+	var to_blocker: bool = true
 	for arc in _field.block_arrows:
-		if arc.start_pos.distance_to(blocker_arc.get_global_face_centre()) >= 0.01:
-			from_blocker = false
-	_expect(from_blocker, "and every arc starts at the blocker's centre")
+		if arc.locked_target.distance_to(blocker_arc.get_global_face_centre()) >= 0.01:
+			to_blocker = false
+	_expect(to_blocker, "and every link runs to the blocker's centre")
 	_field.hide_block_arc()
 	_expect(_field.block_arrows.is_empty(), "hide_block_arc() disposes of them all")
 

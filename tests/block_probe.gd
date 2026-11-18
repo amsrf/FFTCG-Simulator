@@ -1,4 +1,6 @@
 extends Node3D
+
+const CARD_EDGE_SCRIPT := preload("res://scripts/cards/card_edge.gd")
 ## Headless probe for the blocking visuals.
 ##
 ## Run it instead of the game:
@@ -58,6 +60,22 @@ func _ready() -> void:
 			only_mine = false
 	_expect(only_mine, "every marked card is one of my own untapped Forwards")
 
+	# --- THE ATTACK LINK: before any block, it points at the defending player, off screen ------------------------
+	_field.show_attack_link()
+	var to_player = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	_expect(to_player != null and not to_player.targets_card(), "a declared attack links the attacker to the player")
+	if to_player != null:
+		await get_tree().process_frame
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		var px: Vector2 = cam.unproject_position(to_player.end_pos)
+		var view: Vector2 = get_viewport().get_visible_rect().size
+		# The opponent attacks here, so the player hit is US: past the BOTTOM edge, at the horizontal centre.
+		_expect(px.y > view.y and absf(px.x - view.x * 0.5) < 2.0,
+			"it ends off screen past the bottom edge, at the centre (%s of %s)" % [str(px), str(view)])
+		var again_link = _field.block_arrows.back()
+		_field.show_attack_link()
+		_expect(_field.block_arrows.back() == again_link, "asking again keeps the running link (no restart)")
+
 	var first: Card = mine[0]
 	_field.set_blocker_card(first)
 	_expect(_field.blocker_card == first, "clicking a card selects it as the blocker")
@@ -67,23 +85,60 @@ func _ready() -> void:
 	_expect(_field.block_arrows.size() == 1, "a single-attacker block draws exactly ONE arc")
 	_expect(arrow != null and arrow.is_aiming, "selecting a blocker draws an arc")
 	if arrow != null:
-		var start: Vector3 = first.get_global_face_centre()
-		var target: Vector3 = their_attacker.get_global_face_centre()
-		print("[BlockProbe] arc %s -> %s (blocker centre %.3f m from attacker centre)"
-			% [arrow.start_pos, target, start.distance_to(target)])
-		_expect(arrow.start_pos.distance_to(start) < 0.01,
-			"the arc starts at the blocker's CENTRE")
-		var tip_gap: float = _nearest_vertex(arrow, target)
-		var path: float = _farthest_vertex(arrow, start)
+		var start: Vector3 = arrow.attacker_top_edge(their_attacker, first.get_global_face_centre())
+		var target: Vector3 = first.get_global_face_centre()
+		_expect(arrow.start_pos.distance_to(start) < 0.01, "the link starts at the ATTACKER's top edge")
+		_expect(start.distance_to(target) < their_attacker.get_global_face_centre().distance_to(target),
+			"that edge is the one FACING the blocker, so the curve never hooks back over the attacker")
+		_expect(arrow.locked_target.distance_to(target) < 0.01, "and runs to the blocker's centre")
+		var pts: PackedVector3Array = arrow.points()
 		var chord: float = start.distance_to(target)
-		print("[BlockProbe] tip is %.4f m from the attacker's centre; the ribbon runs %.3f m for a %.3f m chord"
-			% [tip_gap, path, chord])
-		_expect(tip_gap < 0.05, "the arc lands on the attacker's centre")
-		# A cross-row link must NOT bow along its own chord: that made a 1.54 m path for an
-		# 0.85 m span, reading as a long loop rather than an arc. (The shaft is trimmed for
-		# the head, so this measures slightly under the true path.)
-		_expect(path < chord * 1.5,
-			"the arc bows instead of running along its own chord (%.2fx)" % (path / chord))
+		var path: float = 0.0
+		for i in range(1, pts.size()):
+			path += pts[i].distance_to(pts[i - 1])
+		_expect(not pts.is_empty() and pts[0].distance_to(start) < 0.01 and pts[pts.size() - 1].distance_to(arrow.end_pos) < 0.01,
+			"the parabola runs from the attacker's edge to its end point")
+		var below: float = target.y - arrow.end_pos.y
+		var flat_gap: Vector2 = Vector2(arrow.end_pos.x - target.x, arrow.end_pos.z - target.z)
+		_expect(below > 0.05 and flat_gap.length() < 0.01,
+			"it PLUNGES INTO the blocker: it ends %.2f m under the card's centre, not on its face" % below)
+		# It rises in WORLD Y: the highest point is well above both ends, near the middle of the path.
+		var top_i: int = 0
+		for i in pts.size():
+			if pts[i].y > pts[top_i].y:
+				top_i = i
+		var rise: float = pts[top_i].y - maxf(start.y, target.y)
+		var where: float = float(top_i) / maxf(pts.size() - 1, 1)
+		_expect(rise >= arrow.min_apex * 0.9 and where > 0.3 and where < 0.7,
+			"it rises upward in Y: apex %.2f m above the higher end, %.0f%% along (path %.2fx the chord)"
+			% [rise, where * 100.0, path / chord])
+		# The loop (reference Clips/arrow3, frames 71-120): a SPARK draws the line from the attacker, the line holds,
+		# then it is erased from the back, a pause, and again.
+		var d_mid: Array = arrow.phase_at(arrow.draw_seconds * 0.5)
+		_expect(d_mid[0] == 0.0 and d_mid[2] > 0.1 and d_mid[2] < 0.9 and absf(d_mid[1] - d_mid[2]) < 0.001,
+			"a spark DRAWS the line: it runs from the attacker up to the spark (%.2f)" % d_mid[2])
+		var held: Array = arrow.phase_at(arrow.draw_seconds + arrow.hold_seconds * 0.6)
+		_expect(held[0] == 0.0 and held[1] >= 1.0 and held[3] > 0.5,
+			"when the spark reaches the blocker the line is complete, and holds with a glow where it landed")
+		var v_mid: Array = arrow.phase_at(arrow.draw_seconds + arrow.hold_seconds + arrow.vanish_seconds * 0.5)
+		_expect(v_mid[0] > 0.1 and v_mid[0] < 0.95 and v_mid[1] >= 1.0,
+			"then it is erased FROM THE BACK (visible %.2f .. %.2f)" % [v_mid[0], v_mid[1]])
+		var cycle: float = arrow.draw_seconds + arrow.hold_seconds + arrow.vanish_seconds + arrow.loop_pause_seconds
+		var gone: Array = arrow.phase_at(cycle - arrow.loop_pause_seconds * 0.5)
+		_expect(gone[1] <= gone[0] and gone[2] < 0.0, "until nothing is left")
+		var again: Array = arrow.phase_at(arrow.draw_seconds * 0.5 + cycle * 3.0)
+		_expect(absf(again[2] - d_mid[2]) < 0.001, "and it LOOPS (same place three cycles later)")
+		_expect(not ("head_size" in arrow), "there is no arrowhead: the head is the spark")
+		# STABLE: the curve does not move while the cards do not.
+		var before: PackedVector3Array = arrow.points().duplicate()
+		await get_tree().create_timer(0.3).timeout
+		var drift: float = 0.0
+		var after: PackedVector3Array = arrow.points()
+		for i in mini(before.size(), after.size()):
+			drift = maxf(drift, before[i].distance_to(after[i]))
+		_expect(drift < 0.001, "the arc is stable: it does not move or distort (%.4f m drift)" % drift)
+		var red: Color = arrow.glow_color
+		_expect(red.r > 0.8 and red.g < 0.35 and red.b < 0.45, "it glows red (%s)" % str(red))
 
 	# Reselect: the orange and the arc both move, nothing is left behind.
 	var second: Card = mine[1]
@@ -96,14 +151,16 @@ func _ready() -> void:
 	_expect(_field.block_arrows.size() == 1, "reselecting keeps exactly one arc for a single attacker")
 	var moved = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
 	if moved != null:
-		_expect(moved.start_pos.distance_to(second.get_global_face_centre()) < 0.01,
-			"the arc moved to the new blocker's centre")
+		_expect(moved.locked_target.distance_to(second.get_global_face_centre()) < 0.01,
+			"the link moved to the new blocker's centre")
 
 	# Clicking the same card again deselects.
 	_field.set_blocker_card(second)
 	_expect(_field.blocker_card == null, "clicking the same card again deselects it")
 	_expect(not second.ring_selected(), "deselecting clears the orange")
-	_expect(arrow == null or not arrow.is_aiming, "deselecting hides the arc")
+	var back_to_player = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	_expect(back_to_player != null and not back_to_player.targets_card(),
+		"deselecting points the link back at the defending player")
 
 	# --- block_disabled: a status the data has always applied and nothing consulted -------------------------------
 	# Red Mage's ability hands this out, and it did nothing at all. It has to stop the RING and the CLICK together —
@@ -137,21 +194,46 @@ func _ready() -> void:
 	var their_arrow = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
 	_expect(their_arrow != null and their_arrow.is_aiming, "the opponent's pick draws an arc for us to see")
 	if their_arrow != null:
-		_expect(their_arrow.start_pos.distance_to(their_blocker.get_global_face_centre()) < 0.01,
-			"their arc starts at their blocker's centre")
+		_expect(their_arrow.locked_target.distance_to(their_blocker.get_global_face_centre()) < 0.01,
+			"their link runs to their blocker's centre")
 	_expect(_marked().is_empty(),
 		"no blue ring is used for the opponent's pick — that cue means \"your choice\"")
 
-	# And the whole thing is cleared when the combat's blocker resets.
+	# While the combat is still declaring, a reset blocker hands the link back to the player; once the damage step has
+	# ended the link (end_combat_link), the reset leaves nothing.
 	_field.reset_blocker()
-	_expect(_field.block_arrows.is_empty(), "reset_blocker() disposes of every arc")
+	_expect(not _field.block_arrows.is_empty() and not _field.block_arrows[0].targets_card(),
+		"reset_blocker() while declaring points the link back at the player")
+	_field.end_combat_link()
+	_field.reset_blocker()
+	_expect(_field.block_arrows.is_empty(), "after end_combat_link() reset_blocker() leaves no link")
 	_expect(not their_blocker.ring_selected(), "reset_blocker() clears any orange")
 
 	await _check_clash_presentation(game)
 	_check_earth_totem()
 	await _check_earth_launch(game)
+	await _check_link_stops_at_clash(game)
 	_report()
 	get_tree().quit()
+
+## The block link loops until the clash starts, and is gone the moment it does.
+func _check_link_stops_at_clash(game: Node) -> void:
+	var mine: Array = _field.get_front_cards_for("player")
+	var theirs: Array = _field.get_front_cards_for("opponent")
+	if mine.is_empty() or theirs.is_empty():
+		_expect(false, "the clash-stop check has two Forwards")
+		return
+	_field.attacker_card = theirs.front()
+	_field.blocker_card = mine.front()
+	_field.show_block_arc(mine.front())
+	await get_tree().create_timer(1.6).timeout
+	var link = _field.block_arrows.back() if not _field.block_arrows.is_empty() else null
+	_expect(link != null and link.is_aiming, "the link is still up (looping) while the block waits")
+	game.resolve_blocked_clash()
+	await get_tree().process_frame
+	_expect(_field.block_arrows.is_empty() and (link == null or not is_instance_valid(link) or link.is_queued_for_deletion()),
+		"the clash starting stops the link and its arrow")
+	await get_tree().create_timer(3.0).timeout
 
 func _check_earth_launch(game: Node) -> void:
 	var card: Card = _field.get_front_cards_for("player").front()
@@ -160,7 +242,9 @@ func _check_earth_launch(game: Node) -> void:
 	motion.pause()
 	motion.custom_step(card.damage_fx.earth_launch_seconds(3000) * 0.5)
 	var weak_height := card.hand_mesh.global_position.y - card.global_position.y
-	_expect(card.get_node("CardEdge").transform.is_equal_approx(card.hand_mesh.transform) and not card.power_label.visible,
+	var edge_rest := Transform3D(Basis.from_scale(Vector3(1.0, CARD_EDGE_SCRIPT.thickness_for(true), 1.0)), Vector3.ZERO)
+	_expect(card.get_node("CardEdge").transform.is_equal_approx(card.hand_mesh.transform * edge_rest) \
+			and not card.power_label.visible,
 		"earth waver carries the thickness edge and hides the stationary power readout")
 	_expect(absf(weak_height - 1.0) < 0.01 and card.global_transform.is_equal_approx(root_pose),
 		"earth launch follows its gravity arc while leaving the field-owned card root unchanged")
@@ -478,16 +562,18 @@ func _check_clash_presentation(game: Node) -> void:
 		"clash lift preserves both cards' original scale")
 	_expect(cinema._proxy_a.global_position.y > original_a.origin.y,
 		"clash starts by lifting the card in world Y")
-	var aligned: bool = not cinema._same_column(original_a.origin, original_b.origin)
-	var lift_time: float = maxf(cinema.lift_seconds, cinema.align_seconds) if aligned else cinema.lift_seconds
-	await get_tree().create_timer(lift_time + cinema.windup_seconds - 0.10 + 0.02).timeout
+	# STRAIGHT THROUGHOUT: no turn to face the other card. A dulled card first straightens (its own beat); an upright
+	# one skips it.
+	var straight_a: Quaternion = cinema._straight_rotation(attacker, original_a.basis.get_rotation_quaternion())
+	var straight_b: Quaternion = cinema._straight_rotation(defender, original_b.basis.get_rotation_quaternion())
+	var straighten_time: float = 0.0 if straight_a.angle_to(original_a.basis.get_rotation_quaternion()) < 0.001 \
+		and straight_b.angle_to(original_b.basis.get_rotation_quaternion()) < 0.001 else cinema.straighten_seconds
+	await get_tree().create_timer(straighten_time + cinema.lift_seconds + cinema.windup_seconds - 0.10 + 0.02).timeout
 	var proxy_a: Card = cinema._proxy_a
-	var aligned_rotation := Vector3(0.0, cinema._yaw_towards(original_a.origin, original_b.origin), 0.0) if aligned else original_a.basis.orthonormalized().get_euler()
-	var relative := Basis.from_euler(aligned_rotation).inverse() * proxy_a.basis.orthonormalized()
+	var relative := Basis(straight_a).inverse() * proxy_a.basis.orthonormalized()
 	_expect(relative.is_equal_approx(Basis(Vector3.RIGHT, deg_to_rad(cinema.windup_pitch_degrees))),
-		"wind-up pitches around the aligned card's own X axis")
-	var defender_alignment := Vector3(0.0, cinema._yaw_towards(original_b.origin, original_a.origin), 0.0) if aligned else original_b.basis.orthonormalized().get_euler()
-	var defender_relative: Basis = Basis.from_euler(defender_alignment).inverse() * cinema._proxy_b.basis.orthonormalized()
+		"wind-up pitches around the STRAIGHT card's own X axis, with no turn toward the other card")
+	var defender_relative: Basis = Basis(straight_b).inverse() * cinema._proxy_b.basis.orthonormalized()
 	_expect(defender_relative.is_equal_approx(Basis(Vector3.RIGHT, deg_to_rad(32.0))),
 		"opponent winds up with positive 32-degree X pitch opposite the player")
 	var away := original_a.origin - original_b.origin
@@ -536,36 +622,6 @@ func _marked() -> Array:
 
 ## Every vertex of every surface. The TIP lives in the head (surface 1), so scanning the
 ## shaft alone misses the very point the arrow lands on.
-func _vertices(arrow) -> PackedVector3Array:
-	var out := PackedVector3Array()
-	var mesh: ArrayMesh = arrow.line.mesh
-	if mesh == null:
-		return out
-	for s in range(mesh.get_surface_count()):
-		out.append_array(mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX])
-	return out
-
-## Nearest vertex to a point. For the TARGET this is the head's tip, so "the arrow lands
-## here" is this being ~0.
-func _nearest_vertex(arrow, point: Vector3) -> float:
-	var verts: PackedVector3Array = _vertices(arrow)
-	if verts.is_empty():
-		return -1.0
-	var near: float = INF
-	for v in verts:
-		near = minf(near, point.distance_to(v))
-	return near
-
-func _farthest_vertex(arrow, point: Vector3) -> float:
-	var mesh: ArrayMesh = arrow.line.mesh
-	if mesh == null or mesh.get_surface_count() == 0:
-		return -1.0
-	var verts: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var far: float = 0.0
-	for v in verts:
-		far = maxf(far, point.distance_to(v))
-	return far
-
 func _names(cards: Array) -> String:
 	var out: Array[String] = []
 	for c in cards:
