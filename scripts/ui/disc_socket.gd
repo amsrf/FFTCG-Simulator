@@ -5,7 +5,7 @@ extends Node3D
 ## the -Y dome is carved stone. It fills its well, so its rim tucks under the station's iron ring: no gap.
 ##
 ## A button is never hidden. It TURNS, and always FORWARD (rotation only ever increases): gem-up when offered, stone-up
-## when not. A press always spins it: a half turn if the press takes it away, a full 360 if it stays offered.
+## when not. A press FLICKS it (see PRESS_SPIN_*): it spins down to the stone, holds, and only then follows its claims.
 ##
 ## The disc is SHARED. Several logical buttons may claim it (Confirm and Pass both use the large one); it shows its gem
 ## while ANY claimant wants it. Claims are COALESCED to the end of the frame: Assistant routinely hides and re-shows a
@@ -16,11 +16,27 @@ extends Node3D
 
 const HALF_TURN_SECONDS := 0.42
 const FULL_TURN_SECONDS := 0.7
-## A PRESS IS A FLICK: the disc spins this many extra full turns, fast at first and slowing to a stop on the face it
-## should show (gem if the button stays offered, stone if the press took it away). A state change with no press keeps
-## the plain half/full turn.
-const PRESS_SPIN_TURNS := 3
-const PRESS_SPIN_SECONDS := 1.5
+## A PRESS IS A FLICK. The disc leaves at PRESS_SPIN_SPEED (turns per second) and decelerates at a CONSTANT rate to a
+## dead stop on the STONE face, after at least PRESS_SPIN_MIN_TURNS. The deceleration is solved for the stop: the
+## stone angle at or past the minimum is the distance d, so a = w0^2 / 2d and the spin lasts T = 2d / w0 (a quadratic
+## ease-out is exactly this motion: its starting slope is 2d/T = w0). It then holds still PRESS_HOLD_SECONDS, and the
+## disc is LOCKED for the whole spin + hold: claims that change meanwhile wait, presses are refused, and on release it
+## turns (plain half turn) to whatever is wanted by then. A state change with no press keeps the plain half/full turn.
+const PRESS_SPIN_SPEED := 6.0
+const PRESS_SPIN_MIN_TURNS := 2.5
+const PRESS_HOLD_SECONDS := 0.5
+## The gem's text/symbol is blank while the disc spins; it comes back for the final full turn, so it reads only as the
+## disc slows into its stop — and only if the button will be offered again (wants_active()). A press whose button
+## stays taken away (no priority) keeps the gem blank for the whole spin.
+const IMPRINT_RETURN_ANGLE := TAU
+## EVERY turn ends with a little overshoot that rings out: the disc reaches its face still moving at the speed that
+## carries it SETTLE_OVERSHOOT radians past (~10 deg), then a damped spring (period SETTLE_PERIOD, decay
+## SETTLE_DAMPING per second) brings it back over SETTLE_SECONDS. The main motion is shaped to arrive at exactly that
+## speed, so there is no seam between the two.
+const SETTLE_OVERSHOOT := 0.18
+const SETTLE_PERIOD := 0.22
+const SETTLE_DAMPING := 11.0
+const SETTLE_SECONDS := 0.45
 const GLOW_FADE_SECONDS := 0.15
 const HOVER_GLOW := 1.0
 const PRESS_GLOW := 1.8
@@ -39,6 +55,15 @@ const AXLE_LIFT := 0.02
 
 const FACE_SHADER := preload("res://shaders/disc_face.gdshader")
 const GLOW_SHADER := preload("res://shaders/disc_ring_glow.gdshader")
+const PILLAR_SHADER := preload("res://shaders/disc_light_pillar.gdshader")
+## Light thrown UP off the ring on hover/press: an open cylinder this tall standing on the ring.
+const PILLAR_HEIGHT := 0.38
+## While the ring's light is ON (hover/press), a few slow motes of light rise off it, as bright as the ring.
+const MOTE_AMOUNT := 9
+const MOTE_LIFETIME := 2.6
+const MOTE_SIZE := 0.03
+## The ring intensity above which motes are emitted.
+const MOTE_THRESHOLD := 0.3
 
 ## The disc's radius: it fills the well (the well is this + 0.002).
 @export var radius: float = 0.314
@@ -67,12 +92,19 @@ var _imprinted := ""                  # what the imprint currently shows
 var _imprint_drawn := false           # whether the imprint has been drawn at all
 var _turn_tween: Tween
 var _glow_tween: Tween
+var _imprint_hidden := false        # blanked for the fast part of a press spin
+var _busy := false                    # a press spin (or its hold) is playing: nothing else may turn the disc
+
+## The press spin and its hold are over: the disc follows its claims again and may be pressed.
+signal released
 
 var _pivot: Node3D
 var _gem_material: ShaderMaterial
 var _stone_material: ShaderMaterial
 var _bezel_material: StandardMaterial3D
 var _glow_material: ShaderMaterial
+var _pillar_material: ShaderMaterial
+var _motes: CPUParticles3D
 var _viewport: SubViewport
 var _label: Label
 var _symbol: Node2D
@@ -114,12 +146,22 @@ func set_hovered(on: bool) -> void:
 	_hovered = on
 	_glow_to(HOVER_GLOW if on else 0.0)
 
-## A press: the ring flashes and the button spins (decided at the end of the frame, once the press's own
-## effects — usually hiding this very button — have landed).
+## True while a press spin (or the hold after it) is playing.
+func is_busy() -> bool:
+	return _busy
+
+## How long a press spin starting at `from` lasts until it has settled on the stone (the hold comes after).
+static func press_spin_seconds(from: float = 0.0) -> float:
+	var stop := _stone_angle_past(from + PRESS_SPIN_MIN_TURNS * TAU)
+	return 2.0 * (stop - from) / (PRESS_SPIN_SPEED * TAU + _settle_speed()) + SETTLE_SECONDS
+
+## A press: the ring flashes and the button spins (started at the end of the frame). Refused while a spin is playing.
 func pulse() -> void:
+	if _busy:
+		return
 	_spin_pending = true
 	if _glow_material != null:
-		_glow_material.set_shader_parameter("intensity", PRESS_GLOW)
+		_set_glow(PRESS_GLOW)
 		_glow_to(HOVER_GLOW if _hovered else 0.0, 0.45)
 	_mark_dirty()
 
@@ -136,32 +178,107 @@ func _mark_dirty() -> void:
 
 func _apply() -> void:
 	_dirty = false
+	if _busy:
+		return            # the spin finishes first; _release() applies whatever is wanted then
 	var target := wants_active()
+	if _spin_pending:
+		_spin_pending = false
+		_start_press_spin()
+		return
 	_refresh_imprint(target)
 	var goal := _goal
-	var flick := _spin_pending
-	if flick:
-		# PRESS_SPIN_TURNS full turns past where it was heading, then on to the next angle showing the wanted face.
-		goal = _next_angle(_goal + PRESS_SPIN_TURNS * TAU + 0.01, target)
-	elif target != _active:
+	if target != _active:
 		goal = _next_angle(_goal, target)
-	_spin_pending = false
 	_active = target
 	if is_equal_approx(goal, _goal):
 		return
 	var from := _pivot.rotation.x
 	_goal = goal
+	# Text only on a gem that is coming UP; a gem going face down (no priority) goes blank at once.
+	_set_imprint_shown(target)
 	if _turn_tween != null and _turn_tween.is_valid():
 		_turn_tween.kill()
-	if flick:
-		# Flung: full speed at once, then a long deceleration into the resting face (no ease-in, no overshoot).
-		_turn_tween = create_tween().set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-		_turn_tween.tween_property(_pivot, "rotation:x", goal, PRESS_SPIN_SECONDS)
-	else:
-		var seconds := FULL_TURN_SECONDS if goal - from > PI * 1.5 else HALF_TURN_SECONDS
-		_turn_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-		_turn_tween.tween_property(_pivot, "rotation:x", goal, seconds)
+	var seconds := FULL_TURN_SECONDS if goal - from > PI * 1.5 else HALF_TURN_SECONDS
+	_turn_tween = create_tween()
+	_turn_tween.tween_method(_pose_turn.bind(from, goal, seconds), 0.0, seconds + SETTLE_SECONDS, seconds + SETTLE_SECONDS)
 	_turn_tween.tween_callback(_normalise)
+
+## A plain turn: eases in from rest and arrives at `goal` at the settle speed (a cubic Hermite with zero start slope
+## and the arrival slope as its end slope), then the settle.
+func _pose_turn(t: float, from: float, goal: float, seconds: float) -> void:
+	if t >= seconds:
+		_pivot.rotation.x = _settle_angle(goal, t - seconds)
+		return
+	var d := goal - from
+	var x := t / seconds
+	var s := _settle_speed() * seconds / d
+	_pivot.rotation.x = from + d * ((3.0 * x * x - 2.0 * x * x * x) + s * (x * x * x - x * x))
+
+## Constant deceleration from PRESS_SPIN_SPEED to the settle speed on the stone, the settle, the hold, then release.
+func _start_press_spin() -> void:
+	_busy = true
+	if _turn_tween != null and _turn_tween.is_valid():
+		_turn_tween.kill()
+	var from := _pivot.rotation.x
+	_goal = _stone_angle_past(from + PRESS_SPIN_MIN_TURNS * TAU)
+	_active = false
+	_set_imprint_shown(false)
+	var total := press_spin_seconds(from)
+	_turn_tween = create_tween()
+	_turn_tween.tween_method(_pose_press.bind(from, _goal), 0.0, total, total)
+	_turn_tween.tween_callback(_normalise)
+	_turn_tween.tween_interval(PRESS_HOLD_SECONDS)
+	_turn_tween.tween_callback(_release)
+
+func _pose_press(t: float, from: float, goal: float) -> void:
+	var w0 := PRESS_SPIN_SPEED * TAU
+	var v := _settle_speed()
+	var reach := 2.0 * (goal - from) / (w0 + v)       # time to the face
+	if t >= reach:
+		_pivot.rotation.x = _settle_angle(goal, t - reach)
+		return
+	var a := (w0 - v) / reach
+	_pivot.rotation.x = from + w0 * t - 0.5 * a * t * t
+
+## The settle after arriving at `goal`: a damped sine whose starting speed is the arrival speed.
+static func _settle_angle(goal: float, t: float) -> float:
+	var wd := TAU / SETTLE_PERIOD
+	return goal + _settle_speed() / wd * exp(-SETTLE_DAMPING * t) * sin(wd * t)
+
+## The arrival speed that peaks SETTLE_OVERSHOOT past the face (the first peak of the damped sine is a quarter period in).
+static func _settle_speed() -> float:
+	var wd := TAU / SETTLE_PERIOD
+	return SETTLE_OVERSHOOT * wd * exp(SETTLE_DAMPING * SETTLE_PERIOD * 0.25)
+
+func _process(_delta: float) -> void:
+	if _motes != null:
+		var want := glow_intensity() > MOTE_THRESHOLD
+		if _motes.emitting != want:
+			_motes.emitting = want
+	if _busy and _imprint_hidden and _goal - _pivot.rotation.x <= IMPRINT_RETURN_ANGLE and wants_active():
+		_set_imprint_shown(true)
+
+func _set_imprint_shown(on: bool) -> void:
+	_imprint_hidden = not on
+	if _gem_material != null:
+		_gem_material.set_shader_parameter("use_imprint", on)
+
+## True when the gem currently carries its text or symbol (false during the fast part of a press spin, and through a
+## whole press spin whose button is not wanted back).
+func imprint_shown() -> bool:
+	return not _imprint_hidden
+
+func _release() -> void:
+	_busy = false
+	released.emit()
+	_mark_dirty()
+
+## The first stone-up angle (an odd multiple of PI) at or beyond `from`.
+static func _stone_angle_past(from: float) -> float:
+	var k := int(ceil(from / PI - 1e-4))
+	if k % 2 == 0:
+		k += 1
+	return k * PI
 
 ## The next angle at or beyond `from` that shows the wanted face: gem-up at even multiples of PI, stone-up at odd.
 func _next_angle(from: float, gem_up: bool) -> float:
@@ -184,8 +301,30 @@ func _glow_to(value: float, seconds: float = GLOW_FADE_SECONDS) -> void:
 	if _glow_tween != null and _glow_tween.is_valid():
 		_glow_tween.kill()
 	_glow_tween = create_tween()
-	_glow_tween.tween_method(func(v: float): _glow_material.set_shader_parameter("intensity", v),
-		float(_glow_material.get_shader_parameter("intensity")), value, seconds)
+	_glow_tween.tween_method(_set_glow, glow_intensity(), value, seconds)
+
+## The ring and the pillar above it share one intensity.
+func _set_glow(v: float) -> void:
+	_glow_material.set_shader_parameter("intensity", v)
+	if _pillar_material != null:
+		_pillar_material.set_shader_parameter("intensity", v)
+	_tint_motes()
+
+## Motes are the ring's own light: its colour, at its brightness (the ring's core is drawn at 0.9 * intensity).
+func _tint_motes() -> void:
+	if _motes == null:
+		return
+	var c := glow_color.linear_to_srgb()
+	c.a = clampf(glow_intensity() * 0.9, 0.0, 1.0)
+	_motes.color = c
+
+func glow_intensity() -> float:
+	var v = _glow_material.get_shader_parameter("intensity") if _glow_material != null else null
+	return float(v) if v is float else 0.0
+
+## True while the motes are rising (the ring's light is on).
+func motes_emitting() -> bool:
+	return _motes != null and _motes.emitting
 
 
 # --------------------------------------------------------------------------------------------- imprint
@@ -289,6 +428,82 @@ func _build() -> void:
 	glow.position = Vector3(0, RING_HEIGHT + 0.02, 0)
 	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(glow)
+	_build_pillar()
+	_build_motes()
+
+## An open cylinder of light standing on the ring (no caps: a cap would be a lit disc over the button).
+func _build_pillar() -> void:
+	var tube := CylinderMesh.new()
+	tube.top_radius = radius + RING_OUTSET
+	tube.bottom_radius = radius + RING_OUTSET
+	tube.height = PILLAR_HEIGHT
+	tube.radial_segments = 64
+	tube.rings = 8
+	tube.cap_top = false
+	tube.cap_bottom = false
+	_pillar_material = ShaderMaterial.new(); _pillar_material.shader = PILLAR_SHADER
+	_pillar_material.set_shader_parameter("height", PILLAR_HEIGHT)
+	_pillar_material.set_shader_parameter("intensity", 0.0)
+	_pillar_material.render_priority = 1
+	var pillar := MeshInstance3D.new()
+	pillar.name = "LightPillar"
+	pillar.mesh = tube
+	pillar.material_override = _pillar_material
+	pillar.position = Vector3(0, RING_HEIGHT + PILLAR_HEIGHT * 0.5, 0)
+	pillar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(pillar)
+
+## Slow motes of light drifting up off the ring while its light is on.
+func _build_motes() -> void:
+	_motes = CPUParticles3D.new()
+	_motes.name = "Motes"
+	_motes.emitting = false
+	_motes.amount = MOTE_AMOUNT
+	_motes.lifetime = MOTE_LIFETIME
+	_motes.randomness = 0.6
+	_motes.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	_motes.emission_ring_axis = Vector3.UP
+	_motes.emission_ring_radius = radius + RING_OUTSET
+	_motes.emission_ring_inner_radius = radius + RING_OUTSET - 0.008
+	_motes.emission_ring_height = 0.01
+	_motes.direction = Vector3.UP
+	_motes.spread = 12.0
+	_motes.initial_velocity_min = 0.06
+	_motes.initial_velocity_max = 0.13
+	_motes.gravity = Vector3(0, 0.015, 0)
+	_motes.damping_min = 0.01
+	_motes.damping_max = 0.03
+	_motes.scale_amount_min = 0.5
+	_motes.scale_amount_max = 1.1
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.2, 0.7, 1.0])
+	fade.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0)])
+	_motes.color_ramp = fade
+	var dot := GradientTexture2D.new()
+	dot.fill = GradientTexture2D.FILL_RADIAL
+	dot.fill_from = Vector2(0.5, 0.5)
+	dot.fill_to = Vector2(1.0, 0.5)
+	dot.width = 64; dot.height = 64
+	var soft := Gradient.new()
+	soft.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
+	soft.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0)])
+	dot.gradient = soft
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.no_depth_test = false
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = dot
+	mat.render_priority = 2
+	var quad := QuadMesh.new()
+	quad.size = Vector2(MOTE_SIZE, MOTE_SIZE)
+	quad.material = mat
+	_motes.mesh = quad
+	_motes.position = Vector3(0, RING_HEIGHT + 0.01, 0)
+	add_child(_motes)
 
 func _build_imprint() -> void:
 	_viewport = SubViewport.new(); _viewport.name = "Imprint"
@@ -335,6 +550,8 @@ func _apply_colors() -> void:
 	_stone_material.set_shader_parameter("base_color", stone_color.linear_to_srgb())
 	_stone_material.set_shader_parameter("groove_color", groove_color.linear_to_srgb())
 	_glow_material.set_shader_parameter("glow_color", glow_color.linear_to_srgb())
+	_pillar_material.set_shader_parameter("glow_color", glow_color.linear_to_srgb())
+	_tint_motes()
 
 func _add_mesh(node_name: String, mesh: Mesh, material: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()

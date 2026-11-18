@@ -314,6 +314,7 @@ func slot_width_m() -> float:
 func shatter(world_parent: Node) -> void:
 	if world_parent == null or _spin_node == null:
 		return
+	SoundManager.play(&"mana_crystal_shatter")
 	var shards: Node3D = preload("res://scripts/vfx/crystal_shards.gd").new()
 	# ADD FIRST: `burst()` takes the crystal's GLOBAL transform, and that needs a parent to be global to.
 	#

@@ -5,6 +5,8 @@ signal sound_played(event: StringName, variant: int)
 const MAX_VOICES := 24
 const DRAW_PATH := "res://assets/audio/sfx/cards/draw/draw_%02d.wav"
 const FLIP_PATH := "res://assets/audio/sfx/cards/flip_distant/flip_distant_%02d.wav"
+const MANA_CRYSTAL_PATH := "res://assets/audio/sfx/magic/mana_crystal/glass_break_v2/mana_crystal_glass_%02d.wav"
+const PRIORITY_PASS_PATH := "res://assets/audio/sfx/ui/priority/pass_%02d.wav"
 
 var _rng := RandomNumberGenerator.new()
 var _events: Dictionary = {}
@@ -20,6 +22,8 @@ func _ready() -> void:
 		AudioServer.set_bus_send(AudioServer.bus_count - 1, "Master")
 	register_event(&"card_draw", _load_bank(DRAW_PATH, 22), -8.0)
 	register_event(&"card_flip", _load_bank(FLIP_PATH, 22), -8.0)
+	register_event(&"mana_crystal_shatter", _load_bank(MANA_CRYSTAL_PATH, 4), -0.0)
+	register_event(&"priority_pass", _load_bank(PRIORITY_PASS_PATH, 1))
 
 ## Load a numbered bank `pattern % 1 .. pattern % count`, reporting every missing file.
 func _load_bank(pattern: String, count: int) -> Array[AudioStream]:
