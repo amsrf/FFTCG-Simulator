@@ -55,6 +55,8 @@ var _cast_armed := false
 ## a test can drive the whole flow without a real mouse.
 var _last_drag_pointer := Vector2(-1, -1)
 var _drop_zone: Node = null
+## The ghost of the slot the held Character will land in (field_slot_ghost.gd). Built lazily, local hand only.
+var _slot_ghost: Node = null
 ## The size a hovered hand card grows to: about 225 x 315 px under the perspective camera — bigger than the resting
 ## hand, readable, and still clear of the field.
 const HOVER_CARD_SCALE := 1.85
@@ -1054,6 +1056,7 @@ func end_character_drag(card: Card = null) -> void:
 	_drag_mode = DragMode.NONE
 	_hold_elapsed = 0.0
 	_stance_progress = 0.0
+	_refresh_slot_ghost()
 
 ## Called every frame by the dragged Card. Returns true while the Hand owns the card's transform; false means the
 ## caller should run the ordinary mouse-plane drag (the REORDER mode).
@@ -1146,6 +1149,29 @@ func _set_cast_armed(value: bool) -> void:
 	var zone := _field_drop_zone() if value or _drop_zone != null else null
 	if zone != null:
 		zone.set_lit(value)
+	_refresh_slot_ghost()
+
+## The landing-slot ghost: faint while a playable Character is held in the stance, bright while a release would play
+## it (or while it is being paid for); hidden otherwise. Field.landing_slot() decides the slot, so it is play_card()'s.
+func _refresh_slot_ghost() -> void:
+	if mirror_presentation:
+		return
+	var card := _character_drag_card
+	var showing: bool = is_instance_valid(card) and card.is_character() and (_character_drag_charging \
+			or (_drag_mode == DragMode.STANCE and card.can_be_played() and field.has_priority()))
+	if not showing:
+		if _slot_ghost != null and is_instance_valid(_slot_ghost):
+			_slot_ghost.hide_slot()
+		return
+	if _slot_ghost == null or not is_instance_valid(_slot_ghost):
+		_slot_ghost = preload("res://scripts/game/field_slot_ghost.gd").new()
+		_slot_ghost.name = "FieldSlotGhost"
+		add_child(_slot_ghost)
+	_slot_ghost.show_slot(field.landing_slot(card), _cast_armed or _character_drag_charging)
+
+## Probe hook: the landing-slot ghost, or null if no card has been held yet.
+func slot_ghost() -> Node:
+	return _slot_ghost if _slot_ghost != null and is_instance_valid(_slot_ghost) else null
 
 ## Built lazily, only for the interactive hand. World-space (top_level), so the parent does not matter.
 func _field_drop_zone() -> Node:

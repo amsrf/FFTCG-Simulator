@@ -458,9 +458,29 @@ stand-in where the card is drawn; `play_in(tier)` = drawing crosses to `SLAM_HEI
 card appears and drops, `SlamDust` + `jolt()`. Beats are static vars on the script (slower than the clip on purpose).
 `phase` ("travel" / "hold" / "fill" / "drop" / "landed") is the probe hook. The light quad must ride ON the falling
 card (coplanar it z-fights). Dust quads lie FLAT in the slab-bottom plane (standing billboards clouded the card face).
-Field cards float ~0.44 m over the wood, so "the board" a card hits is its own row's plane. The crystal block-build is
+Field cards REST ON THE WOOD (row markers at Field-local y 0.0846: face = slab top 0.065 + the 1.7 cm field edge).
+They used to float 0.44 m up and read as floating; they were moved down ALONG THE CAMERA RAY, so they are 1.0551x
+farther away and `Zone.FIELD` scale (1.2 -> 1.266) and `ROW_CARD_STEP` (0.65 -> 0.686) grew by that factor, leaving
+the screen layout unchanged. Change one of the three and recompute the others the same way. The crystal block-build is
 `Field.use_crystal_teleport`. `card_play_probe` is the spec; `tools/card_play_demo.tscn` (`--fixed-fps 60`, every
 frame is exactly 1/60 s however slow the PNG save) is the filmstrip.
+
+**The phase is shown by the phase prism** (`scripts/ui/phase_prism.gd`), not by `PhaseText`: a TRIANGULAR crystal
+lying in a stone cradle above the local priority buttons, its top face flush with the lip; a phase change turns it
+forward 120 degrees (`Game.phase_entered`), the new name written on the hidden face that comes up. Its angle only ever
+increases. The cradle (`Blender/build_phase_cradle.py`, the board pipeline's last stage before
+`export_board_to_godot.py`) READS the prism's size, lip height and `CENTRE` from `phase_prism.gd`: change them there,
+re-run the cradle script, re-export the board (both seats). A hexagonal crystal was tried first: a horizontal lip never
+lines up with a hexagon's faces (slivers, cut tips, gaps). Godot's front faces are CLOCKWISE seen from outside: a
+procedural mesh wound the other way still "draws" (the inside of its far side) while it floats, and vanishes once
+sunk. A larger "phase track" bridge over the river was built and rejected as too big: keep this small.
+`phase_prism_probe` is the spec.
+
+**The held card previews its slot, and field cards cast a wood shadow.** `Field.landing_slot(card)` is the ONE
+answer to "where would this land" (same `_nearest_free_slot()` as `play_card()`); the hand's ghost
+(`field_slot_ghost.gd`) only draws it. A new placement rule goes into that shared function, never into the ghost.
+`card_field_shadow.gd` is a `top_level` child of the Card on the wood (`WOOD_Y`), offset by `FALL` (straight
+down, the card hid it); `Card.enter_zone()` is its only switch.
 
 Card thickness is `CardEdge`'s y scale (the mesh is one unit deep): `CARD_EDGE.thickness_for(on_field)` decides it in
 `Card.enter_zone`; anything that saves and restores the edge's transform (damage reaction, tornado) restores it too.
@@ -1036,7 +1056,7 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **A drawn card leaves the deck at the deck's size.** `Hand.draw_many()` records each card's world scale before
   `add_card_to_tree()` (whose `enter_zone(HAND)` assigns 1.35 at once) and restores it on the path follower, so the
   flight's grow-and-settle tween takes it to hand size with no first-frame jump. `draw_probe` asserts it.
-  The deck is LOWER than the field cards (y 0.5), so the path's start handle carries `DRAW_LIFT` of world Y: without it
+  The deck sits below a card in flight (field cards now rest on the wood), so the path's start handle carries `DRAW_LIFT` of world Y: without it
   the card flies under the field. `draw_probe` asserts the card stays above the field once off the deck.
 - **The mana crystal row:** `mana_crystal.tscn` + `scripts/mana_crystal.gd` + `shaders/mana_crystal.gdshader`, placed by `Assistant`'s cost readout and fed by `Assistant.payment_breakdown()`. One crystal per point of cost. `element` is what is being *asked* for (`"fire"` → a ruby, `""`/`"any"` → white) and `paid_element` + `lit` are what *paid* it, so a white wild crystal paid by a red source turns red and glows. Colours come from `CRYSTAL_TINT` (the badge palette with fire overruled to a ruby — the badge accent is an orange).
 - **The crystal shader goes on SURFACE 0 ONLY**, via `set_surface_override_material(0, …)`. `neo_crystal3.glb` is built as two surfaces: `Material.001` is the body and `Material.003` *is* the black edge and outline geometry. A full `material_override` deletes the edges.

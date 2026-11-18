@@ -14,7 +14,10 @@ const CARD_CHARGE = 1
 ## A row holds at most five cards, so 0.65 is enough: it leaves a 0.16 m gap between 0.49 m cards and frees the
 ## outer columns, which is what makes room for the deck and graveyard beside the rows under the perspective
 ## camera. Cards still do not overlap.
-const ROW_CARD_STEP := 0.65
+## Row spacing, local. 0.686 = the old 0.65 x 1.0551: the rows were moved down onto the wood ALONG THE CAMERA RAY
+## (battle_field.tscn markers, y 0.5 -> 0.0846), which puts them 1.0551x farther away, so spacing and the field card
+## scale (Card.ZONE_PRESENTATION) grew by the same factor and the screen layout is unchanged.
+const ROW_CARD_STEP := 0.686
 const RULES := preload("res://scripts/game/rules.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
@@ -522,6 +525,29 @@ func _nearest_free_slot(centre: Vector3, row: Array, entering: Card) -> Vector3:
 		if free:
 			return Vector3(x, centre.y, centre.z)
 	return centre + Vector3(row_slot_offset(row.size()), 0, 0)
+
+## WHERE `card` WOULD LAND if its controller played it now: the same free slot play_card() will pick
+## (_nearest_free_slot), in WORLD coordinates, plus the card's footprint there. Empty when it would not take a slot
+## by itself: not a Character, or a sixth Backup (make_room_for_backup asks which one goes first). Read by the hand's
+## ghost slot (field_slot_ghost.gd) while a card is held, so the preview and the play cannot disagree.
+func landing_slot(card: Card) -> Dictionary:
+	if card == null or not card.is_character():
+		return {}
+	var is_opponent: bool = card.controller != Card.PLAYER
+	var row: Array
+	var marker: Node3D
+	if card.type == Card.FORWARD:
+		row = opponent_front_cards if is_opponent else front_cards
+		marker = $OpponentFrontrowCard if is_opponent else $FrontrowCard
+	else:
+		row = opponent_back_cards if is_opponent else back_cards
+		marker = $OpponentBackrowCard if is_opponent else $BackrowCard
+		if row.size() >= 5:
+			return {}
+	var local: Vector3 = _nearest_free_slot(marker.position, row, card)
+	var field_scale: float = global_transform.basis.get_scale().x
+	var card_scale: float = float(Card.ZONE_PRESENTATION[Card.Zone.FIELD]["scale"])
+	return {"position": to_global(local), "size": card._card_face_size() * field_scale * card_scale}
 
 ## Cost bands for the field-arrival pulse: 0-4 has no pulse, 5-7 is mild, and
 ## 8+ is the big impact.

@@ -4,9 +4,9 @@ from mathutils import Matrix, Vector
 from bpy_extras.object_utils import world_to_camera_view
 HERE=os.path.dirname(os.path.abspath(__file__))
 ROOT=os.path.dirname(HERE); OUT=os.path.join(ROOT,'assets','board'); os.makedirs(OUT,exist_ok=True)
-# The latest step of the board pipeline: build_pit_housing.py (on top of fill_deck_pockets.py).
-SOURCE=os.path.join(HERE,'board_pit_stations')
-bpy.ops.wm.open_mainfile(filepath=os.path.join(SOURCE,'board_pit_stations.blend'))
+# The latest step of the board pipeline: build_phase_cradle.py (on top of build_pit_housing.py).
+SOURCE=os.path.join(HERE,'board_phase_cradle')
+bpy.ops.wm.open_mainfile(filepath=os.path.join(SOURCE,'board_phase_cradle.blend'))
 scene=bpy.context.scene
 seat_two='--seat2' in sys.argv
 suffix='_seat2' if seat_two else ''
@@ -16,7 +16,13 @@ if seat_two:
     pivot=Vector((0,-.30,0))
     turn=Matrix.Translation(pivot) @ Matrix.Rotation(math.pi,4,'Z') @ Matrix.Translation(-pivot)
     fixed_prefixes=('Forest single wood slab','Volcanic single wood slab','Forest recessed wooden floor','Volcanic recessed wooden floor',
-        'Slab edge split','Split branch','Slab grain accent','Wood knot','Grain around knot')
+        'Slab edge split','Split branch','Slab grain accent','Wood knot','Grain around knot',
+        # The phase crystal's cradle is always on the LOCAL player's right (phase_prism.gd), in the local station's stone.
+        'Phase cradle')
+    forest_stone=bpy.data.materials.get('Forest housing stone')
+    cradle=bpy.data.objects.get('Phase cradle lip')
+    if cradle is not None and forest_stone is not None:
+        cradle.data.materials.clear(); cradle.data.materials.append(forest_stone)
     for o in scene.objects:
         if o.name.startswith(('Deck proxy','Layout card','Card face')):
             o.hide_render=True

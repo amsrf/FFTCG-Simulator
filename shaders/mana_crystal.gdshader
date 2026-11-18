@@ -50,6 +50,25 @@ uniform float roughness_value : hint_range(0.0, 1.0) = 0.25;
 // project's Compatibility renderer silently ignores Environment glow, so there is none available. See game.tscn.
 uniform float emission_energy : hint_range(0.0, 4.0) = 0.85;
 
+// CONTACT DARKENING, for a crystal set INTO something (the phase prism in its stone cradle): the surface dims as it
+// goes down to WORLD height `occlusion_y`, over `occlusion_depth` metres above it, so the crystal fades into the hole
+// instead of being cut off by a bright edge. Off by default (the payment row's crystals stand in the air).
+uniform float occlusion_y = -1000.0;
+uniform float occlusion_depth = 0.03;
+uniform float occlusion_floor : hint_range(0.0, 1.0) = 0.25;
+varying float world_y;
+
+// A GRADIENT ACROSS A FACE, for meshes that carry it in their vertex colour (the phase prism writes COLOR.r = 0 on a
+// face's top edge and 1 on its bottom edge): lighter at the top, darker at the bottom. Off by default; the payment
+// row's model has no such colours.
+uniform float gradient_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float gradient_top : hint_range(0.5, 2.0) = 1.15;
+uniform float gradient_bottom : hint_range(0.0, 1.0) = 0.55;
+
+void vertex() {
+	world_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
+}
+
 void fragment() {
 	// Owed: near-black, keeping a little of the colour so the requirement is still readable.
 	vec3 owed_albedo = mix(vec3(0.045), tint.rgb, owed_tint);
@@ -65,4 +84,8 @@ void fragment() {
 	// The paid glow only ever ADDS light, so a filled crystal is never darker than an owed one.
 	float breathe = 1.0 + pulse * sin(TIME * pulse_speed + phase_offset);
 	EMISSION = owed_light + tint.rgb * emission_energy * paid * breathe + vec3(1.0) * flash * 1.4;
+	float contact = mix(occlusion_floor, 1.0, smoothstep(occlusion_y, occlusion_y + max(occlusion_depth, 1e-4), world_y));
+	float shade = mix(1.0, mix(gradient_top, gradient_bottom, COLOR.r), gradient_amount);
+	ALBEDO *= contact * shade;
+	EMISSION *= contact * shade;
 }

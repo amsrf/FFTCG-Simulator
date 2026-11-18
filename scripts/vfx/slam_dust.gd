@@ -78,8 +78,8 @@ static func spawn(card: Node3D, face: Transform3D, tier: int) -> CPUParticles3D:
 	ramp.add_point(0.25, Color(COLOUR, OPACITY[i] * 0.8))
 	dust.color_ramp = ramp
 	card.get_tree().root.add_child(dust)
-	# At the slab's BOTTOM, so the puffs roll out from under the piece. (Field cards ride ~0.44 m over the wood; the
-	# plane they lie in is the surface they read as hitting, so the dust is there, not down on the wood.)
+	# At the slab's BOTTOM, so the puffs roll out from under the piece. (Field cards rest on the wood, so the
+	# slab bottom is the wood surface.)
 	var bottom: float = CARD_EDGE.FIELD_THICKNESS * scale.y
 	dust.global_transform = Transform3D(Basis.IDENTITY, face.origin - Vector3.UP * (bottom - 0.01))
 	dust.emitting = true

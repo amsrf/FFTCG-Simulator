@@ -21,6 +21,8 @@ var _hand = null
 var _assistant = null
 
 
+const FIELD_SHADOW := preload("res://scripts/cards/card_field_shadow.gd")
+
 func _expect(ok: bool, what: String) -> void:
 	_checks += 1
 	if ok:
@@ -110,6 +112,8 @@ func _ready() -> void:
 	await _wait_for(func() -> bool: return cheap.hologram.phase == "drop", 1.0)
 	_expect(cheap.visible, "then the card is there")
 	_expect(cheap.hand_mesh.global_position.y > slot.y + 0.1, "above its slot, and it drops")
+	await get_tree().process_frame
+	var drop_shadow: float = cheap.field_shadow.strength() if cheap.field_shadow != null else -1.0
 	await _wait_for(func() -> bool: return cheap.hologram.phase == "landed", 1.0)
 	var landed_ms: int = Time.get_ticks_msec() - t0
 	_expect(cheap.hand_mesh.global_position.distance_to(slot) < 0.001, "it hits the board exactly on its slot")
@@ -121,6 +125,19 @@ func _ready() -> void:
 		_expect(int(dust.get("amount")) == 14, "a cheap card's small puff (%d)" % int(dust.get("amount")))
 	_expect(not HOLOGRAM.is_jolting() and camera.global_position.is_equal_approx(camera_home),
 		"a cost-2 card does not move the camera")
+	# THE WOOD SHADOW (card_field_shadow.gd): on the slab under the card, offset by FALL, full strength at rest, and
+	# lighter while the card was still falling.
+	await get_tree().process_frame
+	var shadow = cheap.field_shadow
+	_expect(shadow != null and shadow.active and shadow.is_visible_in_tree(), "a field card casts a wood shadow")
+	if shadow != null:
+		var want := Vector3(cheap.global_position.x + FIELD_SHADOW.FALL.x, FIELD_SHADOW.WOOD_Y,
+			cheap.global_position.z + FIELD_SHADOW.FALL.y)
+		_expect(shadow.global_position.distance_to(want) < 0.005,
+			"on the wood, offset by FALL (%s vs %s)" % [str(shadow.global_position), str(want)])
+		_expect(absf(shadow.strength() - FIELD_SHADOW.STRENGTH) < 0.02, "at full strength at rest (%.2f)" % shadow.strength())
+		_expect(drop_shadow >= 0.0 and drop_shadow < shadow.strength() - 0.05,
+			"and lighter while the card was falling (%.2f)" % drop_shadow)
 	await get_tree().create_timer(0.4).timeout
 	_expect(lines == null or not is_instance_valid(lines), "the drawing's light has gone")
 	_expect(ghost == null or not is_instance_valid(ghost), "and so has the hologram")
@@ -156,6 +173,7 @@ func _ready() -> void:
 	await _game.put_card_into_graveyard(cheap)
 	_expect(absf(CARD_EDGE.thickness_of(cheap) - CARD_EDGE.CARD_EDGE_THICKNESS) < 0.0001,
 		"off the field it is card-thin again")
+	_expect(cheap.field_shadow == null or not cheap.field_shadow.active, "and casts no wood shadow")
 
 	print("[CardPlay] %d checks | failures: %d" % [_checks, _fails])
 	if _fails == 0:

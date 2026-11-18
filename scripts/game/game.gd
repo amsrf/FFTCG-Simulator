@@ -869,6 +869,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/block_link.gdshader"),
 	# The wood slab's gold rim (field_drop_zone.gd): first rendered when a held hand card is pointed at the field.
 	preload("res://shaders/field_drop_glow.gdshader"),
+	# The landing-slot ghost (field_slot_ghost.gd): first rendered when a held Character reaches the cast stance.
+	preload("res://shaders/field_slot_ghost.gdshader"),
 	preload("res://shaders/ex_burst_aura.gdshader"),
 	preload("res://shaders/counter_arc.gdshader"),
 	preload("res://shaders/counter_overlay.gdshader"),
@@ -885,7 +887,8 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/cost_panel.gdshader"),
 	# The top-of-stack aura and resolve pulse (card_stack_aura.gd): first rendered when something reaches the stack.
 	preload("res://shaders/stack_aura.gdshader"),
-	# The board shadow under a card lifted by effect damage (card_damage_fx.gd): first rendered on the first hit.
+	# The board shadow under a card lifted by effect damage (card_damage_fx.gd), and the resting wood shadow under every
+	# field card (card_field_shadow.gd).
 	preload("res://shaders/card_lift_shadow.gdshader"),
 	preload("res://shaders/ice_crystal.gdshader"),
 	preload("res://shaders/orb_halo.gdshader"),
@@ -927,7 +930,19 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/destroy_card_pop.gdshader"),
 ]
 
+## THE PHASE PRISM (scripts/ui/phase_prism.gd): the crystal lying above the priority buttons that rolls to the
+## current phase. Built here, before the first phase is entered, and fed by phase_entered. It replaced the debug phase
+## line in PhaseText (which still carries match messages).
+const PHASE_PRISM := preload("res://scripts/ui/phase_prism.gd")
+var phase_prism: Node3D = null
+## A phase or step was entered. `turn_owner` is the player id (1 = this machine's player).
+signal phase_entered(phase: int, turn_owner: int)
+
 func _ready():
+	phase_prism = PHASE_PRISM.new()
+	phase_prism.name = "PhasePrism"
+	add_child(phase_prism)
+	phase_entered.connect(func(p: int, owner_id: int) -> void: phase_prism.show_phase(p, owner_id == 1))
 	start_match(MatchSetup.resolve_config())
 
 ## Forces each effect shader to compile by putting a 1-pixel quad using it on screen for one frame. The quads free
@@ -2304,7 +2319,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 	# it, so every phase starts from its default (modals are pushed on top).
 	phase = phase_enum
 	GlobalVariables.set_base_mode(GlobalVariables.default_mode_for(phase_enum))
-	$PhaseText.text = "%s — P%s" % [phase_to_string(phase_enum), turn_owner]
+	phase_entered.emit(phase_enum, turn_owner)
 	
 	match phase_enum:
 		GlobalVariables.Phase.ACTIVE_PHASE:

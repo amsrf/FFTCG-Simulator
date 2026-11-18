@@ -4,15 +4,22 @@ extends MeshInstance3D
 const GEOMETRY_PATH := "res://assets/board/board_mesh.bin"
 const APPEARANCE_PATH := "res://assets/board/board_appearance.png"
 const RIVER_SHADER := preload("res://shaders/board_river.gdshader")
+const SURFACE_SHADER := preload("res://shaders/board_surface.gdshader")
 ## Multiplies the baked board (wood, stone, river). 1.0 = the texture as baked; lower = a darker scene.
 ## The cards are unshaded and unaffected, so they keep their contrast against it.
 @export_range(0.2, 1.0, 0.01) var brightness: float = 0.7:
 	set(value):
 		brightness = value
 		_apply_brightness()
+## How much darker the far rim is than the play area (0 = flat board). The board and the river share it
+## (shaders/board_edge_shade.gdshaderinc), so the eye goes to the cards rather than to bright empty wood.
+@export_range(0.0, 1.0, 0.01) var edge_darkness: float = 0.5:
+	set(value):
+		edge_darkness = value
+		_apply_brightness()
 var displayed_seat: int = 0
 var river: MeshInstance3D
-var _board_material: StandardMaterial3D
+var _board_material: ShaderMaterial
 var _river_material: ShaderMaterial
 
 func _ready() -> void:
@@ -31,12 +38,10 @@ func configure_seat(seat: int) -> void:
 	if appearance == null:
 		push_error("Board environment appearance missing")
 		return
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	material.albedo_texture = ImageTexture.create_from_image(appearance)
-	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	material.texture_repeat = false
+	var material := ShaderMaterial.new()
+	material.shader = SURFACE_SHADER
+	var appearance_texture := ImageTexture.create_from_image(appearance)
+	material.set_shader_parameter("appearance", appearance_texture)
 	board_mesh.surface_set_material(0, material)
 	_board_material = material
 	mesh = board_mesh
@@ -51,7 +56,7 @@ func configure_seat(seat: int) -> void:
 		river.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var water := ShaderMaterial.new()
 	water.shader = RIVER_SHADER
-	water.set_shader_parameter("baked_appearance", material.albedo_texture)
+	water.set_shader_parameter("baked_appearance", appearance_texture)
 	water.set_shader_parameter("flow_direction", -1.0 if next_seat == 2 else 1.0)
 	water.set_shader_parameter("river_center_z", 0.31 if next_seat == 2 else 0.29)
 	river_mesh.surface_set_material(0, water)
@@ -62,10 +67,10 @@ func configure_seat(seat: int) -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _apply_brightness() -> void:
-	if _board_material != null:
-		_board_material.albedo_color = Color(brightness, brightness, brightness)
-	if _river_material != null:
-		_river_material.set_shader_parameter("brightness", brightness)
+	for m in [_board_material, _river_material]:
+		if m != null:
+			m.set_shader_parameter("brightness", brightness)
+			m.set_shader_parameter("edge_darkness", edge_darkness)
 
 func _load_geometry(geometry_path: String) -> ArrayMesh:
 	var file := FileAccess.open(geometry_path, FileAccess.READ)

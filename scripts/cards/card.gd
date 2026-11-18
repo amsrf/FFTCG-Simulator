@@ -216,6 +216,9 @@ func _ready():
 
 ## Card thickness (a shared rounded-prism side wall). See card_edge.gd.
 const CARD_EDGE := preload("res://scripts/cards/card_edge.gd")
+const CARD_FIELD_SHADOW := preload("res://scripts/cards/card_field_shadow.gd")
+## The soft shadow on the wood under a field card (card_field_shadow.gd). Built on the first field arrival.
+var field_shadow: MeshInstance3D = null
 ## The printed cost crystal, enlarged over the original. See card_cost_badge.gd.
 const CARD_COST_BADGE := preload("res://scripts/cards/card_cost_badge.gd")
 const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
@@ -591,7 +594,9 @@ const ZONE_PRESENTATION := {
 	# HAND_CONTAINER_SCALE), and Hand lays the fan out for it. The hand sits ~4.6 m from the camera, so proximity, not
 	# scale, is what makes it read larger than the field.
 	Zone.HAND:      {"scale": HAND_CARD_SCALE / HAND_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
-	Zone.FIELD:     {"scale": 1.2, "rotation": READABLE_ROTATION, "power_ui": true},
+	# 1.266 = 1.2 x 1.0551: field cards REST ON THE WOOD (their face at the slab top + edge thickness), moved down along
+	# the camera ray from y 0.5, so they grew by the distance ratio to keep their on-screen size. See Field.ROW_CARD_STEP.
+	Zone.FIELD:     {"scale": 1.266, "rotation": READABLE_ROTATION, "power_ui": true},
 	# Divided by the container's own scale, because `scale` is LOCAL: the card has to end up at STACK_CARD_SCALE in the
 	# WORLD. See STACK_CONTAINER_SCALE.
 	Zone.STACK:     {"scale": STACK_CARD_SCALE / STACK_CONTAINER_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
@@ -684,12 +689,15 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	current_zone = zone
 	if mat != null:
 		field_face.enter_zone(hand_mesh, mat, zone == Zone.FIELD, revealed, _printed_texture, code, card_name, cost, element)
+		if zone == Zone.FIELD:
+			power_label.set_field_ink(element)
 	set_hidden(false)
 	# The field tile has its own thin edge finish.
 	CARD_EDGE.set_field_style(self, zone == Zone.FIELD)
 	CARD_EDGE.set_tint(self, element)
 	# Leaving the field takes the sickness waves with it at once.
 	overlays.refresh_sickness()
+	_sync_field_shadow()
 	# And the dull look: a card changing zone shows exactly its real state (after current_zone moved), mid-tween nothing.
 	dull_fx.sync()
 	var presentation: Dictionary = ZONE_PRESENTATION.get(zone, ZONE_PRESENTATION[Zone.NONE])
@@ -1773,6 +1781,16 @@ func _build_target_border() -> void:
 
 ## Card face size in metres. The mesh is a flat quad in XZ (0.429 x 0.6), so the
 ## AABB's x is the width and its z the height.
+## The wood shadow is on exactly while the card is in the FIELD zone; built lazily on the first arrival.
+func _sync_field_shadow() -> void:
+	var on_field: bool = current_zone == Zone.FIELD
+	if on_field and (field_shadow == null or not is_instance_valid(field_shadow)):
+		field_shadow = CARD_FIELD_SHADOW.new()
+		field_shadow.setup(self, _card_face_size())
+		add_child(field_shadow)
+	if field_shadow != null and is_instance_valid(field_shadow):
+		field_shadow.set_active(on_field)
+
 func _card_face_size() -> Vector2:
 	if hand_mesh != null and hand_mesh.mesh != null:
 		var aabb: AABB = hand_mesh.mesh.get_aabb()

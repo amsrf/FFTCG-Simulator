@@ -20,6 +20,8 @@ extends Node
 ##   --preset <name>  boot the real GAME through MatchSetup instead (ai / standard / debug)
 ##   --pay <spec>     with --preset: open the crystal payment modal at that cost, e.g. "火:1,neutral:1",
 ##                    so a shot can show the payment UI mid-selection without a human clicking
+##   --phase <name>   with --preset: roll the phase prism to that phase (--theirs = the opponent's turn)
+##   --hold <i>       with --preset: hold hand card i in the cast stance (--armed 0 = pointer over the hand band)
 ##   --out <path>     PNG to write (default tools/shots/shot.png)
 ##   --cost <spec>    e.g. "fire:1,neutral:1" — set on the subject if it has a `cost`
 ##   --element <e>    set on the subject if it has an `element` (a lone badge)
@@ -263,6 +265,35 @@ func _ready() -> void:
 						print("[Shot]   crystal for='%s' paid_by='%s' lit=%s colour=%s"
 							% [str(c.get("element")), str(c.get("paid_element")),
 							   str(c.get("lit")), str(c.call("display_colour") if c.has_method("display_colour") else c.call("colour_now"))])
+		# --phase <GlobalVariables.Phase name> [--theirs]: roll the phase prism there (on the opponent's turn with
+		# --theirs); add --seconds to catch it mid-roll or settled.
+		if _args.has("phase"):
+			await _settle(3)
+			var prism = game.get("phase_prism")
+			if prism != null:
+				prism.show_phase(GlobalVariables.Phase[str(_args["phase"])], not _args.has("theirs"))
+		# --hold <hand index>: press and hold that hand card into the cast stance, with the pointer over the wood
+		# (--armed 1, default) or over the hand band (--armed 0), so the landing-slot ghost and the slab rim can be
+		# seen without a human holding the mouse. Driven through the Hand's own drag entry points, like drop_area_probe.
+		if _args.has("hold"):
+			await _settle(3)
+			var hand3 = game.get_node_or_null("Player/Hand")
+			var idx: int = int(_args["hold"])
+			if hand3 != null and idx < hand3.cards.size():
+				var held: Card = hand3.cards[idx]
+				var vp: Vector2 = get_viewport().get_visible_rect().size
+				var pointer := Vector2(vp.x * 0.5, vp.y * 0.95)
+				if str(_args.get("armed", "1")) != "0":
+					pointer = get_viewport().get_camera_3d().unproject_position(Vector3(0.0, 0.065, -0.6))
+				# No held.begin_drag(): with no mouse button down the card's own drag would release at once.
+				hand3.begin_character_drag(held, vp.y * 0.95)
+				hand3.update_character_drag(held, hand3._character_drag_start_pointer)
+				hand3._update_character_hold(Hand.HOLD_SECONDS)
+				hand3._update_character_hold(Hand.STANCE_SECONDS)
+				hand3.update_character_drag(held, pointer)
+				var ghost = hand3.slot_ghost()
+				print("[Shot] held %s (%s) armed=%s ghost=%s" % [held.card_name, held.type, hand3.cast_armed(),
+					("showing at %s" % str(ghost.global_position)) if ghost != null and ghost.is_showing() else "none"])
 	elif _args.has("field-card"):
 		_build_field_cards(str(_args["field-card"]).split(",", false))
 	else:

@@ -215,7 +215,7 @@ script = SubResource("GDScript_e8heu")
 
 [node name="PhaseText" type="Label3D" parent="." unique_id=289152130]
 transform = Transform3D(-1, 8.74228e-08, -4.37114e-08, -4.37114e-08, 1.91069e-15, 1, 8.74228e-08, 1, 1.91069e-15, 2.57209, 0.624521, 2.14331)
-text = "No Phase"
+text = ""
 font = ExtResource("17_e8heu")
 
 [connection signal="damaged" from="Player" to="." method="_on_player_side_damaged"]

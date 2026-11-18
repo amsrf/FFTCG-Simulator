@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 
+#include "res://shaders/board_edge_shade.gdshaderinc"
+
 uniform sampler2D baked_appearance : source_color, filter_linear, repeat_disable;
 uniform float flow_direction = 1.0;
 uniform float flow_speed : hint_range(0.0, 0.3) = 0.18;
@@ -14,6 +16,7 @@ uniform float preview_time = -1.0;
 // Same multiplier as the board material (board_environment.gd `brightness`).
 uniform float brightness : hint_range(0.0, 1.0) = 1.0;
 varying vec2 river_position;
+varying vec2 world_xz;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -39,6 +42,7 @@ float flow_marks(vec2 p, vec2 cell_size, vec2 radius, float density) {
 }
 void vertex() {
 	river_position = VERTEX.xz;
+	world_xz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
 }
 void fragment() {
 	float clock = preview_time >= 0.0 ? preview_time : TIME;
@@ -78,5 +82,5 @@ void fragment() {
 		+ vec3(0.10, 0.25, 0.23) * (shimmer + foam * 0.18)
 		+ vec3(0.28, 0.55, 0.49) * streaks * streak_strength
 		+ vec3(0.38, 0.62, 0.55) * (patches * side_pools + entrance_wake * 0.7) * foam_strength;
-	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre) * brightness;
+	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre) * brightness * board_edge_shade(world_xz);
 }

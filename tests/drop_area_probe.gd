@@ -72,6 +72,8 @@ func _ready() -> void:
 	_hold_into_stance(card)
 	_expect(_hand.update_character_drag(card, cast_point) and _hand.character_drag_latched() and _hand.cast_armed(),
 		"a held Summon reaches the cast stance and is armed over the wood slab")
+	var summon_ghost = _hand.slot_ghost()
+	_expect(summon_ghost == null or not summon_ghost.is_showing(), "a held Summon shows no landing-slot ghost")
 	card.release_drag()
 	await get_tree().process_frame
 	_expect(_hand.charging_card == card,
@@ -126,6 +128,18 @@ func _ready() -> void:
 	# Released OFF the field, the held card goes back to the hand.
 	_hand.update_character_drag(character, Vector2(viewport_size.x * 0.5, grab_y))
 	_expect(not _hand.cast_armed(), "a held Character over the hand band is not armed")
+	# THE LANDING-SLOT GHOST (field_slot_ghost.gd): faint while held, on the slot play_card() will pick.
+	var ghost = _hand.slot_ghost()
+	var landing: Dictionary = _field.landing_slot(character)
+	_expect(ghost != null and ghost.is_showing() and not landing.is_empty(),
+		"a held playable Character shows the landing-slot ghost")
+	_expect(ghost != null and ghost.global_position.distance_to(landing.get("position", Vector3.INF)) < 0.01
+			and absf((landing.get("position", Vector3.INF) as Vector3).x - _field.to_global(_field.get_node(
+				"FrontrowCard" if character.type == Card.FORWARD else "BackrowCard").position).x) < 0.01,
+		"on the row's centre slot (empty board) - %s" % str(ghost.global_position if ghost != null else null))
+	# No await here: the probe's card has no mouse button down, so its own drag would release it. Read the targets.
+	_expect(ghost != null and float(ghost.get("_target_armed")) == 0.0,
+		"faint (not armed) while the pointer is over the hand band")
 	character.release_drag()
 	await get_tree().create_timer(0.35).timeout
 	_expect(_hand.charging_card == null and _hand.cards.has(character) and not character.is_dragging,
@@ -135,6 +149,8 @@ func _ready() -> void:
 	_hold_into_stance(character)
 	_expect((_hand.update_character_drag(character, cast_point)
 			and _hand.character_drag_latched() and _hand.cast_armed()), "a held Character is armed over the wood slab")
+	_expect(ghost.is_showing() and float(ghost.get("_target_armed")) == 1.0,
+		"and the ghost brightens to armed over the wood slab")
 	var stance_pose: Transform3D = character.global_transform
 	character.release_drag()
 	await get_tree().process_frame
@@ -144,11 +160,13 @@ func _ready() -> void:
 			and character.get_parent() == _hand
 			and not _game.get("stack").layout_cards().has(character)),
 		"the paying Character keeps its cast stance and stays out of the Stack fan")
+	_expect(ghost.is_showing(), "the ghost stays lit while the Character is paid for")
 	_assistant.on_charge_cancelled()
 	await get_tree().create_timer(0.35).timeout
 	_expect((character.get_parent() == _hand and _hand.cards.has(character)
 			and not _hand.character_drag_latched()),
 		"cancelling a latched Character returns it to hand and clears the latch")
+	_expect(not ghost.is_showing() and ghost.intensity() < 0.01, "and cancelling fades the ghost out")
 
 	# DOUBLE-CLICK TO PLAY: two clicks on the same card (no drag) tween it into the cast stance in a very short time and
 	# start mana charging, exactly like a latched release. One click only re-lays the hand out.
