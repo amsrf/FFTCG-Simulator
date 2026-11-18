@@ -92,6 +92,11 @@ var effect_ability_index: int = -1
 ## EVERY target this card's effect was given, in pick order. Most effects take one, and for those it is a one-element
 ## list; a card that says "choose up to 3" (Aerith 1-064) puts all of them here.
 var effect_targets: Array[Card] = []
+## A TRIGGERED ABILITY'S DECLARED CHOICE. True once its controller chose its targets as it was put on the stack
+## (Stack.declare_trigger_choices, rules 11.8.7 / 11.11.2): `effect_targets` then holds them, and at resolution only the
+## ones still legal are used. False on a copy that never got that moment (an EX BURST resolves with no window), which
+## chooses as it resolves instead.
+var trigger_targets_declared: bool = false
 ## The single target — which is what nearly every consumer wants. A PROPERTY over the list rather than a second field,
 ## so the two can never disagree: reading gives the LAST pick, and assigning replaces the whole list with that one card.
 ## Every existing `.effect_target` read and write therefore keeps working exactly as it did.
@@ -166,6 +171,9 @@ var stack_tween: Tween
 ## TELEPORT CAST presentation (source shine/fade, destination materialise). See card_teleport.gd.
 const CARD_TELEPORT := preload("res://scripts/cards/card_teleport.gd")
 var teleport: CARD_TELEPORT = CARD_TELEPORT.new(self)
+## HOW A CHARACTER IS PLAYED: hologram out where it was cast, line drawing down onto the slot. See card_hologram.gd.
+const CARD_HOLOGRAM := preload("res://scripts/cards/card_hologram.gd")
+var hologram: CARD_HOLOGRAM = CARD_HOLOGRAM.new(self)
 ## Silence bubble + Frozen rim. See card_status_overlays.gd.
 const CARD_STATUS_OVERLAYS := preload("res://scripts/cards/card_status_overlays.gd")
 var overlays: CARD_STATUS_OVERLAYS = CARD_STATUS_OVERLAYS.new(self)

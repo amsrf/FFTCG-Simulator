@@ -46,6 +46,8 @@ func _ready() -> void:
 	_hand = _game.get("hand")
 	_stack = _game.get("stack")
 	_assistant = _game.get("assistant")
+	# The crystal block-build is kept behind this switch (the normal play is card_play_probe).
+	_field.use_crystal_teleport = true
 	_field.teleport_shine_seconds = 0.25
 	_field.teleport_fade_seconds = 0.20
 	_field.teleport_materialize_seconds = 0.60
