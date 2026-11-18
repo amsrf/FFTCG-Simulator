@@ -310,6 +310,9 @@ func _ready() -> void:
 
 func _build_field_cards(ids: PackedStringArray) -> void:
 	const CARD_SCENE := preload("res://scenes/cards/card.tscn")
+	const FIELD_SHADOW := preload("res://scripts/cards/card_field_shadow.gd")
+	const FIELD_DROP_ZONE := preload("res://scripts/game/field_drop_zone.gd")
+	const CARD_Y := FIELD_SHADOW.WOOD_Y + FIELD_SHADOW.REST_HEIGHT
 	var columns := clampi(int(_args.get("field-columns", ids.size())), 1, maxi(ids.size(), 1))
 	var rows := ceili(float(ids.size()) / columns)
 	for index in range(ids.size()):
@@ -321,6 +324,7 @@ func _build_field_cards(ids: PackedStringArray) -> void:
 		var row := floori(float(index) / columns)
 		var row_width := mini(columns, ids.size() - row * columns)
 		card.position.x = (float(index % columns) - (row_width - 1) * 0.5) * 0.58
+		card.position.y = CARD_Y
 		card.position.z = (float(row) - (rows - 1) * 0.5) * 0.83
 
 	_add_environment(false)
@@ -332,7 +336,7 @@ func _build_field_cards(ids: PackedStringArray) -> void:
 	plane.size = Vector2(20.0, 20.0)
 	floor.mesh = plane
 	floor.material_override = mat
-	floor.position.y = -0.018
+	floor.position.y = FIELD_DROP_ZONE.SLAB_TOP_Y
 	add_child(floor)
 
 	var key := DirectionalLight3D.new()
@@ -344,9 +348,10 @@ func _build_field_cards(ids: PackedStringArray) -> void:
 	camera.position = Vector3(0.19, 1.37, 0.65)
 	if ids.size() > 1:
 		camera.position = Vector3(0.0, 1.37, 0.65) * maxf(1.0, maxf(columns * 0.37, rows * 0.94))
+	camera.position.y += CARD_Y
 	camera.fov = 36.0 * float(_args.get("zoom", 1.0))
 	add_child(camera)
-	camera.look_at(Vector3.ZERO)
+	camera.look_at(Vector3(0.0, CARD_Y, 0.0))
 	camera.current = true
 
 

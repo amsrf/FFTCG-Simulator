@@ -663,7 +663,16 @@ func _check_field_faces(field_cards: Array) -> void:
 		76, 77, 78, 79, 80, 81, 82, 83, 84, 85,
 		86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
 		96, 97, 98, 99, 100, 101, 102, 103, 104, 105,
-		107, 108, 109, 111, 112, 113, 114, 115, 116, 118]
+		107, 108, 109, 111, 112, 113, 114, 115, 116, 118,
+		119, 120, 121, 122, 125, 126, 127, 128, 129, 130,
+		131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
+		141, 142, 144, 145, 146, 147, 148, 149, 150, 151,
+		152, 153, 154, 155, 156, 157, 158, 159, 160, 161,
+		162, 163, 164, 165, 166, 167, 168, 169, 171, 173,
+		174, 175, 176, 177, 179, 180, 181, 182, 183, 184,
+		185, 186, 187, 188, 189, 191, 192, 193, 194, 195,
+		196, 197, 199, 200, 201, 202, 203, 204, 205, 206,
+		207, 208, 209, 210, 211, 212, 213, 214, 215, 216]
 	for card_id in restored_ids:
 		var pilot: Card = CARD_SCENE.instantiate()
 		pilot.initialize(card_id, Card.PLAYER)
@@ -675,6 +684,29 @@ func _check_field_faces(field_cards: Array) -> void:
 		_expect(pilot_art != null and pilot_art != original and pilot_art.get_size() == Vector2(429, 444)
 			and pilot_crop == Vector4(0, 0, 1, 1),
 			"%s (%s) uses the restored field portrait" % [pilot.card_name, pilot.code])
+		if card_id == 92: # Earth Dark Knight
+			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
+			_expect(band.r > 0.79 and band.g > 0.66 and band.b < 0.2, "Earth field bands use a lighter gold")
+		if card_id in [33, 63]: # Ice Argath and Wind Vaan
+			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
+			_expect(band.g > 0.53, "%s uses the brighter field palette" % pilot.card_name)
+		if card_id in [33, 63, 92]:
+			var cp := pilot.hand_mesh.get_node("FieldHeading/Cost") as Label3D
+			var title := pilot.hand_mesh.get_node("FieldHeading/CardName") as Label3D
+			var power_number: Label3D = pilot.power_label.power_part()
+			_expect(cp.modulate == Color.WHITE and title.modulate == Color.WHITE
+				and power_number.modulate == Color.WHITE and cp.outline_size > 0
+				and title.outline_size == cp.outline_size and power_number.outline_size == cp.outline_size,
+				"%s field labels use white ink with a fine outline" % pilot.card_name)
+		if card_id == 182: # Light Cloud
+			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
+			_expect(band.r > 0.6 and absf(band.r - band.g) < 0.03 and band.b >= band.r,
+				"Light field bands use a silver grey")
+			var cost_ink: Color = pilot.hand_mesh.get_node("FieldHeading/Cost").modulate
+			_expect(cost_ink.get_luminance() < 0.2
+				and pilot.hand_mesh.get_node("FieldHeading/CardName").modulate == cost_ink
+				and pilot.power_label.power_part().modulate == cost_ink,
+				"%s field labels share dark ink on the lighter bands" % pilot.card_name)
 		pilot.queue_free()
 
 	var sample: Card = CARD_SCENE.instantiate()
@@ -690,6 +722,8 @@ func _check_field_faces(field_cards: Array) -> void:
 		"Auron uses the full dedicated portrait on the field")
 	_expect(sample.power_label.power_part().font == sample.hand_mesh.get_node("FieldHeading/Cost").font,
 		"the cost and power labels use the same field font")
+	_expect(sample.hand_mesh.get_node("FieldHeading/Cost").modulate == Color.WHITE
+		and sample.power_label.power_part().modulate == Color.WHITE, "Fire field labels keep white ink")
 	var field_font: FontVariation = FIELD_CARD_FACE.label_font()
 	_expect(field_font.base_font is FontFile and field_font.base_font.multichannel_signed_distance_field,
 		"field labels use distance-field glyphs for angled rendering")

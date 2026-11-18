@@ -15,7 +15,9 @@ vec3 sample_card_face(vec2 uv, vec4 vertex_tone) {
 	if (band_edge <= field_band_fraction + 0.00001) {
 		// Printed-mesh stand-ins and glass shards have no bevel tones. Use the band's flat colour there.
 		float tone = mix(vertex_tone.r, 0.5, vertex_tone.b);
-		float across = mix(1.16, 0.77, smoothstep(0.04, 0.90, uv.x));
+		// The printed element stripe has a broad central highlight with darker ends.
+		float from_center = abs(2.0 * uv.x - 1.0);
+		float across = mix(1.30, 0.74, smoothstep(0.20, 1.0, from_center));
 		float inner_edge = smoothstep(0.0, field_band_fraction, band_edge);
 		float bevel_light = max(tone * 2.0 - 1.0, 0.0);
 		vec3 satin = field_band_color.rgb * across * mix(0.52, 1.22, tone);

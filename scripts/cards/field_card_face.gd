@@ -12,10 +12,12 @@ const BEVEL := 0.004
 const BEVEL_STEPS := 3
 const MAX_PORTRAIT_STRETCH := 1.30
 const RADIUS := 0.03
+# Opus I type stripes are the colour reference. Keep a little depth for the raised satin bands.
 const PALETTE := [
-	Color("#831f29"), Color("#245069"), Color("#245c43"), Color("#645126"),
-	Color("#553b75"), Color("#234977"), Color("#625638"), Color("#3b325a"),
+	Color("#ae3b28"), Color("#238fae"), Color("#308f5d"), Color("#d0b12d"),
+	Color("#875d8d"), Color("#4f73a0"), Color("#a7a7b0"), Color("#535251"),
 ]
+const DARK_INK := Color("#1a1b20")
 
 # Hand-framed scan regions start below the printed name band and end above the type stripe.
 const SCAN_SIZE := Vector2(429, 600)
@@ -45,7 +47,7 @@ func enter_zone(mesh_instance: MeshInstance3D, material: ShaderMaterial, on_fiel
 			Vector4(0.0, 0.0, 1.0, 1.0) if portrait != null else illustration_crop(texture.get_size(), code))
 		material.set_shader_parameter("field_band_fraction", BAND_FRACTION)
 		if _heading == null:
-			_build_heading(mesh_instance, title, cost)
+			_build_heading(mesh_instance, title, cost, element)
 	sync_reveal(mesh_instance, material, revealed)
 
 
@@ -60,6 +62,17 @@ func sync_reveal(mesh_instance: MeshInstance3D, material: ShaderMaterial, reveal
 func show_heading(should_show: bool) -> void:
 	if _heading != null:
 		_heading.visible = drawn_on_field and should_show
+
+
+static func label_color(element: String) -> Color:
+	return DARK_INK if element == "光" else Color.WHITE
+
+
+static func label_outline_size(element: String) -> int:
+	match element:
+		"土": return 4
+		"氷", "風": return 2
+		_: return 0
 
 
 ## Optional clean portraits use the printed card code. The source JPEG fallback also works before editor import.
@@ -115,15 +128,15 @@ static func illustration_crop(image_size: Vector2, code: String) -> Vector4:
 	return Vector4(start.x, start.y, crop_size.x, crop_size.y)
 
 
-func _build_heading(parent: MeshInstance3D, title: String, cost: int) -> void:
+func _build_heading(parent: MeshInstance3D, title: String, cost: int, element: String) -> void:
 	_heading = Node3D.new()
 	_heading.name = "FieldHeading"
 	_heading.position = Vector3(0.0, BAND_HEIGHT + 0.001, -BAND_CENTRE)
 	parent.add_child(_heading)
 
-	var cost_label := _add_label("Cost", str(cost), 100)
+	var cost_label := _add_label("Cost", str(cost), 100, element)
 	cost_label.position.x = -FACE.x * 0.34
-	var name_label := _add_label("CardName", title, 84)
+	var name_label := _add_label("CardName", title, 84, element)
 	name_label.position.x = -FACE.x * 0.22
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var text_width: float = name_label.font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, name_label.font_size).x
@@ -132,7 +145,7 @@ func _build_heading(parent: MeshInstance3D, title: String, cost: int) -> void:
 		name_label.pixel_size = minf(name_label.pixel_size, available_width / text_width)
 
 
-func _add_label(node_name: String, wording: String, size: int) -> Label3D:
+func _add_label(node_name: String, wording: String, size: int, element: String) -> Label3D:
 	var label := Label3D.new()
 	label.name = node_name
 	label.rotation.x = -PI * 0.5
@@ -140,7 +153,9 @@ func _add_label(node_name: String, wording: String, size: int) -> Label3D:
 	label.font_size = size
 	label.pixel_size = LABEL_PIXEL_SIZE
 	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	label.outline_size = 0
+	label.modulate = label_color(element)
+	label.outline_modulate = DARK_INK
+	label.outline_size = label_outline_size(element)
 	label.double_sided = false
 	label.text = wording
 	_heading.add_child(label)

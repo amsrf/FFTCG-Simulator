@@ -78,6 +78,14 @@ func damage_part() -> Label3D:
 	return _damage_part
 
 
+func set_field_ink(element: String) -> void:
+	_rest_modulate = FIELD_CARD_FACE.label_color(element)
+	_power_part.outline_modulate = FIELD_CARD_FACE.DARK_INK
+	_power_part.outline_size = FIELD_CARD_FACE.label_outline_size(element)
+	if not is_boosting():
+		_power_part.modulate = _rest_modulate
+
+
 func _make_part(part_name: String) -> Label3D:
 	var part := Label3D.new()
 	part.name = part_name
