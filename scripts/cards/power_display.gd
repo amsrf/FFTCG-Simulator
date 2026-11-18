@@ -1,8 +1,8 @@
 extends Label3D
-## The field readout "power/damage". It is drawn as TWO child labels laid side by side - the power digits and the
-## "/damage" part - so an emphasis (the power-up swell, the power-down deflate, a change pulse) moves only the number
-## that changed. This node keeps `text` = the whole readout for anything that reads it (probes, logs), but its own
-## glyphs are transparent; visibility and the card's transform still flow to the parts as children.
+## Animates the power on the lower band and the damage counter over the art independently.
+## The parent still exposes the combined readout as text for existing observers.
+
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
 
 var power: int
 var accumulated_damage: int
@@ -22,6 +22,7 @@ var _rest_priority := 0
 var _rest_outline_priority := 0
 var _power_part: Label3D = null
 var _damage_part: Label3D = null
+var _damage_counter: MeshInstance3D = null
 ## Label3D settings the parts copy from this node (as authored in card.tscn).
 const PART_PROPERTIES := ["font", "font_size", "pixel_size", "outline_size", "outline_modulate", "modulate",
 	"billboard", "double_sided", "no_depth_test", "fixed_size", "alpha_cut", "texture_filter", "shaded",
@@ -47,13 +48,17 @@ const BOOST_RENDER_PRIORITY := 40
 
 
 func _ready() -> void:
+	font = FIELD_CARD_FACE.label_font()
+	pixel_size = FIELD_CARD_FACE.LABEL_PIXEL_SIZE
+	texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	power = get_parent().power
 	target_power = power
 	accumulated_damage = get_parent().accumulated_damage
-	# The number is anchored at its RIGHT edge (and the damage part at its left, on the same seam), so a swell grows
-	# the number leftward, away from "/damage", instead of over it.
-	_power_part = _make_part("PowerNumber", HORIZONTAL_ALIGNMENT_RIGHT)
-	_damage_part = _make_part("DamagePart", HORIZONTAL_ALIGNMENT_LEFT)
+	_power_part = _make_part("PowerNumber")
+	_damage_part = _make_part("DamagePart")
+	_damage_part.position = Vector3(0.136, 0.092, -0.009)
+	_damage_part.font_size = 58
+	_damage_part.modulate = Color("#ffd08a")
 	_rest_scale = _power_part.scale
 	_rest_modulate = _power_part.modulate
 	_rest_priority = _power_part.render_priority
@@ -73,31 +78,41 @@ func damage_part() -> Label3D:
 	return _damage_part
 
 
-func _make_part(part_name: String, align: HorizontalAlignment) -> Label3D:
+func _make_part(part_name: String) -> Label3D:
 	var part := Label3D.new()
 	part.name = part_name
 	for property in PART_PROPERTIES:
 		part.set(property, get(property))
-	part.horizontal_alignment = align
 	add_child(part)
 	return part
 
 
+func _add_damage_counter() -> void:
+	_damage_counter = MeshInstance3D.new()
+	_damage_counter.name = "DamageCounter"
+	_damage_counter.position.z = -0.004
+	_damage_counter.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var shape := BoxMesh.new()
+	shape.size = Vector3(0.123, 0.045, 0.006)
+	_damage_counter.mesh = shape
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("#633718")
+	_damage_counter.material_override = material
+	_damage_part.add_child(_damage_counter)
+
+
 func _refresh_text() -> void:
 	var power_text := str(power)
-	var damage_text := "/%s" % accumulated_damage
-	self.text = power_text + damage_text
+	self.text = "%s/%s" % [power_text, accumulated_damage]
 	if _power_part == null:
 		return
 	_power_part.text = power_text
-	_damage_part.text = damage_text
-	# Lay the two out as ONE centred string would be: measured at rest, so a swollen number never shoves the rest.
-	var used_font: Font = font if font != null else ThemeDB.fallback_font
-	var w_power: float = used_font.get_string_size(power_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * pixel_size
-	var w_damage: float = used_font.get_string_size(damage_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x * pixel_size
-	var seam: float = -(w_power + w_damage) * 0.5 + w_power
-	_power_part.position = Vector3(seam, 0.0, 0.0)
-	_damage_part.position = Vector3(seam, 0.0, 0.0)
+	_damage_part.text = str(accumulated_damage)
+	_damage_part.visible = accumulated_damage > 0
+	if _damage_part.visible and _damage_counter == null:
+		_add_damage_counter()
+
 
 func changePower(newPower):
 	animate_power_change(newPower)

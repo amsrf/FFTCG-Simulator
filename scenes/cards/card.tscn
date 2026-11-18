@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://bve4to1ebobje"]
+[gd_scene load_steps=13 format=3 uid="uid://bve4to1ebobje"]
 
 [ext_resource type="Script" uid="uid://j6anprsyi5n4" path="res://scripts/cards/card.gd" id="1_kikvd"]
 [ext_resource type="ArrayMesh" uid="uid://bhhnbh1wys3t" path="res://assets/models/card.tres" id="3_b4rk6"]
@@ -7,7 +7,6 @@
 [ext_resource type="PackedScene" uid="uid://v00ikds8vvpl" path="res://scenes/cards/target.tscn" id="6_1i5pp"]
 [ext_resource type="ArrayMesh" uid="uid://diui7xwtxfrvb" path="res://Blender/aura2obj.obj" id="6_pjytt"]
 [ext_resource type="Script" uid="uid://d0e8p7r05c7me" path="res://scripts/cards/power_display.gd" id="7_b4rk6"]
-[ext_resource type="FontFile" uid="uid://drpmhhgmwy5c6" path="res://assets/fonts/FOT-NewRodin Pro EB.otf" id="7_pjytt"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_rjlel"]
 size = Vector3(0.411, 0.00460754, 0.595)
@@ -60,14 +59,12 @@ transform = Transform3D(0.4, 0, 0, 0, -1.74846e-08, -0.4, 0, 0.4, -1.74846e-08, 
 visible = false
 
 [node name="PowerDisplay" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0.004, 0.345)
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0.017, 0.261)
 visible = false
-pixel_size = 0.001
-text = "80000/90000"
-font = ExtResource("7_pjytt")
-font_size = 64
+text = ""
+font_size = 112
 outline_modulate = Color(0.04, 0.05, 0.08, 1)
-outline_size = 14
+outline_size = 0
 script = ExtResource("7_b4rk6")
 
 [node name="FieldMesh" type="MeshInstance3D" parent="."]

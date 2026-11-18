@@ -9,29 +9,54 @@ extends RefCounted
 ## The prism matches the face's corner radius, so its outline cannot poke out past the rounded
 ## corners, and its top face is left open because the card art covers it.
 const CARD_EDGE_THICKNESS := 0.02
+## The field has a thin body under the art. The raised bands supply the depth above it.
+const FIELD_THICKNESS := 0.014
 const CARD_EDGE_RADIUS := 0.03
 const CARD_EDGE_CORNER_STEPS := 5
 static var _edge_mesh_cache: ArrayMesh = null
-static var _edge_material_cache: StandardMaterial3D = null
+static var _edge_material_cache: ShaderMaterial = null
+## The wall is GLASS tinted by the card's element (user's call: the black wall showed once field cards got thick).
+const GLASS_SHADER := preload("res://shaders/card_glass_edge.gdshader")
+const ELEMENTS := preload("res://scripts/core/elements.gd")
+const NEUTRAL_GLASS := Color(0.75, 0.82, 0.92)
 
 static func install(card: Node3D, face: Vector2) -> void:
 	if card.has_node("CardEdge"):
 		return
 	if _edge_mesh_cache == null:
-		_edge_mesh_cache = _build_mesh(
-			face, CARD_EDGE_THICKNESS, CARD_EDGE_RADIUS)
+		_edge_mesh_cache = _build_mesh(face, 1.0, CARD_EDGE_RADIUS)
 	if _edge_material_cache == null:
-		_edge_material_cache = StandardMaterial3D.new()
-		_edge_material_cache.albedo_color = Color(0.055, 0.06, 0.075)
-		_edge_material_cache.metallic = 0.15
-		_edge_material_cache.roughness = 0.55
-		_edge_material_cache.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_edge_material_cache = ShaderMaterial.new()
+		_edge_material_cache.shader = GLASS_SHADER
 	var edge := MeshInstance3D.new()
 	edge.name = "CardEdge"
 	edge.mesh = _edge_mesh_cache
 	edge.material_override = _edge_material_cache
 	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	edge.scale = Vector3(1.0, CARD_EDGE_THICKNESS, 1.0)
 	card.add_child(edge)
+
+## The thickness a card has in `on_field` or not: the one place that decides it (Card.enter_zone calls this).
+static func thickness_for(on_field: bool) -> float:
+	return FIELD_THICKNESS if on_field else CARD_EDGE_THICKNESS
+
+static func set_field_style(card: Node3D, on_field: bool) -> void:
+	var edge := card.get_node_or_null("CardEdge") as MeshInstance3D
+	if edge != null:
+		edge.scale.y = thickness_for(on_field)
+		edge.set_instance_shader_parameter("field_edge", on_field)
+
+## The glass takes the card's element colour (its first element; neutral glass for none).
+static func set_tint(card: Node3D, element: Variant) -> void:
+	var edge := card.get_node_or_null("CardEdge") as GeometryInstance3D
+	if edge == null:
+		return
+	var index: int = ELEMENTS.index_of(element)
+	edge.set_instance_shader_parameter("tint", ELEMENTS.ACCENT[index] if index >= 0 else NEUTRAL_GLASS)
+
+static func thickness_of(card: Node3D) -> float:
+	var edge := card.get_node_or_null("CardEdge") as Node3D
+	return edge.scale.y if edge != null else 0.0
 
 static func _build_mesh(face: Vector2, thickness: float, radius: float) -> ArrayMesh:
 	var hx: float = face.x * 0.5

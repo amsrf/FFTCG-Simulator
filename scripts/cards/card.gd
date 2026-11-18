@@ -203,21 +203,24 @@ func _ready():
 	crystal_scene = load(CRYSTAL_SCENE_PATH)
 	_build_target_border()
 	CARD_EDGE.install(self, _card_face_size())
+	CARD_EDGE.set_field_style(self, current_zone == Zone.FIELD)
+	CARD_EDGE.set_tint(self, element)
 
 ## Card thickness (a shared rounded-prism side wall). See card_edge.gd.
 const CARD_EDGE := preload("res://scripts/cards/card_edge.gd")
 ## The printed cost crystal, enlarged over the original. See card_cost_badge.gd.
 const CARD_COST_BADGE := preload("res://scripts/cards/card_cost_badge.gd")
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
+var field_face := FIELD_CARD_FACE.new()
 var cost_badge: MeshInstance3D = null
 
-## Show the cost badge only where the printed face is what is on screen: face up, on the field or in the hand, and not
-## while the card is dissolving in or out.
+## Keep printed cost, field labels and keyword icons in sync with the reveal and dissolve.
 func refresh_cost_badge() -> void:
-	if cost_badge == null or not is_instance_valid(cost_badge):
-		return
 	var dissolving: bool = teleport != null and bool(teleport.chrome_hidden)
-	cost_badge.visible = revealed and _stack_face == null and not dissolving \
-		and (current_zone == Zone.FIELD or current_zone == Zone.HAND)
+	var show_chrome := revealed and _stack_face == null and not dissolving
+	field_face.show_heading(show_chrome)
+	if is_instance_valid(cost_badge):
+		cost_badge.visible = show_chrome and current_zone == Zone.HAND and not field_face.drawn_on_field
 	refresh_keyword_icons()
 
 ## Brave / First Strike badges along the bottom of the face. See card_keyword_icons.gd.
@@ -277,6 +280,10 @@ func set_revealed(is_revealed: bool) -> void:
 	if revealed == is_revealed:
 		return
 	revealed = is_revealed
+	if mat != null:
+		field_face.sync_reveal(hand_mesh, mat, revealed)
+		if field_face.drawn_on_field:
+			showPower()
 	var surface_material: Material = (mat as Material) if is_revealed else (_get_card_back_material() as Material)
 	$HandMesh.set_surface_override_material(0, surface_material)
 	$FieldMesh.set_surface_override_material(0, surface_material)
@@ -501,15 +508,8 @@ func is_drawn_on_field() -> bool:
 	return get_parent() is Field
 
 func showPower():
-	if(power_label == null):
-		return
-	if(type == FORWARD):
-		# THE NUMBERS SIT UNDER THE CARD (like Master Duel's stats), so the art is not covered and needs no dark band
-		# painted behind them (the shader's `effect_enabled` band stays off).
-		power_label.visible = true
-		mat.set_shader_parameter("effect_enabled", false)
-	else:
-		power_label.visible = false
+	if power_label != null:
+		power_label.visible = type == FORWARD and revealed and not teleport.chrome_hidden
 
 ## The power/damage readout is field-only information: a card in hand, deck,
 ## stack, damage zone or graveyard must never wear it.
@@ -674,7 +674,12 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 			tween.kill()
 		tween = null
 	current_zone = zone
+	if mat != null:
+		field_face.enter_zone(hand_mesh, mat, zone == Zone.FIELD, revealed, _printed_texture, code, card_name, cost, element)
 	set_hidden(false)
+	# The field tile has its own thin edge finish.
+	CARD_EDGE.set_field_style(self, zone == Zone.FIELD)
+	CARD_EDGE.set_tint(self, element)
 	# Leaving the field takes the sickness waves with it at once.
 	overlays.refresh_sickness()
 	# And the dull look: a card changing zone shows exactly its real state (after current_zone moved), mid-tween nothing.

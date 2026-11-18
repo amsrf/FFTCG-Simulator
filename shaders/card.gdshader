@@ -10,7 +10,7 @@ shader_type spatial;
 // rather than lit. The trade is explicit: if the board ever wants cards to sit IN the light, delete this line.
 render_mode unshaded;
 
-uniform sampler2D texture_albedo : source_color;
+#include "res://shaders/field_card_face.gdshaderinc"
 uniform bool effect_enabled = false;
 // DULL. 0 = active, 1 = dull: the art is drawn toward grey and darkened so a spent card reads at a glance even where the
 // small tap tilt is hard to see (Card.dull_fx tweens it with the tap). MIXED, never added.
@@ -419,8 +419,7 @@ void fragment() {
                 : teleport_hot_color.rgb;
         }
     }
-    vec4 original_color = texture(texture_albedo, UV);
-    vec3 base = original_color.rgb;
+    vec3 base = sample_card_face(UV, COLOR);
     if (effect_enabled && UV.y > 0.875) {
         base = vec3(0.1);
     }

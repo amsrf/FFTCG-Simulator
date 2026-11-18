@@ -18,7 +18,9 @@ const KEYWORDS: Array = [
 ]
 
 ## Badge width as a fraction of the card face width, the inset from the left/bottom edges, and the gap between badges.
-const ICON_FRACTION := 0.23
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
+const ICON_FRACTION := 0.17
+const ROW_WIDTH_FRACTION := 0.60
 const EDGE_MARGIN_FRACTION := 0.035
 const GAP_FRACTION := 0.015
 ## Above the face, the cost badge (0.0015) and the frozen rim (0.003), so nothing on the card fights it for depth.
@@ -69,7 +71,7 @@ func refresh(visible_on_card: bool) -> void:
 	var margin: float = face.x * EDGE_MARGIN_FRACTION
 	var gap: float = face.x * GAP_FRACTION
 	# Full size while the row fits; past that (four badges do not), every badge shrinks so the row stays on the card.
-	var fit: float = (face.x - 2.0 * margin - (wanted.size() - 1) * gap) / wanted.size()
+	var fit: float = (face.x * ROW_WIDTH_FRACTION - margin - (wanted.size() - 1) * gap) / wanted.size()
 	var size: float = minf(face.x * ICON_FRACTION, fit)
 	for entry in KEYWORDS:
 		var b: MeshInstance3D = _badges.get(entry[0]) as MeshInstance3D
@@ -77,8 +79,10 @@ func refresh(visible_on_card: bool) -> void:
 			b.visible = false
 	for i in wanted.size():
 		var b: MeshInstance3D = _ensure_badge(wanted[i], size)
-		# The face is a quad in XZ centred on the origin; the card's top is -Z, so the bottom edge is +face.y/2.
-		b.position = Vector3(-face.x * 0.5 + margin + size * 0.5 + i * (size + gap), 0.0, face.y * 0.5 - margin - size * 0.5)
+		# Keep the icons above the power band and to the left of the damage counter.
+		var x := -face.x * 0.5 + margin + size * 0.5 + i * (size + gap)
+		var z := face.y * (0.5 - FIELD_CARD_FACE.BAND_FRACTION) - margin - size * 0.5
+		b.position = Vector3(x, 0.0, z)
 		b.visible = true
 	_row.visible = true
 
@@ -87,11 +91,8 @@ func _ensure_row() -> void:
 		return
 	_row = Node3D.new()
 	_row.name = "KeywordIcons"
-	var top: float = 0.0
 	var hand_mesh = _card.hand_mesh
-	if hand_mesh != null and hand_mesh.mesh != null:
-		top = hand_mesh.mesh.get_aabb().end.y
-	_row.position = Vector3(0.0, top + LIFT, 0.0)
+	_row.position.y = LIFT
 	# Same parent as the frozen rim and the target ring: the visible card's mesh, so the damage recoil (a HandMesh
 	# tween) carries the badges with the card.
 	var parent: Node3D = (hand_mesh as Node3D) if hand_mesh != null else _card

@@ -15,6 +15,8 @@ extends Node
 ##
 ## Options, all after the bare "--":
 ##   --scene <res>    what to shoot (default res://scenes/ui/crystal_cost.tscn)
+##   --field-card <id[,id...]>  render actual field cards in isolation
+##   --field-columns <n>       wrap the field-card preview into a grid
 ##   --preset <name>  boot the real GAME through MatchSetup instead (ai / standard / debug)
 ##   --pay <spec>     with --preset: open the crystal payment modal at that cost, e.g. "火:1,neutral:1",
 ##                    so a shot can show the payment UI mid-selection without a human clicking
@@ -261,6 +263,8 @@ func _ready() -> void:
 						print("[Shot]   crystal for='%s' paid_by='%s' lit=%s colour=%s"
 							% [str(c.get("element")), str(c.get("paid_element")),
 							   str(c.get("lit")), str(c.call("display_colour") if c.has_method("display_colour") else c.call("colour_now"))])
+	elif _args.has("field-card"):
+		_build_field_cards(str(_args["field-card"]).split(",", false))
 	else:
 		await _build_subject()
 
@@ -272,6 +276,48 @@ func _ready() -> void:
 		await get_tree().create_timer(float(_args["seconds"])).timeout
 	await _settle(int(_args.get("frames", 20)))
 	await _save(out)
+
+func _build_field_cards(ids: PackedStringArray) -> void:
+	const CARD_SCENE := preload("res://scenes/cards/card.tscn")
+	var columns := clampi(int(_args.get("field-columns", ids.size())), 1, maxi(ids.size(), 1))
+	var rows := ceili(float(ids.size()) / columns)
+	for index in range(ids.size()):
+		var card: Card = CARD_SCENE.instantiate()
+		card.initialize(int(ids[index]), Card.PLAYER)
+		add_child(card)
+		card.enter_zone(Card.Zone.FIELD)
+		card.rotation.y = 0.0
+		var row := floori(float(index) / columns)
+		var row_width := mini(columns, ids.size() - row * columns)
+		card.position.x = (float(index % columns) - (row_width - 1) * 0.5) * 0.58
+		card.position.z = (float(row) - (rows - 1) * 0.5) * 0.83
+
+	_add_environment(false)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("#77716b")
+	mat.roughness = 0.95
+	var floor := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(20.0, 20.0)
+	floor.mesh = plane
+	floor.material_override = mat
+	floor.position.y = -0.018
+	add_child(floor)
+
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-49.0, -32.0, 0.0)
+	key.light_energy = 0.7
+	key.shadow_enabled = true
+	add_child(key)
+	var camera := Camera3D.new()
+	camera.position = Vector3(0.19, 1.37, 0.65)
+	if ids.size() > 1:
+		camera.position = Vector3(0.0, 1.37, 0.65) * maxf(1.0, maxf(columns * 0.37, rows * 0.94))
+	camera.fov = 36.0 * float(_args.get("zoom", 1.0))
+	add_child(camera)
+	camera.look_at(Vector3.ZERO)
+	camera.current = true
+
 
 func _build_subject() -> void:
 	var subject: Node = load(str(_args.get("scene", DEFAULT_SCENE))).instantiate()

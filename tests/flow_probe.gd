@@ -17,6 +17,8 @@ extends Node3D
 #---
 ## It says nothing about how any of it LOOKS.
 
+const CARD_SCENE := preload("res://scenes/cards/card.tscn")
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
@@ -105,6 +107,8 @@ func _ready() -> void:
 
 	print("[FlowProbe] board: %d field cards, stack %d, hand %s"
 		% [field.get_all_cards().size(), stack.cards.size(), _names(hand.cards)])
+
+	_check_field_faces(field.get_all_cards())
 
 	var chemist: Card = _find_by_id(hand.cards, ETB_CARD_ID)
 	_expect(chemist != null, "the debug opening hand contains card %d" % ETB_CARD_ID)
@@ -612,6 +616,107 @@ func _ready() -> void:
 
 	_report()
 	get_tree().quit()
+
+func _check_field_faces(field_cards: Array) -> void:
+	var forward: Card
+	var backup: Card
+	for card: Card in field_cards:
+		if card.type == Card.FORWARD:
+			forward = card
+		elif card.type == Card.BACKUP:
+			backup = card
+	_expect(forward != null and backup != null, "setup includes a Forward and a Backup for the field face check")
+	if forward == null or backup == null:
+		return
+	var field_mesh: Mesh = forward.hand_mesh.mesh
+	var dimensions := field_mesh.get_aabb().size
+	_expect(is_equal_approx(dimensions.x, FIELD_CARD_FACE.FACE.x)
+		and is_equal_approx(dimensions.z, FIELD_CARD_FACE.FACE.y)
+		and is_equal_approx(field_mesh.get_aabb().end.y, FIELD_CARD_FACE.BAND_HEIGHT),
+		"field bands rise above the art within the printed card footprint")
+	_expect(backup.hand_mesh.mesh == field_mesh and not backup.power_label.visible,
+		"Backups share the field mesh and leave the bottom band blank")
+	var field_edge := forward.get_node("CardEdge") as MeshInstance3D
+	_expect(field_edge.scale.y < 0.02 and field_edge.get_instance_shader_parameter("field_edge") == true,
+		"field tiles use a thin satin side wall")
+	var heading := forward.hand_mesh.get_node_or_null("FieldHeading")
+	_expect(heading != null and heading.visible and not forward.cost_badge.visible
+		and heading.get_node("Cost").text == str(forward.cost)
+		and heading.get_node("CardName").text == forward.card_name,
+		"the top band carries the card name and plain printed CP cost")
+
+	var centred_crop := FIELD_CARD_FACE.illustration_crop(Vector2(429, 600), "1-041L")
+	_expect(centred_crop.z >= 0.75 and centred_crop.y + centred_crop.w < 0.6,
+		"the fallback crop retains at least three quarters of the scan width above the printed rules")
+	for code in ["1-002R", "1-150R"]:
+		var adjusted_crop := FIELD_CARD_FACE.illustration_crop(Vector2(429, 600), code)
+		_expect(adjusted_crop.x > centred_crop.x and adjusted_crop.y < centred_crop.y
+			and adjusted_crop.x + adjusted_crop.z <= 1.0 and adjusted_crop.y + adjusted_crop.w < 0.6,
+			"%s keeps its right-aligned subject inside the art window" % code)
+	var restored_ids := [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+		19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 40, 41,
+		42, 43, 44, 45, 46, 47, 48, 49, 50, 51,
+		53, 54, 55, 56, 57, 58, 59, 60, 63, 64,
+		65, 66, 67, 68, 69, 70, 71, 72, 73, 75,
+		76, 77, 78, 79, 80, 81, 82, 83, 84, 85,
+		86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+		96, 97, 98, 99, 100, 101, 102, 103, 104, 105,
+		107, 108, 109, 111, 112, 113, 114, 115, 116, 118]
+	for card_id in restored_ids:
+		var pilot: Card = CARD_SCENE.instantiate()
+		pilot.initialize(card_id, Card.PLAYER)
+		add_child(pilot)
+		pilot.enter_zone(Card.Zone.FIELD)
+		var pilot_art: Texture2D = pilot.mat.get_shader_parameter("field_art_texture")
+		var pilot_crop: Vector4 = pilot.mat.get_shader_parameter("field_art_rect")
+		var original: Texture2D = pilot.mat.get_shader_parameter("texture_albedo")
+		_expect(pilot_art != null and pilot_art != original and pilot_art.get_size() == Vector2(429, 444)
+			and pilot_crop == Vector4(0, 0, 1, 1),
+			"%s (%s) uses the restored field portrait" % [pilot.card_name, pilot.code])
+		pilot.queue_free()
+
+	var sample: Card = CARD_SCENE.instantiate()
+	sample.initialize(1, Card.PLAYER) # Auron 1-001H has a dedicated field portrait.
+	add_child(sample)
+	sample.enter_zone(Card.Zone.HAND)
+	var printed_mesh: Mesh = sample.hand_mesh.mesh
+	var printed_texture: Texture2D = sample.mat.get_shader_parameter("texture_albedo")
+	sample.enter_zone(Card.Zone.FIELD)
+	var portrait: Texture2D = sample.mat.get_shader_parameter("field_art_texture")
+	_expect(portrait != null and portrait.get_size().x == 772
+		and sample.mat.get_shader_parameter("field_art_rect") == Vector4(0, 0, 1, 1),
+		"Auron uses the full dedicated portrait on the field")
+	_expect(sample.power_label.power_part().font == sample.hand_mesh.get_node("FieldHeading/Cost").font,
+		"the cost and power labels use the same field font")
+	var field_font: FontVariation = FIELD_CARD_FACE.label_font()
+	_expect(field_font.base_font is FontFile and field_font.base_font.multichannel_signed_distance_field,
+		"field labels use distance-field glyphs for angled rendering")
+	_expect(sample.hand_mesh.mesh == field_mesh and sample.power_label.visible
+		and sample.power_label.power_part().text == str(sample.power)
+		and not sample.power_label.damage_part().visible,
+		"a Forward starts with only its power readout")
+	sample.suffer_damage(3000)
+	await get_tree().create_timer(0.85).timeout
+	_expect(sample.power_label.damage_part().visible and sample.power_label.damage_part().text == "3000"
+		and sample.power_label.power_part().text == str(sample.power),
+		"marked damage appears on its own counter while power stays visible")
+	sample.clear_damage()
+	await get_tree().create_timer(0.85).timeout
+	_expect(not sample.power_label.damage_part().visible, "clearing damage clears the counter")
+	sample.set_revealed(false)
+	_expect(sample.hand_mesh.mesh == printed_mesh and not sample.power_label.visible
+		and not sample.hand_mesh.get_node("FieldHeading").visible,
+		"a face-down field card conceals its heading and power")
+	sample.set_revealed(true)
+	_expect(sample.hand_mesh.mesh == field_mesh and sample.power_label.visible,
+		"revealing a field card restores the raised face")
+	sample.enter_zone(Card.Zone.HAND)
+	_expect(sample.hand_mesh.mesh == printed_mesh and sample.cost_badge.visible and not sample.power_label.visible
+		and not sample.mat.get_shader_parameter("field_face")
+		and sample.mat.get_shader_parameter("texture_albedo") == printed_texture,
+		"leaving the field restores the printed face and the hand cost badge")
+	sample.queue_free()
+
 
 func _check_draw_audio(game) -> void:
 	var played: Array[int] = []
