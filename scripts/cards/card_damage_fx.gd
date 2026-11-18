@@ -9,55 +9,39 @@ extends RefCounted
 ## Preloaded by PATH (no class_name): a class_name added since Godot last scanned is not in the global cache, which is
 ## a parse error on every headless run.
 
-## RECOIL, modelled on the reference clip (~/Desktop/Clips/damage, the wolf, frames 62-102 at 60 fps). Tracking it
-## showed AUTHORED curves, not a physics step: it snaps up in one frame, drifts higher while it hangs, and its fall
-## EASES into the board (it slows before contact - free fall would not). Only the landing behaves like a simulation: a
-## damped spring rocks it edge to edge with one small hop. What sells it there is lighting, so this does the same:
-##   SNAP + HANG   lift (world Y), tip toward the camera about the near (bottom) edge, a slight turn to the left;
-##   FALL          ease-in-out back to the board;
-##   LANDING       a damped spring roll about the long axis (the low edge touching first), plus one hop;
-##   SHADING       the face brightens as it turns toward the light (camera side), ~+15% at the tip like the wolf,
-##                 and flickers as it rocks (card.gdshader `face_light`);
-##   SHADOW        a soft board shadow that grows with height.
+## RECOIL: the card SNAPS up and tips toward the camera about its near edge (a little jump), then RETURNS SLOWLY on a
+## weakly damped spring: it sinks back over ~0.3 s, the tip swings past flat onto the other edge and back a few times,
+## each swing smaller, and it comes to rest after 1.4-2.1 s. There is no snap back: the spring is faded to
+## exactly zero before the pose is reset. The lift never goes below the board (the card rests on it while the tip
+## rocks), and a tip either way pivots on the edge that stays down, so no corner enters the board.
+##   SHADING   the face brightens as it turns toward the light (camera side), and flickers as it rocks
+##             (card.gdshader `face_light`);
+##   SHADOW    a soft board shadow that grows with height.
 ## Every hit is ROLLED (roll_reaction): each size and timing below is a base that the roll varies within its range,
 ## so two hits never look the same but always look like the same kind of hit.
-## Timeline (seconds, before the roll):
-const REACTION_RISE := 0.03
-const REACTION_HANG_END := 0.17
-const REACTION_FALL := 0.19
-## The rock starts this long BEFORE contact: the low edge meets the board first.
-const REACTION_ROCK_LEAD := 0.06
-## How long the landing (rock + hops) lasts after contact; the spring is faded to exactly zero at the end.
-const REACTION_SETTLE := 0.50
-## Sizes, by damage tier. The tip stays near 20 deg: on this ~67 deg board camera a flat card is already 23 deg from
-## facing it, so more tip makes the card look SHORTER, not tipped (measured; see AGENTS.md).
-const REACTION_LIFT := [0.30, 0.35, 0.40, 0.45]
+## The snap: seconds from rest to the full jump.
+const REACTION_RISE := 0.04
+## The return spring: one full swing takes this long (slow), and its amplitude falls by e every 1/damping seconds
+## (weak: after one swing about a third is left).
+const SPRING_PERIOD := 0.85
+const SPRING_DAMPING := 2.4
+## The spring is cut when its envelope is this small, faded to zero over the last REACTION_FADE seconds.
+const SPRING_CUTOFF := 0.02
+const REACTION_FADE := 0.15
+## Sizes, by damage tier: a LITTLE jump. The tip stays near 20 deg: on this ~67 deg board camera a flat card is already
+## 23 deg from facing it, so more tip makes the card look SHORTER, not tipped (measured; see AGENTS.md).
+const REACTION_LIFT := [0.16, 0.19, 0.22, 0.25]
 const REACTION_PITCH_DEG := [18.0, 20.0, 22.0, 24.0]
 const REACTION_YAW_DEG := [3.0, 3.5, 4.0, 4.5]
-const REACTION_ROLL_DEG := [6.0, 7.0, 8.0, 9.0]
-const REACTION_HOP := [0.04, 0.05, 0.06, 0.07]
-## The landing spring: one full rock's period and how fast it dies. Weak damping on purpose (the user wanted more
-## bounce): about six swings before it is still.
-const ROCK_PERIOD := 0.15
-const ROCK_DAMPING := 3.2
-const HOP_SECONDS := 0.18
-## A second, smaller hop right after the first.
-const HOP2_SHARE := 0.35
-const HOP2_SECONDS := 0.12
-## The roll's ranges: multipliers on the base (or degrees added, for the tip).
+## Roll ranges (multipliers unless noted).
 const VARY_LIFT := Vector2(0.85, 1.15)
 const VARY_PITCH_DEG := Vector2(-3.0, 3.0)
 const VARY_YAW := Vector2(0.6, 1.4)
-## Chance the snap turns LEFT (as in the reference); otherwise it turns right.
+## Most hits turn left, a few right.
 const YAW_LEFT_CHANCE := 0.7
-const VARY_ROLL := Vector2(0.8, 1.25)
-const VARY_ROCK_PERIOD := Vector2(0.85, 1.15)
+const VARY_PERIOD := Vector2(0.85, 1.15)
 const VARY_DAMPING := Vector2(0.8, 1.2)
-const VARY_HOP := Vector2(0.75, 1.3)
-const VARY_HANG := Vector2(0.85, 1.2)
-const VARY_FALL := Vector2(0.9, 1.15)
-const VARY_ROCK_LEAD := Vector2(0.5, 1.2)
-## Card face half extents (metres, card-local); matches card.tres.
+## Half the card face in its local units (Card._card_face_size() / 2).
 const HALF_FACE := Vector2(0.2145, 0.3)
 ## Shading: the light sits above, on the camera side and a little to the right; FACE_LIGHT_GAIN turns the change in
 ## dot(normal, light) into the shader's -1..1 `face_light` (20 deg of tip -> ~+0.15).
@@ -93,6 +77,9 @@ var earth_contact_seconds := 0.0
 ## This hit's roll (roll_reaction): sizes, timings and directions; see reaction_pose() for the keys.
 var _params: Dictionary = {}
 var _far_sign := 1.0
+## How far the card is turned from upright about its up axis when the hit starts (radians): its DULL TILT. The hit
+## undoes it, so a dulled card is shown STRAIGHT while it is knocked loose and dulled again once it settles.
+var _untilt := 0.0
 ## Presentation-only randomness; never Game.rng, which is reserved for rules.
 var _rng := RandomNumberGenerator.new()
 var _shadow: MeshInstance3D = null
@@ -126,6 +113,7 @@ func play_reaction(damage: int, delay: float = 0.0) -> void:
 	normalize()
 	_params = roll_reaction(tier, _rng.randi())
 	_far_sign = _toward_camera_sign()
+	_untilt = wrapf(deg_to_rad(_card.rotation_degrees.y - float(_card.get("_upright_y"))), -PI, PI)
 	var seconds: float = _params.end
 	var t := _card.create_tween()
 	if delay > 0.0:
@@ -243,87 +231,72 @@ static func _smoother(u: float) -> float:
 	u = clampf(u, 0.0, 1.0)
 	return u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
 
-## Rolls one hit: every size and timing varied within its VARY_* range, the turn's direction, and which edge lands
-## first. Static and seeded, so a probe can sweep many seeds.
+## Rolls one hit: every size and timing varied within its range, and the turn's direction. Static and seeded, so a
+## probe can sweep many seeds.
 static func roll_reaction(tier: int, seed_value: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	tier = clampi(tier, 0, REACTION_LIFT.size() - 1)
 	var vary := func(range_value: Vector2) -> float: return rng.randf_range(range_value.x, range_value.y)
-	var hang_end: float = REACTION_HANG_END * vary.call(VARY_HANG)
-	var land: float = hang_end + REACTION_FALL * vary.call(VARY_FALL)
 	var yaw_sign := 1.0 if rng.randf() < YAW_LEFT_CHANCE else -1.0
+	var damping: float = SPRING_DAMPING * vary.call(VARY_DAMPING)
 	return {
 		"rise": REACTION_RISE,
-		"hang_end": hang_end,
-		"land": land,
-		"rock_start": land - REACTION_ROCK_LEAD * vary.call(VARY_ROCK_LEAD),
-		"end": land + REACTION_SETTLE,
+		"period": SPRING_PERIOD * vary.call(VARY_PERIOD),
+		"damping": damping,
+		"end": REACTION_RISE + log(1.0 / SPRING_CUTOFF) / damping,
 		"lift": float(REACTION_LIFT[tier]) * vary.call(VARY_LIFT),
 		"pitch": float(REACTION_PITCH_DEG[tier]) + vary.call(VARY_PITCH_DEG),
 		"yaw": float(REACTION_YAW_DEG[tier]) * vary.call(VARY_YAW) * yaw_sign,
-		"roll": float(REACTION_ROLL_DEG[tier]) * vary.call(VARY_ROLL),
-		"rock_sign": 1.0 if rng.randf() < 0.5 else -1.0,
-		"rock_period": ROCK_PERIOD * vary.call(VARY_ROCK_PERIOD),
-		"rock_damping": ROCK_DAMPING * vary.call(VARY_DAMPING),
-		"hop": float(REACTION_HOP[tier]) * vary.call(VARY_HOP),
 	}
 
-## The hit's envelope at `t`: x = lift (0..~1.06 of the peak), y = tip (0..~1.12), z = turn (0..1). Snap, hang
-## (drifting a little higher and tipping a little further), then an ease-in-out fall that slows into the board.
-static func reaction_envelope(t: float, p: Dictionary) -> Vector3:
+## The hit's shape at `t`, 1 at the top of the jump: the snap (0 -> 1 in `rise`), then the return spring, released from
+## rest at the top so it starts slowly: e^(-d u) (cos w u + d/w sin w u). It goes NEGATIVE (the overshoot) and is faded
+## to exactly 0 at `end`.
+static func reaction_spring(t: float, p: Dictionary) -> float:
 	var rise: float = p.rise
-	var hang_end: float = p.hang_end
-	var land: float = p.land
-	if t <= 0.0 or t >= land:
-		return Vector3.ZERO
-	if t < rise:
-		var up := _ease_out(t / rise)
-		return Vector3(up, up, up)
-	if t < hang_end:
-		var u := smoothstep(0.0, 1.0, (t - rise) / (hang_end - rise))
-		return Vector3(1.0 + 0.06 * u, 1.0 + 0.12 * u, 1.0)
-	var down := 1.0 - _smoother((t - hang_end) / (land - hang_end))
-	return Vector3(1.06 * down, 1.12 * down, down)
-
-## The landing spring at `t`: x = roll (-1..1, signed; one long edge down), y = hop height (0..1 of the first hop).
-static func landing_spring(t: float, p: Dictionary) -> Vector2:
-	var land: float = p.land
 	var end: float = p.end
-	var rock_start: float = p.rock_start
-	var roll := 0.0
-	if t > rock_start and t < end:
-		var tau := t - rock_start
-		roll = exp(-float(p.rock_damping) * tau) * sin(TAU * tau / float(p.rock_period))
-		roll *= 1.0 - smoothstep(end - 0.10, end, t)
-	var hop := 0.0
-	var after := t - land
-	if after > 0.0 and after < HOP_SECONDS:
-		hop = sin(PI * after / HOP_SECONDS)
-	elif after >= HOP_SECONDS and after < HOP_SECONDS + HOP2_SECONDS:
-		hop = HOP2_SHARE * sin(PI * (after - HOP_SECONDS) / HOP2_SECONDS)
-	return Vector2(roll, hop)
+	if t <= 0.0 or t >= end:
+		return 0.0
+	if t < rise:
+		return _ease_out(t / rise)
+	var u: float = t - rise
+	var w: float = TAU / float(p.period)
+	var d: float = p.damping
+	var value: float = exp(-d * u) * (cos(w * u) + d / w * sin(w * u))
+	return value * (1.0 - smoothstep(end - REACTION_FADE, end, t))
+
+## STRAIGHTENING A DULLED CARD for the hit: 0 at rest, 1 by the top of the snap, held through the swings, and back to 0
+## over the last UNTILT_RETURN seconds, so the card settles dulled again exactly when the spring stops.
+const UNTILT_RETURN := 0.35
+
+static func untilt_weight(t: float, p: Dictionary) -> float:
+	var end: float = p.end
+	if t <= 0.0 or t >= end:
+		return 0.0
+	return clampf(t / float(p.rise), 0.0, 1.0) * (1.0 - smoothstep(end - UNTILT_RETURN, end, t))
 
 ## The HandMesh pose at `t` for the rolled hit `p`, in the CARD'S LOCAL frame (local +Y is world up; field cards are
 ## turned half a turn about Y, so never convert this through the card's world basis). `scale` divides the world
-## metres into local units. LIFT * YAW * PITCH * ROLL: the tip pivots on the near edge, the turn and the roll about the
-## card's centre; the roll's low edge is lifted back onto the board so no corner enters it.
-static func reaction_pose(t: float, far_sign: float, p: Dictionary, scale: float = 1.0) -> Transform3D:
-	var env := reaction_envelope(t, p)
-	var spring := landing_spring(t, p)
-	if env == Vector3.ZERO and spring == Vector2.ZERO:
-		return Transform3D.IDENTITY
-	var pitch_angle := deg_to_rad(float(p.pitch)) * env.y
+## metres into local units. LIFT * YAW * TIP. The lift follows only the positive half of the spring (the card rests on
+## the board through the overshoot); the tip follows all of it, and pivots on whichever edge stays down: the near edge
+## while the far edge rises toward the camera, the far edge while the overshoot lifts the near one.
+##
+## `untilt` is the card's dull tilt (radians about its up axis); it is turned back out for the hit (untilt_weight), so a
+## dulled card is knocked loose STRAIGHT. The card's own up axis is the board's, so this undoes the tap exactly.
+static func reaction_pose(t: float, far_sign: float, p: Dictionary, scale: float = 1.0, untilt: float = 0.0) -> Transform3D:
+	var s := reaction_spring(t, p)
+	var straighten := Transform3D(Basis(Vector3.UP, -untilt * untilt_weight(t, p)), Vector3.ZERO)
+	if s == 0.0:
+		return straighten
+	var pitch_angle := deg_to_rad(float(p.pitch)) * s
 	var pitch_basis := Basis(Vector3.RIGHT, pitch_angle * far_sign)
-	var pivot := Vector3(0.0, 0.0, HALF_FACE.y * far_sign)
+	var pivot := Vector3(0.0, 0.0, HALF_FACE.y * far_sign * signf(s))
 	var pitch := Transform3D(pitch_basis, pivot - pitch_basis * pivot)
-	var roll_angle := deg_to_rad(float(p.roll)) * spring.x * float(p.rock_sign)
-	var roll := Transform3D(Basis(Vector3.BACK, roll_angle), Vector3.ZERO)
 	# Positive about world up is counter-clockwise seen from the downward-looking camera: the turn to the left.
-	var yaw := Transform3D(Basis(Vector3.UP, deg_to_rad(float(p.yaw)) * env.z), Vector3.ZERO)
-	var height := (float(p.lift) * env.x + float(p.hop) * spring.y) / scale \
-		+ HALF_FACE.x * absf(sin(roll_angle)) * cos(pitch_angle)
-	return Transform3D(Basis.IDENTITY, Vector3.UP * height) * yaw * pitch * roll
+	var yaw := Transform3D(Basis(Vector3.UP, deg_to_rad(float(p.yaw)) * s), Vector3.ZERO)
+	var height := float(p.lift) * maxf(s, 0.0) / scale
+	return Transform3D(Basis.IDENTITY, Vector3.UP * height) * straighten * yaw * pitch
 
 func _set_reaction_pose(seconds: float) -> void:
 	var hand_mesh = _card.hand_mesh
@@ -333,12 +306,12 @@ func _set_reaction_pose(seconds: float) -> void:
 		_reset_pose()
 		return
 	var card_scale: float = maxf(_card.global_basis.get_scale().y, 0.0001)
-	var pose := reaction_pose(seconds, _far_sign, _params, card_scale)
+	var pose := reaction_pose(seconds, _far_sign, _params, card_scale, _untilt)
 	hand_mesh.transform = pose
 	_apply_chrome(pose)
 	_set_face_light(face_light_for(pose))
 	var tip: float = deg_to_rad(float(_params.pitch))
-	var height: float = pose.origin.y * card_scale + HALF_FACE.y * sin(tip * reaction_envelope(seconds, _params).y)
+	var height: float = pose.origin.y * card_scale + HALF_FACE.y * absf(sin(tip * reaction_spring(seconds, _params)))
 	_set_shadow(clampf(height / (float(_params.lift) + HALF_FACE.y * sin(tip)), 0.0, 1.0), height)
 
 ## Probe hook: this hit's roll.

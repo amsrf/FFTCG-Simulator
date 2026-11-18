@@ -183,7 +183,47 @@ func _ready() -> void:
 	_expect(slots.size() == zone.get("cards").size(), "a 2-damage hit lands each card in its own slot")
 	_expect(row_x.size() == 1, "and the row is one straight line (one world x)")
 
+	# --- THE OPPONENT IS ZOOMED TOO --------------------------------------------------------------------------------
+	# Damage to the opponent (an unblocked attack of ours) must look at THEIR zone, EX BURST reveal and all, exactly as
+	# damage to us does. Their zone once had no camera, so the zoom returned silently and the hit was never looked at.
+	await _check_opponent_zoom(game, opp_side, board)
+
 	_finish()
+
+
+func _check_opponent_zoom(game, opp_side, board: Camera3D) -> void:
+	var opp_zone: Node3D = opp_side.get_node_or_null("DamageZone")
+	var opp_cam: Camera3D = null
+	if opp_zone != null:
+		for child in opp_zone.find_children("*", "Camera3D", true, false):
+			opp_cam = child as Camera3D
+			break
+	_expect(opp_cam != null, "the opponent's damage zone has its damage camera")
+	if opp_cam == null:
+		return
+	var old: Tween = game.get("_damage_tween")
+	if old != null and old.is_valid():
+		old.custom_step(30.0)
+	await get_tree().process_frame
+	opp_side.take_damage(1, game.get("field").get_front_cards_for("player").front())
+	await get_tree().process_frame
+	_expect(get_viewport().get_camera_3d() == opp_cam, "damage to the OPPONENT takes the view to their damage zone")
+	var tw: Tween = game.get("_damage_tween")
+	_expect(tw != null and tw.is_valid(), "and their zoom tween is running")
+	if tw == null or not tw.is_valid():
+		return
+	tw.pause()
+	tw.custom_step(float(game.get("damage_zoom_in_seconds")) + 0.01)
+	await get_tree().process_frame
+	var cards: Array = opp_zone.get("cards")
+	var landed: Vector3 = opp_zone.global_transform * (opp_zone.call("calculate_card_position", cards.size() - 1) as Vector3)
+	var slot_px: Vector2 = opp_cam.unproject_position(landed)
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	_expect(slot_px.distance_to(view * 0.5) < 3.0,
+		"and the opponent's landing slot sits at the centre of the shot (%s of %s)" % [slot_px, view])
+	tw.custom_step(30.0)
+	await get_tree().process_frame
+	_expect(get_viewport().get_camera_3d() == board, "and the board view comes back after it")
 
 
 func _finish() -> void:

@@ -1,4 +1,6 @@
 extends Node
+
+const CARD_EDGE_SCRIPT := preload("res://scripts/cards/card_edge.gd")
 ## CARD DAMAGE REACTION probe.
 ##
 ## The reference is clip4: effect damage makes a card pop off the table, scale
@@ -19,6 +21,15 @@ func _expect(ok: bool, what: String) -> void:
 	else:
 		_fails += 1
 		print("[DamageReaction] FAIL %s" % what)
+
+
+## How far a card face leans ON SCREEN: its bottom-to-top line, projected, against the screen's vertical (degrees).
+func _screen_tilt(node: Node3D) -> float:
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	var top: Vector2 = camera.unproject_position(node.global_transform * Vector3(0, 0, -0.3))
+	var bottom: Vector2 = camera.unproject_position(node.global_transform * Vector3(0, 0, 0.3))
+	var up: Vector2 = top - bottom
+	return rad_to_deg(absf(wrapf(atan2(up.x, -up.y), -PI, PI)))
 
 
 func _play_card(game: Node, field: Node, id: int) -> Card:
@@ -57,7 +68,7 @@ func _ready() -> void:
 	_expect(fx.is_reacting(), "effect damage starts a hit reaction")
 	var near_rise: float = near_at.call().y - rest_near.y
 	var far_rise: float = far_at.call().y - rest_far.y
-	_expect(near_rise > 0.25, "the card snaps up off the board (bottom edge +%.2f m)" % near_rise)
+	_expect(near_rise > 0.10 and near_rise < 0.32, "the card snaps up off the board: a little jump (bottom edge +%.2f m)" % near_rise)
 	var tip: float = rad_to_deg(asin(clampf((far_rise - near_rise) / (0.6 * card.global_basis.get_scale().y), -1.0, 1.0)))
 	_expect(tip > 15.0 and tip < 28.0, "it tips toward the camera about its bottom edge (%.1f deg)" % tip)
 	var toward: Vector3 = card.get_viewport().get_camera_3d().global_position - card.global_position
@@ -67,7 +78,9 @@ func _ready() -> void:
 	# SHADING: turned toward the light, the face is brighter (the wolf: ~+15%).
 	var lit: float = fx.face_light()
 	_expect(lit > 0.1 and lit < 0.25, "the tipped face is lit brighter (face_light %+.3f)" % lit)
-	_expect(edge.transform.is_equal_approx(card.hand_mesh.transform), "the thickness edge rides with the face")
+	# The edge's REST is its thickness (its y scale), so it rides as face pose * that.
+	var edge_rest := Transform3D(Basis.from_scale(Vector3(1.0, CARD_EDGE_SCRIPT.thickness_for(true), 1.0)), Vector3.ZERO)
+	_expect(edge.transform.is_equal_approx(card.hand_mesh.transform * edge_rest), "the thickness edge rides with the face")
 	_expect(badge.transform.is_equal_approx(card.hand_mesh.transform * badge_home), "the cost crystal rides with the face")
 	_expect(card.power_label.transform.is_equal_approx(card.hand_mesh.transform * label_home), "the power readout rides with the face")
 	_expect(fx.shadow_strength() > 0.3, "the lifted card casts a shadow on the board")
@@ -76,58 +89,56 @@ func _ready() -> void:
 	var lowest := INF
 	var in_range := true
 	var yaw_signs := {}
-	var rock_signs := {}
 	for seed_value in range(60):
 		var tier: int = seed_value % 4
 		var p: Dictionary = fx.roll_reaction(tier, seed_value)
 		in_range = in_range and p.lift >= fx.REACTION_LIFT[tier] * 0.85 - 0.0001 and p.lift <= fx.REACTION_LIFT[tier] * 1.15 + 0.0001 \
-			and absf(p.pitch - fx.REACTION_PITCH_DEG[tier]) <= 3.0001 and p.end <= 1.0 and p.rock_start < p.land
+			and absf(p.pitch - fx.REACTION_PITCH_DEG[tier]) <= 3.0001 and p.end > 1.0 and p.end < 2.5
 		yaw_signs[signf(p.yaw)] = true
-		rock_signs[p.rock_sign] = true
 		for far_sign in [-1.0, 1.0]:
-			for i in range(0, 101):
-				var pose: Transform3D = fx.reaction_pose(float(i) * 0.01, far_sign, p)
+			var t := 0.0
+			while t <= float(p.end):
+				var pose: Transform3D = fx.reaction_pose(t, far_sign, p)
 				for corner in [Vector3(-0.2145, 0, -0.3), Vector3(0.2145, 0, -0.3), Vector3(-0.2145, 0, 0.3), Vector3(0.2145, 0, 0.3)]:
 					lowest = minf(lowest, (pose * corner).y)
+				t += 0.01
 	_expect(in_range, "60 rolls keep every size and timing inside its range")
-	_expect(yaw_signs.size() == 2 and rock_signs.size() == 2, "rolls turn both ways and land on both edges")
-	_expect(lowest > -0.001, "no corner ever enters the board, in any roll (%.4f)" % lowest)
+	_expect(yaw_signs.size() == 2, "rolls turn both ways")
+	_expect(lowest > -0.001, "no corner ever enters the board, in any roll, through the whole return (%.4f)" % lowest)
 	var a: Dictionary = fx.roll_reaction(1, 11)
 	var b: Dictionary = fx.roll_reaction(1, 12)
-	var differ: float = (fx.reaction_pose(0.1, 1.0, a).origin - fx.reaction_pose(0.1, 1.0, b).origin).length() \
-		+ absf(fx.landing_spring(a.land + 0.1, a).x - fx.landing_spring(b.land + 0.1, b).x)
+	var differ: float = (fx.reaction_pose(0.3, 1.0, a).origin - fx.reaction_pose(0.3, 1.0, b).origin).length() \
+		+ absf(fx.reaction_spring(0.7, a) - fx.reaction_spring(0.7, b))
 	_expect(differ > 0.01, "two hits of the same strength do not look the same (%.3f)" % differ)
-	# The shape of one roll: the fall EASES into the board, then a weakly damped rock and two hops.
+	# The shape of one roll: a fast snap, then a SLOW return on a WEAKLY damped spring, with no snap back.
 	var p0: Dictionary = fx.roll_reaction(1, 5)
-	var mid: float = (p0.hang_end + p0.land) * 0.5
-	var mid_speed: float = absf(fx.reaction_envelope(mid + 0.01, p0).x - fx.reaction_envelope(mid, p0).x)
-	var late_speed: float = absf(fx.reaction_envelope(p0.land - 0.005, p0).x - fx.reaction_envelope(p0.land - 0.015, p0).x)
-	_expect(late_speed < mid_speed * 0.5, "the fall slows before it lands (%.3f vs %.3f per 10 ms)" % [late_speed, mid_speed])
+	_expect(fx.reaction_spring(float(p0.rise), p0) > 0.99 and float(p0.rise) <= 0.05,
+		"the jump is a snap: full height in %.2f s" % float(p0.rise))
+	var back_down := -1.0
 	var swings: Array[float] = []
-	var t := float(p0.rock_start)
-	while t < float(p0.end):
-		var roll: float = fx.landing_spring(t, p0).x
-		if absf(roll) > 0.05:
-			if swings.is_empty() or signf(roll) != signf(swings.back()):
-				swings.append(roll)
-			elif absf(roll) > absf(swings.back()):
-				swings[swings.size() - 1] = roll
-		t += 0.005
-	var decays := swings.size() >= 2 and absf(swings.back()) < absf(swings[0])
-	_expect(swings.size() >= 5 and decays, "it rocks edge to edge %d times as it lands, dying out slowly" % swings.size())
-	var hops := 0
-	var was_up := false
-	t = float(p0.land)
-	while t < float(p0.end):
-		var up: bool = fx.landing_spring(t, p0).y > 0.05
-		if up and not was_up:
-			hops += 1
-		was_up = up
-		t += 0.005
-	_expect(hops == 2, "it bounces twice after landing, the second smaller (%d hops)" % hops)
-	_expect(fx.landing_spring(float(p0.end) - 0.001, p0).length() < 0.02, "the spring has died out by the end")
+	var biggest_step := 0.0
+	var t0 := float(p0.rise)
+	while t0 < float(p0.end):
+		var value: float = fx.reaction_spring(t0, p0)
+		if back_down < 0.0 and value <= 0.0:
+			back_down = t0 - float(p0.rise)
+		if absf(value) > 0.03:
+			if swings.is_empty() or signf(value) != signf(swings.back()):
+				swings.append(value)
+			elif absf(value) > absf(swings.back()):
+				swings[swings.size() - 1] = value
+		biggest_step = maxf(biggest_step, absf(fx.reaction_spring(t0 + 0.01, p0) - value))
+		t0 += 0.005
+	_expect(back_down > 0.2, "the return is slow: back on the board %.2f s after the jump" % back_down)
+	var decays := swings.size() >= 3
+	for i in range(1, swings.size()):
+		decays = decays and absf(swings[i]) < absf(swings[i - 1])
+	_expect(decays, "weak damping: it swings past rest and back %d times, each smaller (%s)" % [
+		swings.size() - 1, str(swings.map(func(v): return snappedf(v, 0.01)))])
+	_expect(biggest_step < 0.08, "after the snap nothing jumps: the largest change in 10 ms is %.3f of the jump" % biggest_step)
+	_expect(absf(fx.reaction_spring(float(p0.end) - 0.001, p0)) < 0.001, "the spring is exactly at rest when it ends")
 
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(float(fx.reaction_params().end) + 0.2).timeout
 	_expect(not fx.is_reacting(), "the hit reaction finishes")
 	_expect(card.hand_mesh.position.is_equal_approx(Vector3.ZERO)
 		and card.hand_mesh.scale.is_equal_approx(Vector3.ONE)
@@ -137,6 +148,33 @@ func _ready() -> void:
 	_expect(fx.shadow_strength() == 0.0, "no shadow once the card rests")
 	_expect(badge.transform.is_equal_approx(badge_home) and card.power_label.transform.is_equal_approx(label_home)
 		and card.power_label.visible, "the cost crystal and power readout are back home")
+
+	# A DULLED CARD IS HIT STRAIGHT. Dulled the real way (it attacks), then hit by an ability: on screen the face is
+	# upright while it is knocked loose (only the rolled turn of a few degrees), and dulled again when it settles.
+	field.set_attacker(card)
+	field.execute_card_attack()
+	await get_tree().create_timer(0.5).timeout
+	var dulled_tilt: float = _screen_tilt(card.hand_mesh)
+	_expect(card.tapped and dulled_tilt > 8.0, "attacking dulls the card (%.1f° on screen)" % dulled_tilt)
+	card.suffer_damage(3000, "Ability", "opponent")
+	var hit_start: int = Time.get_ticks_msec()
+	var worst_hit := 0.0
+	var settled_tilt := 0.0
+	await get_tree().process_frame
+	var end_s: float = float(fx.reaction_params().end)
+	while fx.is_reacting():
+		var at: float = (Time.get_ticks_msec() - hit_start) / 1000.0
+		if at > 0.06 and at < end_s - fx.UNTILT_RETURN - 0.05:
+			worst_hit = maxf(worst_hit, _screen_tilt(card.hand_mesh))
+		await get_tree().process_frame
+	settled_tilt = _screen_tilt(card.hand_mesh)
+	print("[DamageReaction] dulled hit: dulled %.1f°, worst while hit %.1f°, settled %.1f°" % [dulled_tilt, worst_hit, settled_tilt])
+	_expect(worst_hit < 7.0, "while it is knocked loose the dulled card is STRAIGHT on screen (worst %.1f°)" % worst_hit)
+	_expect(absf(settled_tilt - dulled_tilt) < 1.0, "and it settles dulled again (%.1f° vs %.1f°)" % [settled_tilt, dulled_tilt])
+	field.reset_attacker()
+	card.untap()
+	card.clear_damage()
+	await get_tree().create_timer(0.4).timeout
 
 	# Combat damage keeps the clash presentation and must not trigger this.
 	card.clear_damage()
@@ -152,7 +190,11 @@ func _ready() -> void:
 	var second: Card = _play_card(game, field, 12)
 	await get_tree().process_frame
 	await get_tree().create_timer(0.05).timeout
-	var ctx = EFFECT_CONTEXT.new(game, card, "test", {}, card, [card, second])
+	# The SOURCE is a Lightning card (Kain 127): an element whose cue does not take the recoil over. Fire, Ice, Wind and
+	# Earth own it (VfxPreset.owns_damage_reaction) and play it at their own impact, so the stagger is not theirs.
+	var lightning: Card = _play_card(game, field, 127)
+	await get_tree().process_frame
+	var ctx = EFFECT_CONTEXT.new(game, lightning, "test", {}, lightning, [card, second])
 	ctx.damage([card, second], 1000, "multi")
 	await get_tree().create_timer(0.05).timeout
 	_expect(card.hand_mesh.position.y > 0.005,

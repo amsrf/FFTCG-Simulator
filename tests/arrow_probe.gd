@@ -146,6 +146,8 @@ func _report() -> void:
 func _check_ice_cluster() -> void:
 	var preset = load("res://assets/vfx/elements/ice.tres")
 	_expect(preset.impact_scene != null and preset.board_impact_scene != null, "Ice single and board cues load")
+	# The recoil (and a held break) must wait for the crystal to LAND; without these the card reacted ~1.5 s early.
+	_expect(preset.owns_damage_reaction and preset.effect_break, "Ice cue owns the recoil and the break at impact")
 	var cue = preset.impact_scene.instantiate()
 	add_child(cue)
 	cue.queue_free()
