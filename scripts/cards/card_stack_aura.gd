@@ -37,6 +37,15 @@ var _is_top := false
 var _intensity := 0.0
 var _wave := -1.0
 
+## NO REFERENCE CYCLES, NO STRANDED AWAITS. This module once leaked itself, its tweens, its material and a suspended
+## coroutine for every card that had been on the stack (they were all still alive at exit): the tweens were SceneTree
+## tweens whose lambdas captured `self`, stored in _fade/_pulse, so the aura and its tweens held each other forever;
+## and pulse() awaited the tween's `finished`, which a KILLED tween never emits, so an interrupted pulse left its
+## coroutine (and anyone awaiting it) suspended for good. Now: tweens are bound to the CARD (they die with it), every
+## stored tween is dropped when it ends or is killed, pulse() awaits this module's own `pulse_ended` (emitted on
+## completion AND on interruption), and release() (Card's NOTIFICATION_PREDELETE) lets go of everything.
+signal pulse_ended
+
 func _init(card: Node3D) -> void:
 	_card = card
 
@@ -53,8 +62,9 @@ func set_top(on: bool) -> void:
 	_ensure_aura(mesh)
 	if _fade != null and _fade.is_valid():
 		_fade.kill()
-	_fade = _card.get_tree().create_tween()
+	_fade = _card.create_tween()
 	_fade.tween_method(func(v: float) -> void: _apply_levels(v, _wave), _intensity, STANDING_INTENSITY if on else 0.0, FADE_SECONDS)
+	_fade.tween_callback(func() -> void: _fade = null)
 
 func is_top() -> bool:
 	return _is_top
@@ -72,10 +82,10 @@ func pulse() -> void:
 		_fade.kill()
 	var from: float = _intensity
 	var total: float = pulse_seconds()
-	_pulse = _card.get_tree().create_tween()
+	_pulse = _card.create_tween()
 	_pulse.tween_method(func(k: float) -> void: _pulse_step(k * total, from), 0.0, 1.0, total)
-	await _pulse.finished
-	_pulse = null
+	_pulse.tween_callback(_end_pulse)
+	await pulse_ended
 	mesh = _mesh()
 	if mesh != null:
 		mesh.scale = Vector3.ONE
@@ -139,19 +149,37 @@ func _ensure_aura(mesh: Node3D) -> void:
 	_aura.visible = false
 	mesh.add_child(_aura)
 
+## The pulse is over, finished or interrupted: drop the tween and wake whoever awaits pulse().
+func _end_pulse() -> void:
+	var was := _pulse != null
+	_pulse = null
+	if was:
+		pulse_ended.emit()
+
 ## Leaving the stack (any zone change): stop everything, mesh back at rest, no aura. Called by Card.enter_zone().
 func normalize() -> void:
 	var was_pulsing: bool = is_pulsing()
-	for t in [_fade, _pulse]:
-		if t != null and t.is_valid():
-			t.kill()
-	_fade = null
-	_pulse = null
+	_stop_tweens()
 	_is_top = false
 	var mesh: Node3D = _mesh()
 	if mesh != null and was_pulsing:
 		mesh.scale = Vector3.ONE
 	_apply_levels(0.0, -1.0)
+
+func _stop_tweens() -> void:
+	if _fade != null and _fade.is_valid():
+		_fade.kill()
+	_fade = null
+	if _pulse != null and _pulse.is_valid():
+		_pulse.kill()
+	_end_pulse()
+
+## The card is being freed: stop and drop everything, wake any awaiting pulse(), and let go of the card.
+func release() -> void:
+	_stop_tweens()
+	_aura = null
+	_mat = null
+	_card = null
 
 ## Probe hooks.
 func aura() -> MeshInstance3D:

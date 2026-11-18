@@ -5,6 +5,13 @@ All notable changes to the FF TCG Simulator project.
 ## [Unreleased] — 2026-11-18
 
 ### Fixed
+- **Memory leak: every card that had been on the stack leaked its top-of-stack aura** (`card_stack_aura.gd`): the module, its fade/pulse tweens, its `ShaderMaterial` and, for an interrupted pulse, a suspended coroutine all stayed alive (found with `--verbose`: they were the whole of `may_probe`'s exit report). The tweens were SceneTree tweens whose lambdas captured `self` and were stored in `_fade`/`_pulse` (a reference cycle), and `pulse()` awaited `finished`, which a killed tween never emits. Tweens are now bound to the card and dropped when they end or are killed, `pulse()` awaits the module's own `pulse_ended` (emitted on completion and on interruption), and `release()` runs from `Card`'s `NOTIFICATION_PREDELETE`.
+- `card_overlap_shadow.update()` no longer reads `global_transform` during teardown (the stack or a card's mesh already out of the tree): the `!is_inside_tree()` error in many probe logs.
+- `perspective_probe` instantiated a whole game scene just to call the static `Game.diff_snapshots()`, and leaked it.
+
+### Known Issues
+- A sound still playing when the game quits is reported at exit (`AudioStreamPlaybackWAV` + its stream, `determinism_probe` / `perspective_probe`). Exit-only, bounded by the voice pool; stopping voices in `SoundManager._exit_tree()` did not clear it (the engine releases a stopped playback on its next mix).
+
 - **A card could resolve while still flying onto the stack** (seen with the pass mode on React: a Summon cast by the player resolved mid-flight). `Stack.resolve_top_effect()` assumed every priority decision waited for the presentation queue; the AI and mock agents and the React/Smart auto-pass do not. It now awaits `Stack.await_stack_settled()` (capped at 6 s, skipped in fast mode), built on the new `Stack.cards_still_entering()` (local Summon presentation, opponent Summon flight, trigger cards and ability cards still entering). `tests/stack_entry_probe.tscn` reproduces the report (React mode, Summon from hand, passing opponent) and failed before the fix.
 
 ### Changed

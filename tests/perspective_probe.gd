@@ -98,7 +98,8 @@ func _ready() -> void:
 	# 2. The final boards, field by field (what a desync report would print).
 	as_seat_1.erase("_turn_hashes")
 	as_seat_2.erase("_turn_hashes")
-	var report: Array = GAME_SCENE.instantiate().get_script().diff_snapshots(as_seat_1, as_seat_2)
+	# diff_snapshots is static: call it on the script. Instantiating a whole game just to reach it leaked that game.
+	var report: Array = load("res://scripts/game/game.gd").diff_snapshots(as_seat_1, as_seat_2)
 	for line in report:
 		print("[Perspective] DIFF " + line)
 	diffs += report.size()

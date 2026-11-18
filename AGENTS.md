@@ -1277,6 +1277,11 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
   so a new arrival path must hide AFTER enter_zone. `VfxDirector.release_hold()` keeps a held card hidden when its
   parent has `swallow_stand_in` - any new hold/release flow inherits that. Discard/mill/receive go through
   `_swallow()`; the hover point is lifted along the line of sight (`mouth_transform()`), because a straight-up lift
+- **A RefCounted card module must not keep its own tweens in a cycle.** A tween whose lambda captures `self`, stored in a
+  member, keeps the module (and its material) alive forever; `await tween.finished` never returns if the tween is
+  killed. Bind tweens to the card (`_card.create_tween()`), drop stored tweens when they end or are killed, await your
+  own signal emitted on both paths, and release from `Card`'s `NOTIFICATION_PREDELETE` (`card_stack_aura.gd` is the
+  pattern). Find leaks with `--verbose`: it names every leaked instance and resource at exit.
   draws beside the pit under the perspective camera. The pit top is OPAQUE on purpose: it clips the sinking card.
 - **A pile that shares a scene needs its zone as data.** `Graveyard` and `Removed` are the same `.tscn` with a different exported `zone`; `add_card()` used to hardcode `Card.Zone.GRAVEYARD`, which made an exiled card indistinguishable from a broken one. Any new pile (exile, warp, deck-out) should reuse the scene and set `zone`, and `Card.Zone` values must be **appended**, never inserted — they are written into scenes and printed by probes.
 

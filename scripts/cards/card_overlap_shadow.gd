@@ -5,13 +5,20 @@ const MAX_CASTERS := 4
 ## Shared full silhouettes: only current geometry determines casting and reception.
 static func update(container: Node3D, cards: Array,
 		strength: float = 0.62, width: float = 0.055, radius: float = 0.03) -> void:
+	# A layout pass can run while the scene is being torn down (the stack reflowing as cards leave it): nothing has a
+	# global transform out of the tree, and reading one is an engine error.
+	if container == null or not container.is_inside_tree():
+		return
 	var camera := container.get_viewport().get_camera_3d()
 	var geometry: Array[Dictionary] = []
 	for card: Card in cards:
 		if not is_instance_valid(card):
 			continue
 		card.clear_edge_shadow()
-		if camera == null or card.get_parent() != container or card.is_dragging or not card.visible:
+		# During teardown children leave the tree before their parent: the card can still be "inside" while its mesh
+		# is already out, so ask the mesh itself.
+		if camera == null or card.get_parent() != container or card.is_dragging or not card.visible \
+				or card.hand_mesh == null or not card.hand_mesh.is_inside_tree():
 			continue
 		var placement := card.hand_mesh.global_transform
 		var face := card._card_face_size()

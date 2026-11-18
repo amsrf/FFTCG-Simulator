@@ -436,6 +436,10 @@ func _get_mouse_3d_position_on_card_plane() -> Vector3:
 
 	
 func _notification(what):
+	# Being freed: modules that hold tweens/awaits must let go, or they outlive the card (card_stack_aura.gd).
+	if what == NOTIFICATION_PREDELETE:
+		stack_aura.release()
+		return
 	# Arriving on a Field refreshes the power readout and the board's continuous effects.
 	if what == NOTIFICATION_PARENTED and get_parent() is Field:
 		_updateUI()
