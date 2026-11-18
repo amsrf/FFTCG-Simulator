@@ -1363,6 +1363,31 @@ func stage_ex_burst(source: Card) -> Card:
 	return null
 
 ## Wait for a triggered-ability card's entrance to finish. Capped, so a lost presentation can never stall a burst.
+## Wait until nothing is entering the stack (cards_still_entering), at most `cap_seconds`.
+func await_stack_settled(cap_seconds: float = 6.0) -> void:
+	if PRESENTATION.fast_mode:
+		return
+	var waited := 0.0
+	while cards_still_entering() and waited < cap_seconds:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	if waited >= cap_seconds:
+		push_warning("[Stack] resolving although something is still marked as entering the stack after %.1f s" % cap_seconds)
+
+## IS ANYTHING STILL ON ITS WAY ONTO THE STACK? The local Summon's presentation (fade, then flight), the opponent's
+## Summon flight, trigger cards still to fly in or flying, and an ability's card coming out of its source. Each of
+## those clears its marker when the card has landed (or is dropped), so this is the "has the stack settled" question.
+func cards_still_entering() -> bool:
+	if _local_summon_presentation != null and is_instance_valid(_local_summon_presentation):
+		return true
+	if _opponent_summon_flight_card != null and is_instance_valid(_opponent_summon_flight_card):
+		return true
+	for list in [_incoming_triggers, _trigger_flights]:
+		for c in list:
+			if is_instance_valid(c):
+				return true
+	return false
+
 func await_trigger_entry(card: Card, cap_seconds: float = 4.0) -> void:
 	if PRESENTATION.fast_mode:
 		return
@@ -1531,8 +1556,12 @@ func cancel_stack_card(card: Card) -> void:
 @export var resolve_trail_seconds: float = 0.5
 
 func resolve_top_effect() -> void:
-	# No wait for a Summon's flight here: resolution always follows a priority decision, and every decision waits
-	# for the presentation queue (Agent._settle), so the flight has landed before anyone sees it resolve.
+	# NOTHING RESOLVES WHILE A CARD IS STILL FLYING ONTO THE STACK. This used to assume every priority decision waited
+	# for the presentation queue (Agent._settle), so a flight had always landed by then. It does not: the AI and mock
+	# agents pass after their think time, and the React / Smart auto-pass after AUTO_PASS_DELAY, none of them waiting.
+	# A Summon cast in React mode against a passing opponent resolved mid-flight. Wait here, at the one choke point,
+	# whoever passed. Capped so a lost marker cannot hang the game; fast mode has no flights.
+	await await_stack_settled()
 	## Stack resolution: run effect instructions only; costs were applied at
 	## commit for skills. The effect handler may await a modal (e.g. Auron's
 	## "may play a Backup" choice), so resolution waits for the game to signal

@@ -1282,6 +1282,11 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 
 - **An animating action should RETURN its tween, and multi-target animations join with `AnimationBatch`.** `await` inside a target loop serialises: five returned Forwards took ~3000 ms one after another. The Godot equivalent of `Promise.all()` is `scripts/animation_batch.gd` — start every tween, `close()`, `await batch.wait()`; it never hangs on a null/invalid tween and never aborts. That only works if the animation is ONE awaitable, which is why `Hand.begin_return_card()` is a single chained tween (the landing callback is a step inside the chain, not a second tween). Logical changes stay synchronous before the join, so a follow-up instruction sees the right board while the visuals catch up.
 
+- **Nothing resolves while a card is still flying onto the stack.** `Stack.resolve_top_effect()` first awaits
+  `await_stack_settled()` (`cards_still_entering()`: local Summon presentation, opponent Summon flight, trigger and
+  ability cards entering). Do NOT rely on the agents waiting: the AI/mock pass after their think time and the
+  React/Smart auto-pass after `AUTO_PASS_DELAY`, none of them on the presentation queue. A new way for a card to fly
+  onto the stack must set a marker that `cards_still_entering()` reads. `stack_entry_probe` is the spec.
 - **A resolving card stays on screen until it has RESOLVED.** `resolve_top_effect()` pops it from `cards` at once (rules),
   but keeps it in `Stack.resolving_card`, which `layout_cards()` includes, until `resolution_complete`; the reflow
   happens only then. Do not reflow at the pop, or the card leaves before the player has made its choices.

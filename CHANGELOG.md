@@ -4,6 +4,9 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-18
 
+### Fixed
+- **A card could resolve while still flying onto the stack** (seen with the pass mode on React: a Summon cast by the player resolved mid-flight). `Stack.resolve_top_effect()` assumed every priority decision waited for the presentation queue; the AI and mock agents and the React/Smart auto-pass do not. It now awaits `Stack.await_stack_settled()` (capped at 6 s, skipped in fast mode), built on the new `Stack.cards_still_entering()` (local Summon presentation, opponent Summon flight, trigger cards and ability cards still entering). `tests/stack_entry_probe.tscn` reproduces the report (React mode, Summon from hand, passing opponent) and failed before the fix.
+
 ### Changed
 - Triggered and activated abilities on the stack use the restored field portrait above the ability text. `StackAbilityFace.configure()` uses an illustration crop when an ability card has no restored portrait.
 - Field bands use colors sampled from the printed Opus I stripes, with a wide central highlight across all eight elements (`field_card_face.gd`, `field_card_face.gdshaderinc`). Earth, Ice, and Wind use outlined white labels, and Light uses dark labels for contrast (`power_display.gd`). Refined the FFIII and Tactics portrait crops for more consistent framing.
