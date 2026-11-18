@@ -36,6 +36,18 @@ extends Node3D
 @export var intake_end_scale: float = 0.3
 ## How far the card turns toward edge-on while it sinks (radians; PI/2 would be fully edge-on).
 @export var intake_turn: float = deg_to_rad(76.0)
+## A FACE-DOWN card discarded from a hand (the opponent's) is shown first: it comes toward the camera and down the
+## screen out of the hand (metres), grows, YAWS about its long axis to turn face-up (the art is swapped in while it is
+## edge-on), and is held long enough to read before it flies to the pit.
+@export var discard_reveal_lift: float = 0.6
+@export var discard_reveal_drop: float = 0.45
+@export var discard_reveal_scale: float = 1.35
+@export var discard_reveal_flip_seconds: float = 0.24
+@export var discard_reveal_hold_seconds: float = 0.4
+## Several face-down cards discarded together ("discard 2"): each starts its flip this long after the previous one,
+## and they are held SIDE BY SIDE across the screen, `discard_reveal_spacing` card widths apart, so none hides another.
+@export var discard_reveal_stagger: float = 0.12
+@export var discard_reveal_spacing: float = 1.08
 
 const PIT := preload("res://scripts/game/pit.gd")
 ## The pit's outer radius in metres (game.tscn sets the Removed piles smaller than the Break Zone ones).
@@ -86,12 +98,98 @@ func discard_many(cards: Array) -> void:
 	for card in cards:
 		if card == null or not is_instance_valid(card):
 			continue
-		moves.append({"card": card, "start": card.global_transform})
+		# A discard is public: a card nobody could see (the opponent's hand) is revealed before it goes in.
+		moves.append({"card": card, "start": card.global_transform, "reveal": not card.revealed})
 		graveyard_cards.append(card)
 		card.broken = false
 		card.current_zone = zone
 	if not moves.is_empty():
-		Vfx.present(func() -> void: await _swallow(moves, discard_seconds, discard_arc_height, discard_stagger))
+		Vfx.present(func() -> void:
+			await _reveal_face_down(moves)
+			await _swallow(moves, discard_seconds, discard_arc_height, discard_stagger))
+
+
+## Turn every face-down card in `moves` face-up where it is (all together), then hold; each move's `start` becomes
+## the revealed pose so the flight leaves from there. Cards already face-up are untouched, and nothing waits when
+## none needs it.
+func _reveal_face_down(moves: Array) -> void:
+	var tweens: Array = []
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	var revealing: Array = []
+	for m in moves:
+		if m.get("reveal", false) and is_instance_valid(m["card"]):
+			revealing.append(m)
+	if revealing.is_empty():
+		return
+	# Where each is held: out of the hand toward the camera and down the screen, then laid side by side about their
+	# common centre along the screen's horizontal (one card: exactly where it came out).
+	var starts: Array = []
+	var centre := Vector3.ZERO
+	for m in revealing:
+		var card: Card = m["card"]
+		# The hand's fan tween must not keep writing hand-local positions over the reveal.
+		card.stop_hand_layout()
+		var start: Transform3D = card.global_transform
+		starts.append(start)
+		var origin: Vector3 = start.origin
+		if cam != null:
+			origin += (cam.global_position - start.origin).normalized() * discard_reveal_lift
+			origin += -cam.global_basis.y.normalized() * discard_reveal_drop
+		centre += origin
+	centre /= revealing.size()
+	var across: Vector3 = cam.global_basis.x.normalized() if cam != null else Vector3.RIGHT
+	var count: int = revealing.size()
+	for i in count:
+		var m: Dictionary = revealing[i]
+		var card: Card = m["card"]
+		var start: Transform3D = starts[i]
+		var width: float = card._card_face_size().x * start.basis.get_scale().x * discard_reveal_scale
+		var origin: Vector3 = centre + across * (float(i) - float(count - 1) * 0.5) * width * discard_reveal_spacing
+		# UPRIGHT FOR THE VIEWER. The opponent's hand is mirrored, so the face would come out UPSIDE DOWN. The fix is a
+		# half turn about the face normal, applied in the instant the card is edge-on (with the face swap), where it
+		# cannot be seen: the yaw stays the only motion. The art's top is the card's local -Z.
+		var landed: Basis = Basis(start.basis.get_rotation_quaternion())
+		if cam != null and is_upside_down_on_screen(landed, origin, cam):
+			landed = Basis(landed.y.normalized(), PI) * landed
+		var shown := Transform3D(landed.scaled_local(Vector3.ONE * start.basis.get_scale().x * discard_reveal_scale),
+			origin)
+		m["start"] = shown
+		var t: Tween = create_tween()
+		if i > 0 and discard_reveal_stagger > 0.0:
+			t.tween_interval(discard_reveal_stagger * i)
+		var flip: float = maxf(discard_reveal_flip_seconds, 0.0001)
+		t.tween_method(func(k: float) -> void: _reveal_pose(card, start, shown, k), 0.0, 1.0, flip)
+		# Everyone is held until the LAST one has been shown for the full hold.
+		var hold: float = discard_reveal_hold_seconds + discard_reveal_stagger * (count - 1 - i)
+		if hold > 0.0:
+			t.tween_interval(hold)
+		tweens.append(t)
+	for t in tweens:
+		if t.is_valid() and t.is_running():
+			await t.finished
+
+
+## The first half turns from `start`, the second half arrives at `shown` (which may be `start` turned half a turn about
+## its face normal, to be upright): both are edge-on at the swap, where the two poses cover the same sliver.
+func _reveal_pose(card: Card, start: Transform3D, shown: Transform3D, k: float) -> void:
+	if not is_instance_valid(card):
+		return
+	var u: float = smoothstep(0.0, 1.0, k)
+	var angle: float = u * PI if u < 0.5 else (u - 1.0) * PI
+	if u >= 0.5 and not card.revealed:
+		card.set_revealed(true)
+	var from: Basis = Basis(start.basis.get_rotation_quaternion()) if u < 0.5 \
+			else Basis(shown.basis.get_rotation_quaternion())
+	var long_axis: Vector3 = from.z.normalized()
+	var size: float = lerpf(start.basis.get_scale().x, shown.basis.get_scale().x, u)
+	var pose: Basis = (Basis(long_axis, angle) * from).scaled_local(Vector3.ONE * size)
+	card.global_transform = Transform3D(pose, start.origin.lerp(shown.origin, u))
+
+## True when a card with rotation `basis` at `origin` shows its art's top (local -Z) pointing DOWN the screen.
+static func is_upside_down_on_screen(basis: Basis, origin: Vector3, cam: Camera3D) -> bool:
+	var top: Vector2 = cam.unproject_position(origin - basis.z.normalized() * 0.1)
+	var centre: Vector2 = cam.unproject_position(origin)
+	return top.y > centre.y
 
 
 ## A card arriving from somewhere OTHER than the field (a revealed card removed from the game, say): it joins the
@@ -142,7 +240,8 @@ func _swallow(moves: Array, flight: float, arc: float, stagger: float) -> void:
 		# The pile's look for the whole flight (face up, no field readout), then back to where it started.
 		card.enter_zone(zone)
 		card.global_transform = start
-		tweens.append(_intake(card, start, flight, arc, stagger * order, false))
+		# A card just revealed out of a hand keeps the orientation it was shown in: it MOVES to the pit, no turn.
+		tweens.append(_intake(card, start, flight, arc, stagger * order, false, bool(m.get("reveal", false))))
 		order += 1
 	for t in tweens:
 		if t != null and t.is_valid() and t.is_running():
@@ -158,14 +257,16 @@ func swallow_stand_in(stand_in: Card) -> void:
 
 ## One card's intake as ONE tween: flight (skipped when `flight` is 0), hover, sink, then hidden in the pit (or
 ## freed, for a stand-in). Returned so callers can join several.
-func _intake(card: Card, start: Transform3D, flight: float, arc: float, delay: float, free_after: bool) -> Tween:
+func _intake(card: Card, start: Transform3D, flight: float, arc: float, delay: float, free_after: bool,
+		keep_rotation: bool = false) -> Tween:
 	var rest: Transform3D = rest_transform()
 	var mouth: Transform3D = mouth_transform()
 	var total: float = flight + intake_hover_seconds + intake_sink_seconds
 	var t: Tween = create_tween()
 	if delay > 0.0:
 		t.tween_interval(delay)
-	t.tween_method(func(k: float) -> void: _intake_pose(card, start, mouth, rest, flight, arc, k), 0.0, total, total)
+	t.tween_method(func(k: float) -> void: _intake_pose(card, start, mouth, rest, flight, arc, k, keep_rotation),
+		0.0, total, total)
 	if pit != null:
 		# The flare goes off as the card drops through the mouth.
 		t.parallel().tween_callback(pit.flare).set_delay(flight + intake_hover_seconds + intake_sink_seconds * 0.45)
@@ -174,11 +275,13 @@ func _intake(card: Card, start: Transform3D, flight: float, arc: float, delay: f
 
 
 ## The pose at time `k` of an intake (deterministic, so a demo can freeze any moment).
+## `keep_rotation`: the card keeps `start`'s orientation the whole way (a revealed discard): position and size only.
 func _intake_pose(card: Card, start: Transform3D, mouth: Transform3D, rest: Transform3D, flight: float, arc: float,
-		k: float) -> void:
+		k: float, keep_rotation: bool = false) -> void:
 	if not is_instance_valid(card):
 		return
-	var q_mouth: Quaternion = mouth.basis.get_rotation_quaternion()
+	var q_mouth: Quaternion = start.basis.get_rotation_quaternion() if keep_rotation \
+			else mouth.basis.get_rotation_quaternion()
 	var s_mouth: float = mouth.basis.get_scale().x
 	var white := 0.0
 	var pose: Basis
@@ -211,7 +314,7 @@ func _intake_pose(card: Card, start: Transform3D, mouth: Transform3D, rest: Tran
 			var to_camera: Vector3 = (mouth.origin - rest.origin).normalized()
 			var side: float = 1.0 if (Basis(long_axis, 1.0) * mouth.basis.y.normalized()).dot(to_camera) \
 					>= (Basis(long_axis, -1.0) * mouth.basis.y.normalized()).dot(to_camera) else -1.0
-			var turn := Basis(long_axis, side * intake_turn * smoothstep(0.0, 0.7, w))
+			var turn := Basis() if keep_rotation else Basis(long_axis, side * intake_turn * smoothstep(0.0, 0.7, w))
 			var s: float = s_mouth * lerpf(intake_hover_shrink, intake_end_scale, e)
 			pose = (turn * Basis(q_mouth)).scaled_local(Vector3.ONE * s)
 			white = 1.0

@@ -74,6 +74,9 @@ var cards = []
 @export var selected_cards_for_mana_conversion: Array[Card] = []
 ## "Choose a card in hand" state (triggered "may" abilities such as Auron).
 var choose_card_criteria: Dictionary = {}
+## While choosing: the ONLY cards that may be picked (empty = every card matching the criteria). A multi-card discard
+## passes the cards not yet chosen, so a card already picked cannot be picked again.
+var choose_card_allowed: Array = []
 var selected_card_for_effect: Card = null
 ## The size cards are drawn at in the hand, read from Card's zone table rather than repeated here: the fan has to be
 ## LAID OUT for the size the cards actually are, so raising that one scale would otherwise make them silently overlap.
@@ -1380,7 +1383,8 @@ func refresh_highlights() -> void:
 				# The ONLY hand glow: the game is asking the player to choose a
 				# card, so mark exactly the cards that satisfy the criteria (all
 				# Fire Backups for Auron's trigger, for instance).
-				card.set_prompt_glow(not choose_card_criteria.is_empty() and card.matches_criteria(choose_card_criteria))
+				card.set_prompt_glow(not choose_card_criteria.is_empty() and card.matches_criteria(choose_card_criteria)
+						and _choosable(card))
 			_:
 				# Everything else — a normal main phase included — stays dark. A
 				# playable card is not a card the game is asking you to pick.
@@ -1395,6 +1399,7 @@ func begin_choose_card(criteria: Dictionary) -> void:
 func end_choose_card() -> void:
 	clear_effect_card_selection()
 	choose_card_criteria = {}
+	choose_card_allowed = []
 	selected_card_for_effect = null
 	refresh_highlights()
 
@@ -1439,6 +1444,24 @@ func remove_card_for_free_play(card: Card) -> void:
 func remove_for_play(card: Card) -> void:
 	_release_hover(card)
 	cards.erase(card)
+	update_card_positions()
+
+func _choosable(card: Card) -> bool:
+	return choose_card_allowed.is_empty() or choose_card_allowed.has(card)
+
+## DISCARD SEVERAL AT ONCE ("discard 2 cards"): they leave the hand together and the Break Zone presents them as ONE
+## batch — revealed (if face down) and flown in concurrently, a short stagger apart — instead of one after another.
+func discard_cards(picked: Array) -> void:
+	var leaving: Array = []
+	for card in picked:
+		if card != null and is_instance_valid(card) and cards.has(card):
+			_release_hover(card)
+			cards.erase(card)
+			card.set_selected_highlight(false)
+			leaving.append(card)
+	if leaving.is_empty():
+		return
+	graveyard.call("discard_many", leaving)
 	update_card_positions()
 
 func discard_card(card: Card) -> void:
@@ -1578,7 +1601,7 @@ func on_card_grabbed(card: Card) -> void:
 		GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND:
 			# Triggered "may" choice: only criteria-matching cards can be
 			# selected, and selecting one unselects the previous one.
-			if card.matches_criteria(choose_card_criteria):
+			if card.matches_criteria(choose_card_criteria) and _choosable(card):
 				toggle_effect_card_selection(card)
 		_:
 			_press_pointer = get_viewport().get_mouse_position()
