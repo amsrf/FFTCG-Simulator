@@ -44,7 +44,12 @@ var mat: ShaderMaterial
 var _drag_release_handled := false
 ## True only for a drag started by a real grab. The per-frame fallback uses it so
 ## code that merely sets is_dragging (tests, staging) is never auto-released.
-var _drag_input_active := false
+## A live pointer drag. _process() exists only for it (the per-frame follow and the missed-release fallback), so the
+## card PROCESSES ONLY WHILE THIS IS SET: ~100 cards no longer run an empty _process every frame.
+var _drag_input_active := false:
+	set(value):
+		_drag_input_active = value
+		set_process(value)
 @export var selected = false
 @export var type: String
 @export var card_name: String
@@ -207,6 +212,7 @@ func create_instruction_from_json(array: Array) -> Array[Instruction]:
 	return ans
 
 func _ready():
+	set_process(_drag_input_active)
 	camera = get_viewport().get_camera_3d()
 	crystal_scene = load(CRYSTAL_SCENE_PATH)
 	_build_target_border()

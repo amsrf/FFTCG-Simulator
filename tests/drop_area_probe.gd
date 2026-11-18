@@ -67,7 +67,10 @@ func _ready() -> void:
 	# offset instead of in the fan.
 	_hand.set_hovered(card, true)
 	_expect(_hand.hovered_card == card, "the card is hovered before the drag")
+	# A card PROCESSES ONLY WHILE DRAGGED (Card._drag_input_active): ~100 idle cards ran an empty _process every frame.
+	_expect(not card.is_processing(), "an idle card does not process every frame")
 	card.begin_drag()
+	_expect(card.is_processing(), "a dragged card does (it follows the pointer)")
 	_hand.begin_character_drag(card, grab_y)
 	_hold_into_stance(card)
 	_expect(_hand.update_character_drag(card, cast_point) and _hand.character_drag_latched() and _hand.cast_armed(),
@@ -75,6 +78,7 @@ func _ready() -> void:
 	var summon_ghost = _hand.slot_ghost()
 	_expect(summon_ghost == null or not summon_ghost.is_showing(), "a held Summon shows no landing-slot ghost")
 	card.release_drag()
+	_expect(not card.is_processing(), "and stops processing once released")
 	await get_tree().process_frame
 	_expect(_hand.charging_card == card,
 		"releasing the latched Summon starts the cast")

@@ -30,7 +30,11 @@ const CROP_REGIONS := {
 
 static var _mesh: ArrayMesh
 static var _font: FontVariation
-static var _portraits: Dictionary[String, Texture2D] = {}
+## Portraits by card code, held WEAKLY: a card showing one keeps it alive, and once no card does it is freed. A strong
+## cache kept every portrait ever shown (392 in assets/field_art, ~1-3 MB each decoded with mipmaps) for the whole
+## session. Codes with no portrait are remembered so a missing one is not looked for on disk every time.
+static var _portraits: Dictionary[String, WeakRef] = {}
+static var _no_portrait: Dictionary[String, bool] = {}
 var _heading: Node3D
 var drawn_on_field := false
 
@@ -77,8 +81,13 @@ static func label_outline_size(element: String) -> int:
 
 ## Optional clean portraits use the printed card code. The source JPEG fallback also works before editor import.
 static func portrait_texture(code: String) -> Texture2D:
+	if _no_portrait.has(code):
+		return null
 	if _portraits.has(code):
-		return _portraits[code]
+		var held = _portraits[code].get_ref()
+		if held != null:
+			return held as Texture2D
+		_portraits.erase(code)
 	var path := "res://assets/field_art/%s.jpg" % code
 	var texture: Texture2D
 	if ResourceLoader.exists(path, "Texture2D"):
@@ -89,7 +98,9 @@ static func portrait_texture(code: String) -> Texture2D:
 			image.generate_mipmaps()
 			texture = ImageTexture.create_from_image(image)
 	if texture != null:
-		_portraits[code] = texture
+		_portraits[code] = weakref(texture)
+	else:
+		_no_portrait[code] = true
 	return texture
 
 

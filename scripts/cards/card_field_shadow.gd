@@ -26,6 +26,9 @@ const MARGIN := 0.16
 const FALL := Vector2(0.01, -0.03)
 
 var _card: Node3D = null
+## The card transform the shadow was last placed for: an unmoved card (almost always) costs one comparison a frame.
+var _placed_for := Transform3D()
+var _placed := false
 var _material: ShaderMaterial = null
 var active := false
 
@@ -52,6 +55,7 @@ func setup(card: Node3D, face: Vector2) -> void:
 func set_active(value: bool) -> void:
 	active = value
 	visible = value
+	_placed = false
 	set_process(value)
 	if value:
 		_follow()
@@ -63,6 +67,10 @@ func _follow() -> void:
 	if _card == null or not is_instance_valid(_card) or not _card.is_inside_tree():
 		return
 	var card_xf: Transform3D = _card.global_transform
+	if _placed and card_xf.is_equal_approx(_placed_for):
+		return
+	_placed_for = card_xf
+	_placed = true
 	var height: float = card_xf.origin.y - WOOD_Y
 	var above: float = maxf(0.0, height - REST_HEIGHT)
 	# Only the card's YAW and size: the shadow lies flat whatever tilt the card has.
