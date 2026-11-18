@@ -54,8 +54,11 @@ func _ready() -> void:
 	var yuffie: Card = _cards[YUFFIE]
 	var specs: Array = yuffie.effect().activated_abilities()
 	_expect(specs.size() == 1, "Yuffie 85 has her Bloodfest ability")
-	_expect(specs.size() == 1 and str(specs[0].text).begins_with("《S》") and specs[0].divide_total == 6000,
-		"and it is the S ability, with display text and a divide pool")
+	# The S cost is the spec's `s_cost` flag; the text is the PRINTED wording (it starts with the ability's name,
+	# "Bloodfest 《S》《Dull》: ...", checked by tools/ability_text_check.py), so it is only required to name the S cost.
+	_expect(specs.size() == 1 and specs[0].s_cost and str(specs[0].text).contains("《S》")
+		and specs[0].divide_total == 6000,
+		"and it is the S ability, with its printed text and a divide pool")
 
 	# --- the window on its own ------------------------------------------------------------------------------
 	var window = PARTY_SPLIT.instantiate()

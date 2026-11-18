@@ -112,14 +112,23 @@ func _ready() -> void:
 	print("[SkillFlow] with priority waiting: confirm_button_visible=%s" % confirm_visible)
 	_expect(not confirm_visible,
 		"the confirm that started this is GONE — left up, it hides the pass button and the game looks frozen")
+	# MODEL THE HUMAN from the first window: the activating player KEEPS priority after the ability is committed
+	# (11.6.11 / 11.7.11), so the pass button must come up for them now. Look for it BEFORE passing — passing first used
+	# up this very window and the loop below then never saw a button for the player.
+	var button_seen: int = 0
+	var first_wait: float = 0.0
+	while assistant_node != null and first_wait < 1.0 and not assistant_node.passPhaseButton.visible:
+		await get_tree().create_timer(0.05).timeout
+		first_wait += 0.05
+	if assistant_node != null and assistant_node.passPhaseButton.visible:
+		button_seen += 1
 	if assistant_node != null:
 		assistant_node.pressed_pass_priority.emit()
-	# MODEL THE HUMAN: press the PASS button whenever it is up, and count whether it ever appears.
+	# Then keep modelling them: press the PASS button whenever it is up, and count whether it ever appears.
 	#
 	# passPhaseButton, NOT confirmButton — they are separate nodes, and checking the confirm told me nothing about the pass
 	# button. That is what produced the previous run's "seen 0 times" and made me report a false finding.
 	var passes: int = 0
-	var button_seen: int = 0
 	var waited: float = 0.0
 	while stack.stack_length() > 0 and waited < 4.0:
 		await get_tree().create_timer(0.1).timeout
@@ -134,6 +143,13 @@ func _ready() -> void:
 	_expect(button_seen > 0,
 		"the pass button APPEARS while priority is waiting — a human has to be able to pass to resolve this")
 	_expect(stack.stack_length() == 0, "THE STACK EMPTIES — the effect resolves and leaves, which is the whole report")
+	# Leaving `cards` is the START of resolution: the card stays on display through its pulse, lead-in, effect and hold
+	# (Stack.resolving_card), and the effect lands inside that. Read the board once it has finished.
+	var resolving_wait: float = 0.0
+	while stack.resolving_card != null and is_instance_valid(stack.resolving_card) and resolving_wait < 6.0:
+		await get_tree().create_timer(0.1).timeout
+		resolving_wait += 0.1
+	print("[SkillFlow] resolution finished %.1fs after the stack emptied" % resolving_wait)
 
 	# And the effect actually happened: every player Forward should now carry the granted immunity AND be upright again.
 	var granted: int = 0

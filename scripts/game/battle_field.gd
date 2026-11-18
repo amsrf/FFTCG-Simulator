@@ -32,6 +32,13 @@ const SLAM_PULSE := preload("res://scenes/vfx/slam_pulse.tscn")
 ## actual card texture is revealed.
 @export var teleport_glow_seconds: float = 0.18
 @export var teleport_reveal_seconds: float = 0.30
+## HOW A CHARACTER IS PLAYED NOW (card_hologram.gd, ~/Desktop/Clips/play 148-202): a hologram out where it was cast, a
+## line drawing down onto the slot, a white fill, the card, and a camera jolt by slam_tier. The crystal block-build
+## above is kept for a special play some day; this switches back to it.
+@export var use_crystal_teleport: bool = false
+## How long after the cast starts dissolving the line drawing leaves from it (the departure is ~0.38 s): as the
+## hologram is going, not after it (the reference waits, a dead beat at our play rate).
+@export var hologram_head_start_seconds: float = 0.28
 ## Continuous-effect queries. The BOARD owns its rulebook, not Game: created here in _ready, so the forwarders below
 ## work as soon as the board exists and never depend on the parent's initialisation order.
 var rules = null
@@ -105,6 +112,7 @@ var selected_mana_elements: Dictionary = {}
 const MANA_CHOICE := preload("res://scenes/ui/mana_choice.tscn")
 var mana_choice = null
 @onready var ballistic_arrow_scene = preload("res://scenes/vfx/ballistic_arrow.tscn")
+const BLOCK_LINK := preload("res://scripts/vfx/block_link.gd")
 @onready var assistant: Assistant = game.get_node("Assistant")
 @onready var stack: Stack = game.get_node("Stack") as Stack
 @onready var hand: Hand = game.get_node("Player/Hand") as Hand
@@ -364,8 +372,10 @@ func _apply_entry_rules(entering: Card) -> void:
 			effect_obj.on_character_enter(entering, source.make_effect_context("static"))
 
 
+## `slot` ({index, position}, from Game.make_room_for_backup()) puts the card into the slot a card just vacated
+## instead of the next one along the row.
 func play_card(card, is_opponent: bool = false, animate = true, record: bool = true,
-		suppress_auto: bool = false, teleport: bool = false) -> void:
+		suppress_auto: bool = false, teleport: bool = false, slot: Dictionary = {}) -> void:
 	# UNIQUE NAMES. A player may not control two Characters with the same name. Checked BEFORE the reparent, so the
 	# duplicate never touches the field: it did not enter, so no enter-the-field trigger and no entry animation run.
 	# The card already on the field is kept; the new copy goes to the Break Zone (not a "break" — broken stays false).
@@ -417,15 +427,20 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 		target_node = $OpponentBackrowCard if is_opponent else $BackrowCard
 	
 	var n = target_array.size()
-	target_array.append(card)
+	var use_slot: bool = slot.has("position") and slot.has("index") and int(slot["index"]) >= 0
+	if use_slot:
+		target_array.insert(mini(int(slot["index"]), n), card)
+	else:
+		target_array.append(card)
 	refresh_continuous_effects()
 	
-	# Calculate position
-	var target_position = target_node.position
-	if n % 2 == 0:
-		target_position -= (n/2) * Vector3(ROW_CARD_STEP, 0, 0)
+	# Calculate position: the slot a card just vacated (make_room_for_backup), else the free slot nearest the centre.
+	var target_position: Vector3
+	if use_slot:
+		target_position = slot["position"]
 	else:
-		target_position += ((n+1)/2) * Vector3(ROW_CARD_STEP, 0, 0)
+		target_position = _nearest_free_slot(target_node.position, target_array, card)
+	_slot_x[card] = target_position.x
 	
 
 	# ENTRY RULES (Ultimecia 152: "all Forwards other than Ultimecia enter the field dull"). Read from the board at
@@ -445,27 +460,31 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 			_arrive(card)
 			# NO TRAVEL. The source is dissolving in place (a stand-in); the card appears directly on its slot.
 			card.position = target_position
-			card.visible = true
-			card.teleport.set_visual(1.0, 0.35, 0.0)
-			var materialize: Tween = card.teleport.play_in(
-				teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
-			await materialize.finished
-			_play_arrival_pulse(card))
+			if use_crystal_teleport:
+				card.visible = true
+				card.teleport.set_visual(1.0, 0.35, 0.0)
+				var materialize: Tween = card.teleport.play_in(
+					teleport_materialize_seconds, teleport_glow_seconds, teleport_reveal_seconds)
+				await materialize.finished
+				_play_arrival_pulse(card)
+			else:
+				# The slam's own dust and camera jolt are the impact; the old pulse whited the card out over them.
+				await card.hologram.play_in(slam_tier(card)))
 	elif animate:
+		# PUT ONTO THE FIELD BY AN EFFECT (a free play from hand, a search to the field): the same play, departing
+		# from wherever the card is drawn now (nothing to dissolve when it comes out of a deck).
 		Vfx.present(func() -> void:
 			if not is_instance_valid(card):
 				return
+			if card.is_inside_tree() and card.visible and not card.is_drawn_on_field():
+				card.set_revealed(true)
+				card.hologram.play_out()
+				await get_tree().create_timer(hologram_head_start_seconds).timeout
+				if not is_instance_valid(card):
+					return
 			_arrive(card)
-			var tween = create_tween().set_ease(Tween.EASE_OUT)
-			tween.set_parallel(true)
-			tween.tween_property(card, "position", target_position + Vector3(0, 0.8, 0), 0.3).set_delay(0.3)
-			tween.set_trans(Tween.TRANS_BACK)
-			tween.tween_property(card, "scale", Vector3.ONE*1.2, 0.5)
-			tween.set_parallel(false)
-			tween.tween_property(card, "position", target_position + Vector3(0, 2, 0), 0.6).set_delay(0.2)
-			tween.tween_property(card, "position", target_position, 0.4)
-			await tween.finished
-			_play_arrival_pulse(card))
+			card.position = target_position
+			await card.hologram.play_in(slam_tier(card)))
 	else:
 		_arrive(card)
 		card.position = target_position
@@ -478,6 +497,31 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# (Agent._settle), so the player sees the card arrive before being asked.
 	if animate and not suppress_auto:
 		execute_card_effect.call_deferred(card, EVENTS.Event.ENTER_FIELD)
+
+## Each field card's HOME slot (local x), recorded when it is placed. Occupancy is read from here, not from
+## `position`, because a card can be mid-arrival or pushed aside by a party formation.
+var _slot_x: Dictionary = {}
+
+## Slots fan out from the row's centre: 0, +1, -1, +2, -2, ... steps. A card entering takes the FIRST of them no
+## card in its row occupies, so a gap left by a card that left the field is filled before the row grows outward.
+static func row_slot_offset(k: int) -> float:
+	return (float((k + 1) / 2) if k % 2 == 1 else -float(k / 2)) * ROW_CARD_STEP
+
+func _nearest_free_slot(centre: Vector3, row: Array, entering: Card) -> Vector3:
+	var taken: Array = []
+	for other in row:
+		if other != entering and is_instance_valid(other) and _slot_x.has(other):
+			taken.append(float(_slot_x[other]))
+	for k in range(row.size() + 1):
+		var x: float = centre.x + row_slot_offset(k)
+		var free := true
+		for t in taken:
+			if absf(t - x) < ROW_CARD_STEP * 0.5:
+				free = false
+				break
+		if free:
+			return Vector3(x, centre.y, centre.z)
+	return centre + Vector3(row_slot_offset(row.size()), 0, 0)
 
 ## Cost bands for the field-arrival pulse: 0-4 has no pulse, 5-7 is mild, and
 ## 8+ is the big impact.
@@ -553,6 +597,9 @@ func execute_card_attack():
 		# AND the wider trigger: "when A PARTY YOU CONTROL attacks" — for cards that are watching the party rather
 		# than riding in it (Celestia and Gippal are Backups/Forwards that may not be members at all).
 		trigger_party_attacks(attacker_card.controller)
+	# THE ATTACK LINK: from every attacker toward the defending player (off screen) until a blocker takes it over.
+	if not attacking.is_empty():
+		show_attack_link()
 
 ## Fire "a party you control attacked" for every card that side controls. Members already got their own
 ## `when_party_attack`; this is the watcher form, so both shapes exist and neither has to guess.
@@ -1611,6 +1658,33 @@ func has_viable_target(target_criteria, source: Card = null, source_kind: String
 			return true
 	return false
 
+## IS A CHOSEN TARGET STILL LEGAL? Asked at resolution for targets chosen earlier (11.11.2 / 11.11.2.1): the card must
+## still be on the field and still be a legal choice for `source`. A staged choice accepts a card legal for any stage.
+func is_still_legal_target(card, target_criteria, source: Card = null, source_kind: String = "") -> bool:
+	if card == null or not is_instance_valid(card) or not (card is Card):
+		return false
+	target_criteria = _legacy_target_criteria(target_criteria)
+	if target_criteria is Array:
+		for block in target_criteria:
+			if is_still_legal_target(card, block, source, source_kind):
+				return true
+		return false
+	if not (target_criteria is Dictionary):
+		return false
+	# STILL IN ITS ZONE. A field pick must still be on the field; a pick made ON THE STACK (Summoner's counter targets
+	# a Summon there) must still be on the stack. Other domains are not re-checked here: their choice is not a target
+	# on the board, so it is kept as chosen.
+	match _block_domain(target_criteria):
+		"field":
+			if not card.is_on_field():
+				return false
+		"stack":
+			if stack == null or not stack.cards.has(card):
+				return false
+		_:
+			return true
+	return _card_matches_criteria(card, target_criteria, source, source_kind)
+
 func _card_matches_criteria(card: Card, target_criteria: Dictionary, source: Card = null, source_kind: String = "") -> bool:
 	# Legality has two parts: the effect's choose_target criteria (properties of
 	# the candidate) and the candidate's own protection against this source.
@@ -1665,6 +1739,7 @@ func remove_card(card):
 	drop_party_member(card)
 	prune_party()
 	_formation_home.erase(card)
+	_slot_x.erase(card)
 
 ## ONE PASS OVER THE BOARD FOR EVERY CONTINUOUS EFFECT.
 ##
@@ -2031,6 +2106,7 @@ func reset_attacker():
 			card.set_attacker_status(false)
 	attacking_party.clear()
 	attacker_card = null
+	end_combat_link()
 	_queue_party_formation()
 
 ## Select/deselect a blocker for the current combat (human input only).
@@ -2042,7 +2118,8 @@ func set_blocker_card(card: Card) -> void:
 		card.set_blocker_status(false)
 		card.set_selected_highlight(false)
 		blocker_card = null
-		hide_block_arc()
+		# Deselected: the link points back at the defending player.
+		show_attack_link()
 	else:
 		if blocker_card != null and is_instance_valid(blocker_card):
 			blocker_card.set_blocker_status(false)
@@ -2238,17 +2315,57 @@ func hide_review_link() -> void:
 		if link != null and is_instance_valid(link):
 			link.set_is_aiming(false)
 
-## The link from the blocker to the attacker, drawn CENTRE to CENTRE.
-##
-## Static by design: both cards are already on the field and neither moves while the
-## declaration is open, so this aims once and locks. That is the opposite of the targeting
-## arrow, which follows the mouse and a card that may still be tweening into the stack.
-## ONE ARC PER PARTY MEMBER. When the attacker is a party, the block is not a single link: the blocker's power is
-## being divided across every member, so each of them gets an arc from the blocker's face centre. A party of one (the
-## ordinary attack) still produces exactly one arc, so this is the same call for both cases.
-##
-## Static by design: both cards are already on the field and neither moves while the declaration is open, so each arc
-## aims once and locks.
+## THE COMBAT LINK (scripts/vfx/block_link.gd): one arc per attacking party member, in two forms —
+##   show_attack_link(): toward the DEFENDING PLAYER, a point just past the screen's edge (bottom if it is us, top if
+##                       it is the opponent), from the moment the attack is declared;
+##   show_block_arc():   rebuilt toward the BLOCKER once one is chosen, plunging into that card.
+## A deselected blocker sends it back to the player. `_attack_link_live` says the combat still wants the link: it is
+## set by show_attack_link() and cleared by end_combat_link(), which the damage step calls as the clash or the strike on
+## the player begins — so reset_blocker() afterwards cannot bring it back.
+var _attack_link_live: bool = false
+## Pixels past the screen edge for the defending player's point.
+const PLAYER_POINT_OFFSCREEN_PX := 60.0
+
+func show_attack_link() -> void:
+	if attacker_card == null or not is_instance_valid(attacker_card):
+		return
+	_attack_link_live = true
+	# Already pointing at the player: leave it running (rebuilding would restart its loop).
+	if not block_arrows.is_empty() and not block_arrows[0].targets_card():
+		return
+	hide_block_arc()
+	var members: Array = party_members()
+	if members.is_empty():
+		members = [attacker_card]
+	var i := 0
+	for member in members:
+		if member == null or not is_instance_valid(member):
+			continue
+		var link = BLOCK_LINK.new()
+		add_child(link)
+		link.loop_offset = 0.12 * i
+		var at_bottom: bool = member.controller == Card.OPPONENT
+		var height: float = member.global_position.y
+		link.setup_point(member, func() -> Vector3: return defending_player_point(at_bottom, height))
+		block_arrows.append(link)
+		i += 1
+
+## The defending player as a point on the board's plane (`height`): the screen's horizontal centre,
+## PLAYER_POINT_OFFSCREEN_PX past the bottom edge (`at_bottom`, the local player) or the top edge (the opponent).
+func defending_player_point(at_bottom: bool, height: float) -> Vector3:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null:
+		return Vector3(0.0, height, 0.0)
+	var view: Vector2 = get_viewport().get_visible_rect().size
+	var screen := Vector2(view.x * 0.5, view.y + PLAYER_POINT_OFFSCREEN_PX if at_bottom else -PLAYER_POINT_OFFSCREEN_PX)
+	var origin: Vector3 = cam.project_ray_origin(screen)
+	var direction: Vector3 = cam.project_ray_normal(screen)
+	if absf(direction.y) < 0.0001:
+		return Vector3(origin.x, height, origin.z)
+	return origin + direction * ((height - origin.y) / direction.y)
+
+## The link rebuilt toward `blocker` (every attacking party member to it), plunging into that card. Recreated on every
+## selection; a party's links start their loops 0.12 s apart.
 func show_block_arc(blocker: Card) -> void:
 	hide_block_arc()
 	if blocker == null or attacker_card == null:
@@ -2256,28 +2373,26 @@ func show_block_arc(blocker: Card) -> void:
 	var targets: Array = party_members()
 	if targets.is_empty():
 		targets = [attacker_card]
+	var i := 0
 	for member in targets:
 		if member == null or not is_instance_valid(member):
 			continue
-		var arc: BallisticArrow = ballistic_arrow_scene.instantiate()
-		add_child(arc)
-		# Adjacent cards are the common case for a block, and the default floor exists to
-		# stop a dot being drawn for a near-zero targeting drag.
-		arc.min_distance = 0.15
-		# A block joins the two battle rows, so its chord runs up the screen. Bowing along
-		# screen-up would put the arch along the chord (a 1.54 m path for an 0.85 m span);
-		# perpendicular instead makes it a sideways link. Kept shallow — this is a link
-		# between two cards, not a shot.
-		arc.bow_perpendicular = true
-		arc.peak_ratio = 0.22
-		arc.set_is_aiming(true, blocker.get_global_face_centre())
-		arc.lock_arc(member.get_global_face_centre())
-		block_arrows.append(arc)
+		var link = BLOCK_LINK.new()
+		add_child(link)
+		link.loop_offset = 0.12 * i
+		link.setup(member, blocker)
+		block_arrows.append(link)
+		i += 1
+
+## The combat is past declaring: the clash or the strike on the player takes over from the link.
+func end_combat_link() -> void:
+	_attack_link_live = false
+	hide_block_arc()
 
 func hide_block_arc() -> void:
 	for arc in block_arrows:
 		if arc != null and is_instance_valid(arc):
-			arc.set_is_aiming(false)
+			arc.is_aiming = false
 			arc.queue_free()
 	block_arrows.clear()
 
@@ -2289,7 +2404,11 @@ func reset_blocker():
 			blocker_card.set_blocker_status(false)
 		blocker_card.set_selected_highlight(false)
 	blocker_card = null
-	hide_block_arc()
+	# Still declaring (the attack link is live): point back at the player; otherwise the combat is over.
+	if _attack_link_live:
+		show_attack_link()
+	else:
+		hide_block_arc()
 func _on_assistant_charge_cancelled() -> void:
 	for c in selected_cards_for_mana_conversion:
 		c.reset()

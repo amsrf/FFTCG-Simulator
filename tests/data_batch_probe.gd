@@ -127,12 +127,11 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_expect(GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.TARGET,
 		"the 'deals damage' trigger does not open an empty targeting session")
-	_expect(stack.stack_length() == 1, "it still queues its effect (%d)" % stack.stack_length())
-	await stack.resolve_top_effect()
-	await get_tree().process_frame
-	_expect(stack.stack_length() == 0, "which resolves harmlessly")
+	# 11.8.4: an auto-ability that must choose and has nothing it could choose is removed from the stack at once, with
+	# no chance to respond — on screen, nothing happens. So it never becomes a stack object at all.
+	_expect(stack.stack_length() == 0, "with no legal target it is not put on the stack (11.8.4) (%d)" % stack.stack_length())
 	_expect(terra.accumulated_damage == 0 and laguna.accumulated_damage == 0,
-		"dealing no damage to anything")
+		"and nothing is dealt any damage")
 
 	print("[DataBatch] %d checks | failures: %d" % [_checks, _fails])
 	print("[DataBatch] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

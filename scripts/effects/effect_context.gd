@@ -162,12 +162,22 @@ func choose_targets(criteria: Variant, count: int = 1, allow_cancel: bool = fals
 	return picks
 
 
-## Choose the targets the resolving auto-ability declared with TriggerSpec.chooses(). The board can change while the
-## ability waits on the stack, so a target that vanished since it triggered still yields [] here.
+## The targets of the resolving auto-ability that declared a choice with TriggerSpec.chooses().
+##
+## THEY WERE CHOSEN WHEN IT WAS PUT ON THE STACK (Stack.declare_trigger_choices), so nobody is asked here. The board
+## may have changed since: only the picks that are STILL LEGAL are returned (11.11.2.1), and none left means the
+## effect is cancelled (11.11.2) — every handler already returns on an empty list. A copy that never had that moment
+## (an EX BURST, resolved with no priority window) chooses now instead.
 func choose_trigger_targets() -> Array:
 	if trigger_choice == null:
 		push_error("choose_trigger_targets: %s's ability declares no .chooses() request" % (source.card_name if source != null else "?"))
 		return []
+	if effect_card != null and is_instance_valid(effect_card) and effect_card.trigger_targets_declared:
+		var still: Array = []
+		for pick in targets:
+			if field != null and field.is_still_legal_target(pick, _legacy_targets(trigger_choice), effect_card, "Ability"):
+				still.append(pick)
+		return still
 	return await choose_targets(trigger_choice)
 
 
@@ -269,9 +279,11 @@ func play_from_hand_card(card: Card, enter_dull: bool = false) -> void:
 	var owner_hand: Hand = game.hand_for(1 if card.controller == Card.PLAYER else 2)
 	if owner_hand == null:
 		return
+	# A sixth Backup: the controller chooses which of the five makes way FIRST, and the new one takes its slot.
+	var slot: Dictionary = await game.make_room_for_backup(card)
 	owner_hand.remove_for_play(card)
 	card.reset_for_field_arrival()
-	game.field.play_card(card, card.controller == Card.OPPONENT, true)
+	game.field.play_card(card, card.controller == Card.OPPONENT, true, true, false, false, slot)
 	if enter_dull:
 		card.tap()
 
@@ -287,7 +299,7 @@ func may_play_from_hand(criteria: CARD_QUERY, enter_dull: bool = false,
 	var picked: Card = await choose_hand_card(candidates, prompt)
 	if picked == null:
 		return false
-	play_from_hand_card(picked, enter_dull)
+	await play_from_hand_card(picked, enter_dull)
 	return true
 
 

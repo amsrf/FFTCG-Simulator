@@ -36,7 +36,6 @@ const CARD_FILTER := preload("res://scripts/core/card_filter.gd")
 const CARD_SHARDS := preload("res://scenes/cards/card_shards.tscn")
 ## The cinematic clash presentation. Cards are cinematics proxies; game state stays here.
 const CLASH_CINEMATIC := preload("res://scenes/game/clash_cinematic.tscn")
-const CLASH_CINEMATIC_SCRIPT := preload("res://scripts/vfx/clash_cinematic.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
 const EVENT_CONTEXT := preload("res://scripts/effects/event_context.gd")
 const DAMAGE_CONTEXT := preload("res://scripts/effects/damage_context.gd")
@@ -163,9 +162,10 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 	if picked == null:
 		return
 	LOG.info("Hand", "P%d plays %s for free" % [owner_id, picked.card_name])
+	var slot: Dictionary = await make_room_for_backup(picked)
 	owner_hand.remove_for_play(picked)
 	picked.reset_for_field_arrival()
-	field.play_card(picked, owner_id == 2, true)
+	field.play_card(picked, owner_id == 2, true, true, false, false, slot)
 
 ## PLAY 1 CARD FROM A BREAK ZONE. "Choose 1 Forward of cost 4 or less from your Break Zone. Play it onto the field."
 ## (Devout 48/77).
@@ -207,9 +207,10 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 	if picked == null:
 		return
 	LOG.info("BreakZone", "plays %s from the Break Zone" % picked.card_name)
+	var slot: Dictionary = await make_room_for_backup(picked)
 	pile.graveyard_cards.erase(picked)
 	picked.reset_for_field_arrival()
-	field.play_card(picked, owner_id == 2, true)
+	field.play_card(picked, owner_id == 2, true, true, false, false, slot)
 
 func opponent_mills(count: int = 1) -> void:
 	var caster: int = 1 if _current_controller == Card.PLAYER else 2
@@ -219,26 +220,30 @@ func discard_from(player_id: int, count: int = 1) -> int:
 	var owner_hand: Hand = hand_for(player_id)
 	if owner_hand == null:
 		return 0
-	var discarded: int = 0
+	# CHOOSE THEM ALL, THEN DISCARD THEM TOGETHER. "Discard N cards" is one simultaneous discard; discarding each pick
+	# at once made every next pick wait (agents settle on the presentation queue) for the previous card's whole
+	# reveal-and-swallow, so the cards went one after another. The batch is presented concurrently, a stagger apart.
+	var picks: Array = []
 	for _i in range(count):
-		if owner_hand.cards.is_empty():
+		var remaining: Array = owner_hand.cards.filter(func(c): return not picks.has(c))
+		if remaining.is_empty():
 			LOG.info("Discard", "P%d has no cards to discard" % player_id)
-			return discarded
+			break
 		# ASK THE OWNER, whoever they are. Game does not know or care whether that player is the human at this
 		# keyboard, an AI, or a remote opponent — LocalAgent draws a UI, AIAgent picks heuristically, and a future
 		# RemoteAgent answers over the network. Special-casing LocalAgent here would have baked this machine's
 		# setup into the rules layer, which is the thing the seam exists to prevent.
 		var agent: Agent = agent_for(player_id)
 		if agent == null:
-			return discarded
-		var picked: Card = await agent.choose_discard(player_id, owner_hand.cards)
-		if picked == null:
-			# Cancelled locally, or an agent with no opinion. Nothing more to do.
-			return discarded
+			break
+		var picked: Card = await agent.choose_discard(player_id, remaining)
+		if picked == null or picks.has(picked) or not owner_hand.cards.has(picked):
+			# Cancelled locally, or an agent with no opinion: what was already chosen is still discarded.
+			break
 		LOG.info("Discard", "P%d discards %s" % [player_id, picked.card_name])
-		owner_hand.discard_card(picked)
-		discarded += 1
-	return discarded
+		picks.append(picked)
+	owner_hand.discard_cards(picks)
+	return picks.size()
 
 ## "Draw 1 card, then discard 1 card from your hand." The discard is an INSTRUCTION, not a skill cost, so it needs its
 ## own entry point; and it must set the success latch because Bahamut Fury branches on whether the discard happened.
@@ -791,10 +796,44 @@ var match_over: bool = false
 ## The match's ONE random generator. Seeded from config["seed"] in start_match(), so a seeded match replays
 ## exactly — nothing that affects the rules may use Godot's global RNG.
 var rng := RandomNumberGenerator.new()
-## AUTO-PASS for the local player: pass for them when they get priority and have nothing they could do (no card to
-## cast, no ability to use). From the menu setting (MatchSetup.auto_pass); off unless the config says so, so tests that
-## drive the human by hand are not passed for.
-var auto_pass: bool = false
+## HOW MUCH THE LOCAL PLAYER IS ASKED (the selector under the pass button, `pass_mode_selector.gd`):
+##   STOP_ALL  every priority window stops, playable or not — what a player wants to BLUFF (an instant pass would
+##             tell the opponent they have nothing);
+##   SMART     pass for them, after a short pause, when they have nothing they could do (no card, no ability);
+##   REACT     like PASS_ALL, except it stops whenever the OPPONENT has put something on the stack (top of the
+##             stack is theirs) and the player could answer it: "pass everything unless they do something";
+##   PASS_ALL  pass every window that is only a chance to RESPOND; it still stops in their own main phase with an
+##             empty stack when they have a card to play, so their own turn is never skipped. TEMPORARY: it reverts
+##             to the mode it replaced when the player's next turn starts (_enter_phase ACTIVE).
+## Mandatory decisions (targets, blocks, payments) are never passed: only priority. The predicate that decides is
+## Assistant.auto_pass_would_answer(). Default STOP_ALL, so tests that drive the human by hand are not passed for.
+const PASS_STOP_ALL := "stop_all"
+const PASS_SMART := "smart"
+const PASS_REACT := "react"
+const PASS_ALL := "pass_all"
+## Selector / Tab order.
+const PASS_MODES: Array[String] = [PASS_STOP_ALL, PASS_SMART, PASS_REACT, PASS_ALL]
+## What PASS_ALL goes back to at the player's next turn: the last mode chosen before it.
+var mode_before_pass_all: String = PASS_SMART
+signal pass_mode_changed(mode: String)
+var pass_mode: String = PASS_STOP_ALL:
+	set(value):
+		if not PASS_MODES.has(value) or value == pass_mode:
+			return
+		if value == PASS_ALL:
+			mode_before_pass_all = pass_mode
+		pass_mode = value
+		pass_mode_changed.emit(value)
+func _on_pass_mode_changed(_mode: String) -> void:
+	if player_agent != null and player_agent.has_method("on_pass_mode_changed"):
+		player_agent.on_pass_mode_changed()
+
+## The old on/off switch, kept as a view of pass_mode: on = SMART.
+var auto_pass: bool:
+	get:
+		return pass_mode != PASS_STOP_ALL
+	set(value):
+		pass_mode = PASS_SMART if value else PASS_STOP_ALL
 
 ## The other player's last move was a PASS: passing now would be the second pass in a row, which resolves the top of
 ## the stack or, with the stack empty, ends the phase (rule 11.1.7). Set before each priority question; the pass button
@@ -821,6 +860,13 @@ var priority_holder: int = 0:
 ##
 ## Anything added to the payment/absorb effects belongs in this list.
 const EFFECT_SHADERS: Array[Shader] = [
+	# How a Character is played (card_hologram.gd): the hologram where it was cast and the line drawing on the slot.
+	preload("res://shaders/card_hologram.gdshader"),
+	preload("res://shaders/card_blueprint.gdshader"),
+	# The unblocked strike's shockwave at the player's edge (clash_cinematic.gd, _edge_wave).
+	preload("res://shaders/player_impact_wave.gdshader"),
+	# The block link (block_link.gd): first rendered when a blocker is picked.
+	preload("res://shaders/block_link.gdshader"),
 	# The wood slab's gold rim (field_drop_zone.gd): first rendered when a held hand card is pointed at the field.
 	preload("res://shaders/field_drop_glow.gdshader"),
 	preload("res://shaders/ex_burst_aura.gdshader"),
@@ -834,6 +880,7 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/pit_flare.gdshader"),
 	# The board buttons (disc_socket.gd): the ring glow first renders on the first hover.
 	preload("res://shaders/disc_ring_glow.gdshader"),
+	preload("res://shaders/disc_light_pillar.gdshader"),
 	# The mana cost row's backing window (crystal_cost.gd): first rendered when a payment opens.
 	preload("res://shaders/cost_panel.gdshader"),
 	# The top-of-stack aura and resolve pulse (card_stack_aura.gd): first rendered when something reaches the stack.
@@ -944,7 +991,10 @@ func start_match(config: Dictionary) -> void:
 		break
 
 	# "player_type": "ai" seats an AI as player 1 too — AI-vs-AI simulations and the determinism probe.
-	auto_pass = bool(config.get("auto_pass", false))
+	if config.has("pass_mode"):
+		pass_mode = str(config["pass_mode"])
+	else:
+		auto_pass = bool(config.get("auto_pass", false))
 	player_agent = AIAgent.new() if str(config.get("player_type", "local")) == "ai" else LocalAgent.new()
 	player_agent.bind(self)
 	match str(config.get("opponent_type", "mock")):
@@ -960,6 +1010,9 @@ func start_match(config: Dictionary) -> void:
 		opponent_agent = wrap.call(2, opponent_agent)
 		player_agent.bind(self)
 	opponent_agent.bind(self)
+	# A pass mode changed mid-window (the selector under the pass button) re-decides the window the player holds.
+	if not pass_mode_changed.is_connected(_on_pass_mode_changed):
+		pass_mode_changed.connect(_on_pass_mode_changed)
 	# Online play: the network session wants this game (turn hashes, stopping the match on a disconnect).
 	var started = config.get("on_match_started", null)
 	if started is Callable:
@@ -1463,11 +1516,6 @@ var _clash_suppressed_cards: Dictionary = {}
 ## still playing. Flushed by resolve_blocked_clash() after the animation.
 var _clash_cinematic_active: bool = false
 var _deferred_break_zone_triggers: Array = []
-## True while resolve_blocked_clash() is presenting: a First Strike clash then plays each damage step as its own
-## one-sided strike (the striker hits first; the reply only if the target survived), instead of one exchange.
-var _clash_stepwise: bool = false
-## Set once a step has been presented, so resolve_blocked_clash() does not replay the whole clash afterwards.
-var _clash_presented: bool = false
 
 func event_trigger_already_fired(key: String) -> bool:
 	return _event_triggers_fired.has(key)
@@ -2018,10 +2066,11 @@ func clash_cards(card1:Card,card2:Card):
 
 ## FIRST STRIKE.
 ##
-## If exactly ONE of the two cards has it, combat is two damage steps with a PRIORITY ROUND between them. If both
-## have it or neither does, it is one simultaneous step. The second step happens only if both cards are still alive
-## after the first — hence the is_on_field() checks on either side of the priority window, since a player may cast
-## something during it.
+## If exactly ONE of the two cards has it, combat is two damage steps; if both have it or neither does, it is one
+## simultaneous step. The second step happens only if both cards are still alive after the first. There is NO
+## priority window between the steps: 15.2.3.3 gives the turn player priority there but forbids Summons and action /
+## special abilities, so nobody can do anything in it, and triggers from First Strike damage wait until all damage is
+## dealt. The presentation is the ordinary exchange, showing only who survived.
 ## Resolve the combat rules first, then replay the result as a cinematic. The two cards are hidden while their
 ## proxies perform, so Field layout and Card.enter_zone() cannot move the actors mid-animation.
 ##
@@ -2036,27 +2085,48 @@ func resolve_blocked_clash() -> void:
 
 	var snap_a: Transform3D = attacker.global_transform
 	var snap_b: Transform3D = blocker.global_transform
+	# The block link stops as the clash begins: the cards themselves take over from here.
+	field.end_combat_link()
 	_suppress_clash_fx([attacker, blocker])
 	# Turned on BEFORE damage: a defeated card reaches the Break Zone inside clash_attacker_blocker(), and its
 	# break-zone trigger must be held until the presentation is over.
 	_clash_cinematic_active = true
-	_clash_stepwise = true
-	_clash_presented = false
 	await clash_attacker_blocker()
-	_clash_stepwise = false
 
 	var survives_a: bool = is_instance_valid(attacker) and attacker.is_on_field()
 	var survives_b: bool = is_instance_valid(blocker) and blocker.is_on_field()
 	# The cinematic is pure presentation: the clash is already resolved above. Fast mode skips it. A First Strike
-	# clash has already shown its strikes one by one (_present_clash_step), so it is not replayed as an exchange.
-	if not _clash_presented and not PRESENTATION.fast_mode \
-			and is_instance_valid(attacker) and is_instance_valid(blocker):
+	# clash is presented the same way: the exchange only shows WHO SURVIVED, and First Strike changes that, not the look.
+	if not PRESENTATION.fast_mode and is_instance_valid(attacker) and is_instance_valid(blocker):
 		var cinema = CLASH_CINEMATIC.instantiate()
 		add_child(cinema)
 		await cinema.play(attacker, blocker, snap_a, snap_b, survives_a, survives_b)
 		cinema.queue_free()
 	_flush_deferred_break_zone_triggers()
 	_release_clash_fx([attacker, blocker])
+
+
+## AN UNBLOCKED ATTACK HITS THE PLAYER. The attacker (every member, for a party) charges the defending player, who is
+## not on the board: they are a point at the screen's horizontal centre just past its edge — the top edge when the
+## opponent is hit, the bottom edge when the local player is. Pure presentation, run before the damage it shows;
+## fast mode skips it.
+func _present_unblocked_attack() -> void:
+	if PRESENTATION.fast_mode:
+		return
+	var members: Array = []
+	for member in field.party_members():
+		if member != null and is_instance_valid(member) and member.is_on_field() and member.is_drawn_on_field():
+			members.append(member)
+	if members.is_empty():
+		return
+	var cinema = CLASH_CINEMATIC.instantiate()
+	add_child(cinema)
+	# The strike frees itself when the card is home; the damage is dealt from the HAND-OFF (the card has bounced off
+	# the player and begun its glide home), so the damage zoom overlaps the glide rather than waiting for it.
+	cinema.strike_finished.connect(cinema.queue_free)
+	cinema.play_player_strike(members, controller_for(3 - turn_owner) == Card.PLAYER)
+	if not cinema.is_handed_off():
+		await cinema.handoff
 
 
 func _flush_deferred_break_zone_triggers() -> void:
@@ -2103,81 +2173,21 @@ func clash_attacker_blocker() -> void:
 		enforce_game_state_rules()
 		return
 
-	# Otherwise the side with First Strike deals first, the other answers only if still alive. Each step is
-	# presented as its own one-sided strike right after it resolves, so the player sees the first blow land (and,
-	# if it was lethal, the end of the fight) before the priority window and the reply.
+	# Otherwise the side with First Strike deals first, and the other answers only if both are still in the fight.
 	if party_fs:
-		var first: Dictionary = _clash_snapshot(blocker)
 		_apply_party_damage(blocker)
-		await _present_clash_step(first, CLASH_CINEMATIC_SCRIPT.STRIKE_ATTACKER)
-		if not _combat_still_live(blocker):
-			return
-		await _between_strikes_priority(blocker)
 		if not _combat_still_live(blocker):
 			return
 		var split: Array = await _blocker_split(blocker)
-		var reply: Dictionary = _clash_snapshot(blocker)
 		_apply_blocker_split(split)
 		enforce_game_state_rules()
-		await _present_clash_step(reply, CLASH_CINEMATIC_SCRIPT.STRIKE_DEFENDER)
 	else:
 		var split: Array = await _blocker_split(blocker)
-		var first: Dictionary = _clash_snapshot(blocker)
 		_apply_blocker_split(split)
 		enforce_game_state_rules()
-		await _present_clash_step(first, CLASH_CINEMATIC_SCRIPT.STRIKE_DEFENDER)
 		if not _combat_still_live(blocker):
 			return
-		await _between_strikes_priority(blocker)
-		if not _combat_still_live(blocker):
-			return
-		var reply: Dictionary = _clash_snapshot(blocker)
 		_apply_party_damage(blocker)
-		await _present_clash_step(reply, CLASH_CINEMATIC_SCRIPT.STRIKE_ATTACKER)
-
-## The two cards a First Strike step is presented with, captured BEFORE its damage: a defeated card is already in
-## the Break Zone when the rules finish, and the strike must start from where the player last saw it.
-func _clash_snapshot(blocker: Card) -> Dictionary:
-	var attacker: Card = field.attacker_card
-	if attacker == null or not is_instance_valid(attacker) or not attacker.is_on_field():
-		attacker = null
-	if blocker == null or not is_instance_valid(blocker) or not blocker.is_on_field():
-		blocker = null
-	return {
-		"attacker": attacker,
-		"blocker": blocker,
-		"snap_a": attacker.global_transform if attacker != null else Transform3D.IDENTITY,
-		"snap_b": blocker.global_transform if blocker != null else Transform3D.IDENTITY,
-	}
-
-## Play one First Strike damage step: `strike_by` hits, the other card only takes it. Only while
-## resolve_blocked_clash() is presenting (a probe calling clash_attacker_blocker() directly gets no animation).
-func _present_clash_step(snap: Dictionary, strike_by: int) -> void:
-	if not _clash_stepwise or PRESENTATION.fast_mode:
-		return
-	var attacker: Card = snap.get("attacker")
-	var blocker: Card = snap.get("blocker")
-	if attacker == null or blocker == null or not is_instance_valid(attacker) or not is_instance_valid(blocker):
-		return
-	_clash_presented = true
-	var cinema = CLASH_CINEMATIC.instantiate()
-	add_child(cinema)
-	await cinema.play(attacker, blocker, snap["snap_a"], snap["snap_b"],
-		attacker.is_on_field(), blocker.is_on_field(), strike_by)
-	cinema.queue_free()
-
-## The priority window between the two First Strike steps. Nothing is being animated during it, so a card that
-## breaks there (a Summon cast in the window) must shatter and fire its Break Zone triggers normally.
-func _between_strikes_priority(blocker: Card) -> void:
-	var presenting: bool = _clash_cinematic_active
-	var cards: Array = [field.attacker_card, blocker]
-	if presenting:
-		_flush_deferred_break_zone_triggers()
-		_release_clash_fx(cards)
-	await priority_round_only()
-	if presenting:
-		_suppress_clash_fx(cards)
-		_clash_cinematic_active = true
 
 ## Both sides still in the fight? The blocker can die to First Strike, and so can every member of the party.
 func _combat_still_live(blocker: Card) -> bool:
@@ -2226,50 +2236,6 @@ func _apply_blocker_split(split: Array) -> void:
 		var blocker_source: Card = field.blocker_card
 		field.cause_damage(card, amount, blocker_source, "", blocker_source.controller if blocker_source != null else "", DAMAGE_CONTEXT.Kind.COMBAT)
 
-
-## A priority pass chain that does NOT advance the phase.
-##
-## priority() ends with next_phase(); a between-damage-step window must not, so this is the same loop with that tail
-## removed. KEEP THE TWO IN STEP if either changes — this is a deliberate copy rather than a refactor of the live
-## priority loop, because the loop is load-bearing and a variant is cheaper to reason about than a shared one
-## parametrised by "should I advance".
-func priority_round_only() -> void:
-	if _priority_lock:
-		LOG.info("Priority", "between-steps round skipped: one is already running")
-		return
-	_priority_lock = true
-	var holder: int = turn_owner
-	var passed_since_action: bool = false
-	while true:
-		await apply_rule_processes()
-		if match_over:
-			break
-		other_player_passed = passed_since_action
-		priority_holder = holder
-		var acted: bool = await agent_for(holder).take_priority(holder)
-		if match_over:
-			break   # a win, or the machines fell out of sync: nobody acts any more
-		if acted:
-			# Rules 11.3.8 / 11.6.11 / 11.7.11: the player who acted GAINS PRIORITY AGAIN (a Summon cast, an ability
-			# used). Priority only moves on a pass (11.1.6); two passes in a row resolve the top of the stack or end the
-			# phase (11.1.7); after a resolution the turn player gains priority (11.1.5).
-			passed_since_action = false
-			continue
-		if not passed_since_action:
-			passed_since_action = true
-			holder = 3 - holder
-			continue
-		if stack.stack_length() > 0:
-			await stack.resolve_top_effect()
-			passed_since_action = false
-			holder = turn_owner
-			continue
-		break
-	_priority_lock = false
-	priority_holder = 0
-	LOG.info("Priority", "between-steps round over")
-	
-	
 
 var phases = [
 	GlobalVariables.Phase.ACTIVE_PHASE,           # 2.1 0
@@ -2342,6 +2308,10 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 	
 	match phase_enum:
 		GlobalVariables.Phase.ACTIVE_PHASE:
+			# PASS ALL lasts until the local player's next turn, then the mode it replaced comes back.
+			if turn_owner == 1 and pass_mode == PASS_ALL:
+				LOG.info("Priority", "your turn: Pass All -> %s" % mode_before_pass_all)
+				pass_mode = mode_before_pass_all
 			field.untap_cards_for(controller_for(turn_owner))
 			next_phase()
 		GlobalVariables.Phase.DRAW_PHASE:
@@ -2434,6 +2404,11 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			else:
 				# cause_attacking_damage(), not cause_damage(): it also fires "when a party you control deals
 				# damage" (Andoria/Boko). Calling the inner function directly left that trigger dead in real play.
+				# The strike is shown FIRST and the damage dealt after it: the damage zoom moves the camera, and it must
+				# not start while the strike is still shaking it.
+				# The attack link to the player stops as the strike on the player begins.
+				field.end_combat_link()
+				await _present_unblocked_attack()
 				cause_attacking_damage()
 			await priority()
 			field.reset_blocker()
@@ -2600,6 +2575,36 @@ func _send_card_to_graveyard(card: Card) -> int:
 ## THE FIELD-EXIT CHOKE POINT. It owns rules state and the typed CARD_LEFT_FIELD event; it does not own animation.
 ## `place` lets an animated caller do its presentation instead of the default immediate placement (used by the
 ## return-to-hand tween). The event carries the ACTUAL destination after replacement effects.
+## RESOLUTION-TIME TARGET CHECK for a Summon or an activated ability (11.11.2, 11.11.2.1, 11.3.9). Their targets were
+## chosen when they were played; by now a response may have made a pick illegal (Aerith's "cannot be chosen by Summons
+## or abilities", a change of controller or type) or moved it off the field. Each pick is asked again with the SAME
+## question the choice asked (`Field.is_still_legal_target`: the criteria plus the card's own and granted protection).
+## Returns {picks, cancelled}: the still-legal picks, in order, and whether there WERE picks and none survived (the
+## effect is cancelled). No criteria or no picks: unchanged, never cancelled — a targetless effect has nothing to lose.
+## A divided-damage split (`_damage_division`, one amount per pick) is filtered alongside, so amounts stay with cards.
+## Triggered auto-abilities make the same check in EffectContext.choose_trigger_targets().
+func recheck_chosen_targets(picks: Array, criteria: Variant, source: Card, source_kind: String) -> Dictionary:
+	var real: Array = picks.filter(func(p): return p != null)
+	var has_criteria: bool = (criteria is Dictionary and not (criteria as Dictionary).is_empty()) \
+			or (criteria is Array and not (criteria as Array).is_empty())
+	if real.is_empty() or not has_criteria:
+		return {"picks": picks, "cancelled": false}
+	var kept: Array = []
+	var kept_amounts: Array = []
+	var amounts: Array = _damage_division if _damage_division is Array else []
+	for i in picks.size():
+		var pick = picks[i]
+		if pick != null and field.is_still_legal_target(pick, criteria, source, source_kind):
+			kept.append(pick)
+			if i < amounts.size():
+				kept_amounts.append(amounts[i])
+		elif pick != null:
+			LOG.info("Rules", "%s is no longer a legal target for %s; it is not affected (11.11.2.1)" % [
+				pick.card_name if is_instance_valid(pick) else "<gone>", source.card_name if source != null else "?"])
+	if not amounts.is_empty():
+		_damage_division = kept_amounts
+	return {"picks": kept, "cancelled": kept.is_empty()}
+
 func move_card_from_field(card: Card, to_zone: int, cause: String = "",
 		place: Callable = Callable()) -> Variant:
 	if card == null or not is_instance_valid(card) or not card.is_on_field():
@@ -2728,6 +2733,9 @@ func would_break_light_dark_limit(card: Card) -> bool:
 ## (zero power, lethal damage) stay in enforce_game_state_rules(), which runs right after the change that causes them.
 func apply_rule_processes() -> void:
 	await _enforce_backup_limit()
+	# 11.8.7: triggered auto-abilities are put on the stack before anyone gains priority, and one that CHOOSES
+	# declares its targets then (11.11.2). The stack card carries the picks from here on, so it shows them.
+	await stack.declare_trigger_choices()
 
 ## 12.4.8 (and 7.7.4): "If one player has six or more Backups under their control, they must place the extra Backup(s)
 ## in the Break Zone so that they have five." Casting a sixth is refused at the hand (Hand.can_play_character); this
@@ -2753,6 +2761,36 @@ func _enforce_backup_limit() -> void:
 				chosen = backups[backups.size() - 1]   # no answer: the newest one goes
 			LOG.info("Rules", "P%d has %d Backups: %s goes to the Break Zone (12.4.8)" % [owner_id, backups.size(), chosen.card_name])
 			put_card_into_graveyard(chosen)
+
+## AN EFFECT IS ABOUT TO PUT A SIXTH BACKUP ON THE FIELD (Auron's free play, a search onto the field). The rule
+## (12.4.8) removes the extra one AFTER it entered; that would make the new card land in a far slot beside the
+## gap. Presented the way the player thinks of it instead: the controller first chooses one of their five Backups,
+## it goes to the Break Zone (placed, not broken), and the new Backup is played INTO ITS SLOT. Returns the freed slot
+## ({index, position}) for Field.play_card(), or {} when no room had to be made. _enforce_backup_limit() remains the
+## backstop for any path that does not ask first.
+func make_room_for_backup(card: Card) -> Dictionary:
+	if card == null or not is_instance_valid(card) or card.type != Card.BACKUP or card.is_on_field():
+		return {}
+	var controller_name: String = card.controller
+	var owner_id: int = 1 if controller_name == Card.PLAYER else 2
+	var row: Array = field.opponent_back_cards if controller_name == Card.OPPONENT else field.back_cards
+	var backups: Array = field.get_back_cards_for(controller_name).duplicate()
+	if backups.size() < MAX_BACKUPS:
+		return {}
+	# A card that will not enter at all (unique name, Light/Dark limit: Field.play_card sends it away) costs nothing.
+	if would_be_unique_name_conflict(card) or would_break_light_dark_limit(card):
+		return {}
+	# Dull ones first, like _enforce_backup_limit: an active Backup is still mana this turn.
+	backups = backups.filter(func(b): return b.tapped) + backups.filter(func(b): return not b.tapped)
+	var chosen: Card = await agent_for(owner_id).choose_field_card(owner_id, backups,
+			"Five Backups at most: choose one to put into the Break Zone for %s" % card.card_name)
+	if chosen == null or not backups.has(chosen) or not chosen.is_on_field():
+		chosen = backups[0]
+	var slot := {"index": row.find(chosen), "position": chosen.position}
+	LOG.info("Rules", "P%d makes room for %s: %s goes to the Break Zone (12.4.8)" % [owner_id, card.card_name,
+			chosen.card_name])
+	put_card_into_graveyard(chosen)
+	return slot
 
 ## `drained`: the card's power drop is what put it there (the zero-power sweep) - presented as a drain, not a tribute.
 func put_card_into_graveyard(card: Card, drained: bool = false) -> void:
@@ -2991,8 +3029,16 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		var summon_picks: Array = card.effect_targets.duplicate()
 		if summon_picks.is_empty() and card.effect_target != null:
 			summon_picks = [card.effect_target]
-		var summon_ctx = card.make_effect_context(EVENTS.Event.CAST, {}, card, summon_picks)
-		await card.effect().dispatch(EVENTS.Event.CAST, summon_ctx)
+		# 11.11.2 / 11.3.9: the targets chosen at cast time are checked AGAIN now (a response — Aerith's Planet
+		# Protector — may have made them unchoosable, or they left the field). Invalid ones are dropped (11.11.2.1);
+		# none left cancels the Summon, which still goes to the Break Zone below.
+		var summon_check: Dictionary = recheck_chosen_targets(summon_picks, card.get_cast_target_criteria(), card,
+				"Summon")
+		if summon_check["cancelled"]:
+			LOG.info("Rules", "%s: every chosen target is now illegal — its effect is cancelled (11.11.2)" % card.card_name)
+		else:
+			var summon_ctx = card.make_effect_context(EVENTS.Event.CAST, {}, card, summon_check["picks"])
+			await card.effect().dispatch(EVENTS.Event.CAST, summon_ctx)
 		field.call("finish_targeting_state")
 		await stack.hold_resolved_card()
 		if card.controller == Card.PLAYER:
@@ -3009,8 +3055,17 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 			var ability_picks: Array = card.effect_targets.duplicate()
 			if ability_picks.is_empty() and card.effect_target != null:
 				ability_picks = [card.effect_target]
-			var ability_ctx = ability_source.make_effect_context("activated_ability", {}, card, ability_picks)
-			await card.ability_spec.resolve(ability_ctx)
+			# 11.11.2: the activation-time picks are re-checked at resolution, exactly as for a Summon.
+			var ability_criteria = card.ability_spec.targets
+			if ability_criteria is Object and ability_criteria.has_method("to_legacy"):
+				ability_criteria = ability_criteria.to_legacy()
+			var ability_check: Dictionary = recheck_chosen_targets(ability_picks, ability_criteria, card, "Ability")
+			if ability_check["cancelled"]:
+				LOG.info("Rules", "%s: every chosen target is now illegal — its effect is cancelled (11.11.2)" \
+						% card.card_name)
+			else:
+				var ability_ctx = ability_source.make_effect_context("activated_ability", {}, card, ability_check["picks"])
+				await card.ability_spec.resolve(ability_ctx)
 		field.call("finish_targeting_state")
 		await stack.hold_resolved_card()
 		card.queue_free()
@@ -3230,8 +3285,9 @@ func search_deck_multi(request, filter: Dictionary = {}, destination: String = "
 			"top":
 				deck_node.deck_cards.push_front(card)
 			"field":
+				var slot: Dictionary = await make_room_for_backup(card)
 				card.reset_for_field_arrival()
-				field.play_card(card, owner_id == 2, true, true, suppress_auto)
+				field.play_card(card, owner_id == 2, true, true, suppress_auto, false, slot)
 			_:
 				hand_node.draw(card)
 	shuffle_deck(deck_node)
@@ -3293,8 +3349,9 @@ func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool 
 			deck_node.deck_cards.push_front(found)
 		"field", "field_dull":
 			# The Emperor 185: search it and play it onto the field DULL.
+			var slot: Dictionary = await make_room_for_backup(found)
 			found.reset_for_field_arrival()
-			field.play_card(found, owner_id == 2, true)
+			field.play_card(found, owner_id == 2, true, true, false, false, slot)
 			if tapped or destination == "field_dull":
 				found.tap()
 		_:

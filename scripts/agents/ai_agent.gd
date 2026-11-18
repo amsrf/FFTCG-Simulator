@@ -20,21 +20,20 @@ func take_priority(player_id: int) -> bool:
 	var phase = game.phase
 	if phase != GlobalVariables.Phase.FIRST_MAIN_PHASE and phase != GlobalVariables.Phase.SECOND_MAIN_PHASE:
 		return false
-	# A CHARACTER KEEPS PRIORITY (it never uses the stack), so the AI goes on casting until nothing more is affordable,
-	# then passes. A Summon goes on the stack, and that does pass priority to the opponent.
-	var played: bool = true
-	while played:
-		played = false
-		for card in game.hand_for(player_id).cards.duplicate():
-			if not _is_safe_to_play(card):
-				continue
-			if not _can_afford(card, player_id):
-				continue
-			if await game.play_card_for(player_id, card):
-				if card.type == Card.SUMMON:
-					return true
-				played = true
-				break
+	# ONE ACTION PER ANSWER, REPORTED. A player who acts keeps priority (Game.priority(): Rules 11.3.8 / 9.3.1.5), so
+	# the loop simply asks again. Two things went wrong when this looped over several plays and then answered false:
+	#   * false means PASSED. If the human had passed just before, the loop took the AI's "pass" as the second one in a
+	#     row and resolved the stack or ended the phase: the human never got priority back after the AI's plays.
+	#   * a Character's enter-the-field ability reaches the stack at the END OF THE FRAME (Field.play_card defers it),
+	#     and the next play was started in the same frame, while the stack still looked empty, so a second Character
+	#     was cast over a pending trigger. Asked again, the AI sees that trigger on the stack and waits for it.
+	for card in game.hand_for(player_id).cards.duplicate():
+		if not _is_safe_to_play(card):
+			continue
+		if not _can_afford(card, player_id):
+			continue
+		if await game.play_card_for(player_id, card):
+			return true
 	return false
 
 func _is_safe_to_play(card: Card) -> bool:

@@ -606,9 +606,11 @@ func _ready() -> void:
 	# A fresh, clean board for the simultaneous-trigger check: the AI board above has its own stack history.
 	await Vfx.idle()
 	await _check_draw_audio(game)
+	_check_priority_pass_audio(game)
 	game.queue_free()
 	await get_tree().process_frame
 	await _check_simultaneous_triggers()
+	await _check_trigger_declares_on_stack()
 	await _check_gadot_played_from_hand()
 	await _check_tribute()
 	await _check_cost_row()
@@ -717,6 +719,16 @@ func _check_field_faces(field_cards: Array) -> void:
 		"leaving the field restores the printed face and the hand cost badge")
 	sample.queue_free()
 
+
+func _check_priority_pass_audio(game) -> void:
+	var played: Array[int] = []
+	var observe := func(event: StringName, variant: int):
+		if event == &"priority_pass":
+			played.append(variant)
+	SoundManager.sound_played.connect(observe)
+	game.assistant._pass_priority()
+	_expect(played.size() == 1, "pressing pass priority plays its sound once")
+	SoundManager.sound_played.disconnect(observe)
 
 func _check_draw_audio(game) -> void:
 	var played: Array[int] = []
@@ -854,6 +866,7 @@ func _check_demo_stack_fan() -> void:
 	_expect(earth_face.get_node("Panel").texture != face.get_node("Panel").texture
 		and earth_face.get_node("Ability").text.begins_with("Choose 1 blocking Forward."),
 		"Earth ability has its own palette and cost-free effect text")
+	await _check_source_flights(demo, stack, earth, ability_copy)
 	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.PAYING_COST)
 	var local_hand: Hand = demo.game.get_node("Player/Hand")
 	var local_summon: Card = demo.game.create_card(62, "player")
@@ -1261,6 +1274,80 @@ func _check_opponent_translation(game) -> void:
 	_expect(Vfx.find_children("CounterShard*", "MeshInstance3D", true, false).is_empty(),
 		"the pieces are gone when the cue finishes")
 
+## AN AUTO-ABILITY CHOOSES AS IT GOES ON THE STACK (11.8.7 / 11.11.2), not as it resolves. Squall 1-041's block trigger
+## ("choose 1 Forward. You may deal it 6000 damage"): its controller picks before anyone gains priority, the stack card
+## carries the pick (so it shows it), and resolution asks nobody: it hits a pick that is still legal, and does nothing
+## when the pick has left the field (11.11.2).
+func _check_trigger_declares_on_stack() -> void:
+	for case in ["legal", "gone"]:
+		MatchSetup.config = TEST_GROUNDS.config("clean")
+		var game = GAME_SCENE.instantiate()
+		add_child(game)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		game.player_agent = AIAgent.new()        # Squall's side: picks through the real targeting session
+		game.player_agent.bind(game)
+		game.opponent_agent = MockAgent.new()
+		game.opponent_agent.bind(game)
+		var field = game.field
+		var stack: Stack = game.stack
+		var squall: Card = game.create_card(41, "player")
+		game.add_child(squall)
+		field.play_card(squall, false, false)
+		var victim: Card = game.create_card(55, "opponent")   # Dark Knight, 8000: survives 6000, keeps the damage
+		game.add_child(victim)
+		field.play_card(victim, true, false)
+		await get_tree().process_frame
+		var copies: Array = stack.enqueue_code_triggers(squall, EVENTS.Event.BLOCKS)
+		_expect(copies.size() == 1, "[%s] Squall's block puts one stack object on the stack" % case)
+		if copies.size() != 1:
+			game.queue_free()
+			return
+		var copy: Card = copies[0]
+		_expect(not copy.trigger_targets_declared and copy.effect_targets.is_empty(),
+			"[%s] it has no target until its choice is declared" % case)
+		await game.apply_rule_processes()   # what the priority loop runs before anyone gains priority
+		_expect(copy.trigger_targets_declared and not copy.effect_targets.is_empty(),
+			"[%s] its controller chose before priority, and the stack card carries the pick (%s)" % [
+				case, str(copy.effect_targets.map(func(c): return c.card_name))])
+		var pick: Card = copy.effect_targets[0] if not copy.effect_targets.is_empty() else null
+		await Vfx.idle()
+		stack.refresh_target_display()
+		var link = field.review_arrow
+		_expect(pick != null and link != null and is_instance_valid(link) and link.locked
+			and link.locked_target.distance_to(pick.get_global_face_centre()) < 0.01,
+			"[%s] the stack card shows its target: its arrow lands on %s" % [case, pick.card_name if pick != null else "?"])
+		var damage_before: int = pick.accumulated_damage if pick != null else 0
+		if case == "gone" and pick != null:
+			# Off the field for real (a zone change), not just out of the row lists.
+			game.put_card_into_graveyard(pick)
+			await Vfx.idle()
+		# From here Squall's side is a MockAgent, which never answers a target request: if resolution asked again it
+		# would wait forever, so finishing at all is the proof that nobody was asked.
+		game.player_agent = MockAgent.new()
+		game.player_agent.bind(game)
+		var done: Array = [false]
+		var resolve := func() -> void:
+			await stack.resolve_top_effect()
+			done[0] = true
+		resolve.call()
+		var waited := 0.0
+		while not done[0] and waited < 8.0:
+			await get_tree().process_frame
+			waited += get_process_delta_time()
+		_expect(done[0], "[%s] resolution finished without asking for a target again" % case)
+		await Vfx.idle()
+		if case == "legal":
+			_expect(pick != null and pick.accumulated_damage == damage_before + 6000,
+				"[legal] resolution deals 6000 to the declared target without asking again (%d damage)" % (
+					pick.accumulated_damage if pick != null else -1))
+		else:
+			_expect(pick != null and not pick.is_on_field() and pick.accumulated_damage == damage_before,
+				"[gone] the declared target left the field, so the ability does nothing (11.11.2)")
+		game.queue_free()
+		await get_tree().process_frame
+
+
 ## GADOT 1-007: TWO enter-the-field auto-abilities are TWO stack objects, and their cards fly in STAGGERED, not together.
 func _check_simultaneous_triggers() -> void:
 	MatchSetup.config = TEST_GROUNDS.config("clean")
@@ -1504,7 +1591,13 @@ func _check_cost_row() -> void:
 		# a payment must empty it, or shattered (hidden) crystals would come back.
 		assistant.charge(1, "火")
 		await get_tree().process_frame
+		var shatter_sounds: Array[int] = []
+		var observe_shatter := func(event: StringName, variant: int):
+			if event == &"mana_crystal_shatter":
+				shatter_sounds.append(variant)
+		SoundManager.sound_played.connect(observe_shatter)
 		await row.shatter_paid()
+		_expect(shatter_sounds.size() == 1, "only the paid crystal plays a shatter sound")
 		assistant.on_charge_cancelled()
 		await get_tree().process_frame
 		assistant._on_field_card_activated_ability({"火": 1, "neutral": 2})
@@ -1530,6 +1623,10 @@ func _check_cost_row() -> void:
 		await get_tree().create_timer(0.6).timeout
 		var burst: int = count_shards.call() - shards_before
 		_expect(burst == 3, "confirming the cast bursts ALL THREE paid crystals, even if the mode changes mid-shatter (%d)" % burst)
+		_expect(shatter_sounds.size() == 4, "each of the three committed crystals plays its own sound")
+		for index in range(1, shatter_sounds.size()):
+			_expect(shatter_sounds[index] != shatter_sounds[index - 1], "consecutive crystal sounds use different variants")
+		SoundManager.sound_played.disconnect(observe_shatter)
 		_expect(not row.visible, "and the row is hidden once the last one has burst")
 		# COLOURS STAY WHERE THEY WERE PAID. The reported case: a cost of 1 fire + 4, a fire card (2 CP) turns the fire
 		# crystal and the first wild one red; an ice card (2 CP) then turned the first two WILD crystals blue and moved
@@ -1711,6 +1808,69 @@ func _check_gadot_played_from_hand() -> void:
 	await Vfx.idle()
 	game.queue_free()
 	await get_tree().process_frame
+
+## AN ABILITY COMES OUT OF ITS SOURCE (Stack._fly_from_source). The local player's proxy appears AT ONCE over the card it
+## was activated from — small, upright, facing the camera — and lands in its slot at full stack size. An opponent's
+## proxy is not shown while it is being paid for, and flies in from its source only once committed.
+## `earth` was created this very frame; `red_mage` a moment before it.
+func _check_source_flights(demo, stack: Stack, earth: Card, red_mage: Card) -> void:
+	var camera := get_viewport().get_camera_3d()
+	var cam := camera.global_basis.orthonormalized()
+	var source: Card = earth.effect_source
+	_expect(demo.game.agent_for(1).is_human(), "the demo's local player is human, so their ability shows at activation")
+	var gap: float = camera.unproject_position(earth.global_position).distance_to(
+		camera.unproject_position(source.get_global_face_centre()))
+	_expect(earth.visible and gap < 2.0, "the activated ability's card appears over its source at once (%.1f px away)" % gap)
+	var start_scale: float = earth.global_transform.basis.get_scale().x
+	_expect(absf(start_scale - Card.STACK_CARD_SCALE * stack.source_flight_start_scale) < 0.02,
+		"it starts small: %.2f of world scale (stack size %.2f)" % [start_scale, Card.STACK_CARD_SCALE])
+	var pose := earth.global_basis.orthonormalized()
+	_expect(pose.y.dot(cam.z) > 0.99 and (-pose.z).dot(cam.y) > 0.99,
+		"it starts upright, facing the camera (face %.3f, top %.3f)" % [pose.y.dot(cam.z), (-pose.z).dot(cam.y)])
+	await _await_landed(stack, [earth, red_mage])
+	for card in [red_mage, earth]:
+		var turn: float = card.basis.orthonormalized().get_rotation_quaternion().angle_to(
+			stack._stack_card_local_basis(card).get_rotation_quaternion())
+		_expect(card.position.distance_to(stack.calculate_card_position(card.index)) < 0.01
+			and absf(card.global_transform.basis.get_scale().x - Card.STACK_CARD_SCALE) < 0.02 and turn < 0.02,
+			"%s's ability card lands in its slot at stack size and in the stack pose (%.3f rad off)" % [card.card_name, turn])
+
+	# THE OPPONENT'S ACTIVATION: hidden through its payment, shown once paid.
+	var opponent_mage: Card = demo.game.create_card(3, "opponent")
+	demo.game.add_child(opponent_mage)
+	demo.game.get_node("Field").play_card(opponent_mage, true, false)
+	var hidden: Card = stack.create_skill_proxy(opponent_mage, 0, opponent_mage.activation_skill(0))
+	_expect(not hidden.visible and stack.cards.has(hidden) and not stack.layout_cards().has(hidden),
+		"an opponent's ability being paid for is on the stack for the rules, but not shown or laid out")
+	await get_tree().create_timer(0.3).timeout
+	_expect(not hidden.visible, "and it stays hidden while its costs are being paid")
+	var source_px: Vector2 = camera.unproject_position(opponent_mage.get_global_face_centre())
+	stack.skill_activation_proxy = hidden
+	stack.skill_mana_deferred_until_target_confirm = true
+	stack.commit_skill_activation_costs_if_pending()
+	stack.skill_activation_proxy = null
+	var first_px := Vector2.INF
+	for _i in range(600):
+		if is_instance_valid(hidden) and hidden.visible:
+			first_px = camera.unproject_position(hidden.global_position)
+			break
+		await get_tree().process_frame
+	_expect(first_px != Vector2.INF and first_px.distance_to(source_px) < 2.0,
+		"once paid, it flies in from its source (first seen %.1f px from it)" % (
+			first_px.distance_to(source_px) if first_px != Vector2.INF else INF))
+	await _await_landed(stack, [hidden])
+	_expect(stack.layout_cards().has(hidden) and hidden.position.distance_to(stack.calculate_card_position(hidden.index)) < 0.01,
+		"and lands in its slot")
+
+
+## Wait until none of `cards` is still flying, then for the layout tween to settle.
+func _await_landed(stack: Stack, cards: Array) -> void:
+	var waited := 0.0
+	while cards.any(func(c) -> bool: return is_instance_valid(c) and stack._incoming_triggers.has(c)) and waited < 3.0:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	await get_tree().create_timer(0.4).timeout
+
 
 func _find_by_id(cards: Array, card_id: int) -> Card:
 	for c in cards:

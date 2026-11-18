@@ -46,6 +46,15 @@ var _incoming_triggers: Array[Card] = []
 ## Triggered-ability cards whose entrance (queued wait + flight) has not finished; `trigger_entered` fires as each one
 ## ends, however it ends. What Game.run_ex_burst waits on before resolving.
 var _trigger_flights: Array[Card] = []
+## AN OPPONENT'S ABILITY BEING ACTIVATED. Its proxy exists for the rules (costs, targets) but nobody else may see it until
+## everything is paid: hidden, and left out of the layout, until commit_skill_activation_costs_if_pending() flies it in.
+## Untyped: a cancelled proxy can be freed while listed.
+var _hidden_activations: Array = []
+## TRIGGERED ABILITIES THAT STILL OWE THEIR CHOICE. An auto-ability that chooses (TriggerSpec.chooses) is on the stack
+## from the moment it triggers, but its controller declares the targets the next time anyone would gain priority
+## (declare_trigger_choices, called from Game.apply_rule_processes). Untyped: a copy can be freed while listed.
+var _owed_trigger_choices: Array = []
+var _declaring_trigger_choices: bool = false
 signal trigger_entered(card: Card)
 ## A triggered-ability card's flight onto the stack has just STARTED (it is visible from this moment).
 signal trigger_flight_started(card: Card)
@@ -107,6 +116,8 @@ func layout_cards() -> Array:
 	var parked = summon_casting_card if summon_casting_card != null else casting_card
 	if parked != null and parked.current_zone == Card.Zone.STACK:
 		list.append(parked)
+	for hidden in _hidden_activations:
+		list.erase(hidden)
 	return list
 
 ## The resolving card is shown only while it is still physically on the Stack: a resolved Summon is reparented into
@@ -156,6 +167,13 @@ func stack_length() -> int:
 ## SIMULTANEOUS TRIGGERS DO NOT SPAWN TOGETHER. Abilities put on the stack at the same moment fly in as one group: each
 ## flight starts this long after the previous one STARTED, so they overlap but still read as separate arrivals.
 @export_range(0.05, 1.0, 0.01) var trigger_stagger_seconds: float = 0.25
+## AN EFFECT OF A CARD ON THE FIELD COMES OUT OF THAT CARD (_fly_from_source): it appears over the source, small,
+## upright and facing the camera, and travels to its stack slot, turning into the stack pose and growing as it goes.
+@export_range(0.15, 1.5, 0.01) var source_flight_seconds: float = 0.45
+## The effect card's size where it appears, as a fraction of its size on the stack.
+@export_range(0.1, 1.0, 0.01) var source_flight_start_scale: float = 0.35
+## How far in front of the source (toward the camera, metres) it appears, so the source does not cut through it.
+@export_range(0.0, 1.5, 0.01) var source_flight_lift: float = 0.35
 @export_group("Opponent Summon Flight")
 @export_range(0.30, 2.0, 0.01) var opponent_flight_seconds: float = 32.0 / 60.0
 @export var opponent_flight_path: Path3D
@@ -483,14 +501,18 @@ func cast_card():
 		# PRESENTATION, queued: shine and dissolve IN PLACE, where the player sees the card. Nothing travels across the
 		# board. The dissolve plays on a stand-in (play_out_ghost), so this step only holds the queue for the short
 		# head start: Field's materialise (queued behind this) then begins WHILE the source is still dissolving.
+		var crystal: bool = field.use_crystal_teleport
 		var shine: float = field.teleport_shine_seconds
 		var fade: float = field.teleport_fade_seconds
-		var head_start: float = field.teleport_overlap_delay_seconds
+		var head_start: float = field.teleport_overlap_delay_seconds if crystal else field.hologram_head_start_seconds
 		Vfx.present(func() -> void:
 			if is_instance_valid(landing):
 				# Public from here: the opponent's card turns face up as it dissolves out of their hand.
 				landing.set_revealed(true)
-				landing.teleport.play_out_ghost(shine, fade)
+				if crystal:
+					landing.teleport.play_out_ghost(shine, fade)
+				else:
+					landing.hologram.play_out()
 				if head_start > 0.0:
 					await landing.get_tree().create_timer(head_start).timeout)
 		# RULES, at once: the Character is on the field.
@@ -667,6 +689,13 @@ func create_skill_proxy(source: Card, skill_index: int, definition: Dictionary, 
 	proxy.effect_source = source
 	proxy.effect_kind = "Ability"
 	add_created_card_to_tree(proxy, preload("res://scripts/effects/ability_spec.gd").stack_wording(proxy.skill_def_override))
+	# WHO SEES IT, AND WHEN. The activating player's card comes out of the source now and waits on the stack while they
+	# pay. An opponent's stays hidden until it is paid for (commit_skill_activation_costs_if_pending), then flies.
+	if _is_local_play(source):
+		_present_source_entry(proxy, _source_point(source))   # not awaited, and not queued: it answers the click
+	else:
+		proxy.visible = false
+		_hidden_activations.append(proxy)
 	update_card_positions()
 	return proxy
 
@@ -690,6 +719,10 @@ func _apply_skill_source_tap_from_proxy() -> void:
 func commit_skill_activation_costs_if_pending() -> void:
 	if not skill_mana_deferred_until_target_confirm:
 		return
+	# An opponent's hidden proxy is revealed below, once paid. Its flight starts where the source WAS: a cost below may
+	# return the source to hand or put it into the Break Zone.
+	var reveal: Card = skill_activation_proxy if _hidden_activations.has(skill_activation_proxy) else null
+	var reveal_from: Vector3 = _source_point(reveal.effect_source) if reveal != null else Vector3.INF
 	var payer_hand: Hand = hand
 	if skill_activation_proxy != null and skill_activation_proxy.effect_source != null \
 			and is_instance_valid(skill_activation_proxy.effect_source):
@@ -741,6 +774,12 @@ func commit_skill_activation_costs_if_pending() -> void:
 		if copied_source != null:
 			copied_source.consume_copied_skill(skill_activation_proxy.copied_skill_token)
 	skill_mana_deferred_until_target_confirm = false
+	if reveal != null and is_instance_valid(reveal):
+		_hidden_activations.erase(reveal)
+		# Kept off the layout until its flight starts, exactly like a queued trigger card.
+		_incoming_triggers.append(reveal)
+		update_card_positions()
+		Vfx.present(_present_source_entry.bind(reveal, reveal_from))
 	# THE ACTIVATION IS THE ACTION: everything is paid and it sits on the stack, so priority moves on.
 	skill_activation_committed.emit(skill_activation_proxy)
 	game.note_action_taken()
@@ -772,6 +811,8 @@ func _clear_skill_proxy() -> void:
 		if src != null and is_instance_valid(src) and src.tapped:
 			src.untap()
 	cards.erase(p)
+	_hidden_activations.erase(p)
+	_drop_incoming(p)
 	if is_instance_valid(p):
 		p.queue_free()
 	update_card_positions()
@@ -1139,8 +1180,9 @@ func create_card(id, controller, keyword, source, wording: String = "") -> Card:
 	card.effect_source = source
 	card.effect_kind = "Ability"
 	add_created_card_to_tree(card, wording)
-	# EVERY TRIGGERED ABILITY ENTERS LIKE A PLAY: from below the screen for ours, from the top for the opponent's, all the
-	# way to its slot. The rules are not kept waiting — the card is on the stack now — only the node is.
+	# EVERY TRIGGERED ABILITY FLIES IN: out of its source when that card is on the field (_fly_from_source), otherwise
+	# from below the screen for ours and from the top for the opponent's. The rules are not kept waiting — the card is
+	# on the stack now — only the node is.
 	card.visible = false
 	_incoming_triggers.append(card)
 	_trigger_flights.append(card)
@@ -1189,6 +1231,16 @@ func _present_trigger_entry(card: Card) -> void:
 		_forget_trigger(card)
 		update_card_positions()
 		return
+	# A SOURCE ON THE FIELD: the ability comes out of the card that triggered it. Anything else (a card that just went
+	# to the Break Zone, an EX BURST from the Damage Zone) still enters from its controller's edge of the screen.
+	var from: Vector3 = _source_point(card.effect_source)
+	if from != Vector3.INF:
+		card.visible = true
+		trigger_flight_started.emit(card)
+		await _fly_from_source(card, from)
+		_forget_trigger(card)
+		update_card_positions()
+		return
 	var ours: bool = card.controller == Card.PLAYER
 	var size := get_viewport().get_visible_rect().size
 	var pixel := size * Vector2(0.5, 1.05 if ours else -0.05)
@@ -1206,6 +1258,87 @@ func _present_trigger_entry(card: Card) -> void:
 		await _fly_opponent_summon(card, start, null, false)
 	_forget_trigger(card)
 	update_card_positions()
+
+## Where an effect of `source` comes out of: the centre of its face, while it is drawn on the field; Vector3.INF when it
+## is not (in hand, in a pile, already gone). Untyped: the source of a waiting effect may have been freed.
+func _source_point(source) -> Vector3:
+	if source == null or not is_instance_valid(source) or not (source is Card):
+		return Vector3.INF
+	var card: Card = source
+	if not card.is_drawn_on_field() or not card.is_visible_in_tree():
+		return Vector3.INF
+	return card.get_global_face_centre()
+
+## Is `source` the LOCAL human's card? Only they see their own ability while it is still being paid for.
+func _is_local_play(source: Card) -> bool:
+	if source == null or not is_instance_valid(source) or source.controller != Card.PLAYER or game == null:
+		return false
+	var agent = game.agent_for(1)
+	return agent != null and agent.is_human()
+
+## Take `card` off the in-flight list (and any freed entry with it). Untyped for the same reason as _forget_trigger.
+func _drop_incoming(card) -> void:
+	for i in range(_incoming_triggers.size() - 1, -1, -1):
+		if not is_instance_valid(_incoming_triggers[i]) or _incoming_triggers[i] == card:
+			_incoming_triggers.remove_at(i)
+
+## An ability's card comes out of its source `from` (see _fly_from_source) and settles into the fan. With no source on
+## the field, in fast mode or without a camera it simply appears in its slot.
+func _present_source_entry(card, from: Vector3) -> void:   # untyped: a queued entry may outlive its card
+	if not is_instance_valid(card) or card.get_parent() != self:
+		_drop_incoming(card)
+		return
+	if from == Vector3.INF or PRESENTATION.fast_mode or get_viewport().get_camera_3d() == null:
+		card.visible = true
+		_drop_incoming(card)
+		update_card_positions()
+		return
+	if not _incoming_triggers.has(card):
+		_incoming_triggers.append(card)
+	card.visible = true
+	await _fly_from_source(card, from)
+	_drop_incoming(card)
+	if is_instance_valid(card):
+		update_card_positions()
+
+## THE EFFECT LEAVES ITS SOURCE. The card appears `source_flight_lift` in front of `from` at `source_flight_start_scale`
+## of its stack size, upright and facing the camera, and travels to its slot in the fan while turning into the stack
+## pose and growing to full size, all on one eased progress. The slot is re-read every frame, so a fan that reflows
+## mid-flight is followed. Near the end the card is kept above the settled cards so it lands on top, not through them.
+func _fly_from_source(card: Card, from: Vector3) -> void:
+	card.stop_stack_layout()
+	card.set_revealed(true)
+	var camera := get_viewport().get_camera_3d()
+	var full: float = Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE
+	var small: float = full * source_flight_start_scale
+	var launch: Vector3 = from + (camera.global_position - from).normalized() * source_flight_lift
+	# Held in an array: a lambda captures locals by value, and the last slot seen must survive between frames.
+	var destination: Array = [to_global(calculate_card_position(card.index))]
+	var sample := func(p: float) -> void:
+		if not is_instance_valid(card) or card.get_parent() != self:
+			return
+		# Resolved while flying: keep heading for the last slot it had.
+		if layout_cards().has(card):
+			destination[0] = to_global(calculate_card_position(card.index))
+		var t: float = 1.0 - pow(1.0 - p, 3.0)
+		var axes := camera.global_basis.orthonormalized()
+		var facing := global_basis.orthonormalized().inverse() * Basis(axes.x, axes.z, -axes.y)
+		var turn := facing.get_rotation_quaternion().slerp(_stack_card_local_basis(card).get_rotation_quaternion(), t)
+		card.basis = Basis(turn).scaled(Vector3.ONE * lerpf(small, full, t))
+		var straight: Vector3 = launch.lerp(destination[0], t)
+		card.global_position = straight
+		if p >= 1.0:
+			card.global_position = destination[0]
+			return
+		# Clear the settled fan only on the approach: measured from the field, the whole stack is "above" the card,
+		# and clearing from the start would lift it off its source.
+		_clear_local_flight_from_stack(card, camera)
+		card.global_position = straight.lerp(card.global_position, smoothstep(0.25, 0.85, t))
+	sample.call(0.0)
+	var flight := create_tween()
+	_end_flight_with_card(card, flight)
+	flight.tween_method(sample, 0.0, 1.0, source_flight_seconds)
+	await flight.finished
 
 ## The trigger's entrance is over, however it ended. Freed cards are dropped too: erasing a freed object from a typed
 ## array is an engine error, so the lists are swept rather than erased by value.
@@ -1293,8 +1426,74 @@ func enqueue_code_triggers(source: Card, event, data: Dictionary = {}, event_ctx
 		if choice != null and field != null and not field.has_viable_target(choice, source, "Ability"):
 			LOG.info("Stack", "%s: auto-ability %d has no legal target and is not put on the stack" % [source.card_name, index])
 			continue
-		out.append(enqueue_code_trigger(source, event_id, data, index))
+		var copy: Card = enqueue_code_trigger(source, event_id, data, index)
+		out.append(copy)
+		if choice != null:
+			_owed_trigger_choices.append(copy)
 	return out
+
+
+## DECLARE THE CHOICES of every triggered ability put on the stack since priority was last given (11.8.7, 11.11.2):
+## the TURN player's first, then the other player's, each in the order they went on the stack. Each waits for its card
+## to land, so the arrow is drawn from the stack card, then its controller chooses; the picks are stored on the card,
+## which then shows them like a Summon's. With no legal target left by now the ability is removed at once (11.8.4).
+## Re-entrant calls (a choice that triggers something) are absorbed: the running loop picks the new ones up.
+func declare_trigger_choices() -> void:
+	if _declaring_trigger_choices:
+		return
+	_declaring_trigger_choices = true
+	while true:
+		var card = _next_owed_choice()
+		if card == null:
+			break
+		await _declare_trigger_choice(card)
+	_declaring_trigger_choices = false
+
+
+## The next copy to declare: still on the stack, turn player's before the other player's, oldest first.
+func _next_owed_choice():
+	for i in range(_owed_trigger_choices.size() - 1, -1, -1):
+		var owed = _owed_trigger_choices[i]
+		if not is_instance_valid(owed) or not cards.has(owed):
+			_owed_trigger_choices.remove_at(i)
+	if _owed_trigger_choices.is_empty():
+		return null
+	var turn_controller: String = game.controller_for(game.turn_owner) if game != null else Card.PLAYER
+	for owed in _owed_trigger_choices:
+		if owed.controller == turn_controller:
+			_owed_trigger_choices.erase(owed)
+			return owed
+	return _owed_trigger_choices.pop_front()
+
+
+func _declare_trigger_choice(card: Card) -> void:
+	var source: Card = card.effect_source
+	if source == null or not is_instance_valid(source) or source.effect() == null:
+		return
+	var abilities: Array = source.effect().auto_abilities()
+	var index: int = card.effect_ability_index
+	if index < 0 or index >= abilities.size() or abilities[index].choice == null:
+		return
+	await await_trigger_entry(card)
+	if not is_instance_valid(card) or not cards.has(card):
+		return
+	var ctx = source.make_effect_context(card.effect_event, card.effect_event_data, card, [])
+	var picks: Array = await ctx.choose_targets(abilities[index].choice)
+	if not is_instance_valid(card) or not cards.has(card):
+		return
+	if picks.is_empty():
+		# 11.8.4: nothing it could choose any more, so it is removed from the stack at once and nobody can respond.
+		LOG.info("Stack", "%s: no legal target as its ability is put on the stack; removed (11.8.4)" % source.card_name)
+		cards.erase(card)
+		_forget_trigger(card)
+		card.queue_free()
+		update_card_positions()
+		return
+	card.set_effect_targets(picks)
+	card.trigger_targets_declared = true
+	LOG.info("Stack", "%s's ability targets %s" % [source.card_name, str(picks.map(func(c): return c.card_name))])
+	# Shows the new arrow if this card is the one on display.
+	refresh_target_display()
 
 func enqueue_event_trigger(source: Card, trigger: Dictionary, context: Dictionary) -> Card:
 	var wording: String = TRIGGER_TEXT.without_trigger(str(trigger.get("text", "")))
@@ -1399,7 +1598,13 @@ func _present_resolve_lead(card: Card) -> void:
 ## THE TOP OF THE STACK WEARS THE AURA: the card resolving now, or else the one that will resolve next. Called from
 ## update_card_positions() (every stack change ends there) and when a resolution starts.
 func refresh_top_aura() -> void:
-	var top: Card = resolving_card if is_instance_valid(resolving_card) else (cards.back() if not cards.is_empty() else null)
+	var top: Card = resolving_card if is_instance_valid(resolving_card) else null
+	if top == null:
+		# The top that can be SEEN: an opponent's ability still being paid for is not on display yet.
+		for i in range(cards.size() - 1, -1, -1):
+			if not _hidden_activations.has(cards[i]):
+				top = cards[i]
+				break
 	for c in layout_cards():
 		if is_instance_valid(c):
 			c.stack_aura.set_top(c == top)

@@ -36,4 +36,4 @@ class Ability0 extends "res://scripts/effects/card_ability.gd":
 			candidates,
 			"Play a Character of cost %d or less" % x)
 		if picked != null:
-			ctx.play_from_hand_card(picked)
+			await ctx.play_from_hand_card(picked)
