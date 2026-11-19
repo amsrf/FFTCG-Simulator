@@ -688,7 +688,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	if current_zone == Zone.STACK and zone != Zone.STACK:
 		stop_stack_layout()
 	# A copied ability is a continuous effect while its source is on the field. Leaving the field drops it.
-	if current_zone == Zone.FIELD and zone != Zone.FIELD:
+	# A queued move can update current_zone before the field presentation is removed.
+	if zone != Zone.FIELD and (current_zone == Zone.FIELD or field_face.drawn_on_field):
 		clear_copied_skill()
 		# THE TAP/UNTAP TWEEN BELONGS TO THE FIELD. It animates rotation_degrees.y toward the FIELD's upright (a half
 		# turn, READABLE_ROTATION); left running after the move it overwrote the new zone's rotation set below, so a

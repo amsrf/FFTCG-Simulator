@@ -2,11 +2,11 @@ extends Node
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 ## RETURN TO HAND probe — the zone change and the two-phase animation.
 ##
-## The card must end up a REAL hand card (child of the Hand, in `cards`, HAND zone, hand scale), not just visually
-## near the hand. The animation itself is not measurable headlessly beyond "it finished", so what is asserted is the
-## end state plus the promise that the instruction waits for it.
+## The printed mesh must be in place at the source pose before the flight begins. At landing, the card must be in
+## the owner's Hand scene and card list at hand scale.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -38,6 +38,10 @@ func _ready() -> void:
 	field.play_card(card, false, false)
 	await get_tree().process_frame
 	_expect(card.current_zone == Card.Zone.FIELD, "the card starts on the FIELD")
+	_expect(card.hand_mesh.mesh != FIELD_CARD_FACE.PRINTED_MESH, "the source is drawn as a field tile")
+	await Vfx.idle()
+	card.tap()
+	var field_pose := card.global_transform
 
 	var ctx = EFFECT_CONTEXT.new(_game, card, "test")
 	# RULES FIRST: the move is complete the moment return_to_hand() returns; only the flight is queued.
@@ -45,6 +49,11 @@ func _ready() -> void:
 	_expect(hand.cards.has(card), "the card joined the hand's card list at once (%d -> %d)" % [before, hand.cards.size()])
 	_expect(card.current_zone == Card.Zone.HAND, "its zone is HAND at once (got %d)" % card.current_zone)
 	_expect(not card.is_on_field(), "and the rules no longer see it on the field")
+	_expect(card.get_parent() == hand and card.global_transform.is_equal_approx(field_pose),
+		"the presentation starts at the original field pose")
+	_expect(card.hand_mesh.mesh == FIELD_CARD_FACE.PRINTED_MESH and not card.power_label.visible,
+		"the printed paper card is visible at the source, before it moves")
+	_expect(card.tween == null, "the field's tap tween releases the pose before the return flight")
 
 	# THEN THE SCREEN: once the presentation queue has played, it is drawn in the hand.
 	await Vfx.idle()

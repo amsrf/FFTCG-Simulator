@@ -129,8 +129,8 @@ func take_returned_card(card: Card) -> void:
 	if card.has_signal("card_dragged") and not card.card_dragged.is_connected(Callable(self, "_on_card_dragged")):
 		card.connect("card_dragged", Callable(self, "_on_card_dragged"))
 
-## RETURN TO HAND, PRESENTATION half: grow toward the camera over the hand, then settle into the slot the card already
-## owns. Starts the tween and returns it, so a mass return can fly every card at once.
+## RETURN TO HAND, PRESENTATION half: switch to the printed card at its source pose, then grow and fly into the slot
+## it already owns. Starts the tween and returns it, so a mass return can fly every card at once.
 func fly_returned_card(card: Card) -> Tween:
 	if card == null or not is_instance_valid(card):
 		return null
@@ -146,6 +146,8 @@ func fly_returned_card(card: Card) -> Tween:
 		card.reparent(self, false)
 	else:
 		add_child(card)
+	card.enter_zone(Card.Zone.HAND)
+	# Entering the zone sets the hand's resting pose. Keep the source pose for the first frame of the flight.
 	card.global_transform = trans
 
 	var toward_camera: Vector3 = Vector3.UP
@@ -173,7 +175,6 @@ func fly_returned_card(card: Card) -> Tween:
 func _land_returned(card: Card) -> void:
 	if card == null or not is_instance_valid(card) or not cards.has(card):
 		return
-	card.enter_zone(Card.Zone.HAND)
 	update_card_positions()
 
 ## Draw one card: the single-card case of draw_many().
