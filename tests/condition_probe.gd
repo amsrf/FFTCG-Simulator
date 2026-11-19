@@ -4,6 +4,7 @@ extends Node
 ## end to end. (The instruction-chain if/else this probe used to test went with the instruction executor.)
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const CARD_QUERY := preload("res://scripts/effects/card_query.gd")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0
@@ -34,9 +35,9 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	# --- board conditions -----------------------------------------------------------------------------
-	_expect(_game.call("_controls", "Squall"), "controls:Squall is true — the debug board has one")
-	_expect(not _game.call("_controls", "Nobody"), "controls:Nobody is false")
-	_expect(_game.call("_controls", "Backup"), "controls:Backup is true for a board with Backups")
+	_expect(_game.call("_controls", "Squall", Card.PLAYER), "controls:Squall is true — the debug board has one")
+	_expect(not _game.call("_controls", "Nobody", Card.PLAYER), "controls:Nobody is false")
+	_expect(_game.call("_controls", "Backup", Card.PLAYER), "controls:Backup is true for a board with Backups")
 
 	# --- cast_this_turn, read the way card code reads it ------------------------------------------------
 	var probe_source: Card = _game.call("create_card", 13, "player")
@@ -53,7 +54,6 @@ func _ready() -> void:
 	field.play_card(target, true, false, false)
 	target.set_base_power(10000)
 	target.accumulated_damage = 0
-	_game.set("_targets", [target])
 
 	# Sazh's real code effect, not a legacy instruction handler.
 	var sazh_source: Card = _game.call("create_card", 13, "player")
@@ -81,8 +81,8 @@ func _ready() -> void:
 	for backup in field.get_back_cards_for("player"):
 		if backup.tapped:
 			tapped_before += 1
-	_game.set("_current_controller", Card.PLAYER)
-	await _game.untap_all_matching({"is_type": "Backup", "controller": "player"})
+	var hope_ctx = EFFECT_CONTEXT.new(_game, probe_source, "test")
+	hope_ctx.untap_all_matching(CARD_QUERY.new().of_type("Backup").controlled_by(CARD_QUERY.Controller.YOUR))
 	var still_tapped: int = 0
 	for backup in field.get_back_cards_for("player"):
 		if backup.tapped:

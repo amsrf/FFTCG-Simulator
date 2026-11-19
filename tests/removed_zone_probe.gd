@@ -5,6 +5,7 @@ extends Node
 ## are about the two zones staying separate, not just about a node existing.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -45,8 +46,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	var grave_before: int = grave.graveyard_cards.size()
 
-	_game.set("_targets", [card])
-	_game.remove_targets_from_game()
+	EFFECT_CONTEXT.new(_game, card, "test").remove_from_game([card])
 
 	_expect(removed.graveyard_cards.has(card), "the card is in the Removed pile")
 	_expect(card.current_zone == Card.Zone.REMOVED,

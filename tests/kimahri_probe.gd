@@ -71,10 +71,7 @@ func _place(id: int, controller: String = "player") -> Card:
 
 
 func _set_copy_target(kimahri: Card, target: Card) -> void:
-	_game._current_source_card = kimahri
-	_game._current_controller = "player"
-	_game._targets = [target]
-	await _game.copy_skill()
+	await _game.copy_skill(kimahri, target)
 
 
 func _check_copy_and_choice() -> void:

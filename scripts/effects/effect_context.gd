@@ -23,6 +23,10 @@ var effect_card: Card = null
 ## Targets chosen when the trigger was put on the stack, in pick order. Code effects that declare target_criteria
 ## receive them here; effects that ask later can still use choose_target(s).
 var targets: Array = []
+## Cards picked by a two-step effect ("choose a card in your Break Zone ... put it into your hand", "choose a revealed
+## card ... the rest go to the bottom"): choose_break_zone_card / choose_revealed add to it, the next step reads it.
+## A context lives for one resolution, which is exactly the life of such a choice.
+var chosen: Array = []
 var controller: String = ""
 var owner_id: int = 1
 var event_name = ""
@@ -246,11 +250,10 @@ func may_for(player_id: int, prompt: String) -> bool:
 	return bool(await agent.confirm_optional(player_id, prompt))
 
 
-## Evaluate an existing engine condition string ("controls:Laguna", "cast_this_turn:Alexander") from this effect's
-## perspective. This is a compatibility bridge while the instruction-string conditions are migrated to code.
+## Evaluate an engine condition string ("controls:Laguna", "cast_this_turn:Alexander", "if_last_succeeded") from this
+## effect's controller's perspective.
 func condition(expression: String) -> bool:
-	_prime_game()
-	return bool(game._condition_holds(expression))
+	return bool(game._condition_holds(expression, controller))
 
 
 func untap_all_matching(criteria: CARD_QUERY) -> void:
@@ -258,8 +261,7 @@ func untap_all_matching(criteria: CARD_QUERY) -> void:
 
 
 func play_from_hand(criteria: CARD_QUERY = null, by: String = "self") -> void:
-	_prime_game()
-	await game.play_from_hand(_criteria_block(criteria), by)
+	await game.play_from_hand(owner_id, source, _criteria_block(criteria), by)
 
 
 ## Pick one card from an explicit list. Used by hand-play effects where the caller controls the shortlist.
@@ -304,24 +306,27 @@ func may_play_from_hand(criteria: CARD_QUERY, enter_dull: bool = false,
 
 
 func break_zone_to_hand(filter: CARD_QUERY = null) -> void:
-	_prime_game()
-	await game.break_zone_to_hand(_criteria_filter(filter))
+	await game.break_zone_to_hand(owner_id, _criteria_filter(filter))
 
 
+## Choose one card from a Break Zone (`chooser` "self"/"opponent"); the pick is kept in `chosen` for the next step
+## (put_card_into_hand), and returned.
 func choose_break_zone_card(criteria: CARD_QUERY, chooser: String = "self",
-		prompt: String = "Choose a card in your Break Zone") -> void:
-	_prime_game()
-	await game.choose_break_zone_card(_criteria_block(criteria), chooser, prompt)
+		prompt: String = "Choose a card in your Break Zone") -> Card:
+	var picked: Card = await game.choose_break_zone_card(owner_id, _criteria_block(criteria), chooser, prompt)
+	if picked != null:
+		chosen.append(picked)
+	return picked
 
 
+## Put every card chosen with choose_break_zone_card into its owner's hand.
 func put_card_into_hand() -> void:
-	_prime_game()
-	await game.put_card_into_hand()
+	game.put_card_into_hand(chosen)
+	chosen.clear()
 
 
 func put_hand_card_on_bottom() -> void:
-	_prime_game()
-	await game.put_hand_card_on_bottom()
+	await game.put_hand_card_on_bottom(owner_id)
 
 
 func search_deck(filter: CARD_QUERY, destination: String = "hand", tapped: bool = false) -> void:
@@ -488,22 +493,6 @@ func opponent_discards(count: int = 1) -> void:
 	await discard(3 - owner_id, count)
 
 
-## Divide `total` damage among `cards` through the agent seam. Used by Yuffie 85.
-func divide_damage(cards: Array, total: int) -> void:
-	if cards.is_empty() or total <= 0 or game == null:
-		return
-	var agent = game.agent_for(owner_id)
-	if agent == null:
-		return
-	var split: Array = await agent.choose_damage_split(owner_id, cards, total)
-	for i in range(cards.size()):
-		var card: Card = cards[i]
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		var amount: int = int(split[i]) if i < split.size() else 0
-		if amount > 0:
-			game.field.cause_damage(card, amount, source, "Ability", controller, -1,
-				float(i) * DAMAGE_REACTION_STAGGER_SECONDS)
 
 
 ## Apply the split chosen during ability activation (before commit) to ctx.targets. Used by Yuffie 85.
@@ -527,22 +516,27 @@ func apply_damage_division(_total: int) -> void:
 ## Look at the staging area without moving the card. The count/limit checks live here so a card handler does not
 ## need to know the Game's reveal internals.
 ## Reveal staging stays owned by Game; these are the card-facing names so an effect never calls Game directly.
-func choose_revealed(criteria: CARD_QUERY = null, prompt: String = "Choose a revealed card") -> void:
+## Pick one revealed card; kept in `chosen` for put_chosen_into_hand / put_revealed_on_bottom, and returned.
+func choose_revealed(criteria: CARD_QUERY = null, prompt: String = "Choose a revealed card") -> Card:
 	if game == null:
-		return
-	await game.choose_revealed(_criteria_block(criteria), prompt)
+		return null
+	var picked: Card = await game.choose_revealed(owner_id, source, _criteria_block(criteria), prompt, chosen)
+	if picked != null:
+		chosen.append(picked)
+	return picked
 
 
 func put_chosen_into_hand() -> void:
 	if game == null:
 		return
-	game.put_chosen_into_hand()
+	game.put_chosen_into_hand(chosen)
 
 
+## The revealed cards that were NOT chosen go to the bottom of the deck.
 func put_revealed_on_bottom() -> void:
 	if game == null:
 		return
-	game.put_revealed_on_bottom()
+	game.put_revealed_on_bottom(chosen)
 
 
 func check_revealed(index: int = 0, criteria: CARD_QUERY = null) -> bool:
@@ -572,35 +566,25 @@ func set_power(cards: Array, value: int, duration: int = 1) -> void:
 ## Tidus 163: this Forward may attack as many times as its controller's damage count.
 func extra_attacks_from_damage() -> void:
 	if game != null:
-		game.extra_attacks_from_damage()
+		game.extra_attacks_from_damage(owner_id, source)
 
 
 func opponent_mills(count: int = 1) -> void:
 	await mill(3 - owner_id, count)
 
 
-## The following helpers prime Game's ambient instruction state from this context before calling a Game instruction.
-## They exist only for the instructions whose Game implementation still reads `_current_source_card`/`_current_controller`.
-func _prime_game() -> void:
-	if game == null:
-		return
-	game.set("_current_source_card", source)
-	game.set("_current_controller", controller)
-
-
+## Game handlers take who is acting EXPLICITLY (this context's owner_id / source / controller). There is no ambient
+## "current source / controller / targets" state on Game any more: a context passes what the handler needs.
 func play_from_break_zone(criteria: CARD_QUERY = null) -> void:
-	_prime_game()
-	await game.play_from_break_zone(_criteria_block(criteria))
+	await game.play_from_break_zone(owner_id, source, _criteria_block(criteria))
 
 
 func cast_summon_for_free(criteria: CARD_QUERY = null) -> void:
-	_prime_game()
-	await game.cast_summon_for_free(_criteria_block(criteria))
+	await game.cast_summon_for_free(owner_id, _criteria_block(criteria))
 
 
 func look_top_may_bottom() -> void:
-	_prime_game()
-	await game.look_top_may_bottom()
+	await game.look_top_may_bottom(owner_id)
 
 
 func cancel_stack_card(target: Card) -> void:
@@ -614,9 +598,7 @@ func cancel_stack_card(target: Card) -> void:
 func copy_skill(target: Card) -> void:
 	if game == null or target == null or not is_instance_valid(target):
 		return
-	_prime_game()
-	game.set("_targets", [target])
-	await game.copy_skill()
+	await game.copy_skill(source, target)
 
 
 func each_player_discards(count: int = 1) -> void:
@@ -636,13 +618,11 @@ func power_change_party(amount: int, duration: int = 1) -> void:
 
 
 func take_damage_to_controller(amount: int = 1) -> void:
-	_prime_game()
-	await game.take_damage_to_controller(amount)
+	await game.take_damage_to_controller(source, amount)
 
 
 func return_from_break_zone(tapped: bool = true) -> void:
-	_prime_game()
-	await game.return_from_break_zone(tapped)
+	await game.return_from_break_zone(source, tapped)
 
 
 func return_to_hand(cards: Array, source_kind: String = "") -> void:

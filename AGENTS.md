@@ -126,8 +126,11 @@ use from card code.
   (no `card_effects`, `is_key_word_in_card_effect`, JSON `triggers` array, `begin_triggered_ability`,
   `_resolve_event_trigger`), and so was the instruction EXECUTOR (`_execute_instructions`, `Instruction`,
   `_resolve_executor`): a status's `on_enter_break_zone` payload names a METHOD on the source card's effect (see
-  the status payload note below) and blocking calls `Game.set_blocker()` directly. `EffectContext` still calls some
-  old Game handlers directly (priming `_current_source_card` / `_targets`); they are plain functions now. A stack card
+  the status payload note below) and blocking calls `Game.set_blocker()` directly. There is NO ambient "current
+  source / controller / targets / chosen" state on Game any more (`_current_source_card`, `_current_controller`,
+  `_targets`, `_chosen_cards` and `EffectContext._prime_game()` are gone): every Game handler takes who is acting
+  explicitly (`owner_id`, `source`, `controller`), and `EffectContext` passes its own. A two-step effect's picks
+  (choose a Break Zone / revealed card, then move it) live in `EffectContext.chosen`. A stack card
   with no code effect resolves to nothing (with a warning). `effects_data_probe` checks every instruction entry left
   in the code effects resolves to a real method.
 - Code-defined event triggers filter through `CardEffect.trigger_specs()`, not an `event_matches()` method. A
@@ -275,9 +278,8 @@ next stage automatically, and Confirm appears only after the last.
 `has_viable_target()` requires EVERY stage to have a legal candidate: mandatory targets are judged at cast time, so a
 missing stage makes the card illegal to play.
 
-Instructions address a stage with an index: `dull_targets(0)`, `return_targets_to_hand(1)`. `_selected_targets(index)`
-is the single place that decides "all picks" (index < 0) or one pick. Add an index parameter to any new
-target-instruction wrapper the same way.
+(HISTORY: instructions used to address a stage with an index through `_selected_targets(index)`; the instruction
+layer is gone and card code receives its picks in `ctx.targets`.)
 
 (The instruction chain and its executor are gone; see "Card abilities are code only" at the top.)
 
@@ -507,8 +509,7 @@ half turn. `discard_probe` is the spec.
 * `break_at_end_of_turn` is a status resolved by `Field.end_phase_cleanup()` before `turn_end()` clears statuses.
 * `add_status_to_targets(status, duration, payload)` stores the payload and automatically adds `source` and `controller`.
   `_trigger_status_break_zone_effects()` calls the payload's `on_enter_break_zone` method with that controller.
-* The generic `Game.choose_target(criteria)` instruction opens a targeting session in an instruction chain and writes
-  the picks to `_targets`, so following instructions can act on them.
+* A targeting session opened mid-effect is `EffectContext.choose_targets()`, which returns the picks.
 
 ### Conditional statuses
 
@@ -552,11 +553,9 @@ Cost modifiers are board queries, not payment-time special cases:
 * `search_deck(filter, destination, tapped)` is owner-aware and agent-driven. Destinations include `field` and
   `field_dull`; the search filter is bridged between CardFilter keys (`name`, `type`, `category`, `job`, `element`)
   and Card criteria (`is_named`, `is_type`, ...). Do not add another direct window call for a new search card.
-* Two-player choices use generic instructions, not per-card Game functions. Cloud 158 is
-  `choose_card(self)` -> `choose_card(opponent)` -> `apply_effect(..., exclude_chosen)` ->
-  `put_targets_into_break_zone`; `choose_card` routes the pick through `Agent.choose_field_card`. Serafie 109 uses
-  `choose_break_zone_card(self)` -> `choose_break_zone_card(opponent)` -> `put_card_into_hand`. Prefer composing these
-  verbs over adding an `each_player_...` function.
+* Two-player choices compose EffectContext verbs, not per-card Game functions. Serafie 109 is
+  `ctx.choose_break_zone_card(self)` -> `ctx.choose_break_zone_card(opponent)` -> `ctx.put_card_into_hand()` (the
+  picks are kept in `ctx.chosen`). Prefer composing these over adding an `each_player_...` function.
 * `only_if_damage_received` is a per-ability gate like `only_your_turn` / `only_if_blocking`. A `tap` cost alone asks
   `can_tap()`; a non-tap ability remains available while tapped and while summoning-sick.
 * Return-to-hand checks `Card.can_be_returned_to_hand_by(source, kind)` at the single `return_targets_to_hand` verb.
@@ -740,7 +739,7 @@ scan-and-answer method to `battle_field.gd`.
 `Card.suffer_damage(damage, kind, controller, source_card)` records BOTH the cause (Summon/Ability/combat) and the
 DEALING card. `Field.modify_damage(source, target, amount)` runs before the damage is applied (Warrior of Light
 doubles to a cost-4+ Forward), so a doubled hit counts once for the break check. Combat passes the opposing card;
-effect instructions pass `_current_source_card`.
+effects pass their context's `source`.
 
 A trigger whose `choose_target` has no legal candidate must NOT open a targeting session — `execute_card_effect`
 checks `has_viable_target` first. Otherwise "you may deal 7000 to a dull Forward" with no dull Forward strands the
@@ -791,9 +790,8 @@ lives on the protector as `"protects": {"targets": {...}, "from": "opponent", "b
 
 **The break must know its cause.** `Card.suffer_damage(damage, kind, controller)` records `last_damage_kind` /
 `last_damage_controller` (empty kind = combat, which also clears a stale record), and the state-based sweep passes them
-into `break_card()`. `damage_targets` / `damage_forward` / `break_targets` pass `_effect_kind()` ("Summon" if the
-source card is a Summon, else "Ability") and `_current_controller`. Any NEW damage path must do the same or protection
-will silently not apply to it.
+into `break_card()`. Effect damage (`EffectContext.damage()`) passes its kind ("Summon" if the source card is a Summon,
+else "Ability") and its controller. Any NEW damage path must do the same or protection will silently not apply to it.
 
 ## Divide Damage
 
@@ -803,8 +801,8 @@ distribution able to step back to target selection (re-push the TARGET modal, re
 a resolution-time modal could not, because the effect is already on the stack with locked targets.
 
 The window is `party_split.tscn` with `allow_cancel = true` (Back button + Escape, emits `finished([])`). The blocker's
-party split leaves it false. Amounts are stored on `Game._damage_division` — one slot, consumed by `divide_damage()`
-in `_targets` order.
+party split leaves it false. Amounts are stored on `Game._damage_division` — one slot, consumed by
+`EffectContext.apply_damage_division()` in `ctx.targets` order.
 
 ## Blocking Legality
 

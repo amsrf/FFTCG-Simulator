@@ -30,7 +30,7 @@ func _find_window() -> Node:
 
 ## Run a search and answer its window with `pick`.
 func _search(destination: String, pick: int) -> void:
-	_game.search_deck({}, destination)
+	_game.search_deck({}, destination, false, 1)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var w: Node = _find_window()
@@ -79,8 +79,6 @@ func _ready() -> void:
 	_game.break_card(card)
 	await get_tree().process_frame
 	_expect(graveyard.graveyard_cards.has(card), "a broken card is in the Break Zone to begin with")
-	_game.set("_current_source_card", card)
-
 	# The guard as Vanille's code writes it (card_93.gd): `if ctx.condition("if_last_succeeded"): return_from_break_zone`.
 	# NOT succeeded: the guard must skip the return entirely.
 	var vanille_ctx = EFFECT_CONTEXT.new(_game, card, "test")

@@ -104,7 +104,6 @@ func _ready() -> void:
 	cid.status_effects["test_marker"] = 1
 
 	# --- 77: enter the field -> cost 2 or less -------------------------------------------------------------
-	_game.set("_current_source_card", devout_wind)
 	_field.execute_card_effect(devout_wind, "when_enter_field")
 	# A coroutine call as a STATEMENT is fine; only using its return value requires await, and we cannot await here
 	# because driving the window is what lets it finish.
@@ -128,9 +127,7 @@ func _ready() -> void:
 	_expect(cid.status_effects.has("summoning_sickness"), "it arrives summoning-sick, like any just-played card")
 
 	# --- 48: activated, cost 4 or less --------------------------------------------------------------------
-	_game.set("_current_source_card", devout_ice)
-	_game.set("_current_controller", "player")
-	_game.play_from_break_zone({"is_type": "Forward", "is_cost_lower_than": 5})
+	_game.play_from_break_zone(1, devout_ice, {"is_type": "Forward", "is_cost_lower_than": 5})
 	var window2: Node = await _await_window()
 	_expect(window2 != null, "the ability opens the same search")
 	if window2 != null:
@@ -146,7 +143,7 @@ func _ready() -> void:
 	# --- nothing legal: no window at all -------------------------------------------------------------------
 	_expect(_pile_card(TERRA) != null and terra.cost > 2, "Terra costs more than 2")
 	var spare_window_before: bool = _search_window() != null
-	_game.play_from_break_zone({"is_type": "Forward", "is_cost_lower_than": 3})
+	_game.play_from_break_zone(1, devout_ice, {"is_type": "Forward", "is_cost_lower_than": 3})
 	for _i in range(20):
 		await get_tree().process_frame
 	_expect(not spare_window_before and _search_window() == null, "with no legal card, no window opens")

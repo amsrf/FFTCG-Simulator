@@ -230,8 +230,7 @@ func _ready() -> void:
 	# --- 169 Geomancer: look at the top card, put it on the bottom -------------------------------------
 	var deck = _game.get("deck")
 	var top_before: int = deck.deck_cards[0].id
-	_game.set("_current_controller", "player")
-	await _game.call("look_top_may_bottom")
+	await _game.call("look_top_may_bottom", 1)
 	var top_after: int = deck.deck_cards[0].id
 	_expect(top_after != top_before and deck.deck_cards.back().id == top_before,
 		"Geomancer 169 can move the top card to the bottom")
@@ -240,7 +239,7 @@ func _ready() -> void:
 	var hand = _game.get("hand")
 	var h0: int = hand.cards.size()
 	var chosen_card: Card = hand.cards[0]
-	await _game.call("put_hand_card_on_bottom")
+	await _game.call("put_hand_card_on_bottom", 1)
 	_expect(hand.cards.size() == h0 - 1 and deck.deck_cards.back() == chosen_card,
 		"Yuj 175 puts a chosen hand card at the bottom of the deck")
 
@@ -251,7 +250,7 @@ func _ready() -> void:
 	pile.add_card(buried)
 	var hand_before: int = hand.cards.size()
 	# The picker waits for a choice; drive it the way the window's own button would.
-	var _pending = _game.call("break_zone_to_hand", {})
+	var _pending = _game.call("break_zone_to_hand", 1, {})
 	await get_tree().process_frame
 	var window = null
 	for child in _game.get_children():
@@ -308,9 +307,7 @@ func _ready() -> void:
 		var dmg: Card = _game.call("create_card", 1, "player")
 		_game.add_child(dmg)
 		dz.add_card(dmg)
-	_game.set("_current_controller", "player")
-	_game.set("_current_source_card", tidus)
-	_game.call("extra_attacks_from_damage")
+	_game.call("extra_attacks_from_damage", 1, tidus)
 	print("[B1] Tidus extra attacks: %d for 2 damage" % tidus.extra_attacks)
 	_expect(tidus.extra_attacks == 1, "Tidus 163 gets one extra attack at 2 points of damage")
 
@@ -319,7 +316,7 @@ func _ready() -> void:
 	_game.add_child(ifrit)
 	hand.add_card(ifrit)
 	var stack_before: int = _stack.stack_length()
-	await _game.call("cast_summon_for_free", {"is_type": "Summon", "is_cost_at_most": 6})
+	await _game.call("cast_summon_for_free", 1, {"is_type": "Summon", "is_cost_at_most": 6})
 	var parked = _stack.get("summon_casting_card")
 	print("[B1] Summoner: hand still has Ifrit=%s, stack %d -> %d, parked=%s" % [hand.cards.has(ifrit),
 		stack_before, _stack.stack_length(), parked.card_name if parked != null else "none"])

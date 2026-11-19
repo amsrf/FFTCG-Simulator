@@ -94,16 +94,16 @@ func _ready() -> void:
 		_expect(zidane.can_be_chosen_by(null),
 			"and with no source named the printed rule does not apply, unlike a GRANT, which is unconditional")
 
-	# --- apply_effect chooses its own targets, ONCE -------------------------------------------------
-	var snapshot: Array = game._cards_matching({"is_type": "Forward", "controller": "player"})
-	print("[Immunity] apply_effect snapshot: %d player Forward(s)" % snapshot.size())
+	# --- a set selected ONCE is a snapshot; a fresh query sees later arrivals ------------------------------
+	var snapshot: Array = game._cards_matching({"is_type": "Forward", "controller": "player"}, mine)
+	print("[Immunity] snapshot: %d player Forward(s)" % snapshot.size())
 	_expect(snapshot.has(mine) and snapshot.has(theirs), "the block selects the player's own Forwards")
 	var arrival: Card = game.create_card(fire_forward, "player")
 	field.add_child(arrival)
 	field.play_card(arrival, false, false)
 	_expect(not snapshot.has(arrival),
 		"and a Forward that arrives LATER is not in it — the set is a snapshot, not a standing effect")
-	_expect(game._cards_matching({"is_type": "Forward", "controller": "player"}).has(arrival),
+	_expect(game._cards_matching({"is_type": "Forward", "controller": "player"}, mine).has(arrival),
 		"while a fresh query does see it, which is the difference between a snapshot and a rule")
 
 	_finish()

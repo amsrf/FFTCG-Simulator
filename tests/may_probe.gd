@@ -170,7 +170,6 @@ func _ready() -> void:
 	# --- C. free play from hand (Vaan) --------------------------------------------------------------------
 	_player.hand_pick = CHOCOBO
 	_player.yes = true
-	_game.set("_current_controller", "player")
 	var hand_before: int = _hand.cards.size()
 	_field.execute_card_effect(vaan, "when_enter_field")
 	await get_tree().process_frame
@@ -214,7 +213,6 @@ func _ready() -> void:
 	for _i in range(5):
 		await get_tree().process_frame
 	var player_prompts_before: int = _player.prompts.size()
-	_game.set("_current_controller", "player")
 	_field.execute_card_effect(leon, "when_enter_field")
 	await get_tree().process_frame
 	_stack.resolve_top_effect()

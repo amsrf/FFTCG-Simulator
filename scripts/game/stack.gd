@@ -1713,27 +1713,12 @@ func _on_assistant_target_complete() -> void:
 	assistant.show_pass_priority_button()
 	request_priority.emit()
 
-## The damage pool for an ability that says "divide N damage among them", or -1 when it says no such thing.
-## Read from the SKILL DEF of the source, because the stack object is a proxy with no skill array of its own.
+## The damage pool for an ability that says "divide N damage among them" (AbilitySpec.divide_total), or -1.
 func _divide_damage_total(proxy: Card) -> int:
 	if proxy == null:
 		return -1
 	if proxy.ability_spec != null and proxy.ability_spec.divide_total > 0:
 		return proxy.ability_spec.divide_total
-	var def: Dictionary = proxy.skill_def_override
-	if def.is_empty():
-		if proxy.skill_activation_index < 0:
-			return -1
-		var src: Card = proxy.effect_source
-		if src == null:
-			return -1
-		def = src.activation_skill(proxy.skill_activation_index)
-	if def.is_empty():
-		return -1
-	for instruction in def.get("instructions", []):
-		if str(instruction.get("name", "")) == "divide_damage":
-			var args: Array = instruction.get("argument", [])
-			return int(args[0]) if not args.is_empty() else 0
 	return -1
 
 func confirm_skill_without_target_then_priority() -> void:

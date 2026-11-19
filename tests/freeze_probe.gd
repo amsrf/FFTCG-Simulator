@@ -7,10 +7,11 @@ extends Node
 ##   1. a frozen, tapped card is NOT untapped, and the status is consumed
 ##   2. the very next Active Phase DOES untap it — the freeze does not linger
 ##   3. turn_end() does not erase the status, so applying it on the victim's own turn still works
-##   4. untap_targets("Activate") still works on a frozen card — Freeze denies the Phase, not activation
+##   4. an ability's untap ("Activate") still works on a frozen card — Freeze denies the Phase, not activation
 ##   5. dull_targets taps what it is pointed at
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -69,17 +70,15 @@ func _ready() -> void:
 	card = _new_card()
 	card.tap()
 	card.status_effects["frozen"] = 1
-	_game.set("_targets", [card])
-	_game.untap_targets()
-	_expect(not card.tapped, "untap_targets still works on a frozen card — Freeze denies the Phase, not activation")
+	EFFECT_CONTEXT.new(_game, card, "test").untap([card])
+	_expect(not card.tapped, "an ability's untap still works on a frozen card — Freeze denies the Phase, not activation")
 	_field.remove_card(card)
 
-	# --- 5: dull_targets is the instruction the data was missing -----------------------------------------
+	# --- 5: an ability can dull a card ----------------------------------------------------------------------
 	card = _new_card()
 	_expect(not card.tapped, "the card starts untapped")
-	_game.set("_targets", [card])
-	_game.dull_targets()
-	_expect(card.tapped, "dull_targets taps it")
+	EFFECT_CONTEXT.new(_game, card, "test").dull([card])
+	_expect(card.tapped, "dull taps it")
 	_field.remove_card(card)
 
 	_finish()

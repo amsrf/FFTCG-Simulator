@@ -62,44 +62,8 @@ signal desync_detected(turn: int, local_hash: String, remote_hash: String)
 ## turn number -> hash of the board as that turn began.
 var turn_hashes: Dictionary = {}
 
-var _current_source_card: Card
-var _current_controller: String
-var _targets = []
-## Cards selected by `choose_card` instructions in the current chain, so `apply_effect(..., exclude_chosen)` can
-## remove them from a later mass target set. Cleared with the rest of the instruction state.
-var _chosen_cards: Array = []
-## AERITH 1-064. "When Aerith enters the field, choose up to 3 Backups you control other than Aerith. Activate them." —
-## which here is simply: untap each one that was picked.
-##
-## The instruction carries NO argument, because the effect's TARGETS are the argument: `_targets` is filled from the
-## effect card's own list when its instructions run (see _on_stack_execute_card_effect). It deliberately does NOT read
-## `Field.targeting_picked` — that is the targeting UI's state, and another session can overwrite it before the
-## effect resolves. The effect carries what it was given; nothing has to go looking for it afterwards.
-## THE ONE LOOP. Every "do X to all of them" instruction is the same walk over _targets, so the walk lives here
-## once and the instructions below are just verbs. Adding a verb is one line, not another copy of the loop.
-##
-## `action` is a Card method name, and `argument` is what to pass it — both come from the card data, which is what
-## keeps the JSON readable: a card says dull_targets or damage_targets, not each_target("tap").
-##
-## is_on_field() is required rather than defensive: an effect that resolves after a card died must not call into it.
-##
-## STATE-BASED ACTIONS RUN AFTER ALL TARGETS, ALWAYS — not just after damage. conditional_power and criteria like
-## is_tapped mean any verb can be lethal ("tapped cards lose 3000 power" makes TAPPING lethal), so every verb settles.
-##
-## Once, outside the loop — never inside: a card destroyed by the first target must still receive the effect as
-## that target, not vanish mid-iteration and change what the rest take.
-## "Your opponent discards N cards from their hand."
-##
-## THE DISCARDER CHOOSES. That is the rule, and it is also why this is a seam rather than a one-liner: in a real
-## player-vs-player match the victim is another PERSON, so the pick has to go to whoever owns the hand. The local
-## player gets the hand-selection UI the S cost already uses; every other player is asked through its agent
-## (choose_discard), so a RemoteAgent can answer it over the network later.
-func opponent_discards(count: int = 1) -> void:
-	# THE VICTIM IS THE OTHER SEAT. "player" is P1 and "opponent" is P2, so a card controlled by P1 makes P2
-	# discard and vice versa. Getting this backwards is silent — the wrong hand loses a card and the human sees
-	# nothing at all, which is exactly how it shipped the first time.
-	var caster: int = 1 if _current_controller == Card.PLAYER else 2
-	await discard_from(3 - caster, count)
+## (There is no ambient "current source / controller / targets" state: every handler takes who is acting explicitly,
+## and EffectContext passes it. See EffectContext's handler wrappers.)
 
 ## The caster discards — "draw 1 card then discard 1 card from your hand" (Vaan). The mirror of opponent_discards(),
 ## and it goes through the same agent seam, so a human picks from their hand and the AI picks its cheapest.
@@ -121,8 +85,8 @@ func mill_player(player_id: int, count: int = 1) -> void:
 ##
 ## No cost is paid — the card's text says PLAY, not CAST — and the choice goes through the agent seam, so a human
 ## gets the same search window over their hand while an AI simply takes the first legal card.
-func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
+func play_from_hand(caster_id: int, source: Card, criteria: Dictionary = {}, by: String = "self") -> void:
+	var owner_id: int = caster_id
 	if by == "opponent":
 		owner_id = 3 - owner_id
 	var owner_hand: Hand = hand_for(owner_id)
@@ -133,7 +97,7 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 	for card in owner_hand.cards:
 		if card == null or not is_instance_valid(card):
 			continue
-		if not card.matches_criteria(criteria, _current_source_card):
+		if not card.matches_criteria(criteria, source):
 			continue
 		candidates.append(card)
 		ids.append(card.id)
@@ -168,8 +132,7 @@ func play_from_hand(criteria: Dictionary = {}, by: String = "self") -> void:
 ##
 ## The returning card is reset first (see Card.reset_for_field_arrival): it is a new permanent, not the broken
 ## object that went to the pile, so damage, statuses and temporary buffs must not ride back with it.
-func play_from_break_zone(criteria: Dictionary = {}) -> void:
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
+func play_from_break_zone(owner_id: int, source: Card, criteria: Dictionary = {}) -> void:
 	var pile = player_graveyard if owner_id == 1 else opponent_graveyard
 	if pile == null:
 		return
@@ -178,7 +141,7 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 	for card in pile.graveyard_cards:
 		if card == null or not is_instance_valid(card):
 			continue
-		if not card.matches_criteria(criteria, _current_source_card):
+		if not card.matches_criteria(criteria, source):
 			continue
 		candidates.append(card)
 		ids.append(card.id)
@@ -205,9 +168,6 @@ func play_from_break_zone(criteria: Dictionary = {}) -> void:
 	picked.reset_for_field_arrival()
 	field.play_card(picked, owner_id == 2, true, true, false, false, slot)
 
-func opponent_mills(count: int = 1) -> void:
-	var caster: int = 1 if _current_controller == Card.PLAYER else 2
-	await mill_player(3 - caster, count)
 
 func discard_from(player_id: int, count: int = 1) -> int:
 	var owner_hand: Hand = hand_for(player_id)
@@ -240,9 +200,8 @@ func discard_from(player_id: int, count: int = 1) -> int:
 
 ## "Draw 1 card, then discard 1 card from your hand." The discard is an INSTRUCTION, not a skill cost, so it needs its
 ## own entry point; and it must set the success latch because Bahamut Fury branches on whether the discard happened.
-func break_zone_to_hand(filter: Dictionary = {}) -> void:
+func break_zone_to_hand(owner_id: int, filter: Dictionary = {}) -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var side: PlayerSide = side_for(owner_id)
 	var pile = side.graveyard if side != null else null
 	if pile == null or pile.graveyard_cards.is_empty():
@@ -270,41 +229,40 @@ func break_zone_to_hand(filter: Dictionary = {}) -> void:
 		owner_hand.add_card(found)
 	_last_action_succeeded = true
 
-## Choose one card from a player's Break Zone. `chooser` is "self" or "opponent"; the pick is remembered in
-## `_chosen_cards`. The picker is the same search window used for deck searching, because the Break Zone is a pile.
-func choose_break_zone_card(criteria: Dictionary, chooser: String = "self", _prompt: String = "Choose a card in your Break Zone") -> void:
-	var caster_id: int = 1 if _current_controller == Card.PLAYER else 2
+## Choose one card from a player's Break Zone and RETURN it (null when nothing was chosen). `chooser` is "self" or
+## "opponent", relative to `caster_id`. The caller (EffectContext) remembers the pick for the next step.
+func choose_break_zone_card(caster_id: int, criteria: Dictionary, chooser: String = "self",
+		_prompt: String = "Choose a card in your Break Zone") -> Card:
 	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
 	var side: PlayerSide = side_for(chooser_id)
 	var pile = side.graveyard if side != null else null
 	if pile == null or pile.graveyard_cards.is_empty():
-		return
+		return null
 	var candidates: Array = []
 	for card in pile.graveyard_cards:
 		if _matches_search_filter(card, criteria):
 			candidates.append(card)
 	if candidates.is_empty():
-		return
+		return null
 	var ids: Array = []
 	for card in candidates:
 		ids.append(card.id)
 	var agent: Agent = agent_for(chooser_id)
 	if agent == null:
-		return
+		return null
 	var chosen_id: int = await agent.choose_break_zone_card(chooser_id, ids, {})
 	var chosen: Card = null
 	for card in candidates:
 		if card.id == chosen_id:
 			chosen = card
 			break
-	if chosen == null:
-		return
-	_chosen_cards.append(chosen)
-	LOG.info("Choose", "P%d chose %s from the Break Zone" % [chooser_id, chosen.card_name])
+	if chosen != null:
+		LOG.info("Choose", "P%d chose %s from the Break Zone" % [chooser_id, chosen.card_name])
+	return chosen
 
-## Put every card chosen by earlier choose_break_zone_card instructions into its owner's hand.
-func put_card_into_hand(_argument = null) -> void:
-	for card in _chosen_cards.duplicate():
+## Put each of `cards` (chosen earlier with choose_break_zone_card) from its Break Zone into its owner's hand.
+func put_card_into_hand(cards: Array) -> void:
+	for card in cards:
 		if card == null or not is_instance_valid(card):
 			continue
 		var owner_id: int = 1 if card.controller == Card.PLAYER else 2
@@ -320,39 +278,10 @@ func put_card_into_hand(_argument = null) -> void:
 			owner_hand.add_card(card)
 	_last_action_succeeded = true
 
-## Generic "choose one card from the field" instruction. `chooser` is "self" (the effect's controller) or
-## "opponent". Criteria are evaluated relative to the effect source, and the chosen card is remembered in
-## `_chosen_cards` so a later apply_effect can exclude it.
-func choose_card(criteria: Dictionary, chooser: String = "self", prompt: String = "Choose a card") -> void:
-	var caster_id: int = 1 if _current_controller == Card.PLAYER else 2
-	var chooser_id: int = 3 - caster_id if chooser == "opponent" else caster_id
-	var source: Card = _current_source_card
-	var candidates: Array = []
-	for card in field.get_all_cards():
-		if card.matches_criteria(criteria, source):
-			candidates.append(card)
-	if candidates.is_empty():
-		return
-	var agent: Agent = agent_for(chooser_id)
-	var chosen: Card = null
-	if agent != null:
-		chosen = await agent.choose_field_card(chooser_id, candidates, prompt)
-	if chosen == null or not candidates.has(chosen):
-		chosen = candidates[0]
-	_chosen_cards.append(chosen)
-	LOG.info("Choose", "P%d chose %s" % [chooser_id, chosen.card_name])
 
-## Generic "set _targets from a criteria block" instruction. `exclude_chosen` removes cards selected by earlier
-## choose_card instructions (Cloud of Darkness 158).
-func apply_effect(criteria: Dictionary, exclude_chosen: bool = false) -> void:
-	_targets = _cards_matching(criteria)
-	if exclude_chosen:
-		_targets = _targets.filter(func(c): return not _chosen_cards.has(c))
-	_last_action_succeeded = not _targets.is_empty()
 
 ## PUT, not BREAK: triggers when_enter_break_from_field, never when_break.
-func look_top_may_bottom() -> void:
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
+func look_top_may_bottom(owner_id: int) -> void:
 	var d = deck if owner_id == 1 else opponent_deck
 	if d == null or d.deck_cards.is_empty():
 		_last_action_succeeded = false
@@ -370,9 +299,8 @@ func look_top_may_bottom() -> void:
 
 ## "Draw 1 card, then place 1 card from your hand at the bottom of your deck." Choosing the card is the agent's job;
 ## moving it is the rules layer's.
-func put_hand_card_on_bottom() -> void:
+func put_hand_card_on_bottom(owner_id: int) -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var owner_hand: Hand = hand_for(owner_id)
 	var d = deck if owner_id == 1 else opponent_deck
 	if owner_hand == null or d == null or owner_hand.cards.is_empty():
@@ -394,9 +322,8 @@ func put_hand_card_on_bottom() -> void:
 ## "Cast 1 Summon of cost 6 or less from your hand without paying its cost." The card goes through the SAME charge
 ## path as a paid cast; we simply complete the payment stage immediately, with nothing selected. That keeps the
 ## Summon on the stack (so it can be countered) and its targeting flow intact.
-func cast_summon_for_free(criteria: Dictionary = {}) -> void:
+func cast_summon_for_free(owner_id: int, criteria: Dictionary = {}) -> void:
 	_last_action_succeeded = false
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
 	var owner_hand: Hand = hand_for(owner_id)
 	if owner_hand == null or owner_hand.cards.is_empty():
 		return
@@ -431,48 +358,16 @@ func set_damage_division(split: Array) -> void:
 func clear_damage_division() -> void:
 	_damage_division.clear()
 
-## "Divide 6000 damage among them as you like." The amounts were chosen BEFORE the ability committed (so Cancel
-## could step back to targeting); this applies them to `_targets` in the order they were picked.
-func divide_damage(_total: int = 0) -> void:
-	var amounts: Array = _damage_division.duplicate()
-	_damage_division.clear()
-	for i in range(_targets.size()):
-		var card = _targets[i]
-		if card == null or not is_instance_valid(card) or not card.is_on_field():
-			continue
-		var amount: int = int(amounts[i]) if i < amounts.size() else 0
-		if amount <= 0:
-			continue
-		LOG.info("Divide", "%s takes %d" % [card.card_name, amount])
-		# Through the damage choke point, not suffer_damage directly: 160/171/165 are replacements and must see
-		# every damage event, including divided damage.
-		field.cause_damage(card, amount, _current_source_card, _effect_kind(), _current_controller)
-	enforce_game_state_rules()
 
-## The targets an instruction applies to: all of them, or the ONE at `index`. Staged effects (Hades: dull the
-## Forward, return the Backup) need to say which pick they mean.
-func _selected_targets(index: int = -1) -> Array:
-	if index < 0:
-		return _targets
-	if index < _targets.size():
-		return [_targets[index]]
-	return []
 
-func _each_target(action: String, argument: Array = [], index: int = -1) -> void:
-	for card in _selected_targets(index):
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			card.callv(action, argument)
-	enforce_game_state_rules()
 
 ## KIMAHRI 102. Ronso Rage copies ONE Special Ability from the chosen Forward. With several S abilities the
 ## controller chooses through the same agent seam as normal skill selection; the copied text is stripped of every
 ## activation cost when installed on Kimahri.
-func copy_skill(_argument = null) -> void:
+func copy_skill(source: Card, target: Card) -> void:
 	_last_action_succeeded = false
-	var source: Card = _current_source_card
 	if source == null or not is_instance_valid(source) or not source.is_on_field():
 		return
-	var target: Card = _targets[0] if not _targets.is_empty() else null
 	if target == null or not is_instance_valid(target) or not target.is_on_field():
 		LOG.info("CopySkill", "no valid target")
 		return
@@ -494,19 +389,8 @@ func copy_skill(_argument = null) -> void:
 	LOG.info("CopySkill", "%s copies %s from %s" % [source.card_name, target.card_name, str(specials[chosen].get("text", ""))])
 
 
-func untap_targets(index: int = -1) -> void:
-	_each_target("untap", [], index)
 
-func dull_targets(index: int = -1) -> void:
-	_each_target("tap", [], index)
 
-## DAMAGE TO EVERY TARGET. This is what "deal 3000 damage to all the Forwards opponent controls" needed: the target
-## SET was already handled by apply_effect, but suffer_damage is a CARD method reached through author "target", so
-## it could only ever hit one card.
-func _effect_kind() -> String:
-	if _current_source_card != null and is_instance_valid(_current_source_card) and _current_source_card.type == Card.SUMMON:
-		return "Summon"
-	return "Ability"
 
 ## Promise.all() for animations. Preloaded by path rather than referenced by class name: a class_name added since the
 ## editor last scanned is not in the global cache during a headless run, and this project has been bitten by that
@@ -524,20 +408,19 @@ const ANIMATION_BATCH := preload("res://scripts/vfx/animation_batch.gd")
 ## presentation lags, and the effect does not resolve until every animation has finished.
 ##
 ## Each card goes to ITS controller's hand, which matters as soon as one effect returns cards to different owners.
-func extra_attacks_from_damage() -> void:
-	var owner_id: int = 1 if _current_controller == Card.PLAYER else 2
+## Tidus 163: `source` may attack as many times as its controller's (`owner_id`) damage count.
+func extra_attacks_from_damage(owner_id: int, source: Card) -> void:
 	var side: PlayerSide = side_for(owner_id)
-	if _current_source_card == null or side == null:
+	if source == null or not is_instance_valid(source) or side == null:
 		return
-	_current_source_card.set_extra_attacks(maxi(0, side.damage_count() - 1))
+	source.set_extra_attacks(maxi(0, side.damage_count() - 1))
 	_last_action_succeeded = true
 
 ## Power change to every card matching `criteria`, with NO targeting session — "all the Forwards you control gain
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
 ## say "player"/"your" and still mean the caster's side.
 ## Returns the draw flight (null when nothing was drawn) — see Hand.draw_many().
-func draw_cards(count: int = 1, player_id: int = 0) -> Tween:
-	var owner_id: int = player_id if player_id in [1, 2] else (1 if _current_controller == Card.PLAYER else 2)
+func draw_cards(count: int, owner_id: int) -> Tween:
 	var d = deck if owner_id == 1 else opponent_deck
 	var h: Hand = hand_for(owner_id)
 	if d == null or h == null:
@@ -571,13 +454,12 @@ func power_change_party(amount: int = 0, duration: int = 1) -> void:
 ## Every card on the field matching `block`, in field order — the same evaluator choose_target uses, so an apply_effect
 ## block and a choose_target block mean the same thing by the same keys.
 ##
-## `source` is WHO the criteria are read from, and it defaults to the effect being resolved — because "your"/"player"
-## mean the caster, not a fixed seat. Without it an AI-resolved "all the Backups you control" would hit ours.
-func _cards_matching(block: Dictionary, source: Card = null) -> Array:
-	var from: Card = source if source != null else _current_source_card
+## `source` is WHO the criteria are read from — "your"/"player" mean the caster, not a fixed seat. Without it an
+## AI-resolved "all the Backups you control" would hit ours.
+func _cards_matching(block: Dictionary, source: Card) -> Array:
 	var found: Array = []
 	for c in field.get_all_cards():
-		if c != null and is_instance_valid(c) and c.matches_criteria(block, from):
+		if c != null and is_instance_valid(c) and c.matches_criteria(block, source):
 			found.append(c)
 	return found
 
@@ -586,8 +468,7 @@ func _cards_matching(block: Dictionary, source: Card = null) -> Array:
 ## RULES, at once: the cards leave the deck and wait in `revealed_cards` for the following instruction.
 ## PRESENTATION, queued one entry per card: lifted, turned face-up, held, turned back and hidden. The queue is serial,
 ## so the next card only starts after the previous one has vanished — and nobody is asked to decide until it has.
-func reveal_top(count: int = 1, player_id: int = 0) -> void:
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
+func reveal_top(count: int, owner_id: int) -> void:
 	var d = opponent_deck if owner_id == 2 else deck
 	if d == null:
 		return
@@ -640,48 +521,40 @@ func _show_revealed(card: Card) -> void:
 	if is_instance_valid(card):
 		card.set_hidden(true)
 
-## Check one revealed card against criteria and publish the answer through the instruction latch. The next
-## instruction can use condition "if_last_succeeded" or "if_last_did_not_succeed".
-func check_revealed(index: int = 0, criteria: Dictionary = {}) -> void:
-	if index < 0 or index >= revealed_cards.size():
-		_last_action_succeeded = false
-		return
-	var card: Card = revealed_cards[index]
-	_last_action_succeeded = card != null and is_instance_valid(card) 		and (criteria.is_empty() or card.matches_criteria(criteria, _current_source_card))
 
-## Pick one card from the revealed staging area. The pick is recorded in `_chosen_cards`, exactly like choose_card,
-## so the existing hand/play/bottom instructions can act on it.
-func choose_revealed(criteria: Dictionary = {}, prompt: String = "Choose a revealed card") -> void:
-	var owner_id: int = revealed_owner_id if revealed_owner_id != 0 else (2 if _current_controller == Card.OPPONENT else 1)
+## Pick one card from the revealed staging area and RETURN it (null when none qualifies). `already_chosen` cards are
+## skipped; the caller (EffectContext) remembers the picks for put_chosen_into_hand / put_revealed_on_bottom.
+func choose_revealed(caster_id: int, source: Card, criteria: Dictionary = {}, prompt: String = "Choose a revealed card",
+		already_chosen: Array = []) -> Card:
+	var owner_id: int = revealed_owner_id if revealed_owner_id != 0 else caster_id
 	var candidates: Array = []
 	for card in revealed_cards:
 		if card == null or not is_instance_valid(card):
 			continue
-		if _chosen_cards.has(card):
+		if already_chosen.has(card):
 			continue
-		if criteria.is_empty() or card.matches_criteria(criteria, _current_source_card):
+		if criteria.is_empty() or card.matches_criteria(criteria, source):
 			candidates.append(card)
 	if candidates.is_empty():
 		_last_action_succeeded = false
-		return
+		return null
 	var picked: Card = await agent_for(owner_id).choose_field_card(owner_id, candidates, prompt)
 	if picked == null or not candidates.has(picked):
 		picked = candidates[0]
-	_chosen_cards.append(picked)
 	_last_action_succeeded = true
+	return picked
 
 ## Move the chosen revealed cards to their owner's hand. The card was hidden during the reveal, so restore it and
 ## let Hand own the arrival animation/layout.
-func put_chosen_into_hand(_argument = null) -> void:
+func put_chosen_into_hand(chosen: Array) -> void:
 	var owner_hand: Hand = opponent_hand if revealed_owner_id == 2 else hand
 	if owner_hand == null:
 		return
-	for card in _chosen_cards.duplicate():
+	for card in chosen:
 		if card == null or not is_instance_valid(card) or not revealed_cards.has(card):
 			continue
 		# RULES at once; the flight into the hand is queued behind the reveal that showed it.
 		revealed_cards.erase(card)
-		_chosen_cards.erase(card)
 		owner_hand.take_returned_card(card)
 		Vfx.present(func() -> void:
 			if not is_instance_valid(card):
@@ -693,14 +566,15 @@ func put_chosen_into_hand(_argument = null) -> void:
 
 ## Play the chosen revealed cards. Characters use the normal play path; this is also the hook for Selh'teus-style
 ## reveal-to-play effects.
-func put_revealed_on_bottom(_argument = null) -> void:
+## Every revealed card NOT in `chosen` goes to the bottom of the deck, in reveal order.
+func put_revealed_on_bottom(chosen: Array = []) -> void:
 	var d = opponent_deck if revealed_owner_id == 2 else deck
 	if d == null:
 		return
 	for card in revealed_cards.duplicate():
 		if card == null or not is_instance_valid(card):
 			continue
-		if _chosen_cards.has(card):
+		if chosen.has(card):
 			continue
 		# RULES at once; the card goes back under the deck when the queue reaches it (after its reveal has played).
 		revealed_cards.erase(card)
@@ -732,22 +606,6 @@ func remove_revealed_from_game(index: int = 0) -> void:
 	if revealed_cards.is_empty():
 		revealed_owner_id = 0
 
-## A generic instruction: open a targeting session in the middle of an instruction chain. The cards chosen become
-## the current targets, so the next instruction (dull_targets, damage_targets, ...) acts on them. Used by delayed
-## riders such as Rygdea's "when it is put into the Break Zone, choose an opponent Forward".
-func choose_target(criteria: Dictionary) -> void:
-	var source: Card = _current_source_card
-	if source == null or not is_instance_valid(source):
-		return
-	if not field.has_viable_target(criteria, source, "Ability"):
-		_last_action_succeeded = false
-		return
-	field.request_target(criteria, source, false, "Ability")
-	# A non-local agent completes synchronously inside request_target(); only a local player leaves the list empty.
-	if field.targeting_picked.is_empty():
-		await assistant.target_complete
-	_targets = field.targeting_picked.duplicate()
-	_last_action_succeeded = not _targets.is_empty()
 
 ## Grant a status to EVERY target of the current effect. The multi-target twin of Card.add_status_effect, which an
 ## instruction can only reach one card with — see untap_targets above for the same shape and why it lives here.
@@ -1534,7 +1392,9 @@ var _last_action_succeeded: bool = true
 ##
 ## Unknown conditions are treated as TRUE and printed, so a typo shows up in the log instead of silently deleting an
 ## effect — the failure mode that hurts least.
-func _condition_holds(condition: String) -> bool:
+## `controller` ("player"/"opponent") is whose perspective the condition is judged from: the controller of the
+## ability asking (EffectContext passes its own).
+func _condition_holds(condition: String, controller: String) -> bool:
 	match condition:
 		"", "always":
 			return true
@@ -1543,9 +1403,9 @@ func _condition_holds(condition: String) -> bool:
 		"if_last_did_not_succeed":
 			return not _last_action_succeeded
 	if condition.begins_with("cast_this_turn:"):
-		return cast_this_turn(condition.trim_prefix("cast_this_turn:").strip_edges(), _condition_owner())
+		return cast_this_turn(condition.trim_prefix("cast_this_turn:").strip_edges(), _condition_owner(controller))
 	if condition.begins_with("controls:"):
-		return _controls(condition.trim_prefix("controls:").strip_edges())
+		return _controls(condition.trim_prefix("controls:").strip_edges(), controller)
 	# "forms a party WITH <name> and attacks" (Queen of Eblan + King of Eblan, Chelinka + Yuri). Judged against the
 	# party that is currently attacking, because a party only exists while it attacks.
 	if condition.begins_with("party_has_named:"):
@@ -1557,18 +1417,17 @@ func _condition_holds(condition: String) -> bool:
 	LOG.info("Condition", "unknown condition '%s' — treated as true" % condition)
 	return true
 
-## Whose perspective a condition is judged from: the controller of the ability being resolved. `_current_controller`
-## is set when the effect goes on the stack; fall back to the turn player if a condition is evaluated outside one.
-func _condition_owner() -> int:
-	if _current_controller == Card.PLAYER:
+## Whose perspective a condition is judged from: the controller of the ability asking; the turn player if none.
+func _condition_owner(controller: String) -> int:
+	if controller == Card.PLAYER:
 		return 1
-	if _current_controller == Card.OPPONENT:
+	if controller == Card.OPPONENT:
 		return 2
 	return turn_owner
 
 ## "controls:Laguna" (by name) or "controls:Forward"/"controls:Backup" (by type), for the ability's controller.
-func _controls(spec: String) -> bool:
-	var wanted: String = "player" if _condition_owner() == 1 else "opponent"
+func _controls(spec: String, controller: String) -> bool:
+	var wanted: String = "player" if _condition_owner(controller) == 1 else "opponent"
 	for card in field.get_all_cards():
 		if card.controller != wanted:
 			continue
@@ -1579,20 +1438,7 @@ func _controls(spec: String) -> bool:
 			return true
 	return false
 
-## UNTAP EVERYTHING MATCHING CRITERIA — not just the chosen targets. "Activate all the Backups you control."
-## Deliberately separate from untap_targets(), whose scope is `_targets`; a card that says "all" must not depend on
-## what the player happened to pick.
-func untap_all_matching(criteria: Dictionary = {}) -> void:
-	for card in _cards_matching(criteria):
-		if card != null and is_instance_valid(card) and card.is_on_field():
-			card.untap()
 
-## EACH PLAYER DISCARDS. The ability's controller chooses first, then the other player — the usual order for a
-## symmetric discard, and each side goes through its own agent so a human gets a picker and the AI picks its cheapest.
-func each_player_discards(count: int = 1) -> void:
-	var starter: int = 1 if _current_controller == Card.PLAYER else 2
-	await discard_from(starter, count)
-	await discard_from(3 - starter, count)
 
 
 
@@ -1828,8 +1674,6 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	elif stack.stack_length() > 0:
 		await stack.resolve_top_effect()
 
-	# The burst is spent; leave nothing behind for the next effect to inherit.
-	_targets = []
 
 
 func _end_damage_zoom() -> void:
@@ -1874,14 +1718,14 @@ func _return_to_menu_after_delay() -> void:
 	await get_tree().create_timer(2.5).timeout
 	MatchSetup.go_to_menu()
 
-func take_damage_to_controller(amount: int = 1) -> void:
-	# Controller-relative damage for effects (e.g. Dark Knight death trigger).
-	if _current_source_card == null:
+func take_damage_to_controller(source: Card, amount: int = 1) -> void:
+	# Controller-relative damage for effects (e.g. Dark Knight death trigger): `source`'s controller takes it.
+	if source == null or not is_instance_valid(source):
 		return
-	if _current_source_card.controller == Card.PLAYER:
-		player.take_damage(amount, _current_source_card)
+	if source.controller == Card.PLAYER:
+		player.take_damage(amount, source)
 	else:
-		opponent.take_damage(amount, _current_source_card)
+		opponent.take_damage(amount, source)
 
 func set_blocker(card):
 	# Persist it on the Field: the instruction chain ends before DAMAGE_RESOLUTION reads the blocker, so a transient
@@ -2513,15 +2357,6 @@ func remove_card_from_game(card: Card) -> void:
 		_send_card_to_removed(card)
 
 
-func remove_targets_from_game(_argument = null) -> void:
-	for card in _targets:
-		if card == null or not is_instance_valid(card):
-			continue
-		LOG.info("RemoveFromGame", str("", card.card_name))
-		if card.is_on_field():
-			move_card_from_field(card, Card.Zone.REMOVED, "REMOVE")
-		else:
-			_send_card_to_removed(card)
 
 ## True when `card`'s controller already controls a Character with the same name. Used BEFORE a card is parented onto
 ## the field, so the duplicate never enters and no enter-the-field trigger runs for it.
@@ -2960,12 +2795,12 @@ func _refresh_block_declaration_button() -> void:
 ##
 ## `suppress_auto` is passed to Field.play_card for field destinations, so cards played this way enter without
 ## firing their own enter-the-field auto-abilities — exactly Golbez's "Their auto-abilities will not trigger."
-func search_deck_multi(request, filter: Dictionary = {}, destination: String = "field",
-		suppress_auto: bool = true, player_id: int = 0, prompt: String = "Choose cards") -> void:
+func search_deck_multi(request, filter: Dictionary, destination: String,
+		suppress_auto: bool, player_id: int, prompt: String = "Choose cards") -> void:
 	_last_action_succeeded = false
 	if request == null:
 		return
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
+	var owner_id: int = player_id
 	var deck_node = deck if owner_id == 1 else opponent_deck
 	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null or deck_node.deck_cards.is_empty():
@@ -3021,13 +2856,13 @@ func search_deck_multi(request, filter: Dictionary = {}, destination: String = "
 	_last_action_succeeded = true
 
 
-func search_deck(filter: Dictionary, destination: String = "hand", tapped: bool = false, player_id: int = 0) -> void:
+func search_deck(filter: Dictionary, destination: String, tapped: bool, player_id: int) -> void:
 	# Untyped on purpose: `Deck` has no class_name, so naming the type here would be a parse error — and a
 	# script that fails to parse takes the whole game scene down with it, which is exactly what happened.
 	_last_action_succeeded = false
 	# DEFAULT TO P1 when no controller has been set: direct/test callers have no effect source, and the old
 	# implementation was always the Player deck. An explicit "opponent" still selects P2.
-	var owner_id: int = player_id if player_id in [1, 2] else (2 if _current_controller == Card.OPPONENT else 1)
+	var owner_id: int = player_id
 	var deck_node = deck if owner_id == 1 else opponent_deck
 	var hand_node: Hand = hand_for(owner_id)
 	if deck_node == null or hand_node == null:
@@ -3107,8 +2942,7 @@ func _matches_search_filter(card: Card, filter: Dictionary) -> bool:
 ##
 ## The zone change runs BEFORE it is placed, so it arrives with the field's scale, rotation and readout rather than
 ## whatever it was wearing in the pile — the same order Graveyard.add_card uses in the other direction.
-func return_from_break_zone(tapped: bool = true) -> void:
-	var card: Card = _current_source_card
+func return_from_break_zone(card: Card, tapped: bool = true) -> void:
 	if card == null or not is_instance_valid(card):
 		return
 	var home = null

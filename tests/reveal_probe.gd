@@ -76,7 +76,7 @@ func _place(id: int, controller: String = "player") -> Card:
 
 func _check_reveal_and_move() -> void:
 	_seed_deck([41, 43, 47])
-	await _game.reveal_top(2)
+	await _game.reveal_top(2, 1)
 	_expect(_game.revealed_cards.size() == 2, "reveal_top(2) leaves two cards in revealed_cards")
 	_expect(_game.revealed_cards[0].id == 41 and _game.revealed_cards[1].id == 43,
 		"revealed_cards preserves top-to-bottom order")
@@ -85,12 +85,10 @@ func _check_reveal_and_move() -> void:
 	_expect(not _game.revealed_cards[0].visible
 		and _game.revealed_cards[0].process_mode == Node.PROCESS_MODE_DISABLED,
 		"a revealed card is hidden and inert after its display")
-	_game.check_revealed(0, {"is_type": "Forward"})
-	_expect(_game._last_action_succeeded, "check_revealed sees a Forward")
-	_game.check_revealed(0, {"is_type": "Backup"})
-	_expect(not _game._last_action_succeeded, "and rejects the same card as a Backup")
-
 	var ctx = EFFECT_CONTEXT.new(_game, _game.revealed_cards[0], "test")
+	_expect(ctx.check_revealed(0, CARD_QUERY.new().of_type("Forward")), "check_revealed sees a Forward")
+	_expect(not ctx.check_revealed(0, CARD_QUERY.new().of_type("Backup")), "and rejects the same card as a Backup")
+
 	await ctx.choose_revealed(CARD_QUERY.new().of_type("Forward"), "Choose one")
 	await get_tree().process_frame
 	ctx.put_chosen_into_hand()
@@ -107,7 +105,7 @@ func _check_reveal_and_move() -> void:
 		"the rest go under the deck in reveal order")
 
 	_seed_deck([31])
-	await _game.reveal_top(1)
+	await _game.reveal_top(1, 1)
 	_game.remove_revealed_from_game(0)
 	_expect(_game.revealed_cards.is_empty(), "remove_revealed_from_game clears the revealed card")
 	_expect(_game.player_removed.graveyard_cards.any(func(c): return c.id == 31),
