@@ -84,9 +84,7 @@ func _ready() -> void:
 	_expect(pile.graveyard_cards.size() == opp_pile_before + 1, "Thief (69): and it lands in the Break Zone")
 
 	# --- data shape for 70 and 89 ---------------------------------------------------------------------------
-	var effects: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/card_effects.json"))
-	_expect(effects.get("70", {}).has("when_enter_field")
-		or FileAccess.file_exists("res://assets/effects/card_70.gd"), "Thief (70) has an ETB entry")
+	_expect(FileAccess.file_exists("res://assets/effects/card_70.gd"), "Thief (70) has its ETB in code")
 	var rikku_effect = load("res://assets/effects/card_89.gd").new()
 	var rikku_specs: Array = rikku_effect.activated_abilities()
 	_expect(rikku_specs.size() == 2, "Rikku (89) has two code abilities")

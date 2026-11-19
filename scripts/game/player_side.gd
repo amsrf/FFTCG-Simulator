@@ -82,11 +82,3 @@ func damage_count() -> int:
 func is_defeated() -> bool:
 	return damage_count() >= DEFEAT_DAMAGE
 
-func may_play_for_free(card: Card) -> void:
-	# "You may play ... from your hand onto the field dull" resolution.
-	if card == null or not hand.cards.has(card):
-		return
-	hand.remove_card_for_free_play(card)
-	var field: Field = get_parent().get_node("Field") as Field
-	field.play_card(card, false, true)
-	card.tap()

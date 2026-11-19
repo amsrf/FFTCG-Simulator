@@ -134,12 +134,10 @@ func _ready() -> void:
 	await _game.discard_from(2, 3)
 	_expect(ai_hand.cards.is_empty(), "asking an empty hand to discard three times is a no-op, not a crash")
 
-	# --- the data is present ---------------------------------------------------------------------------
-	var db = CardDatabase.card_effects
-	_expect((db.has("33") or FileAccess.file_exists("res://assets/effects/card_33.gd"))
-		and (db.has("51") or FileAccess.file_exists("res://assets/effects/card_51.gd")),
-		"cards 33 (Argath) and 51 (Nooj) carry the effect")
-	print("[DiscardProbe] 33 -> %s" % str(db.get("33", {})))
+	# --- the effects exist -----------------------------------------------------------------------------------
+	_expect(FileAccess.file_exists("res://assets/effects/card_33.gd")
+		and FileAccess.file_exists("res://assets/effects/card_51.gd"),
+		"cards 33 (Argath) and 51 (Nooj) carry the effect in code")
 
 	_finish()
 

@@ -121,8 +121,14 @@ use from card code.
   `on_activation(ctx)` is reserved but not wired into the activation pipeline yet.
 - CP payment is EXACT (rules 11.2.2/11.2.2.2). Once `Assistant.payment_is_full()` is true, mana-card selection is
   ignored. The only overpay is one hand card producing 2 CP against a 1-CP gap.
-- `assets/card_effects.json` no longer carries card entries. It is a
-  `_definitions` reference only; every card effect lives under `assets/effects/card_<id>.gd`.
+- **Card abilities are code only.** Every card effect lives under `assets/effects/card_<id>.gd`. The per-card JSON
+  file (`assets/card_effects.json`), its loader, `Card.card_effects` and every JSON fallback branch were REMOVED
+  (no `card_effects`, `is_key_word_in_card_effect`, JSON `triggers` array, `begin_triggered_ability`,
+  `_resolve_event_trigger`). What remains of the old engine is the instruction EXECUTOR (`_execute_instructions`):
+  a few code effects still hand it a list (a status's `on_enter_break_zone` payload: Cid 72/73, 192, Rygdea 211),
+  `Card.declare_blocker()` uses it, and `EffectContext` calls some old instruction handlers directly. A stack card
+  with no code effect resolves to nothing (with a warning). `effects_data_probe` checks every instruction entry left
+  in the code effects resolves to a real method.
 - Code-defined event triggers filter through `CardEffect.trigger_specs()`, not an `event_matches()` method. A
   `TriggerSpec` declares the event, handler, optional `CardQuery` on the event card, destination, player scope and
   active requirement; the engine evaluates it before creating a stack object. Once-per-turn triggers use
@@ -155,8 +161,6 @@ use from card code.
   Add to that list rather than teaching each keyword getter a new source.
 - `return_self` is a commit-time ability cost: the source can be in hand when the ability resolves, so never find Game
   by a fixed two-level parent walk. `Card.make_effect_context()` searches ancestors for the Game seam methods.
-- Damage-to-player triggers must branch on `effect_handles_event()` before calling `begin_triggered_ability()`;
-  the latter only knows JSON. Auron was the last target-dependent card blocked by this.
 - Hand-play effects use `EffectContext.may_play_from_hand()`: shortlist, may, choose, play for free, optional dull.
 - Summon targets are chosen BEFORE the Summon enters `Stack.cards`, and are stored on the Summon card itself in
   `effect_targets`. `_on_stack_execute_card_effect()` passes those same picks to `when_cast(ctx)`; do not re-target at
@@ -383,9 +387,9 @@ them appear hidden or shifted.
 
 ### Ability nullification (Wakka 216)
 
-`Card.card_effects` is a read-time view, not the raw printed data. While `status_effects` contains `abilities_nullified`
-it returns an empty dictionary; `_printed_effects` holds the real data and comes back when the status expires. Do not
-clear the shared JSON or mutate the printed effects.
+While `status_effects` contains `abilities_nullified`, `Card.abilities_enabled()` is false, and every reader of the
+card's code effect asks it (hooks, keywords, auras, costs, triggers). Nothing is mutated; the abilities come back when
+the status expires.
 
 Nullification must also be respected by things that registered earlier: `conditional_power`, `power_per`, auras,
 party Brave and entry rules all check `abilities_enabled()`, and the applying instruction recomputes those systems.
@@ -395,8 +399,7 @@ Power setting uses `Card.set_power_value()`, a temporary `power_change` delta, s
 
 ### Copied skills (Kimahri 102)
 
-A copied Special Ability lives in `Card.copied_skill` (one slot, empty = none). Do **not** append it to
-`card_effects["skill"]`; use `Card.activation_skills()`, which is the single activation list (printed + copied). The
+A copied Special Ability lives in `Card.copied_skill` (one slot, empty = none); use `Card.activation_skills()`, which is the single activation list (printed + copied). The
 copy strips `cost`, `tap`, `s_cost`, `discard` and `sacrifice` but keeps `only_*` restrictions and all effect data.
 
 The stack proxy snapshots the chosen definition in `skill_def_override`. That is required because an ability on the
@@ -515,29 +518,18 @@ Dynamic keywords now come from `CardEffect.properties(ctx)` and flow through the
 `conditional_status` dictionary. Return `["brave"]` only while the condition holds (Tidus + Yuna), so the grant
 disappears as soon as the board changes.
 
-### Board-wide events use the `triggers` array
+### Board-wide events
 
-`Card.card_effects["triggers"]` is an array of event watchers, separate from the printed `when_*` keywords:
+Board-wide events (a player took damage, a card left the field, a Summon was cast, a Forward attacked) are code
+abilities like any other: a `TriggerSpec` on the event with its filters, enqueued by `Field.trigger_event()` →
+`Stack.enqueue_code_triggers()` and resolved at the stack (either player may respond first). The JSON `triggers`
+array that used to carry them is gone.
 
-* Events: `damage_received`, `card_left_field`, `summon_cast`, `forward_attacks`.
-* `filter` is criteria on the event card from the trigger owner's perspective; `damage_received` has no card and only
-  compares `controller`.
-* `target` controls the default instruction target: `source` (default), `event` (the card in the event context), or
-  `none`. `choose_target` replaces it with a targeting session.
-* `once_per_turn` is keyed by card instance + trigger index + `Game.turn_number`, so no reset pass is needed.
-* Dispatch points: `Game._on_player_side_damaged`, `Game._send_card_to_graveyard` (only when `current_zone` was FIELD
-  before the move), `Stack.cast_card` for Summons, and `Field.execute_card_attack`.
 * **A non-local agent finishes targeting inside `request_target()`.** `AIAgent.choose_target()` calls
   `set_target_card()` + `on_target_complete()` synchronously, so the signal is already spent when `request_target()`
   returns. Check `targeting_picked` first and only await `target_complete` when it is still empty; otherwise the
   trigger hangs forever.
-* Event triggers are **triggered abilities and go on the stack**. `Field.trigger_event()` only matches and enqueues
-  an effect copy; `Game._resolve_event_trigger()` does `may`, target selection and instructions at resolution. The
-  priority loop therefore lets either player respond first. Do not resolve an event trigger inline.
 * The optional Confirm/Refuse prompt pushes `OPTIONAL_CHOICE`; otherwise the pass-phase button can appear over it.
-* Event-trigger resolution must end its targeting session. `Game._on_stack_execute_card_effect` calls
-  `Field.finish_targeting_state()` before AND after `_resolve_event_trigger()`; without the second call the last locked
-  arc and the orange pick ring outlive Cecil's effect.
 
 ### Costs are read through Rules.effective_cost only
 
@@ -550,8 +542,7 @@ Cost modifiers are board queries, not payment-time special cases:
   the floor is not raised.
 * The payment modal and the AI both call `effective_cost()`. Never add a second cost calculator.
 
-187/213 currently carry only their cost piece in `card_effects.json` and remain in `NEEDS_CODE` until their other
-abilities land.
+187/213 remain in `NEEDS_CODE` until their abilities land in code.
 
 ### B3 rules: targeting priority, per-rule ledgers, owner-aware searches
 
@@ -627,9 +618,6 @@ separate status checked before the scan.
 Yuna 176's `break_zone_exile` is auto-accepted (known simplification: the “may” would need an async pre-break step);
 it is gated on `current_zone == FIELD`, so unique-name duplicates from hand/stack are not exiled.
 
-`assets/card_effects.json` carries a top-level `_definitions` object documenting the context, modifier schema,
-conditions, targets, triggers, skill fields, instructions and statuses. Update it when adding new vocabulary.
-
 B1 introduced these primitives; use them rather than adding one-off code:
 
 * `is_damaged` criteria; `discard_cards`; `break_zone_to_hand`; `look_top_may_bottom`; `put_hand_card_on_bottom`;
@@ -640,12 +628,11 @@ B1 introduced these primitives; use them rather than adding one-off code:
 
 
 `python3 tools/coverage_range.py --check` must print `UNCLASSIFIED: 0`. The `NEEDS_CODE` dict in that tool is the
-roadmap: an id moves out when its primitive lands, and an entry in `card_effects.json` always wins.
+roadmap: an id moves out when its code effect lands. `tools/cards_range.py <first> <last>` prints the raw card texts
+(a `*` marks a card with a code effect).
 
-Data batches live in `tools/card_data_batches.py`; they append to the JSON without reformatting it. `tools/cards_range.py
-<first> <last>` prints the raw card texts the batches are derived from.
-
-When writing data, remember the two placement rules:
+The JSON-era notes below (placement rules, `skill` entries, `when_*` keywords, instruction chains) describe the
+REMOVED per-card JSON data; they are kept only as history of why the code engine looks the way it does:
 
 * `apply_effect` belongs at the **top level** of a trigger, or **inside the specific skill def** it applies to.
   Putting it top-level on a card that also has a choose_target trigger re-targets that trigger's instructions.
@@ -661,8 +648,9 @@ scene-connected / UNREFERENCED.
 
 Two traps it exists to avoid:
 
-* **Instruction handlers are DATA.** `damage_targets`, `draw_cards`, `break_targets`, ... have no `.gd` caller; they
-  are dispatched by name from `assets/card_effects.json`. Search the JSON before declaring one dead.
+* **Instruction handlers can be called by NAME.** A code effect's instruction entry (`{"name": "dull_targets", ...}`
+  in a status payload) or `EffectContext` reaches them, so search `assets/effects/` and `scripts/effects/` for the
+  name before declaring one dead.
 * **A bare name is a call.** `tween_callback(_end_damage_zoom)` and `assistant.set_confirm_button(finish_target)` pass a
   Callable, which a "name(" search does not see.
 
@@ -827,7 +815,7 @@ block every member. A party of Yuffie 86 (no cost 3+) + Yuffie 85 (no cost 4+) i
 
 ## Multiple Abilities on One Card
 
-`card_effects["skill"]` is a list. `Field.begin_skill_activation(card)` with a NEGATIVE index means "ask the owner":
+`Card.activation_skills()` is a list (code AbilitySpecs + a copied skill). `Field.begin_skill_activation(card)` with a NEGATIVE index means "ask the owner":
 one entry activates directly, 2+ open `skill_choice.tscn` through `Agent.choose_skill(player_id, card, skills,
 usable)`. An explicit index still bypasses the picker.
 
@@ -951,7 +939,7 @@ It prints a `[ArrowProbe]` report with a `RESULT:` line, so pass/fail needs no i
 | `battle_field.gd` (`Field`) | Per-player front/back card arrays, `play_card()` + ETB, auras, conditional-power registry, targeting, break detection, `end_phase_cleanup()`. |
 | `stack.gd` (`Stack`) | Stack list + effect copies; skill/summon/S-cost flows. `resolve_top_effect()` awaits `resolution_complete`. |
 | `assistant.gd` (`Assistant`) | All modal UI via `show_modal()`; pass-priority button; mana accumulator + `can_pay_cost()`. |
-| `scripts/card.gd` (`Card`) | Card model + per-card UI/state. Power/damage, status effects, `power_array` buffs, `card_effects`, targeting predicates (`is_type`, `is_element`, `check_controller`, `is_named`, `is_cost_lower_than`). |
+| `scripts/card.gd` (`Card`) | Card model + per-card UI/state. Power/damage, status effects, `power_array` buffs, the code effect (`effect()`), targeting predicates (`is_type`, `is_element`, `check_controller`, `is_named`, `is_cost_lower_than`). |
 | `power_display.gd` | The `PowerDisplay` Label3D on each card; shows `power/accumulated_damage`. |
 | `scripts/hand.gd` (`Hand`) | Hand layout, mana selection, choose-card mode, `charge()`/`discard_card()`. |
 | `scripts/player_side.gd` (`PlayerSide`) | Player-level zones; `take_damage()` moves deck cards into the Damage Zone. |
@@ -959,7 +947,7 @@ It prints a `[ArrowProbe]` report with a `RESULT:` line, so pass/fail needs no i
 | `scripts/presentation.gd` + `tests/determinism_probe.tscn` | Rules vs. animation seam (toward online play). Every animation-only wait in the rules goes through `PRESENTATION.wait()`; `PRESENTATION.fast_mode` (or `-- --fast`) skips them. Decision waits never use it. Rules read `Card.is_on_field()` (= `current_zone`), visuals read `is_drawn_on_field()` (= parent). Rule randomness only from `Game.rng` (seeded by `config.seed`). The determinism probe plays a seeded AI-vs-AI match (`player_type: ai`) in both modes and diffs the board. |
 | Card input (`on_card_grabbed` / `on_card_released` / `on_card_hovered`) | Card forwards click, release and hover to its parent zone (Hand, Field, Stack, Graveyard, DamageZone), which decides what it means there. |
 | `area_3d.gd`, `big_button.gd` | 3D button primitives (signals, hover, enable/disable, autofit). |
-| `assets/card_database.json`, `assets/card_effects.json` | Data loaded by the `CardDatabase` autoload. |
+| `assets/card_database.json` | Printed card data loaded by the `CardDatabase` autoload (abilities are `assets/effects/card_<id>.gd`). |
 
 Node tree + all signal connections live at the bottom of `game.tscn` (read it before changing inter-module wiring).
 
@@ -986,7 +974,7 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - GDScript, **tabs** for indentation.
 - Type explicitly when inference can't work: `var x: Card = ...` not `var x := ...`. `:=` fails on untyped/uninferable expressions (untyped return values, parenthesized boolean expressions) — this has caused repeated parse errors.
 - JSON data must be strict — **no trailing commas**.
-- Card ids are 1-based ints; `string_id` keys into `card_effects`.
+- Card ids are 1-based ints; `assets/effects/card_<id>.gd` is a card's code effect.
 - Element codes are single chars: 火 氷 風 土 雷 水 光 闇 (+ `neutral`). UI text is English.
 - Only `controller == "player"` cards are interactive; guard opponent cards with `controller != "player"`.
 - **Asset paths must match the on-disk case exactly** (`res://scenes/cards/card.tscn`, not `res://Card.tscn`). Windows loads it anyway but exports are case-sensitive — Godot warns with a `Case mismatch opening requested file` line authored to whichever script triggered the load.
@@ -1134,7 +1122,6 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - Opponent hand reuses `Hand.tscn`; behavior is gated by `controller`.
 - `Card.power_label` is `@onready` — null until the card enters the tree.
 - `END_PHASE` has no priority window: cleanup runs immediately, so end-of-turn auto-abilities can't resolve first yet.
-- `activated_ability` in `card_effects.json` is not wired (only `skill` is).
 - Intentionally kept dead code: `scripts/ManaCost.gd`, `Stack.process_next_effect()`, `Game.pop_stack()` / `Stack.pop_stack()`. Since Phase 2 these are also unused: `Game.MOCK_opponent_pass_piority()`, `Game.TEST_blocker()` / `pass_priority()`, `Field.untap_all_cards()`.
 - `ATTACKING` / `BLOCKING` are pushed by `Game._enter_phase` for a **local** declarer only, and popped as soon as the declaration ends (so the pass button returns for the priority round that follows). For a non-local turn owner the phase stays in `INSTANT_SPEED_TIME` on purpose — setting `NO_PRIORITY` there hides the pass button and deadlocks the priority loop.
 - **Code after `await priority()` runs LATE.** In an `_enter_phase` arm, the statements following `await priority()` (e.g. `field.reset_attacker()` / `reset_blocker()`) do **not** run when that priority round ends — they run only once the *next* phase has been entered and its own awaits unwind. So per-combat state must also be established at the **start** of the consuming step: the blocker arm calls `field.reset_blocker()` for exactly this reason. Never assume "reset after priority" means "before the next combat uses it".
@@ -1277,16 +1264,16 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
   so a new arrival path must hide AFTER enter_zone. `VfxDirector.release_hold()` keeps a held card hidden when its
   parent has `swallow_stand_in` - any new hold/release flow inherits that. Discard/mill/receive go through
   `_swallow()`; the hover point is lifted along the line of sight (`mouth_transform()`), because a straight-up lift
-- **A RefCounted card module must not keep its own tweens in a cycle.** A tween whose lambda captures `self`, stored in a
-  member, keeps the module (and its material) alive forever; `await tween.finished` never returns if the tween is
-  killed. Bind tweens to the card (`_card.create_tween()`), drop stored tweens when they end or are killed, await your
-  own signal emitted on both paths, and release from `Card`'s `NOTIFICATION_PREDELETE` (`card_stack_aura.gd` is the
-  pattern). Find leaks with `--verbose`: it names every leaked instance and resource at exit.
   draws beside the pit under the perspective camera. The pit top is OPAQUE on purpose: it clips the sinking card.
 - **A pile that shares a scene needs its zone as data.** `Graveyard` and `Removed` are the same `.tscn` with a different exported `zone`; `add_card()` used to hardcode `Card.Zone.GRAVEYARD`, which made an exiled card indistinguishable from a broken one. Any new pile (exile, warp, deck-out) should reuse the scene and set `zone`, and `Card.Zone` values must be **appended**, never inserted — they are written into scenes and printed by probes.
 
 - **An animating action should RETURN its tween, and multi-target animations join with `AnimationBatch`.** `await` inside a target loop serialises: five returned Forwards took ~3000 ms one after another. The Godot equivalent of `Promise.all()` is `scripts/animation_batch.gd` — start every tween, `close()`, `await batch.wait()`; it never hangs on a null/invalid tween and never aborts. That only works if the animation is ONE awaitable, which is why `Hand.begin_return_card()` is a single chained tween (the landing callback is a step inside the chain, not a second tween). Logical changes stay synchronous before the join, so a follow-up instruction sees the right board while the visuals catch up.
 
+- **A RefCounted card module must not keep its own tweens in a cycle.** A tween whose lambda captures `self`, stored in a
+  member, keeps the module (and its material) alive forever; `await tween.finished` never returns if the tween is
+  killed. Bind tweens to the card (`_card.create_tween()`), drop stored tweens when they end or are killed, await your
+  own signal emitted on both paths, and release from `Card`'s `NOTIFICATION_PREDELETE` (`card_stack_aura.gd` is the
+  pattern). Find leaks with `--verbose`: it names every leaked instance and resource at exit.
 - **Nothing resolves while a card is still flying onto the stack.** `Stack.resolve_top_effect()` first awaits
   `await_stack_settled()` (`cards_still_entering()`: local Summon presentation, opponent Summon flight, trigger and
   ability cards entering). Do NOT rely on the agents waiting: the AI/mock pass after their think time and the

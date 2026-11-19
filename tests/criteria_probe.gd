@@ -85,13 +85,10 @@ func _ready() -> void:
 	_expect(blocker.matches_criteria(blocking_forward), "card 100's 'blocking Forward' block matches the blocker")
 	_expect(not bystander.matches_criteria(blocking_forward), "and not an idle Forward")
 
-	# --- the data is present and well-formed -------------------------------------------------------------
-	var db = CardDatabase.card_effects
+	# --- the effects exist -----------------------------------------------------------------------------------
 	_expect(FileAccess.file_exists("res://assets/effects/card_100.gd")
 		and FileAccess.file_exists("res://assets/effects/card_43.gd"),
 		"cards 100 and 43 are both code-owned")
-	print("[Criteria] 100 -> %s" % str(db.get("100", {})))
-	print("[Criteria] 43  -> %s" % str(db.get("43", {})))
 
 	_finish()
 

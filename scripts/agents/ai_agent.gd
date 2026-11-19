@@ -58,12 +58,6 @@ func _is_safe_to_play(card: Card) -> bool:
 		return false
 	if card.type == Card.FORWARD and game.field.get_front_cards_for(side).size() >= 5:
 		return false
-	# Skip anything whose enter-the-field effect asks for a target: ETB targeting
-	# runs while the card resolves, and a miss there is not recoverable yet.
-	if card.card_effects.has("when_enter_field"):
-		var etb = card.card_effects["when_enter_field"]
-		if etb is Dictionary and etb.has("choose_target"):
-			return false
 	return true
 
 func _can_afford(card: Card, player_id: int) -> bool:

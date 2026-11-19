@@ -3,13 +3,14 @@
 For each function it looks for:
   * direct calls            name( ... )            — in .gd / .tscn / .tres
   * bare method references   tween_callback(name)   — the Callable form
-  * quoted references        "name"                 — dynamic call("name"), scene method="name", and the
-                                                      effect JSON, which invokes instructions by the action name
+  * quoted references        "name"                 — dynamic call("name"), scene method="name", and an
+                                                      instruction entry ({"name": ...}) a code effect hands the executor
 and reports who the users are: production code, tests/tools, or data.
 
 Categories printed: UNREFERENCED, TEST-ONLY, QUOTED-ONLY, DATA-ONLY.
-Instruction handlers (damage_targets, draw_cards, ...) are DATA entries: they are called by name from
-assets/card_effects.json through the instruction chain, which is why a plain grep of .gd files finds no caller.
+Instruction handlers (dull_targets, opponent_mills, ...) can be called by NAME from an instruction entry a code effect
+builds (a status's on_enter_break_zone payload), which is why a plain grep for a call finds no caller. (The per-card
+JSON effects file is gone.)
 
 Run: python3 tools/dead_audit.py [path/to/file.gd]
 """

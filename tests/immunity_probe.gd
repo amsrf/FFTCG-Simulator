@@ -1,7 +1,7 @@
 extends Node
 ## GRANTED TARGET IMMUNITY — the runtime half of the cannot_be_chosen family.
 ##
-## Zidane PRINTS the rule on the card, so it is always true and is read from card_effects. Aerith GRANTS it for a turn, so
+## Zidane PRINTS the rule on the card (in its code effect), so it is always true. Aerith GRANTS it for a turn, so
 ## it lives in status_effects and expires in Card.turn_end(). Both are decided in ONE function, Card.can_be_chosen_by() —
 ## if these two ever need separate readers, that is the bug.
 ##
@@ -95,8 +95,6 @@ func _ready() -> void:
 			"and with no source named the printed rule does not apply, unlike a GRANT, which is unconditional")
 
 	# --- apply_effect chooses its own targets, ONCE -------------------------------------------------
-	var block: Dictionary = game._apply_effect_block(mine)
-	_expect(block.is_empty(), "an ordinary card has no apply_effect block")
 	var snapshot: Array = game._cards_matching({"is_type": "Forward", "controller": "player"})
 	print("[Immunity] apply_effect snapshot: %d player Forward(s)" % snapshot.size())
 	_expect(snapshot.has(mine) and snapshot.has(theirs), "the block selects the player's own Forwards")

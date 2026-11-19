@@ -32,7 +32,6 @@ func _new_card(id: int, power: int) -> Card:
 	_game.add_child(card)
 	_field.play_card(card, false, false)
 	card.status_effects.clear()
-	card.card_effects.clear()
 	card.set_base_power(power)
 	return card
 
@@ -47,7 +46,7 @@ func _ready() -> void:
 	var db = CardDatabase.card_database
 
 	# --- the duration AS JSON DELIVERS IT: a float ------------------------------------------------------
-	# Every number in card_effects.json parses as a float, and Card.power_change() takes untyped arguments, so a
+	# A number from JSON or an instruction argument is a float, and Card.power_change() takes untyped arguments, so a
 	# one-turn buff arrives as 1.0. turn_end() tested `dur is int`, which is FALSE for 1.0 — the buff never
 	# decremented and the power never came back. The int literals above passed while the real card did not, which
 	# is why this case is written with the exact shape the data uses.

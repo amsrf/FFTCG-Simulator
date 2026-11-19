@@ -60,8 +60,6 @@ func effective_cost(card: Card, purpose: String = "cast") -> Dictionary:
 	var own = card.effect() if card.abilities_enabled() else null
 	if own != null and own.has_method("modify_cost"):
 		paid = own.modify_cost(ctx, card, paid)
-	else:
-		paid = _json_self_cost(card, ctx, paid)
 
 	# External modifiers ("your Water Summons cost 1 less", "opponent Summons cost 1 more").
 	for source in _cards():
@@ -73,63 +71,8 @@ func effective_cost(card: Card, purpose: String = "cast") -> Dictionary:
 		if effect_obj != null and effect_obj.has_method("modify_cost_for"):
 			ctx.source = source
 			paid = effect_obj.modify_cost_for(ctx, card, paid)
-		else:
-			paid = _json_cost_aura(source, card, ctx, paid)
 
 	return ctx.apply_floor(paid)
-
-
-## Fallback for a card that has not been migrated yet.
-func _json_self_cost(card: Card, ctx, paid: Dictionary) -> Dictionary:
-	var rule = card.card_effects.get("self_cost", {})
-	if not (rule is Dictionary) or rule.is_empty():
-		return paid
-	var delta: int = 0
-	var per = rule.get("per", {})
-	if per is Dictionary and not per.is_empty():
-		delta += int(rule.get("delta", 0)) * ctx.cards_in_field(per, true).size()
-	else:
-		var condition = rule.get("if_controls", {})
-		if condition is Dictionary and not condition.is_empty() and ctx.controls(condition):
-			delta += int(rule.get("delta", 0))
-		elif not (condition is Dictionary) or condition.is_empty():
-			delta += int(rule.get("delta", 0))
-	return ctx.adjust(paid, delta, int(rule.get("min", 0)))
-
-
-## Fallback for a source that still carries a JSON cost_aura.
-func _json_cost_aura(source: Card, subject: Card, ctx, paid: Dictionary) -> Dictionary:
-	var rules = source.card_effects.get("cost_aura", [])
-	if rules is Dictionary:
-		rules = [rules]
-	if not (rules is Array):
-		return paid
-	for rule in rules:
-		if not (rule is Dictionary):
-			continue
-		var for_type: String = str(rule.get("for", ""))
-		if for_type != "" and subject.type != for_type:
-			continue
-		var for_name: String = str(rule.get("name", ""))
-		if for_name != "" and subject.card_name != for_name:
-			continue
-		var for_element: String = str(rule.get("element", ""))
-		if for_element != "" and not subject.is_element(for_element):
-			continue
-		var scope: String = str(rule.get("from", ""))
-		if scope == "opponent" and subject.controller == source.controller:
-			continue
-		if (scope == "own" or scope == "controller") and subject.controller != source.controller:
-			continue
-		paid = ctx.adjust(paid, int(rule.get("delta", 0)), int(rule.get("min", 0)))
-	return paid
-
-
-func _cost_total(cost: Dictionary) -> int:
-	var total: int = 0
-	for value in cost.values():
-		total += int(value)
-	return total
 
 
 ## GRANTED CHOICE PROTECTION — "The Card Name Sazh you control cannot be chosen by your opponent's Summons or

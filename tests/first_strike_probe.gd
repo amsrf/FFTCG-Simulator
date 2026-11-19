@@ -8,7 +8,7 @@ extends Node
 ## back. That is the whole mechanic in one assertion, and it fails loudly if the two steps collapse into one.
 ##
 ## First Strike is granted as a STATUS here, which exercises the granted half of the printed/granted split. The
-## printed half is covered by cards 29 and 87 in card_effects.json.
+## printed half is covered by cards 29 and 87 (their code keywords).
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 
@@ -75,7 +75,6 @@ func _clash(attacker_strong: bool, attacker_fs: bool, blocker_fs: bool) -> Array
 		_game.add_child(card)
 		field.play_card(card, false, false)
 		card.status_effects.clear()
-		card.card_effects.clear()
 		card.accumulated_damage = 0
 	attacker.set_base_power(STRONG if attacker_strong else WEAK)
 	blocker.set_base_power(WEAK if attacker_strong else STRONG)

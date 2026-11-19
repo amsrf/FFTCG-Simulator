@@ -26,7 +26,12 @@ func _expect(ok: bool, what: String) -> void:
 		print("[BreakZone] FAIL %s" % what)
 
 
-## A Forward on the field with BOTH keywords, so every case can be told apart.
+const EVENTS := preload("res://scripts/effects/events.gd")
+## Test-only effect with BOTH Break Zone abilities (no real card has both).
+const BOTH_EFFECT := preload("res://tests/support/break_zone_both_effect.gd")
+
+## A Forward on the field with BOTH abilities, so every case can be told apart. The effect is attached the way the
+## registry would (Card.effect() returns the cached object).
 func _new_forward() -> Card:
 	var field = _game.get("field")
 	var card: Card = _game.create_card(41, "opponent")
@@ -35,17 +40,16 @@ func _new_forward() -> Card:
 	card.status_effects.clear()
 	card.accumulated_damage = 0
 	card.broken = false
-	card.card_effects["when_enter_break_from_field"] = {"instructions": []}
-	card.card_effects["when_break"] = {"instructions": []}
+	card._card_effect = BOTH_EFFECT.new()
 	return card
 
 
-## Which keywords the stack gained since `before`.
+## Which abilities the stack gained since `before`, by event name ("when_break", ...).
 func _new_keywords(before: int) -> Array:
 	var stack = _game.get("stack")
 	var out: Array = []
 	for i in range(before, stack.cards.size()):
-		out.append(str(stack.cards[i].key_word_effect))
+		out.append(EVENTS.name_of(stack.cards[i].effect_event))
 	return out
 
 

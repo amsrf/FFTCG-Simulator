@@ -65,15 +65,11 @@ var _continuous_power: Dictionary = {}
 ## Legacy permanent deltas that were expressed as power_change(amount, -1) before the ledger existed.
 var _manual_power_delta: int = 0
 signal power_changed(value: int)
-## Keywords GRANTED by a continuous effect (an aura), as opposed to printed in card_effects. A COUNT, not a bool,
+## Keywords GRANTED by a continuous effect (an aura), as opposed to printed (CardEffect.keywords()). A COUNT, not a bool,
 ## because two auras can grant the same keyword and losing one must not lose the other.
 var granted_statuses: Dictionary = {}
 ## Extra attacks left this turn ("Gilgamesh can attack twice", Tidus' Blitz Ace). Consumed by Field.execute_card_attack.
 var extra_attacks: int = 0
-var _printed_effects: Dictionary = {}
-## The card's effects as they are ACTIVE right now. "Loses all abilities" is a temporary, per-card view, never a
-## change to the shared JSON data: while abilities_nullified is present every printed ability lookup sees an empty
-## dictionary, and the original data comes back when the status expires.
 const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 const TARGET_CONTEXT := preload("res://scripts/effects/target_context.gd")
@@ -82,13 +78,10 @@ var _card_effect = null
 var _elements_calculating: bool = false
 ## Auras granted to this card by another effect, or supplied by a test. Definitions are dictionaries or AuraSpecs.
 var extra_auras: Array = []
-@export var card_effects: Dictionary:
-	get:
-		return {} if status_effects.has("abilities_nullified") else _printed_effects
-	set(value):
-		_printed_effects = value
+## The keyword a stack copy was made for ("skill" for an activated ability's proxy). Card effects are code only
+## (assets/effects/card_<id>.gd); the old per-card JSON data and its readers are gone.
 @export var key_word_effect: String
-## A code-defined event on a stack copy. NONE for ordinary JSON effects and real cards.
+## A code-defined event on a stack copy. NONE for real cards and skill proxies.
 var effect_event: int = EVENTS.Event.NONE
 var effect_event_data: Dictionary = {}
 ## WHICH auto-ability of the source this copy is: its index in CardEffect.auto_abilities(). Two abilities on the same
@@ -121,7 +114,7 @@ func set_effect_targets(picks: Array) -> void:
 		if pick != null and is_instance_valid(pick):
 			effect_targets.append(pick)
 @export var effect_source: Card
-## Index into card_effects["skill"] for stack copies activating a skill (-1 = not used).
+## Index into activation_skills() for stack copies activating a skill (-1 = not used).
 @export var skill_activation_index: int = -1
 ## The skill definition carried by a stack copy. Copied abilities use this instead of an index because the source
 ## card may overwrite its copy while this object is still on the stack.
@@ -139,10 +132,6 @@ var copied_skill_token: int = 0
 ## rules ("cannot be chosen by opponent's Summons or abilities") identify the
 ## source of a targeting effect.
 @export var effect_kind: String = ""
-## Board-wide event trigger carried by an EFFECT COPY on the stack. The copy is a normal Card (so it can be seen
-## and responded to), but it resolves through Game._resolve_event_trigger instead of its own card data.
-var event_trigger: Dictionary = {}
-var event_context: Dictionary = {}
 var _event_once: Dictionary = {}
 
 
@@ -256,7 +245,6 @@ func initialize(card_id: int, card_controller: String):
 	string_id = str(card_id)
 	controller = card_controller
 	load_card_data()
-	load_card_effects()
 	assign_card_texture()
 		
 func load_card_data():
@@ -279,11 +267,6 @@ func load_card_data():
 		push_warning("Card with ID '%s' not found in database." % id)
 		
 
-func load_card_effects():
-	if string_id in CardDatabase.card_effects:
-		card_effects = CardDatabase.card_effects[string_id]
-		
-	
 ## False while the card is face-down. `mat` (the art material) is kept so that
 ## revealing restores the SAME instance — rebuilding it would drop the shader's
 ## `effect_enabled` highlight state.
@@ -965,9 +948,9 @@ func turn_end():
 		if s == "frozen" or s == "skip_next_active":
 			continue
 		var dur = status_effects[s]
-		# JSON NUMBERS ARRIVE AS FLOAT. `dur is int` is false for a duration parsed out of card_effects.json, so a
-		# status applied from card data never decremented and never expired — Red Mage's block_disabled, for one,
-		# was permanent. Both numeric kinds count down; anything else (a marker with no number) is left alone.
+		# NUMBERS CAN ARRIVE AS FLOAT (a duration from an instruction argument or a Variant-typed payload). `dur is
+		# int` was false for those, so such a status never expired (Red Mage's block_disabled, once). Both numeric
+		# kinds count down; anything else (a marker with no number) is left alone.
 		if dur is int or dur is float:
 			var left: int = int(dur) - 1
 			if left <= 0:
@@ -1065,20 +1048,11 @@ func activation_skills() -> Array:
 	if not abilities_enabled():
 		return []
 	var out: Array = []
-	# CODE-DEFINED ABILITIES WIN over the JSON list for the same card, so a card can migrate its abilities without
-	# keeping a duplicate set in card_effects.json.
 	var effect_obj = effect()
 	if effect_obj != null and effect_obj.has_method("activated_abilities"):
 		for spec in effect_obj.activated_abilities():
 			if spec != null and spec.has_method("as_skill_dict"):
 				out.append(spec.as_skill_dict())
-	if not out.is_empty():
-		if not copied_skill.is_empty():
-			out.append(copied_skill)
-		return out
-	var printed = card_effects.get("skill", [])
-	if printed is Array:
-		out.append_array(printed)
 	if not copied_skill.is_empty():
 		out.append(copied_skill)
 	return out
@@ -1092,8 +1066,8 @@ func activation_skill(skill_index: int) -> Dictionary:
 	return skills[skill_index]
 
 
-## The code-defined AbilitySpec behind one activation slot, if it has one. JSON abilities return null and keep using
-## their instruction list.
+## The code-defined AbilitySpec behind one activation slot, if it has one (a copied skill may carry only its
+## instruction snapshot).
 func activation_ability_spec(skill_index: int) -> RefCounted:
 	var definition: Dictionary = activation_skill(skill_index)
 	if definition.has("_ability_spec"):
@@ -1147,34 +1121,7 @@ func consume_copied_skill(token: int) -> void:
 		clear_copied_skill()
 
 
-func get_card_effect_instructions() -> Array[Instruction]:
-	if key_word_effect == "skill":
-		if not skill_def_override.is_empty():
-			return create_instruction_from_json(skill_def_override.get("instructions", []))
-		if skill_activation_index >= 0:
-			if not "skill" in card_effects:
-				push_error(str("No skill entry for card ", id))
-				return []
-			var skills = card_effects["skill"]
-			if skill_activation_index >= skills.size():
-				return []
-			var raw = skills[skill_activation_index].get("instructions", [])
-			return create_instruction_from_json(raw)
-	if key_word_effect != "" and key_word_effect in card_effects:
-		var entry = card_effects[key_word_effect]
-		if entry is Dictionary and entry.has("instructions"):
-			return create_instruction_from_json(entry["instructions"])
-		if entry is Array and entry.size() > 0:
-			var first = entry[0]
-			if first is Dictionary and first.has("instructions"):
-				return create_instruction_from_json(first["instructions"])
-	push_error("No keyword %s in card effects" % key_word_effect)
-	return []
-func is_key_word_in_card_effect(keyword:String):
-	return keyword in card_effects
-	
-	
-		
+
 func declare_blocker():
 	# Only records the blocker. The clash belongs to DAMAGE_RESOLUTION — doing it
 	# here as well would apply the damage twice.
@@ -1183,8 +1130,9 @@ func declare_blocker():
 	]
 	emit_signal("execute_instructions", instructions)
 
-## "Loses all abilities" (Wakka 216). This is a read-time view, not a mutation of the printed data. A status is
-## cleared by turn_end like every other until-end-of-turn effect, and stack copies keep their own snapshots.
+## "Loses all abilities" (Wakka 216): every reader of the card's code effect asks this (effect hooks, keywords,
+## auras, costs, triggers). A status, cleared by turn_end like any until-end-of-turn effect; stack copies already on
+## the stack keep resolving.
 func abilities_enabled() -> bool:
 	return not status_effects.has("abilities_nullified")
 
@@ -1270,21 +1218,21 @@ func _status_duration(status: String) -> int:
 		return int(value)
 	return 0
 
-## PRINTED Haste comes from card_effects.json ("haste": true); GRANTED Haste is a status named "haste". Kept
-## separate on purpose, exactly like cannot_be_chosen: the card's data says what it always has, the status says
-## what something gave it, and anything asking "can this tap" needs one answer.
-## Which event an EX BURST runs. Code wins; JSON is the fallback for the handful of cards not yet migrated.
+## Which event an EX BURST runs: CardEffect.ex_burst_event() (NONE = the card has no EX BURST).
 func ex_burst_event() -> int:
 	var effect_obj = effect() if abilities_enabled() else null
 	if effect_obj != null and effect_obj.has_method("ex_burst_event"):
 		var code_event: int = int(effect_obj.ex_burst_event())
 		if code_event != EVENTS.Event.NONE:
 			return code_event
-	return EVENTS.from_name(str(card_effects.get("ex_burst", "")))
+	return EVENTS.Event.NONE
 
 
+## PRINTED Haste comes from CardEffect.keywords(); GRANTED Haste is a status named "haste" or an aura grant. Kept
+## separate on purpose, exactly like cannot_be_chosen: the card says what it always has, the status says what
+## something gave it, and anything asking "can this tap" needs one answer.
 func has_haste() -> bool:
-	return card_effects.has("haste") or status_effects.has("haste") or has_granted("haste") 		or has_code_keyword("haste")
+	return status_effects.has("haste") or has_granted("haste") or has_code_keyword("haste")
 
 
 
@@ -1293,11 +1241,11 @@ func has_code_keyword(keyword: String) -> bool:
 	return effect_obj != null and keyword in effect_obj.keywords()
 
 ## BRAVE: attacking does not dull this card, so it can attack and still block (or attack again). Same split as
-## Brave — printed "brave": true in card_effects.json, granted as a status named "brave", or granted by a party effect
+## Brave — printed (CardEffect.keywords()), granted as a status named "brave", or granted by a party effect
 ## on the field ("The Forwards forming a party you control gain Brave", Gippal). The Field is the only thing that knows
 ## who is currently in a party, so it is asked rather than duplicating the rule here.
 func is_brave() -> bool:
-	if card_effects.has("brave") or status_effects.has("brave") or has_granted("brave") 			or has_code_keyword("brave"):
+	if status_effects.has("brave") or has_granted("brave") or has_code_keyword("brave"):
 		return true
 	var host: Node = get_parent()
 	return host != null and host.has_method("party_grants_brave") and host.call("party_grants_brave", self)
@@ -1306,7 +1254,7 @@ func is_brave() -> bool:
 ## a status of the same name. The two-step combat itself lives in Game.clash_attacker_blocker() — this only answers
 ## the question it asks.
 func is_first_strike() -> bool:
-	return card_effects.has("first_strike") or status_effects.has("first_strike") or has_granted("first_strike") 		or has_code_keyword("first_strike")
+	return status_effects.has("first_strike") or has_granted("first_strike") or has_code_keyword("first_strike")
 
 ## CANNOT BE BROKEN ("it cannot be broken this turn", cards 32 / 110 / 146): the `unbreakable` status. Game.break_card()
 ## asks this, and the indestructible keyword badge shows it. Conditional protection (Auron 1-002: "cannot be broken by
@@ -1373,10 +1321,8 @@ func get_cost() -> Dictionary:
 	return {element:1, "neutral":cost-1}
 
 func get_cast_target_criteria() -> Variant:
-	# Targeting requirement for casting (Summons use "when_cast").
+	# Targeting requirement for casting, from the card's code (CardEffect.cast_target_criteria).
 	# A Dictionary is one stage; an Array is several, asked in order (Hades: Forward, then Backup).
-	# CODE FIRST. A migrated Summon owns its cast timing here; the JSON branch remains only for the cards still
-	# waiting for their code pass.
 	var effect_obj = effect() if abilities_enabled() else null
 	if effect_obj != null and effect_obj.has_method("cast_target_criteria"):
 		var code_criteria = effect_obj.cast_target_criteria(make_effect_context("cast"))
@@ -1386,12 +1332,6 @@ func get_cast_target_criteria() -> Variant:
 			return code_criteria
 		if code_criteria is Array:
 			return code_criteria
-	if "when_cast" in card_effects:
-		var entry = card_effects["when_cast"]
-		if entry is Dictionary and entry.has("choose_target"):
-			var criteria = entry["choose_target"]
-			if criteria is Dictionary or criteria is Array:
-				return criteria
 	return {}
 
 ## "Selected as a mana source" marker. Owned here so that every selection path —
@@ -1874,7 +1814,7 @@ const ELEMENT_NAMES = {
 	"Dark": "闇",
 }
 
-## The stateless code effect for this card id, if one is registered. Falls back to the JSON path when null.
+## The stateless code effect for this card id, if one is registered (null = the card has no abilities in code).
 func effect():
 	if _card_effect == null:
 		_card_effect = EFFECT_REGISTRY.for_card_id(id)

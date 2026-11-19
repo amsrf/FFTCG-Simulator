@@ -7,7 +7,8 @@ first = int(sys.argv[1]) if len(sys.argv) > 1 else 100
 last = int(sys.argv[2]) if len(sys.argv) > 2 else 216
 
 db = json.load(open('assets/card_database.json', encoding='utf-8'))['cards']
-effects = json.load(open('assets/card_effects.json', encoding='utf-8'))
+import os
+code_ids = {int(os.path.basename(p)[5:-3]) for p in __import__('glob').glob('assets/effects/card_*.gd') if os.path.basename(p)[5:-3].isdigit()}
 
 
 def clean(text):
@@ -20,7 +21,7 @@ for i in range(first, min(last, len(db)) + 1):
     elem = c.get('element')
     if isinstance(elem, list):
         elem = ''.join(str(x) for x in elem)
-    mark = '*' if str(i) in effects else ' '
+    mark = '*' if i in code_ids else ' '
     print('%s%3d|%s|%s|%s|%s|c%s|p%s|%s' % (
         mark, i, c.get('code', ''), c.get('name_en', ''), c.get('type_en', ''),
         elem, c.get('cost', ''), c.get('power', ''), clean(c.get('text_en', ''))))

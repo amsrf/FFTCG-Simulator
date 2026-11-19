@@ -5,6 +5,8 @@ extends Node
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const GROUNDS := preload("res://scripts/core/test_grounds.gd")
+const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
+const EVENTS := preload("res://scripts/effects/events.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -102,8 +104,13 @@ func _ready() -> void:
 	# still have a Forward able to block once the party is declared.
 	var attackers_are_passive: bool = true
 	for id in ai_ids:
-		var effects: Dictionary = CardDatabase.card_effects.get(str(int(id)), {})
-		if effects.has("when_attack"):
+		var effect_obj = EFFECT_REGISTRY.for_card_id(int(id))
+		var attack_trigger := false
+		if effect_obj != null:
+			for spec in effect_obj.auto_abilities():
+				if spec.event == EVENTS.Event.ATTACK:
+					attack_trigger = true
+		if attack_trigger:
 			attackers_are_passive = false
 			push_error("[Grounds] the blocking ground's attacker %d has a when_attack effect" % int(id))
 	_expect(attackers_are_passive, "no AI attacker has a when-attack trigger that could dull the blocker")

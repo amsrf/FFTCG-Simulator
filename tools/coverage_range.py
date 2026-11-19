@@ -1,7 +1,7 @@
 """Coverage/classification for the 100-216 card push.
 
 Every id must fall in exactly one bucket:
-  * implemented  - has an entry in assets/card_effects.json or a script in assets/effects/
+  * implemented  - has a script in assets/effects/ (card abilities are code only)
   * vanilla      - no rules text
   * needs code   - listed in NEEDS_CODE with the primitive it is waiting on
 Anything else is a gap and `--check` exits non-zero.
@@ -33,7 +33,6 @@ NEEDS_CODE = {
 
 def main():
     db = json.load(open('assets/card_database.json', encoding='utf-8'))['cards']
-    eff = json.load(open('assets/card_effects.json', encoding='utf-8'))
     code_ids = set()
     for path in glob.glob("assets/effects/card_*.gd"):
         stem = os.path.basename(path)[5:-3]
@@ -42,7 +41,7 @@ def main():
 
     implemented, vanilla, missing, gaps, conflicts = [], [], [], [], []
     for i in range(FIRST, LAST + 1):
-        has_entry = str(i) in eff or i in code_ids
+        has_entry = i in code_ids
         if has_entry:
             implemented.append(i)
             if i in NEEDS_CODE:

@@ -1460,11 +1460,6 @@ func toggle_effect_card_selection(card: Card) -> void:
 			card.crystal_instance.position = Vector3(0, 0.05, -0.35)
 	effect_card_selection_changed.emit(selected_card_for_effect != null)
 
-func remove_card_for_free_play(card: Card) -> void:
-	# Used by "may play for free" resolution: the chosen card leaves the hand.
-	_release_hover(card)
-	cards.erase(card)
-	update_card_positions()
 
 ## TAKE A CARD OUT OF HAND TO PLAY IT, without charging for it (Vaan / Leon: "play ... from your hand").
 ## The card itself is reparented by Field.play_card(); this only stops the hand owning it, exactly like discard_card.

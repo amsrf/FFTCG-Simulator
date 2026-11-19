@@ -107,15 +107,8 @@ func _ready() -> void:
 	_expect(not card.broken, "and it is no longer marked as broken")
 
 	# --- the data -----------------------------------------------------------------------------------------
-	var entry: Dictionary = CardDatabase.card_effects.get("93", {})
-	var instrs: Array = entry.get("when_enter_break_from_field", {}).get("instructions", [])
 	_expect(load("res://assets/effects/card_93.gd").new().has_method("when_enter_break_from_field"),
 		"Vanille's Break Zone effect is code-owned")
-	if instrs.size() == 2:
-		_expect(str(instrs[0].get("name", "")) == "search_deck", "the first is the search")
-		_expect(str(instrs[0].get("argument", []).back()) == "removed", "with destination 'removed'")
-		_expect(str(instrs[1].get("condition", "")) == "if_last_succeeded",
-			"and the return is conditional on it having worked")
 
 	print("[Vanille] %d checks | failures: %d" % [_checks, _fails])
 	print("[Vanille] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

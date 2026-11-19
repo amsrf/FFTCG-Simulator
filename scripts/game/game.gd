@@ -504,8 +504,6 @@ func copy_skill(_argument = null) -> void:
 func untap_targets(index: int = -1) -> void:
 	_each_target("untap", [], index)
 
-## Wakka 216: the chosen Forward loses all its abilities until the end of the turn. The printed data is untouched;
-## Card.card_effects becomes an empty view while the status is present.
 func dull_targets(index: int = -1) -> void:
 	_each_target("tap", [], index)
 
@@ -576,24 +574,6 @@ func power_change_party(amount: int = 0, duration: int = 1) -> void:
 			card.power_change(amount, duration)
 	enforce_game_state_rules()
 
-## The "apply_effect" block of the ability this card is resolving, if it has one. A skill resolves through the PROXY it
-## put on the stack, and the proxy carries the index of the skill it came from — so read it there first.
-func _apply_effect_block(card: Card) -> Dictionary:
-	if card == null:
-		return {}
-	# A stack copy carries a snapshot, so a copied ability's apply_effect survives its source being overwritten.
-	if not card.skill_def_override.is_empty() and card.skill_def_override.get("apply_effect") is Dictionary:
-		return card.skill_def_override["apply_effect"]
-	var src: Card = card.effect_source
-	if src != null and card.skill_activation_index >= 0 and "skill" in src.card_effects:
-		var skills: Array = src.card_effects["skill"]
-		if card.skill_activation_index < skills.size():
-			var def: Dictionary = skills[card.skill_activation_index]
-			if def.get("apply_effect") is Dictionary:
-				return def["apply_effect"]
-	if card.card_effects.get("apply_effect") is Dictionary:
-		return card.card_effects["apply_effect"]
-	return {}
 
 ## Every card on the field matching `block`, in field order — the same evaluator choose_target uses, so an apply_effect
 ## block and a choose_target block mean the same thing by the same keys.
@@ -1520,9 +1500,6 @@ func _execute_instructions_and_wait(instructions: Array[Instruction]) -> void:
 ## Turns are KEPT, not cleared: the array for an old turn costs nothing and "this turn" is a filter, not a deletion.
 var turn_number: int = 1
 var turn_history: Dictionary = {}
-## once_per_turn event triggers, keyed by card instance + trigger index + turn_number. The turn number is part of the
-## key, so a new turn starts with a clean slate without any reset pass.
-var _event_triggers_fired: Dictionary = {}
 ## Break shatter is suppressed for the two cards currently being shown by the clash cinematic. The cinematic
 ## launches its own shatter on the defeated proxy AFTER the exchange, so the instant burst must not also fire.
 var _clash_suppressed_cards: Dictionary = {}
@@ -1532,11 +1509,7 @@ var _clash_suppressed_cards: Dictionary = {}
 var _clash_cinematic_active: bool = false
 var _deferred_break_zone_triggers: Array = []
 
-func event_trigger_already_fired(key: String) -> bool:
-	return _event_triggers_fired.has(key)
 
-func mark_event_trigger_fired(key: String) -> void:
-	_event_triggers_fired[key] = true
 
 func record_action(activity: String, targets: Array = [], actor: int = 0) -> void:
 	# actor 0 = "whoever's turn it is", which is right for anything the turn player initiates. Effects that fire on
@@ -1776,8 +1749,6 @@ func cause_damage():
 		var attacker: Card = field.attacker_card
 		if attacker.abilities_enabled() and attacker.effect_handles_event(EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER):
 			stack.enqueue_code_triggers(attacker, EVENTS.Event.CAUSE_DAMAGE_TO_PLAYER)
-		else:
-			stack.begin_triggered_ability(attacker, "when_cause_damage_to_player")
 	
 func cause_attacking_damage():
 	if field.blocker_card == null:
@@ -1955,9 +1926,7 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	if card == null or not is_instance_valid(card):
 		return
 	var event_key: String = EVENTS.name_of(event)
-	var code_event: bool = card.abilities_enabled() and card.effect_handles_event(event)
-	var effect: Dictionary = card.card_effects.get(event_key, {})
-	if not code_event and effect.is_empty():
+	if not (card.abilities_enabled() and card.effect_handles_event(event)):
 		return
 	LOG.info("ExBurst", "%s -> '%s' (P%s)" % [card.card_name, event_key, 1 if side == player else 2])
 
@@ -1984,16 +1953,12 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 	# TARGETED BURSTS WAIT FOR THE PICK; NO-TARGET BURSTS HAVE NOTHING TO WAIT FOR. Either way the effect copy is now
 	# on the stack and must be resolved HERE, because a burst bypasses the priority loop entirely — leaving a no-target
 	# burst on the stack would make Moogle or Gippal do nothing until some later priority round.
-	# CODE-DEFINED ETBs CHOOSE THEIR TARGET DURING RESOLUTION. The JSON branch below still chooses before the
-	# resolution starts, so only that branch waits for the pick here. Waiting for a code ETB's target before resolving
-	# it would block forever: the code handler has not run yet.
-	if effect.has("choose_target") and not code_event:
-		await assistant.target_complete
+	# A code burst chooses its target during resolution, so there is no pick to wait for here.
 	# IMMEDIATELY: no priority round, nobody responds. The stack's own resolution does the work - the same code every
 	# other effect goes through, so instructions, targets and cleanup all behave identically.
 	# A code burst with no legal target was never put on the stack (11.8.4): resolving "the top" would run some other
 	# stack object instead.
-	if code_event and burst_card == null:
+	if burst_card == null:
 		LOG.info("ExBurst", "%s: no legal target, the burst does nothing" % card.card_name)
 	elif stack.stack_length() > 0:
 		await stack.resolve_top_effect()
@@ -2894,12 +2859,11 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 		_deferred_break_zone_triggers.append([card, was_broken])
 		LOG.info("Clash", str("deferring Break Zone trigger for ", card.card_name))
 		return
-	# execute_card_effect() is the single gate: it knows both code effects and JSON keywords. Emitting the signal
-	# directly here skipped every code-defined Break Zone trigger.
-	if card.card_effects.has("when_enter_break_from_field") or card.effect_handles_event(EVENTS.Event.ENTER_BREAK_FROM_FIELD):
+	# execute_card_effect() is the single gate for the card's code-defined Break Zone abilities.
+	if card.effect_handles_event(EVENTS.Event.ENTER_BREAK_FROM_FIELD):
 		LOG.info("BreakZone", str("", card.card_name, " -> when_enter_break_from_field"))
 		field.execute_card_effect(card, EVENTS.Event.ENTER_BREAK_FROM_FIELD)
-	if was_broken and (card.card_effects.has("when_break") or card.effect_handles_event(EVENTS.Event.BREAK)):
+	if was_broken and card.effect_handles_event(EVENTS.Event.BREAK):
 		LOG.info("BreakZone", str("", card.card_name, " -> when_break"))
 		field.execute_card_effect(card, EVENTS.Event.BREAK)
 	# A STATUS CAN CARRY ITS OWN BREAK TRIGGER. Cid's "the Forward that took damage from Cid" is remembered on the
@@ -2986,44 +2950,6 @@ func _resolve_code_effect(card: Card) -> void:
 	await effect_obj.dispatch(card.effect_event, ctx, card.effect_ability_index)
 
 
-func _resolve_event_trigger(card: Card) -> void:
-	var trigger: Dictionary = card.event_trigger
-	var context: Dictionary = card.event_context
-	var source: Card = card.effect_source
-	if source == null or not is_instance_valid(source):
-		return
-	# "if it is active" is checked at resolution, not when the trigger was put on the stack.
-	if bool(trigger.get("requires_active", false)) and (not source.is_on_field() or source.tapped):
-		return
-	if bool(trigger.get("may", false)):
-		var owner_id: int = 1 if source.controller == Card.PLAYER else 2
-		var agent: Agent = agent_for(owner_id)
-		var use_it: bool = true
-		if agent != null:
-			use_it = await agent.confirm_optional(owner_id, str(trigger.get("may_prompt", "")))
-		if not use_it:
-			return
-	var targets: Array = field.call("_event_targets", trigger, source, context)
-	_current_source_card = source
-	_current_controller = card.controller
-	_targets = targets
-	var criteria = trigger.get("choose_target", null)
-	if criteria:
-		# The stack copy is the source of the arrow: this is the effect the player is resolving.
-		if not field.has_viable_target(criteria, card, "Ability"):
-			return
-		field.request_target(criteria, card, false, "Ability")
-		# A non-local agent completes inside request_target(); only a local player leaves the list empty.
-		if field.targeting_picked.is_empty():
-			await assistant.target_complete
-		targets = field.targeting_picked.duplicate()
-		_targets = targets
-	var instructions_json = trigger.get("instructions", [])
-	if instructions_json is Array and not instructions_json.is_empty():
-		var instructions: Array[Instruction] = source.create_instruction_from_json(instructions_json)
-		await _execute_instructions_and_wait(instructions)
-	else:
-		_clean_instruction_stack()
 
 func _on_stack_execute_card_effect(card: Card) -> void:
 	# A code-defined triggered ability. The stack copy names the event; the effect object does the work with a fresh
@@ -3086,102 +3012,22 @@ func _on_stack_execute_card_effect(card: Card) -> void:
 		card.queue_free()
 		stack._mark_resolution_complete()
 		return
-	# A board-wide event trigger is a stack object with its own resolution path; its copied card data has no
-	# `__event_trigger` keyword to resolve.
-	if not card.event_trigger.is_empty():
-		# Clear anything a previous targeting session left behind, resolve, then clear the session this one opened.
-		field.call("finish_targeting_state")
-		await _resolve_event_trigger(card)
-		field.call("finish_targeting_state")
-		await stack.hold_resolved_card()
-		card.queue_free()
-		stack._mark_resolution_complete()
-		return
-	# Resolution may await an interactive modal (e.g. Auron's "may play a
-	# Backup" choice). Stack.resolve_top_effect() waits for our
-	# _mark_resolution_complete() signal at the end of this function.
-	var instructions = card.get_card_effect_instructions()
-	# THE EFFECT'S OWN TARGETS. `effect_targets` is the whole list (see Card) and `effect_target` is still the last one
-	# for consumers that want a single card. A targetless effect keeps the one-element list it always had.
-	var targets: Array = card.effect_targets.duplicate()
-	if targets.is_empty():
-		targets = [card.effect_target]
-	# "apply_effect" — THE ABILITY SELECTS ITS OWN TARGETS, so the player is not asked. The set is worked out HERE, at
-	# resolution, and never re-evaluated: a Forward that arrives later in the turn does not gain the effect. That snapshot
-	# is the whole point of doing it at resolution rather than hanging it off the field changing, and it is the rule for
-	# an ability that affects "all Forwards you control" — it means the ones on the field when it resolved.
-	var applied_from: Dictionary = _apply_effect_block(card)
-	if not applied_from.is_empty():
-		targets = _cards_matching(applied_from)
-		LOG.info("ApplyEffect", str("", card.card_name, " applies to ", targets.size(), " card(s)"))
-	_current_source_card = card.effect_source if card.effect_source != null else card
-	_current_controller = card.controller
-	_targets = targets
-
-	# Triggered "may" abilities resolve NOW: open the choose-card modal and,
-	# if the player confirms, pass the chosen hand card to may_play_for_free.
-	for instruction in instructions:
-		if instruction.action == "may_play_for_free" and instruction.value == null:
-			var chosen: Card = await _resolve_may_play_for_free(card, instruction)
-			if chosen == null:
-				instructions.erase(instruction)
-			else:
-				instruction.value = chosen
-			break
-
-	# AWAITED. Resolution is not complete until every instruction has finished, including the ones that suspend on an
-	# animation (return to hand) or on a modal — otherwise the next effect can resolve while this one is still moving
-	# cards, and resolve_top_effect() returns before the board has changed.
-	await _execute_instructions_and_wait(instructions)
+	# NOTHING ELSE TO RUN. Every card ability is code (the branches above: a code event, a code Summon, an AbilitySpec,
+	# a copied skill's spec). A stack card that reaches here has no ability in code (a Summon whose code effect has not
+	# been written): it does nothing, and still makes its normal trip. The old JSON instruction path that sat here was
+	# removed with the per-card JSON data.
+	push_warning("[Stack] %s resolved with no code effect (assets/effects/card_%d.gd missing?)" % [card.card_name, card.id])
+	field.call("finish_targeting_state")
 	await stack.hold_resolved_card()
-
 	if card.effect_source == null:
-		# A real card cast from hand (Summon) resolves to its controller's
-		# graveyard instead of being freed.
+		# A real card cast from hand (a Summon) goes to its controller's Break Zone instead of being freed.
 		if card.controller == Card.PLAYER:
 			player_graveyard.add_card(card)
 		else:
 			opponent_graveyard.add_card(card)
 	else:
-		# Stack copy (triggered ability / skill proxy): discard after use.
 		card.queue_free()
-
 	stack._mark_resolution_complete()
-
-func _resolve_may_play_for_free(effect_card: Card, _instruction: Instruction) -> Card:
-	# Opens the choose-card-in-hand modal (Play card / Don't play card).
-	# Returns the chosen card, or null when declined / no legal card exists.
-	var criteria: Dictionary = _get_trigger_choose_card_criteria(effect_card)
-	if criteria.is_empty() or not hand.has_card_matching_criteria(criteria):
-		return null
-
-	GlobalVariables.push_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
-	hand.begin_choose_card(criteria)
-	assistant.show_choose_card_buttons()
-
-	var play: bool = await assistant.choose_card_finished
-	var chosen: Card = hand.selected_card_for_effect
-
-	hand.end_choose_card()
-	assistant.hide_buttons()
-	GlobalVariables.pop_modal(GlobalVariables.Player_Mode.CHOOSE_CARD_IN_HAND)
-	assistant.show_pass_priority_button()
-
-	if play and chosen != null:
-		return chosen
-	return null
-
-func _get_trigger_choose_card_criteria(effect_card: Card) -> Dictionary:
-	var keyword: String = effect_card.key_word_effect
-	if keyword.is_empty() or not effect_card.card_effects.has(keyword):
-		return {}
-	var entry = effect_card.card_effects[keyword]
-	if entry is Array and entry.size() > 0:
-		return entry[0].get("choose_card", {})
-	if entry is Dictionary:
-		return entry.get("choose_card", {})
-	return {}
-
 
 func _on_stack_request_priority() -> void:
 	# Guarded by _priority_lock: if a round is already running, this is a

@@ -597,19 +597,6 @@ func _commit_summon_to_stack() -> void:
 	game.note_action_taken()
 
 
-func begin_triggered_ability(source: Card, keyword: String) -> void:
-	## Triggered auto-abilities go on the stack during rules processing,
-	## before a player receives priority. Any "may" choice (e.g. Auron's
-	## "play a Fire Backup") is made when the ability RESOLVES.
-	if source == null or not source.card_effects.has(keyword):
-		return
-	_add_triggered_effect_to_stack(source, keyword)
-	request_priority.emit()
-
-func _add_triggered_effect_to_stack(source: Card, keyword: String) -> void:
-	create_card(source.id, source.controller, keyword, source)
-	update_card_positions()
-
 func _mark_resolution_complete() -> void:
 	resolution_pending = false
 	resolution_complete.emit()
@@ -1405,8 +1392,6 @@ func commit_ex_burst(card: Card) -> void:
 		cards.append(card)
 		card.index = cards.size() - 1
 
-## Enqueue a board-wide event trigger as a normal stack object. It must be a Card so the UI can show it and the
-## ordinary priority loop can let either player respond; `event_trigger`/`event_context` make it resolve differently.
 ## A code-defined triggered ability. Its effect object is stateless; the stack copy carries the event name and a small
 ## event payload until Game resolves it through CardEffect.dispatch.
 ## ONE STACK OBJECT PER AUTO-ABILITY. `ability_index` is the ability's position in CardEffect.auto_abilities().
@@ -1520,14 +1505,6 @@ func _declare_trigger_choice(card: Card) -> void:
 	# Shows the new arrow if this card is the one on display.
 	refresh_target_display()
 
-func enqueue_event_trigger(source: Card, trigger: Dictionary, context: Dictionary) -> Card:
-	var wording: String = TRIGGER_TEXT.without_trigger(str(trigger.get("text", "")))
-	var card: Card = create_card(source.id, source.controller, "__event_trigger", source, wording)
-	card.event_trigger = trigger.duplicate(true)
-	card.event_context = context.duplicate()
-	card.effect_kind = "Ability"
-	update_card_positions()
-	return card
 
 ## CANCEL a stack object without resolving it (Summoner 53 countering a Summon). It was already paid for, so the card
 ## goes to its owner's Break Zone. Removing it from `cards` is enough to stop it resolving — the priority loop takes

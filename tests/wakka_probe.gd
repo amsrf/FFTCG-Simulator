@@ -75,12 +75,7 @@ func _run_instructions(card: Card, key: String, targets: Array) -> void:
 			var ctx = card.make_effect_context("activated_ability", {}, null, targets)
 			await specs[0].run.call(ctx)
 			return
-	var raw: Array = card.card_effects[key]["instructions"]
-	var instructions: Array[Instruction] = card.create_instruction_from_json(raw)
-	_game._current_source_card = card
-	_game._current_controller = "player"
-	_game._targets = targets
-	await _game._execute_instructions_and_wait(instructions)
+	push_error("[Wakka] %s has no code ability for '%s'" % [card.card_name, key])
 
 
 func _check_nullify_and_power() -> void:
@@ -100,7 +95,7 @@ func _check_nullify_and_power() -> void:
 	await _run_instructions(wakka, "skill", [cloud])
 
 	_expect(cloud.status_effects.has("abilities_nullified"), "Status Reels applies the nullification status")
-	_expect(cloud.card_effects.is_empty(), "the printed ability view is now empty")
+	_expect(not cloud.abilities_enabled(), "its abilities are disabled")
 	_expect(cloud.activation_skills().is_empty(), "Cloud cannot activate any ability")
 	_expect(not _field.can_activate_now(cloud), "and the green availability gate rejects it")
 	_expect(not cloud.is_brave(), "printed keywords are gone too")
