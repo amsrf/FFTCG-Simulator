@@ -5,6 +5,7 @@ extends Node
 ## (the same call its Confirm button makes). That keeps the test on the real code path instead of bypassing it.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -80,26 +81,20 @@ func _ready() -> void:
 	_expect(graveyard.graveyard_cards.has(card), "a broken card is in the Break Zone to begin with")
 	_game.set("_current_source_card", card)
 
+	# The guard as Vanille's code writes it (card_93.gd): `if ctx.condition("if_last_succeeded"): return_from_break_zone`.
 	# NOT succeeded: the guard must skip the return entirely.
+	var vanille_ctx = EFFECT_CONTEXT.new(_game, card, "test")
 	_game.set("_last_action_succeeded", false)
-	var guarded: Array[Instruction] = [
-		Instruction.new("return_from_break_zone", "game", [true], "if_last_succeeded"),
-	]
-	_game.set("_current_instructions", guarded)
-	_game._process_next_instruction()
+	if vanille_ctx.condition("if_last_succeeded"):
+		await vanille_ctx.return_from_break_zone(true)
 	await get_tree().process_frame
 	_expect(graveyard.graveyard_cards.has(card) and not card.is_on_field(),
 		"the guarded return is SKIPPED when the search did not happen")
 
-	# Succeeded: now it comes back, dull. The source has to be set again because finishing the previous chain cleaned
-	# the instruction stack, which is what a real chain does at its end.
-	_game.set("_current_source_card", card)
+	# Succeeded: now it comes back, dull.
 	_game.set("_last_action_succeeded", true)
-	var unguarded: Array[Instruction] = [
-		Instruction.new("return_from_break_zone", "game", [true], "if_last_succeeded"),
-	]
-	_game.set("_current_instructions", unguarded)
-	_game._process_next_instruction()
+	if vanille_ctx.condition("if_last_succeeded"):
+		await vanille_ctx.return_from_break_zone(true)
 	await get_tree().process_frame
 	_expect(card.is_on_field(), "with success it returns to the field")
 	_expect(card.tapped, "and it arrives DULL, as the card says")

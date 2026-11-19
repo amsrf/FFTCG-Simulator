@@ -2,15 +2,16 @@ extends Node
 const EVENTS := preload("res://scripts/effects/events.gd")
 ## "YOU MAY" + block triggers + free play from hand — Squall 41, Leon 60, Vaan 63.
 ##
-## The optional choice belongs to the INSTRUCTION, at resolution:
-##   * `may` asks the effect's controller; `may_by: "opponent"` asks the other player (Leon);
-##   * declining is a normal no-op, and `if_last_did_not_succeed` sees it;
+## The optional choice is made at resolution, through EffectContext.may() / may_for():
+##   * `may` asks the effect's controller; `may_for(opponent)` asks the other player (Leon);
+##   * declining is a normal no-op;
 ##   * the confirm button carries the short prompt ("Deal 6000"), Refuse is the cancel button.
 ##
 ## Also covered: `when_blocks` / `when_blocked` fire when the block is DECLARED, and `play_from_hand` plays a card
 ## from hand for free through the same window used for the Break Zone.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 
 const SQUALL := 41
 const LEON := 60
@@ -130,22 +131,18 @@ func _ready() -> void:
 	var backup_a: Card = _card(BACKUP_A)
 	var backup_b: Card = _card(BACKUP_B)
 
-	# --- A. the instruction gate itself, accept and decline ------------------------------------------------
+	# --- A. the "may" gate card code uses (EffectContext.may), accept and decline ---------------------------
 	backup_a.tap()
+	var may_ctx = EFFECT_CONTEXT.new(_game, backup_a, "test")
 	_player.yes = false
-	var declined: Array[Instruction] = [Instruction.new("untap_targets", "game", [], "", true, "", "Activate?")]
-	_game.set("_current_controller", "player")
-	_game.set("_targets", [backup_a])
-	_game.call("_execute_instructions", declined)
-	await _wait_for(func(): return _player.prompts.size() >= 1)
-	_expect(backup_a.tapped, "declining a may instruction does nothing")
+	if await may_ctx.may("Activate?"):
+		may_ctx.untap([backup_a])
+	_expect(backup_a.tapped, "declining a may does nothing")
 	_expect(_player.prompts.has("Activate?"), "and the prompt reached the player's agent")
 
 	_player.yes = true
-	var accepted: Array[Instruction] = [Instruction.new("untap_targets", "game", [], "", true, "", "Activate?")]
-	_game.set("_targets", [backup_a])
-	_game.call("_execute_instructions", accepted)
-	await _wait_for(func(): return not backup_a.tapped)
+	if await may_ctx.may("Activate?"):
+		may_ctx.untap([backup_a])
 	_expect(not backup_a.tapped, "accepting it applies the effect")
 
 	# --- B. Squall: when_blocked, may deal 6000 -----------------------------------------------------------

@@ -16,10 +16,14 @@ func when_enter_field(ctx: EFFECT_CONTEXT) -> void:
 	ctx.add_status(targets, "rygdea_mark", 1, {
 		"source": ctx.source,
 		"controller": ctx.controller,
-		"on_enter_break_zone": [
-			{"name": "choose_target", "author": "game", "argument": [
-				{"is_type": "Forward", "controller": "opponent"}]},
-			{"name": "dull_targets", "author": "game", "argument": []},
-		],
+		"effect_id": ctx.source.id,
+		# Called by the engine when the marked Forward reaches the Break Zone this turn (see card_72.gd).
+		"on_enter_break_zone": "marked_card_to_break_zone",
 	})
 	ctx.damage(targets, 3000)
+
+
+## The marked Forward was put into the Break Zone this turn: choose 1 Forward your opponent controls and dull it.
+func marked_card_to_break_zone(ctx: EFFECT_CONTEXT) -> void:
+	var picks: Array = await ctx.choose_targets(CARD_QUERY.new().of_type("Forward").controlled_by(CARD_QUERY.Controller.OPPONENT))
+	ctx.dull(picks)

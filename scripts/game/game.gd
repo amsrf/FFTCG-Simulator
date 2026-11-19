@@ -53,10 +53,6 @@ var revealed_cards: Array[Card] = []
 var revealed_owner_id: int = 0
 
 
-## Emitted when an instruction CHAIN has really finished — not merely when its queue is empty, because an instruction
-## that suspends on an animation or a modal leaves the queue empty while it is still running.
-signal instructions_finished
-
 ## DESYNC CHECK (online lockstep). At every turn boundary the board is hashed from the SEATS' point of view, so both
 ## machines of a match produce the same hash if — and only if — they agree on the game. The networking layer sends
 ## its hash to the other machine and calls compare_remote_hash(); a mismatch stops the match with a report of exactly
@@ -66,9 +62,6 @@ signal desync_detected(turn: int, local_hash: String, remote_hash: String)
 ## turn number -> hash of the board as that turn began.
 var turn_hashes: Dictionary = {}
 
-var _current_instructions: Array[Instruction]
-## True from the moment a fresh chain starts until its last instruction has actually completed.
-var _instructions_running: bool = false
 var _current_source_card: Card
 var _current_controller: String
 var _targets = []
@@ -1463,31 +1456,9 @@ func create_card(id, controller, reuse_uid: int = 0):
 		_cards_by_uid[reuse_uid] = card
 	else:
 		assign_uid(card)
-	if card.has_signal("execute_instructions"):
-		card.execute_instructions.connect(_execute_instructions)
 	return card
 
-func _execute_instructions(instructions: Array[Instruction]) -> void:
-	# FRESH CHAIN? Asked BEFORE the concatenation, because that is the only moment the answer exists.
-	#
-	# A `condition: "if_last_succeeded"` instruction may only read the instruction immediately before it IN THIS
-	# CHAIN. Without this reset the flag survives from an earlier effect's search and "if you do so" would wrongly
-	# run. Only a genuinely empty queue counts as fresh: triggered abilities PREPEND their instructions mid-chain,
-	# and a naive reset would wipe a flag the current chain still needs.
-	var fresh_chain: bool = _current_instructions.is_empty()
-	# Concatenate arrays (new instructions go in front)
-	_current_instructions = instructions + _current_instructions
-	if fresh_chain:
-		_last_action_succeeded = false
-		_instructions_running = true
-	_process_next_instruction()
 
-## The awaitable form of the instruction chain, for callers that must know it has really finished. Safe when the chain
-## runs synchronously: `_instructions_running` is already false, so there is nothing to wait for.
-func _execute_instructions_and_wait(instructions: Array[Instruction]) -> void:
-	_execute_instructions(instructions)
-	while _instructions_running:
-		await instructions_finished
 
 ## TURN HISTORY. Deliberately a plain ledger, not a rules engine: `turn_history[turn_number]` is the list of things
 ## that happened during that turn, in order, so a condition can ask "have I cast Alexander this turn?".
@@ -1546,22 +1517,18 @@ func played_this_turn(type_name: String, owner_id: int = 0) -> bool:
 			return true
 	return false
 
-func _clean_instruction_stack():
-	_current_source_card = null
-	_targets = []
-	_chosen_cards = []
 
 ## Whether the instruction that just ran accomplished something. Read by `condition: "if_last_succeeded"` — the
 ## "search ... and if you do so, return Vanille" shape, where the second half must not happen after a cancel.
 var _last_action_succeeded: bool = true
 
-## CONDITION EVALUATION for `Instruction.condition`. Stringly-typed on purpose — the shapes cards ask for are still
-## being discovered, so this is a small parser plus predicates rather than a data structure:
+## CONDITION EVALUATION behind `EffectContext.condition()` (card code: `ctx.condition("controls:Yuna")`). Stringly-typed
+## on purpose: a small parser plus predicates rather than a data structure. (The instruction chains that also used it
+## for `if_last_succeeded` guards are gone; those two forms still read the `_last_action_succeeded` latch.)
 ##
-##   ""                        unconditional (every instruction written before conditions existed)
-##   "if_last_succeeded"       the instruction immediately before this one reported success
-##   "if_last_did_not_succeed" ...or was SKIPPED / failed. Pair it with a guarded instruction above to get an
-##                             if/else: "deal 4000 if Brynhildr was cast, otherwise deal 2000".
+##   ""                        always true
+##   "if_last_succeeded"       the last Game action reported success (_last_action_succeeded)
+##   "if_last_did_not_succeed" ...or did not
 ##   "cast_this_turn:<name>"   the ability's controller cast that card this turn (reads the turn ledger)
 ##   "controls:<name|type>"    the ability's controller controls a card with that name, or of that type
 ##
@@ -1627,109 +1594,7 @@ func each_player_discards(count: int = 1) -> void:
 	await discard_from(starter, count)
 	await discard_from(3 - starter, count)
 
-func _process_next_instruction() -> void:
-	if _current_instructions.is_empty():
-		# All instructions resolved: apply state-based actions so a card
-		# whose accumulated damage has reached its power is broken now.
-		enforce_game_state_rules()
-		# THE CHAIN IS FINISHED, and this is the only place that knows it. An instruction that suspends on an
-		# animation or a modal leaves the queue empty WHILE IT IS STILL RUNNING, so emptiness alone cannot mean done.
-		_clean_instruction_stack()
-		_instructions_running = false
-		instructions_finished.emit()
-		return
 
-	# CONDITIONAL GUARD. Checked BEFORE the instruction is resolved, and it consumes no state of its own: the flag is
-	# whatever the previous instruction left behind.
-	var next_instruction = _current_instructions[0]
-	if not _condition_holds(next_instruction.condition):
-		LOG.info("Instruction", str("skipped ", next_instruction.action,
-			" (condition '%s' is false)" % next_instruction.condition))
-		_current_instructions.pop_front()
-		# A SKIPPED INSTRUCTION DID NOT SUCCEED. This is what makes `if_last_did_not_succeed` usable as the
-		# else-branch of the guarded instruction above it; without it the negation would read a stale `true`.
-		_last_action_succeeded = false
-		_process_next_instruction()
-		return
-
-	var instruction = _current_instructions.pop_front()
-	# "YOU MAY ..." is decided HERE: when the instruction is reached, i.e. at resolution and after targets are
-	# locked. The decider is the effect's controller, unless the card says the OPPONENT decides (Leon 60), in which
-	# case `may_by` moves it. A refusal is a normal no-op: the rest of the chain still runs, and
-	# `if_last_did_not_succeed` sees the refusal.
-	if instruction.may:
-		var decider: int = _condition_owner()
-		if instruction.may_by == "opponent":
-			decider = 3 - decider
-		var deciding_agent: Agent = agent_for(decider)
-		var use_it: bool = true
-		if deciding_agent != null:
-			use_it = await deciding_agent.confirm_optional(decider, instruction.may_prompt)
-		if not use_it:
-			LOG.info("May", "P%d declined %s" % [decider, instruction.action])
-			_last_action_succeeded = false
-			_process_next_instruction()
-			return
-	var executor = _resolve_executor(instruction.executor, _current_source_card)
-	if executor == null:
-		push_error("Instruction failed: unknown executor '%s' for action '%s'" % [instruction.executor, instruction.action])
-		_process_next_instruction()
-		return
-	if not executor.has_method(instruction.action):
-		push_error("Instruction failed: executor '%s' has no method '%s'" % [executor, instruction.action])
-		_process_next_instruction()
-		return
-
-	var args = []
-	if instruction.value != null:
-		if instruction.value is Array:
-			args = instruction.value
-		else:
-			args.append(instruction.value)
-	# OPTIMISTIC SUCCESS, so `if_last_did_not_succeed` can act as an else-branch. A verb that RAN is treated as
-	# having done something unless it says otherwise (search_deck sets false on a cancel); a verb that was SKIPPED
-	# already wrote false. Without this line an unguarded instruction would leave the latch at the chain-start
-	# `false` and the else-branch would run on top of it.
-	_last_action_succeeded = true
-	# AWAITED, so an action that suspends for a player decision — search_deck's window — genuinely holds up
-	# the rest of the instruction list rather than letting the game run on behind it. Awaiting a plain
-	# method's return value is a no-op, so actions that do not suspend cost nothing for this. It does make
-	# `_process_next_instruction` a coroutine, which is fine: its callers do not need to wait for it.
-	await executor.callv(instruction.action, args)
-	_process_next_instruction()
-
-func _resolve_executor(executor_key: String, source_card: Card = null) -> Node:
-	match executor_key:
-		"card":
-			return source_card
-		"hand":
-			return $Player/Hand
-		"deck":
-			return $Player/Deck
-		"assistant":
-			return $Assistant
-		"field":
-			return $Field
-		"player":
-			return $Player
-		"opponent":
-			return $Opponent
-		"opponent_damage_zone":
-			return $Opponent/DamageZone
-		"game":
-			return self
-		"target":
-			if _targets.is_empty() or _targets[0] == null:
-				push_error("Instruction targets no card")
-				return null
-			return _targets[0]
-		"targets":
-			return _targets
-		_:
-			var node: Node = get_node_or_null(executor_key)
-			if node == null:
-				push_error("Unknown executor: %s" % executor_key)
-			return node
 
 func cause_damage():
 	# WHO CAUSED IT travels with the damage. Exdeath 122 ("any card put in the Damage Zone due to Exdeath cannot use
@@ -2361,7 +2226,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 				GlobalVariables.pop_modal(GlobalVariables.Player_Mode.BLOCKING)
 				field.set_blockable(controller_for(defender_id), false)
 			if blocker != null:
-				blocker.declare_blocker()
+				set_blocker(blocker)
 				if not local_defence:
 					# The human is watching the opponent declare. Queue the link for their pick and hold it long enough to
 					# be read; the priority round below waits for the queue, so it is seen before anyone acts. No blue
@@ -2375,7 +2240,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			pass
 		GlobalVariables.Phase.DAMAGE_RESOLUTION_STEP:
 			# A blocked attack clashes instead of damaging the player. This is
-			# the ONLY clash — Card.declare_blocker() just records the blocker.
+			# the ONLY clash — declaring the blocker (set_blocker) only records it.
 			if field.blocker_card != null:
 				# AWAITED: First Strike may open a priority window between its two damage steps, and that window
 				# must finish before this phase continues into its own priority round. Without the await the clash
@@ -2871,33 +2736,34 @@ func trigger_break_zone_keywords(card: Card, was_broken: bool) -> void:
 	# THE FIELD (Graveyard.add_card gates that call).
 	_trigger_status_break_zone_effects(card)
 
-## Runs the one-shot trigger a status carries when its card reaches the Break Zone (see
-## Field._apply_damage_caused_riders). The status is erased first, so the trigger cannot run twice, and the controller
-## recorded with it is restored around the chain so "your opponent mills" still means the right player.
+const EFFECT_CONTEXT_SCRIPT := preload("res://scripts/effects/effect_context.gd")
+const EFFECT_REGISTRY := preload("res://scripts/effects/effect_registry.gd")
+
+## Runs the one-shot trigger a status carries when its card reaches the Break Zone ("if that Forward is put into the
+## Break Zone this turn, ..." - Cid 72/73, Cid Raines 192, Rygdea 211; see Field._apply_damage_caused_riders). The
+## payload names a METHOD on the source card's code effect ("on_enter_break_zone") and that card's id ("effect_id"):
+## the effect is looked up by id, so it runs even after the source has left the field. Its context belongs to the
+## controller recorded in the payload, so "your opponent mills" still means the right player. The status is erased
+## first, so it cannot run twice. Not awaited, as before: the Break Zone arrival does not wait for it.
 func _trigger_status_break_zone_effects(card: Card) -> void:
 	for status in card.status_effects.keys():
 		var payload = card.status_effects[status]
 		if not (payload is Dictionary) or not payload.has("on_enter_break_zone"):
 			continue
-		var entries: Array = payload["on_enter_break_zone"]
 		card.status_effects.erase(status)
-		var instructions: Array[Instruction] = []
-		for entry in entries:
-			if entry is Dictionary:
-				instructions.append(Instruction.new(
-					str(entry.get("name", "")), str(entry.get("author", "game")), entry.get("argument", [])))
-		if instructions.is_empty():
+		var method: String = str(payload["on_enter_break_zone"])
+		var effect_obj = EFFECT_REGISTRY.for_card_id(int(payload.get("effect_id", 0)))
+		if effect_obj == null or not effect_obj.has_method(method):
+			push_error("[BreakZone] %s's status '%s' names '%s', which card %s's effect does not have" % [
+				card.card_name, status, method, str(payload.get("effect_id", "?"))])
 			return
-		var previous: String = _current_controller
-		var previous_source: Card = _current_source_card
 		var payload_source = payload.get("source", null)
-		if payload_source is Card and is_instance_valid(payload_source):
-			_current_source_card = payload_source
-		_current_controller = str(payload.get("controller", previous))
-		LOG.info("BreakZone", str("", card.card_name, " -> status trigger ", status))
-		_execute_instructions(instructions)
-		_current_controller = previous
-		_current_source_card = previous_source
+		var source: Card = payload_source if payload_source is Card and is_instance_valid(payload_source) else card
+		var ctx = EFFECT_CONTEXT_SCRIPT.new(self, source, "status_break_zone", {"card": card})
+		ctx.controller = str(payload.get("controller", source.controller))
+		ctx.owner_id = 1 if ctx.controller == Card.PLAYER else 2
+		LOG.info("BreakZone", "%s -> status trigger %s (%s)" % [card.card_name, status, method])
+		effect_obj.call(method, ctx)
 		return
 
 ## A TARGETING SESSION WAS CONFIRMED. This is the first moment the chosen set is real, so it is where "when chosen"
@@ -3076,8 +2942,8 @@ func _refresh_block_declaration_button() -> void:
 
 ## Agrias 1-151R: look through your deck, take one matching card, then shuffle.
 ##
-## A COROUTINE, and `_process_next_instruction` awaits it — so the game genuinely stops here while the player
-## is choosing, instead of running on behind the window.
+## A COROUTINE, and its caller (EffectContext.search_deck) awaits it — so the game genuinely stops here while the
+## player is choosing, instead of running on behind the window.
 ##
 ## The order is the spec, and it matters: the chosen card goes to the TOP of the deck, is drawn from there,
 ## and only THEN is the deck shuffled. Drawing before shuffling is what makes "taken from the deck" literally

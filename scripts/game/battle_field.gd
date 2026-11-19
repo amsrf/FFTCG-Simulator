@@ -2137,9 +2137,11 @@ func _apply_damage_caused_riders(source: Card, target: Card) -> void:
 		var status: String = str(rule.get("status", ""))
 		if status.is_empty():
 			continue
-		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller}
+		var payload: Dictionary = {"duration": int(rule.get("duration", 1)), "controller": source.controller,
+			"source": source, "effect_id": source.id}
 		if rule.has("on_enter_break_zone"):
-			payload["on_enter_break_zone"] = rule["on_enter_break_zone"]
+			# A METHOD NAME on the source's code effect (Game._trigger_status_break_zone_effects calls it).
+			payload["on_enter_break_zone"] = str(rule["on_enter_break_zone"])
 		LOG.info("Damage", "%s marks %s (%s)" % [source.card_name, target.card_name, status])
 		target.add_status_effect(status, payload)
 

@@ -8,9 +8,9 @@ For each function it looks for:
 and reports who the users are: production code, tests/tools, or data.
 
 Categories printed: UNREFERENCED, TEST-ONLY, QUOTED-ONLY, DATA-ONLY.
-Instruction handlers (dull_targets, opponent_mills, ...) can be called by NAME from an instruction entry a code effect
-builds (a status's on_enter_break_zone payload), which is why a plain grep for a call finds no caller. (The per-card
-JSON effects file is gone.)
+The old data-driven instruction engine (per-card JSON + executor) is gone: card abilities are code, so a function
+with no caller really has none, apart from the dynamic forms above (call("name"), scene method="name", and a status
+payload's "on_enter_break_zone" method name, which Game calls on the source card's effect).
 
 Run: python3 tools/dead_audit.py [path/to/file.gd]
 """

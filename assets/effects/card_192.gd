@@ -19,5 +19,11 @@ func damage_caused_riders() -> Array:
 	return [{
 		"status": "raines_mark",
 		"duration": 1,
-		"on_enter_break_zone": [{"name": "opponent_discards", "author": "game", "argument": [1]}],
+		# Called by the engine when the marked Forward reaches the Break Zone this turn (see card_72.gd).
+		"on_enter_break_zone": "marked_card_to_break_zone",
 	}]
+
+
+## The marked Forward was put into the Break Zone this turn: the opponent discards 1.
+func marked_card_to_break_zone(ctx: EFFECT_CONTEXT) -> void:
+	await ctx.opponent_discards(1)

@@ -1,10 +1,11 @@
 extends Node
 ## EFFECTS DATA probe — coverage report + a validator for the silent-failure class.
 ##
-## Card abilities are code (assets/effects/card_<id>.gd); the per-card JSON file is gone. A few code effects still
-## hand the instruction executor a list (a status's "on_enter_break_zone" payload, e.g. Cid 72/73, Rygdea 211), and
-## a typo there is invisible: the card loads and the instruction only fails when it fires, as a push_error nobody
-## reads. This finds every such entry in the code effects and checks its (author, name) resolves to a real method.
+## Card abilities are code (assets/effects/card_<id>.gd): the per-card JSON file and the instruction executor are gone.
+## What a typo could still hide is a status payload's "on_enter_break_zone" METHOD NAME (Cid 72/73, Cid Raines 192,
+## Rygdea 211): the card loads and the name only fails when the marked card reaches the Break Zone. This checks every
+## such name exists on the card's own effect, and that no instruction-style entry ({"name": ..., "author": ...}) is
+## left in any code effect (nothing would run it).
 ##
 ## It also prints coverage for 1-100 so progress is measurable rather than remembered.
 
@@ -13,7 +14,6 @@ const GAME_SCENE := preload("res://scenes/game/game.tscn")
 var _checks: int = 0
 var _fails: int = 0
 var _game: Node = null
-var _executors: Dictionary = {}
 
 
 func _expect(ok: bool, what: String) -> void:
@@ -32,18 +32,6 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var sample: Card = _game.create_card(1, "player")
-	_executors = {
-		"game": _game,
-		"field": _game.get("field"),
-		"hand": _game.get("hand"),
-		"deck": _game.get_node("Player/Deck"),
-		"assistant": _game.get("assistant"),
-		"player": _game.get_node("Player"),
-		"opponent": _game.get_node("Opponent"),
-		"card": sample,
-		"target": sample,
-	}
 
 	var db = CardDatabase.card_database
 	var code_ids: Dictionary = {}
@@ -73,28 +61,30 @@ func _ready() -> void:
 		if span.x == 101:
 			print("[Effects] 101-216 still to write: %s" % str(missing))
 
-	# --- validate every instruction entry a code effect still hands the executor ---------------------------
-	var entry_pattern := RegEx.create_from_string('\\{\\s*"name"\\s*:\\s*"(\\w+)"\\s*,\\s*"author"\\s*:\\s*"(\\w+)"')
-	var bad: Array = []
-	var instructions: int = 0
+	# --- no instruction entries left (nothing runs them), and every payload method exists ------------------
+	var entry_pattern := RegEx.create_from_string('\\{\\s*"name"\\s*:\\s*"\\w+"\\s*,\\s*"author"')
+	var payload_pattern := RegEx.create_from_string('"on_enter_break_zone"\\s*:\\s*"(\\w+)"')
+	var leftovers: Array = []
+	var bad_methods: Array = []
+	var payloads: int = 0
 	for file_name in DirAccess.get_files_at("res://assets/effects"):
 		if not file_name.ends_with(".gd"):
 			continue
-		var source: String = FileAccess.get_file_as_string("res://assets/effects/" + file_name)
-		for m in entry_pattern.search_all(source):
-			instructions += 1
-			var what: String = m.get_string(1)
-			var who: String = m.get_string(2)
-			if not _executors.has(who):
-				bad.append("%s: unknown author '%s' for '%s'" % [file_name, who, what])
-				continue
-			var target = _executors[who]
-			if target == null or not target.has_method(what):
-				bad.append("%s: '%s' has no method '%s'" % [file_name, who, what])
-	print("[Effects] %d instruction entries in code effects" % instructions)
-	_expect(instructions > 0, "the status-payload instruction entries were found (Cid 72/73, 192, Rygdea 211)")
-	_expect(bad.is_empty(), "every instruction name resolves to a real method %s" % ("" if bad.is_empty() else str(bad)))
+		var path: String = "res://assets/effects/" + file_name
+		var source: String = FileAccess.get_file_as_string(path)
+		if entry_pattern.search(source) != null:
+			leftovers.append(file_name)
+		for m in payload_pattern.search_all(source):
+			payloads += 1
+			var effect_obj = load(path).new()
+			if not effect_obj.has_method(m.get_string(1)):
+				bad_methods.append("%s: no method '%s'" % [file_name, m.get_string(1)])
+	print("[Effects] %d on_enter_break_zone payload(s) in code effects" % payloads)
+	_expect(leftovers.is_empty(), "no instruction-style entries are left in code effects %s" % ("" if leftovers.is_empty() else str(leftovers)))
+	_expect(payloads >= 4, "the status payloads were found (Cid 72/73, Cid Raines 192, Rygdea 211)")
+	_expect(bad_methods.is_empty(), "every payload names a method its card's effect has %s" % ("" if bad_methods.is_empty() else str(bad_methods)))
 	_expect(not FileAccess.file_exists("res://assets/card_effects.json"), "the per-card JSON effects file is gone")
+	_expect(not _game.has_method("_execute_instructions"), "the instruction executor is gone")
 
 	print("[Effects] %d checks | failures: %d" % [_checks, _fails])
 	print("[Effects] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))

@@ -182,23 +182,7 @@ var _arrival_pending: bool = false
 @onready var power_label: Label3D =  $PowerDisplay
 signal card_dragged(card)
 signal focus_card(card)
-signal execute_instructions(instructions)
 
-func create_instruction_from_json(array: Array) -> Array[Instruction]:
-	# Extract fields from JSON
-	var ans: Array[Instruction] = []
-	for json_instruction in array:
-		var action: String = json_instruction.get("name", "")
-		var executor: String = json_instruction.get("author", "")
-		var value = json_instruction.get("argument", null)
-		var condition: String = json_instruction.get("condition", "")
-		var may_use: bool = bool(json_instruction.get("may", false))
-		var may_by: String = str(json_instruction.get("may_by", ""))
-		var may_prompt: String = str(json_instruction.get("may_prompt", ""))
-		ans.append(Instruction.new(action, executor, value, condition, may_use, may_by, may_prompt))
-	
-	# Create and return the Instruction
-	return ans
 
 func _ready():
 	set_process(_drag_input_active)
@@ -1121,14 +1105,6 @@ func consume_copied_skill(token: int) -> void:
 		clear_copied_skill()
 
 
-
-func declare_blocker():
-	# Only records the blocker. The clash belongs to DAMAGE_RESOLUTION — doing it
-	# here as well would apply the damage twice.
-	var instructions: Array[Instruction] = [
-		Instruction.new('set_blocker','game', self),
-	]
-	emit_signal("execute_instructions", instructions)
 
 ## "Loses all abilities" (Wakka 216): every reader of the card's code effect asks this (effect hooks, keywords,
 ## auras, costs, triggers). A status, cleared by turn_end like any until-end-of-turn effect; stack copies already on

@@ -1,13 +1,7 @@
 extends Node
-## CONDITION probe — the evaluator, the negation, and the two cards that need them.
-##
-## The important shape is the if/else built from a guarded instruction plus its negation:
-##
-##   {damage 4000, condition: "cast_this_turn:Brynhildr"}
-##   {damage 2000, condition: "if_last_did_not_succeed"}
-##
-## which is Sazh 1-013H ("deal 4000 instead if you cast Brynhildr"). It only works if a SKIPPED instruction writes
-## false to the latch, and a RUNNING one writes true — both are checked here.
+## CONDITION probe — the evaluator card code reads through EffectContext.condition() ("controls:Laguna",
+## "cast_this_turn:Brynhildr"), and the cards that need it: Sazh 1-013H ("deal 4000 instead if you cast Brynhildr"),
+## end to end. (The instruction-chain if/else this probe used to test went with the instruction executor.)
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
@@ -26,17 +20,10 @@ func _expect(ok: bool, what: String) -> void:
 		print("[Condition] FAIL %s" % what)
 
 
-func _run(chain: Array[Instruction]) -> void:
-	_game.call("_execute_instructions", chain)
 	await get_tree().process_frame
 	await get_tree().process_frame
 
 
-func _activities() -> Array:
-	var out: Array = []
-	for entry in _game.call("actions_this_turn"):
-		out.append(str(entry.get("activity", "")))
-	return out
 
 
 func _ready() -> void:
@@ -51,29 +38,13 @@ func _ready() -> void:
 	_expect(not _game.call("_controls", "Nobody"), "controls:Nobody is false")
 	_expect(_game.call("_controls", "Backup"), "controls:Backup is true for a board with Backups")
 
-	# --- skip writes FALSE, so the negation is a real else-branch --------------------------------------
-	var not_cast: Array[Instruction] = [
-		Instruction.new("record_action", "game", ["guarded", [], 1], "cast_this_turn:Brynhildr"),
-		Instruction.new("record_action", "game", ["else_branch", [], 1], "if_last_did_not_succeed"),
-	]
-	await _run(not_cast)
-	var acts: Array = _activities()
-	print("[Condition] without the cast: %s" % str(acts))
-	_expect(acts.has("else_branch"), "with the cast condition false, the ELSE branch runs")
-	_expect(not acts.has("guarded"), "and the guarded instruction does not")
-
-	# --- now with the cast in the ledger -----------------------------------------------------------------
+	# --- cast_this_turn, read the way card code reads it ------------------------------------------------
+	var probe_source: Card = _game.call("create_card", 13, "player")
+	var probe_ctx = EFFECT_CONTEXT.new(_game, probe_source, "test")
+	_expect(not probe_ctx.condition("cast_this_turn:Brynhildr"), "before the cast, cast_this_turn:Brynhildr is false")
 	_game.call("record_action", "Casted Brynhildr", [], 1)
-	var did_cast: Array[Instruction] = [
-		Instruction.new("record_action", "game", ["guarded", [], 1], "cast_this_turn:Brynhildr"),
-		Instruction.new("record_action", "game", ["else_branch_2", [], 1], "if_last_did_not_succeed"),
-	]
-	await _run(did_cast)
-	acts = _activities()
-	print("[Condition] with the cast: %s" % str(acts))
-	_expect(acts.has("guarded"), "with the cast in the ledger, the guarded instruction runs")
-	_expect(not acts.has("else_branch_2"),
-		"and the running instruction writes TRUE, so the else branch is skipped")
+	_expect(probe_ctx.condition("cast_this_turn:Brynhildr"), "with the cast in the ledger, it is true")
+	_expect(probe_ctx.condition("controls:Squall"), "and controls:Squall reads through the same context")
 
 	# --- Sazh end to end: 4000 instead of 2000 ----------------------------------------------------------
 	var field = _game.get("field")
@@ -110,8 +81,8 @@ func _ready() -> void:
 	for backup in field.get_back_cards_for("player"):
 		if backup.tapped:
 			tapped_before += 1
-	await _run([Instruction.new("untap_all_matching", "game",
-		[{"is_type": "Backup", "controller": "player"}])])
+	_game.set("_current_controller", Card.PLAYER)
+	await _game.untap_all_matching({"is_type": "Backup", "controller": "player"})
 	var still_tapped: int = 0
 	for backup in field.get_back_cards_for("player"):
 		if backup.tapped:
