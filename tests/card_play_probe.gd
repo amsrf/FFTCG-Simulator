@@ -2,9 +2,9 @@ extends Node
 ## HOW A CHARACTER IS PLAYED (card_hologram.gd; ~/Desktop/Clips/play frames 148-202 at 60 fps).
 ##
 ## Casts a cheap Forward and then a cost-8+ one through the real payment path and checks the beats: a hologram stand-in
-## where the card was, the line drawing appearing ABOVE the slot while that is still dissolving, descending onto it,
-## the card hidden until the white fill and shown at once after it, the field slab extruding to its thickness, no
-## camera jolt for a cheap card and a jolt that returns the camera EXACTLY for a big one. Also: field cards are thick,
+## where the card was, the line drawing crossing to hover ABOVE the slot while that is still dissolving, the DRAWING
+## falling onto the slot (accelerating) and flooding white only on contact, the card hidden until then and revealed
+## already at rest, no dust, and a camera jolt for every card (harder for a big one) that returns the camera EXACTLY. Also: field cards are thick,
 ## everywhere else thin.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
@@ -107,24 +107,52 @@ func _ready() -> void:
 		_expect(Vector2(over.x, over.z).length() < 0.01 and absf(over.y - HOLOGRAM.SLAM_HEIGHT) < 0.01,
 			"it hovers right over the slot (%.2f m up)" % over.y)
 	_expect(not cheap.visible, "the card is hidden through the hold")
-	await _wait_for(func() -> bool: return cheap.hologram.phase == "fill", 1.0)
-	_expect(not cheap.visible, "and through the white fill")
+	# The DRAWING falls (not the card), slowly at first and then all at once, and fills white only on the floor.
 	await _wait_for(func() -> bool: return cheap.hologram.phase == "drop", 1.0)
-	_expect(cheap.visible, "then the card is there")
-	_expect(cheap.hand_mesh.global_position.y > slot.y + 0.1, "above its slot, and it drops")
-	await get_tree().process_frame
-	var drop_shadow: float = cheap.field_shadow.strength() if cheap.field_shadow != null else -1.0
+	_expect(not cheap.visible, "the drawing falls while the card is still hidden")
+	var fall: Array = []   # [ms, height above the face]
+	var fall_t0: int = Time.get_ticks_msec()
+	while lines != null and is_instance_valid(lines) and cheap.hologram.phase == "drop":
+		fall.append([Time.get_ticks_msec() - fall_t0, lines.global_position.y - slot.y])
+		var lines_mat := lines.material_override as ShaderMaterial
+		var fill_now = lines_mat.get_shader_parameter("fill")
+		if fill_now is float and fill_now > 0.01:
+			_expect(false, "the drawing is not white yet while it falls")
+			break
+		await get_tree().process_frame
+	var fall_ms: int = Time.get_ticks_msec() - fall_t0
+	_expect(fall_ms > 50 and fall_ms < 220, "the fall is quick: %d ms (ref ~1-2 frames, ours 0.10 s)" % fall_ms)
+	var half_drop: float = -1.0
+	for sample in fall:
+		if float(sample[0]) <= fall_ms * 0.5:
+			half_drop = 1.0 - float(sample[1]) / HOLOGRAM.SLAM_HEIGHT
+	_expect(half_drop >= 0.0 and half_drop < 0.3,
+		"and ACCELERATES: only %.0f%% of the way down at half time" % (half_drop * 100.0))
+	_expect(cheap.hologram.phase == "fill", "it floods white on contact")
+	if lines != null and is_instance_valid(lines):
+		_expect(absf(lines.global_position.y - slot.y - HOLOGRAM.LIGHT_LIFT) < 0.002,
+			"lying on the slot (%.3f m above the face)" % (lines.global_position.y - slot.y))
+	_expect(_find_named(get_tree().root, "CardPlaySparks") != null, "sparks jump off its rim")
+	_expect(not cheap.visible, "the card is still hidden inside the white")
 	await _wait_for(func() -> bool: return cheap.hologram.phase == "landed", 1.0)
 	var landed_ms: int = Time.get_ticks_msec() - t0
-	_expect(cheap.hand_mesh.global_position.distance_to(slot) < 0.001, "it hits the board exactly on its slot")
+	_expect(cheap.visible, "then the card is there")
+	_expect(cheap.hand_mesh.global_position.distance_to(slot) < 0.001, "already at rest on its slot")
 	_expect(landed_ms > 850 and landed_ms < 1600,
-		"slow enough to read: %d ms from confirm to impact (0.85-1.6 s)" % landed_ms)
-	var dust: Node = _find_named(get_tree().root, "SlamDust")
-	_expect(dust != null, "the impact kicks up dust")
-	if dust != null:
-		_expect(int(dust.get("amount")) == 14, "a cheap card's small puff (%d)" % int(dust.get("amount")))
+		"slow enough to read: %d ms from confirm to reveal (0.85-1.6 s)" % landed_ms)
+	_expect(_find_named(get_tree().root, "SlamDust") == null, "no dust: the impact is light")
+	await get_tree().process_frame
+	var cheap_moved: float = 0.0
+	var cheap_jolted := false
+	for i in 20:
+		if HOLOGRAM.is_jolting():
+			cheap_jolted = true
+		cheap_moved = maxf(cheap_moved, camera.global_position.distance_to(camera_home))
+		await get_tree().process_frame
+	_expect(cheap_jolted and cheap_moved > 0.003, "even a cost-2 card jolts the camera (%.3f m)" % cheap_moved)
+	await get_tree().create_timer(0.3).timeout
 	_expect(not HOLOGRAM.is_jolting() and camera.global_position.is_equal_approx(camera_home),
-		"a cost-2 card does not move the camera")
+		"and puts it back exactly")
 	# THE WOOD SHADOW (card_field_shadow.gd): on the slab under the card, offset by FALL, full strength at rest, and
 	# lighter while the card was still falling.
 	await get_tree().process_frame
@@ -136,8 +164,6 @@ func _ready() -> void:
 		_expect(shadow.global_position.distance_to(want) < 0.005,
 			"on the wood, offset by FALL (%s vs %s)" % [str(shadow.global_position), str(want)])
 		_expect(absf(shadow.strength() - FIELD_SHADOW.STRENGTH) < 0.02, "at full strength at rest (%.2f)" % shadow.strength())
-		_expect(drop_shadow >= 0.0 and drop_shadow < shadow.strength() - 0.05,
-			"and lighter while the card was falling (%.2f)" % drop_shadow)
 	await get_tree().create_timer(0.4).timeout
 	_expect(lines == null or not is_instance_valid(lines), "the drawing's light has gone")
 	_expect(ghost == null or not is_instance_valid(ghost), "and so has the hologram")
@@ -149,11 +175,12 @@ func _ready() -> void:
 	_assistant.on_charge_complete()
 	await _wait_for(func() -> bool: return big.hologram.phase == "landed", 3.0)
 	_expect(big.visible, "the big card lands")
-	var big_dust: Node = null
+	var big_sparks: int = 0
 	for node in get_tree().root.get_children():
-		if node.name.begins_with("SlamDust") and int(node.get("amount")) == 38:
-			big_dust = node
-	_expect(big_dust != null, "and throws a big dust ring")
+		# By class: a second spark burst under the root while the departure's is still alive gets an auto-name.
+		if node is CPUParticles3D:
+			big_sparks = maxi(big_sparks, int(node.get("amount")))
+	_expect(big_sparks == HOLOGRAM.CONTACT_SPARKS[2], "and throws more sparks (%d)" % big_sparks)
 	await get_tree().process_frame
 	var moved: float = 0.0
 	var jolted := false
@@ -163,7 +190,7 @@ func _ready() -> void:
 		moved = maxf(moved, camera.global_position.distance_to(camera_home))
 		await get_tree().process_frame
 	_expect(jolted, "a cost-9 card jolts the camera")
-	_expect(moved > 0.005 and moved < 0.15, "by a few pixels' worth (%.3f m)" % moved)
+	_expect(moved > cheap_moved * 1.3 and moved < 0.15, "harder than the cheap one, a few pixels' worth (%.3f m vs %.3f m)" % [moved, cheap_moved])
 	await get_tree().create_timer(0.3).timeout
 	_expect(not HOLOGRAM.is_jolting() and camera.global_position.is_equal_approx(camera_home),
 		"and puts it back exactly")

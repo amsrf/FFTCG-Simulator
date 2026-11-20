@@ -170,6 +170,7 @@ script = ExtResource("40_btnstations")
 [node name="LocalForward" type="Node3D" parent="Assistant/ButtonStations"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.08, 0.085, -1.64)
 script = ExtResource("41_discsocket")
+use_priority_coin = true
 imprint_font = ExtResource("17_e8heu")
 
 [node name="LocalCancel" type="Node3D" parent="Assistant/ButtonStations"]
@@ -182,6 +183,8 @@ glyph = "cross"
 [node name="OpponentForward" type="Node3D" parent="Assistant/ButtonStations"]
 transform = Transform3D(-1, 0, 8.742278e-08, 0, 1, 0, -8.742278e-08, 0, -1, 3.08, 0.085, 2.24)
 script = ExtResource("41_discsocket")
+use_priority_coin = true
+coin_style = "cosmos"
 imprint_mode = "symbol"
 
 [node name="OpponentCancel" type="Node3D" parent="Assistant/ButtonStations"]

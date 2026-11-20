@@ -1,11 +1,9 @@
-"""The phase crystal's cradle: a low stone lip round a rectangular slot the size of the triangular prism's top face,
-over a dark recess in the wood, so the lying phase crystal (scripts/ui/phase_prism.gd) sits IN the board instead of on
-it. Same stone as the button stations (build_button_housing.py), read off those objects so they cannot drift; it sits
-just above the local Cancel/Pass station.
+"""Carve a chamfered socket in the wood for the phase crystal (scripts/ui/phase_prism.gd).
+The socket has sloped stone walls, a lip just above the board, and a dark floor below the crystal's roll.
 
 Godot <-> Blender: Godot (x, y, z) = Blender (x, z, -y). Fixed for both seats (the exporter's fixed_prefixes): the
 crystal is always on the LOCAL player's right. For seat two the exporter swaps its stone to that seat's housing stone.
-Its centre, depth and the crystal's shape are READ from scripts/ui/phase_prism.gd: change them there and re-run this.
+The centre, mouth size and depth come from scripts/ui/phase_prism.gd.
 
 Input: board_pit_stations/board_pit_stations.blend (not modified).
 Output: board_phase_cradle/board_phase_cradle.blend (the export source read by export_board_to_godot.py) and its
@@ -13,7 +11,7 @@ seat-one environment render board_environment.png.
 
     blender --background --python /abs/path/Blender/build_phase_cradle.py
 """
-import bpy, bmesh, os, re, math
+import bpy, bmesh, os, re
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,10 +19,6 @@ OUT = os.path.join(HERE, 'board_phase_cradle'); os.makedirs(OUT, exist_ok=True)
 bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, 'board_pit_stations', 'board_pit_stations.blend'))
 scene = bpy.context.scene
 
-# THE OPENING IS THE PRISM'S TOP FACE. The phase prism is a TRIANGULAR crystal lying with one face up, flush with
-# the lip (scripts/ui/phase_prism.gd), so the slot is a plain rectangle: that face plus CLEARANCE all round. Its size,
-# lip height and centre are READ FROM phase_prism.gd, so the two cannot drift. While it turns, its other edges pass
-# under the lip's solid stone, which hides them.
 ROOT = os.path.dirname(HERE)
 GD = open(os.path.join(ROOT, 'scripts', 'ui', 'phase_prism.gd')).read()
 
@@ -36,38 +30,41 @@ def gd_const(name):
 	return float(m.group(1))
 
 
-FACE, LENGTH, TOP = gd_const('FACE_WIDTH'), gd_const('LENGTH'), gd_const('CRADLE_TOP_Y')
-# The top face stands RAISE above the lip; the two sloped faces (60 degrees from horizontal) close in by RAISE / tan 60
-# each side on the way down, so the slot is the prism's width AT THE LIP, not its top face's width.
-RAISE = gd_const('FACE_ABOVE_LIP')
-SLOT = FACE - 2.0 * max(RAISE, 0.0) / math.tan(math.radians(60.0))   # flush or below: the face's own width
+LENGTH, WIDTH = gd_const('CAVITY_LENGTH'), gd_const('CAVITY_WIDTH')
+TOP, FLOOR = gd_const('CRADLE_TOP_Y'), gd_const('CAVITY_FLOOR_Y')
 _c = re.search(r'^const CENTRE := Vector3\(([-0-9.]+),.*?,\s*([-0-9.]+)\)', GD, re.M)
 GX, GZ = float(_c.group(1)), float(_c.group(2))
 CENTRE = Vector((GX, -GZ, 0.0))
-CLEARANCE = 0.002
-LIP = 0.045              # stone round the slot
-FLOOR_Z = -0.02          # the recess floor, under the prism's lowest edge (its apex points down)
-BOTTOM = -0.12
+LIP = 0.011
+WALL_SLOPE = 0.006
 
 
-def rect(half_x, half_y):
-	"""Counter-clockwise rectangle in Blender XY around CENTRE, long axis along X."""
-	return [Vector((CENTRE.x + x, CENTRE.y + y, 0)) for x, y in
-		((-half_x, -half_y), (half_x, -half_y), (half_x, half_y), (-half_x, half_y))]
+def outline(offset):
+	"""Chamfered outline in Blender XY, with the long axis along X."""
+	x, y = LENGTH / 2 + offset, WIDTH / 2 + offset
+	dx, dy = 0.105, 0.055
+	return [(CENTRE.x + a, CENTRE.y + b) for a, b in (
+		(-x + dx, -y), (x - dx, -y), (x, -y + dy), (x, y - dy),
+		(x - dx, y), (-x + dx, y), (-x, y - dy), (-x, -y + dy))]
 
 
-def prism(name, pts, z0, z1):
-	me = bpy.data.meshes.new(name); bm = bmesh.new()
-	low = [bm.verts.new((p.x, p.y, z0)) for p in pts]
-	high = [bm.verts.new((p.x, p.y, z1)) for p in pts]
-	bm.faces.new(list(reversed(low))); bm.faces.new(high)
-	n = len(pts)
-	for i in range(n):
-		j = (i + 1) % n
-		bm.faces.new([low[i], low[j], high[j], high[i]])
+def bands(name, levels, closed=False):
+	"""Join matching outlines and either wrap them into a ring or cap the two ends."""
+	me = bpy.data.meshes.new(name)
+	bm = bmesh.new()
+	rings = [[bm.verts.new((x, y, z)) for x, y in points] for points, z in levels]
+	for a, b in zip(rings, rings[1:] + (rings[:1] if closed else [])):
+		for i in range(len(a)):
+			j = (i + 1) % len(a)
+			bm.faces.new([a[i], a[j], b[j], b[i]])
+	if not closed:
+		bm.faces.new(list(reversed(rings[0])))
+		bm.faces.new(rings[-1])
 	bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-	bm.normal_update(); bm.to_mesh(me); bm.free()
-	o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
+	bm.to_mesh(me)
+	bm.free()
+	o = bpy.data.objects.new(name, me)
+	bpy.context.collection.objects.link(o)
 	return o
 
 
@@ -87,28 +84,26 @@ def station_material(object_name):
 
 stone = station_material('player button housing')
 dark = bpy.data.materials.get('Well shadow')
-inner = rect(LENGTH / 2 + CLEARANCE, SLOT / 2 + CLEARANCE)
-outer = rect(LENGTH / 2 + CLEARANCE + LIP, SLOT / 2 + CLEARANCE + LIP)
-print('OPENING: %.3f x %.3f at (%.3f, %.3f), lip top %.3f, prism raised %.3f' % (LENGTH + 2 * CLEARANCE,
-	SLOT + 2 * CLEARANCE, CENTRE.x, CENTRE.y, TOP, RAISE), flush=True)
+mouth = outline(0.0)
+throat = outline(-WALL_SLOPE)
+outer = outline(LIP)
+print('OPENING: %.3f x %.3f at (%.3f, %.3f), depth %.3f' % (LENGTH, WIDTH, CENTRE.x, CENTRE.y,
+	TOP - FLOOR), flush=True)
 
-lip = prism('Phase cradle lip', outer, BOTTOM, TOP)
-hole = prism('cutter', inner, BOTTOM - 0.1, TOP + 0.1)
-apply_boolean(lip, hole, 'DIFFERENCE'); bpy.data.objects.remove(hole, do_unlink=True)
-b = lip.modifiers.new('Hewn edges', 'BEVEL'); b.width = 0.012; b.segments = 3
+lip = bands('Phase cradle lip', [(outer, FLOOR - 0.012), (outer, TOP), (mouth, TOP), (throat, FLOOR - 0.004)],
+	closed=True)
+b = lip.modifiers.new('Hewn edges', 'BEVEL'); b.width = 0.003; b.segments = 3
 lip.modifiers.new('Shading', 'WEIGHTED_NORMAL')
-# A boolean leaves an empty first slot (it rendered white): one slot, every face on it.
-lip.data.materials.clear(); lip.data.materials.append(stone)
-for poly in lip.data.polygons:
-	poly.material_index = 0
-floor = prism('Phase cradle floor', inner, FLOOR_Z - 0.01, FLOOR_Z)
+lip.data.materials.append(stone)
+floor_edge = outline(-WALL_SLOPE + 0.012)
+floor = bands('Phase cradle floor', [(floor_edge, FLOOR - 0.010), (floor_edge, FLOOR)])
 if dark is not None:
 	floor.data.materials.append(dark)
 made = [lip, floor]
 
 # Small scenery inside the footprint goes; the slab gets the recess cut out of it (down to the floor).
 keep = ('Forest single', 'Volcanic single', 'Diorama', 'Continuous river', 'Layout card', 'Card face', 'Deck proxy')
-xs = [p.x for p in outer]; ys = [p.y for p in outer]
+xs, ys = zip(*outer)
 for o in list(scene.objects):
 	if o.type not in {'MESH', 'CURVE'} or o in made or o.name.startswith(keep) or o.name.startswith('Phase cradle'):
 		continue
@@ -120,9 +115,11 @@ for o in list(scene.objects):
 		print('REMOVED under phase cradle:', o.name, flush=True)
 		bpy.data.objects.remove(o, do_unlink=True)
 slab = bpy.data.objects['Volcanic single wood slab']
-cut = prism('cutter', rect(LENGTH / 2 + CLEARANCE + 0.004, SLOT / 2 + CLEARANCE + 0.004), FLOOR_Z, 0.5)
+cut = bands('cutter', [(outline(-WALL_SLOPE + 0.008), FLOOR - 0.010), (outline(0.008), TOP),
+	(outline(0.008), 0.5)])
 apply_boolean(slab, cut, 'DIFFERENCE'); bpy.data.objects.remove(cut, do_unlink=True)
 
+bpy.context.preferences.filepaths.save_version = 0
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'board_phase_cradle.blend'))
 for o in scene.objects:
 	if o.name.startswith(('Deck proxy', 'Layout card', 'Card face')):

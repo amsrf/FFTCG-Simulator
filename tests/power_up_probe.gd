@@ -9,6 +9,7 @@ extends Node
 ##   leaving the field mid-burst removes it and leaves the readout at rest.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
+const DRAIN := preload("res://scripts/vfx/power_down_drain.gd")
 const BURST := preload("res://scripts/vfx/power_up_burst.gd")
 const DISPLAY := preload("res://scripts/cards/power_display.gd")
 
@@ -49,6 +50,7 @@ func _ready() -> void:
 	var rest_scale: Vector3 = num.scale
 	var rest_priority: int = num.render_priority
 	var rest_modulate: Color = num.modulate
+	var dmg_rest_modulate: Color = dmg.modulate   # the /damage part has its own amber tint
 
 	# --- A BUFF: swords first, then the number. ---
 	card.add_power_modifier("probe:a", 3000)
@@ -72,9 +74,11 @@ func _ready() -> void:
 	print("[PowerUp] mid-count: '%s' at %.2fx" % [label.text, grown])
 	_expect(grown > 1.3, "the readout swells while it counts (%.2fx)" % grown)
 	_expect(num.render_priority > rest_priority, "the swollen readout draws above the gas")
-	_expect(dmg.scale.is_equal_approx(Vector3.ONE) and dmg.modulate.is_equal_approx(rest_modulate),
+	_expect(dmg.scale.is_equal_approx(Vector3.ONE) and dmg.modulate.is_equal_approx(dmg_rest_modulate),
 		"only the POWER number swells: the /damage part is untouched (%s %s)" % [dmg.scale, dmg.modulate])
-	_expect(label.modulate.a == 0.0 and dmg.text.begins_with("/") and not num.text.contains("/"),
+	# The damage part shows just the number (no slash); the parent keeps "power/damage" for readers, drawn invisible.
+	_expect(label.modulate.a == 0.0 and not num.text.contains("/") and not dmg.text.contains("/")
+		and label.text == "%s/%s" % [num.text, dmg.text],
 		"the readout is drawn as two parts ('%s' + '%s'); the parent draws nothing" % [num.text, dmg.text])
 	var mid: int = int(label.text.split("/")[0])
 	_expect(mid > 5000 and mid <= 8000, "the count is under way (%d)" % mid)
@@ -92,7 +96,8 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_expect(not card.power_fx.is_playing(), "a power loss plays no power-up")
-	await _wait(0.9)
+	# A loss from an effect plays the drain, whose count runs longer than a plain one.
+	await _wait(DISPLAY.drain_seconds(DRAIN.NUMBER_START) + 0.15)
 	_expect(label.text.begins_with("5000/"), "and counts down to 5000 (%s)" % label.text)
 
 	# --- Net zero in one frame. ---
@@ -116,6 +121,32 @@ func _ready() -> void:
 	_expect(label.text.begins_with("7000/") and num.scale.is_equal_approx(rest_scale),
 		"and the readout lands on the total, at rest (%s, %s vs %s)" % [label.text, num.scale, rest_scale])
 	await _wait(0.3)
+
+	# --- End-of-turn EXPIRY is not an effect: no swords and no drain, either way. ---
+	card.power_change(1000, 1)                       # an effect: +1000 until end of turn
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(card.power_fx.is_playing(), "an effect's +1000 until end of turn plays the power-up")
+	await _wait(BURST.LIFETIME + 0.2)
+	card.turn_end()                                  # the +1000 expires
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(card.power == 7000 and not card.power_fx.is_playing() and not card.power_fx.is_draining(),
+		"its expiry at end of turn plays no drain (power %d)" % card.power)
+	await _wait(0.9)
+	_expect(label.text.begins_with("7000/"), "and just counts back to 7000 (%s)" % label.text)
+	card.power_change(-1000, 1)                      # an effect: -1000 until end of turn
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(card.power_fx.is_draining(), "an effect's -1000 still plays the drain")
+	await _wait(3.0)
+	card.turn_end()                                  # the -1000 expires: power goes back UP
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_expect(card.power == 7000 and not card.power_fx.is_playing(),
+		"and its expiry plays no power-up (power %d)" % card.power)
+	await _wait(0.9)
+	_expect(label.text.begins_with("7000/"), "the readout is back on 7000 (%s)" % label.text)
 
 	# --- Just arrived: no fanfare. ---
 	var fresh: Card = game.create_card(41, "player")

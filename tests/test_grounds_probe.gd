@@ -41,7 +41,7 @@ func _ready() -> void:
 
 	# The MAIN MENU keeps its everyday presets; the grounds live on their own screen behind "Test Mode".
 	var presets: Array = MatchSetup.get_presets()
-	_expect(presets == ["custom", "ai", "standard", "debug"],
+	_expect(presets == ["custom", "ai", "ai_cosmos", "standard", "debug"],
 		"the main menu presets are unchanged (%s)" % str(presets))
 	var grounds_listed: Array = MatchSetup.get_test_grounds()
 	for ground_name in names:
@@ -279,9 +279,10 @@ func _ready() -> void:
 	_expect(mill_deck.deck_cards.size() == deck_before - 1, "milling from the ground takes a card off the deck")
 	_expect(mill_pile.graveyard_cards.size() == pile_before + 1, "and the pile grows by one")
 
-	# --- the tribute ground: Black Mage's sacrifice is usable at once, and R's path really tributes -----------
 	mill_game.queue_free()
 	await get_tree().process_frame
+
+	# --- the tribute ground: Black Mage's sacrifice is usable at once, and R's path really tributes -----------
 	MatchSetup.config = MatchSetup.build_config("tribute")
 	var tribute_game = GAME_SCENE.instantiate()
 	add_child(tribute_game)

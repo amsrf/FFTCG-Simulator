@@ -652,7 +652,37 @@ func _check_field_faces(field_cards: Array) -> void:
 	_expect(heading != null and heading.visible and not forward.cost_badge.visible
 		and heading.get_node("Cost").text == str(forward.cost)
 		and heading.get_node("CardName").text == forward.card_name,
-		"the top band carries the card name and plain printed CP cost")
+		"the top band carries the card name and printed CP")
+	var forward_plate: Color = forward.mat.get_shader_parameter("field_nameplate_color")
+	var backup_plate: Color = backup.mat.get_shader_parameter("field_nameplate_color")
+	var backup_title := backup.hand_mesh.get_node("FieldHeading/CardName") as Label3D
+	_expect(forward_plate.get_luminance() < 0.15 and backup_plate.get_luminance() > 0.87
+		and heading.get_node("CardName").modulate.get_luminance() > 0.9 and backup_title.modulate.get_luminance() < 0.2,
+		"Forwards use white names on black nameplates and Backups use dark names on white nameplates")
+	var forward_grain: Texture2D = forward.mat.get_shader_parameter("field_nameplate_texture")
+	var backup_grain: Texture2D = backup.mat.get_shader_parameter("field_nameplate_texture")
+	_expect(forward_grain != null and backup_grain != null and forward_grain != backup_grain,
+		"both nameplate textures come from their printed card type")
+	_expect(float(forward.mat.get_shader_parameter("field_nameplate_shadow")) > 0.0
+		and is_zero_approx(float(backup.mat.get_shader_parameter("field_nameplate_shadow"))),
+		"the black nameplate casts a narrow shadow across the top of the portrait")
+	var cost_rect: Vector4 = forward.mat.get_shader_parameter("field_cost_rect")
+	var cost_label := heading.get_node("Cost") as Label3D
+	_expect(is_equal_approx(cost_label.position.x, (cost_rect.x - 0.5) * FIELD_CARD_FACE.FACE.x)
+		and cost_rect.y - cost_rect.w > 0.0 and cost_rect.y + cost_rect.w < FIELD_CARD_FACE.BAND_FRACTION,
+		"printed CP is centered in a flat crystal entirely inside the top band")
+	var high_cost: Card = CARD_SCENE.instantiate()
+	high_cost.initialize(837, Card.PLAYER) # Database slot for Mont Leonis, 11 CP.
+	add_child(high_cost)
+	high_cost.enter_zone(Card.Zone.FIELD)
+	var wide_rect: Vector4 = high_cost.mat.get_shader_parameter("field_cost_rect")
+	var wide_label := high_cost.hand_mesh.get_node("FieldHeading/Cost") as Label3D
+	var label_width := wide_label.font.get_string_size(wide_label.text, HORIZONTAL_ALIGNMENT_CENTER,
+		-1, wide_label.font_size).x * wide_label.pixel_size
+	_expect(wide_label.text == "11" and wide_rect.z > cost_rect.z
+		and label_width < wide_rect.z * FIELD_CARD_FACE.FACE.x * 2.0,
+		"two-digit costs fit inside a wider crystal")
+	high_cost.queue_free()
 
 	var centred_crop := FIELD_CARD_FACE.illustration_crop(Vector2(429, 600), "1-041L")
 	_expect(centred_crop.z >= 0.75 and centred_crop.y + centred_crop.w < 0.6,
@@ -680,6 +710,7 @@ func _check_field_faces(field_cards: Array) -> void:
 		185, 186, 187, 188, 189, 191, 192, 193, 194, 195,
 		196, 197, 199, 200, 201, 202, 203, 204, 205, 206,
 		207, 208, 209, 210, 211, 212, 213, 214, 215, 216]
+	var low_contrast_costs: Array[String] = []
 	for card_id in restored_ids:
 		var pilot: Card = CARD_SCENE.instantiate()
 		pilot.initialize(card_id, Card.PLAYER)
@@ -691,30 +722,41 @@ func _check_field_faces(field_cards: Array) -> void:
 		_expect(pilot_art != null and pilot_art != original and pilot_art.get_size() == Vector2(429, 444)
 			and pilot_crop == Vector4(0, 0, 1, 1),
 			"%s (%s) uses the restored field portrait" % [pilot.card_name, pilot.code])
+		var crystal: Color = pilot.mat.get_shader_parameter("field_cost_color")
+		var cp := pilot.hand_mesh.get_node("FieldHeading/Cost") as Label3D
+		var fill_luminance := crystal.srgb_to_linear().get_luminance()
+		var ink_luminance := cp.modulate.srgb_to_linear().get_luminance()
+		var contrast := (maxf(fill_luminance, ink_luminance) + 0.05) / (minf(fill_luminance, ink_luminance) + 0.05)
+		if cp.outline_size > 0:
+			var outline_luminance := cp.outline_modulate.srgb_to_linear().get_luminance()
+			var outline_contrast := (minf(fill_luminance, ink_luminance) + 0.05) / (outline_luminance + 0.05)
+			contrast = maxf(contrast, outline_contrast)
+		if contrast < 4.5:
+			low_contrast_costs.append(pilot.code)
 		if card_id == 92: # Earth Dark Knight
 			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
 			_expect(band.r > 0.79 and band.g > 0.66 and band.b < 0.2, "Earth field bands use a lighter gold")
+			_expect(cp.modulate == Color.WHITE and cp.outline_size > 0 and cp.outline_modulate == FIELD_CARD_FACE.DARK_INK,
+				"Earth costs use white digits with a fine dark outline")
 		if card_id in [33, 63]: # Ice Argath and Wind Vaan
 			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
 			_expect(band.g > 0.53, "%s uses the brighter field palette" % pilot.card_name)
 		if card_id in [33, 63, 92]:
-			var cp := pilot.hand_mesh.get_node("FieldHeading/Cost") as Label3D
-			var title := pilot.hand_mesh.get_node("FieldHeading/CardName") as Label3D
 			var power_number: Label3D = pilot.power_label.power_part()
-			_expect(cp.modulate == Color.WHITE and title.modulate == Color.WHITE
-				and power_number.modulate == Color.WHITE and cp.outline_size > 0
-				and title.outline_size == cp.outline_size and power_number.outline_size == cp.outline_size,
-				"%s field labels use white ink with a fine outline" % pilot.card_name)
+			_expect(power_number.modulate == Color.WHITE and power_number.outline_size > 0,
+				"%s keeps the white power number with a fine outline" % pilot.card_name)
 		if card_id == 182: # Light Cloud
 			var band: Color = pilot.mat.get_shader_parameter("field_band_color")
 			_expect(band.r > 0.6 and absf(band.r - band.g) < 0.03 and band.b >= band.r,
 				"Light field bands use a silver grey")
 			var cost_ink: Color = pilot.hand_mesh.get_node("FieldHeading/Cost").modulate
 			_expect(cost_ink.get_luminance() < 0.2
-				and pilot.hand_mesh.get_node("FieldHeading/CardName").modulate == cost_ink
+				and pilot.hand_mesh.get_node("FieldHeading/CardName").modulate.get_luminance() > 0.9
 				and pilot.power_label.power_part().modulate == cost_ink,
-				"%s field labels share dark ink on the lighter bands" % pilot.card_name)
+				"Light Forwards use dark ink for cost and power and white for the name")
 		pilot.queue_free()
+	_expect(low_contrast_costs.is_empty(), "cost digits have at least 4.5:1 contrast across the restored cards (%s)"
+		% ", ".join(low_contrast_costs))
 
 	var sample: Card = CARD_SCENE.instantiate()
 	sample.initialize(1, Card.PLAYER) # Auron 1-001H has a dedicated field portrait.

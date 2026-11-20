@@ -12,12 +12,23 @@ const BEVEL := 0.004
 const BEVEL_STEPS := 3
 const MAX_PORTRAIT_STRETCH := 1.30
 const RADIUS := 0.03
-# Opus I type stripes are the colour reference. Keep a little depth for the raised satin bands.
+# Opus I type stripes are the colour reference for the raised bottom bands.
 const PALETTE := [
 	Color("#ae3b28"), Color("#238fae"), Color("#308f5d"), Color("#d0b12d"),
 	Color("#875d8d"), Color("#4f73a0"), Color("#a7a7b0"), Color("#535251"),
 ]
 const DARK_INK := Color("#1a1b20")
+const FORWARD_NAMEPLATE := Color(0.085, 0.090, 0.10)
+const BACKUP_NAMEPLATE := Color(0.95, 0.94, 0.90)
+const NAMEPLATE_SAMPLE := Rect2i(222, 29, 130, 25)
+const COST_U := 0.128
+const COST_HALF_HEIGHT := 0.03
+const COST_LABEL_SCALE := 0.90
+const COST_PALETTE := [
+	Color("#c04532"), Color("#337a99"), Color("#267b4a"), Color("#deb444"),
+	Color("#824ca6"), Color("#455ea0"), Color("#efe1b9"), Color("#524962"),
+]
+const NEUTRAL_COST := Color("#62616b")
 
 # Hand-framed scan regions start below the printed name band and end above the type stripe.
 const SCAN_SIZE := Vector2(429, 600)
@@ -30,6 +41,7 @@ const CROP_REGIONS := {
 
 static var _mesh: ArrayMesh
 static var _font: FontVariation
+static var _nameplate_samples: Dictionary[bool, Texture2D] = {}
 ## Portraits by card code, held WEAKLY: a card showing one keeps it alive, and once no card does it is freed. A strong
 ## cache kept every portrait ever shown (392 in assets/field_art, ~1-3 MB each decoded with mipmaps) for the whole
 ## session. Codes with no portrait are remembered so a missing one is not looked for on disk every time.
@@ -40,7 +52,7 @@ var drawn_on_field := false
 
 
 func enter_zone(mesh_instance: MeshInstance3D, material: ShaderMaterial, on_field: bool, revealed: bool,
-		texture: Texture2D, code: String, title: String, cost: int, element: String) -> void:
+		texture: Texture2D, code: String, title: String, cost: int, element: String, backup: bool) -> void:
 	drawn_on_field = on_field
 	if on_field:
 		var index: int = ELEMENTS.index_of(element)
@@ -50,8 +62,17 @@ func enter_zone(mesh_instance: MeshInstance3D, material: ShaderMaterial, on_fiel
 		material.set_shader_parameter("field_art_rect",
 			Vector4(0.0, 0.0, 1.0, 1.0) if portrait != null else illustration_crop(texture.get_size(), code))
 		material.set_shader_parameter("field_band_fraction", BAND_FRACTION)
+		material.set_shader_parameter("field_nameplate_texture", _nameplate_texture(backup))
+		material.set_shader_parameter("field_nameplate_color", BACKUP_NAMEPLATE if backup else FORWARD_NAMEPLATE)
+		material.set_shader_parameter("field_nameplate_shadow", 0.0 if backup else 0.96)
+		var cost_color: Color = COST_PALETTE[index] if index >= 0 else NEUTRAL_COST
+		var cost_text := str(cost)
+		var half_width := 0.025 if cost_text.length() == 1 else 0.032
+		material.set_shader_parameter("field_cost_color", cost_color)
+		material.set_shader_parameter("field_cost_rect",
+			Vector4(COST_U, BAND_FRACTION * 0.5, half_width / FACE.x, COST_HALF_HEIGHT / FACE.y))
 		if _heading == null:
-			_build_heading(mesh_instance, title, cost, element)
+			_build_heading(mesh_instance, title, cost_text, element, half_width, backup)
 	sync_reveal(mesh_instance, material, revealed)
 
 
@@ -66,6 +87,17 @@ func sync_reveal(mesh_instance: MeshInstance3D, material: ShaderMaterial, reveal
 func show_heading(should_show: bool) -> void:
 	if _heading != null:
 		_heading.visible = drawn_on_field and should_show
+
+
+## Cache a blank patch from each printed nameplate, shared by every card of that type.
+static func _nameplate_texture(backup: bool) -> Texture2D:
+	if not _nameplate_samples.has(backup):
+		var path := "res://assets/cards/1-031C.jpg" if backup else "res://assets/cards/1-001H.jpg"
+		var scan := load(path) as Texture2D
+		var grain := scan.get_image().get_region(NAMEPLATE_SAMPLE)
+		grain.generate_mipmaps()
+		_nameplate_samples[backup] = ImageTexture.create_from_image(grain)
+	return _nameplate_samples[backup]
 
 
 static func label_color(element: String) -> Color:
@@ -139,24 +171,33 @@ static func illustration_crop(image_size: Vector2, code: String) -> Vector4:
 	return Vector4(start.x, start.y, crop_size.x, crop_size.y)
 
 
-func _build_heading(parent: MeshInstance3D, title: String, cost: int, element: String) -> void:
+func _build_heading(parent: MeshInstance3D, title: String, cost: String, element: String, half_width: float,
+		backup: bool) -> void:
 	_heading = Node3D.new()
 	_heading.name = "FieldHeading"
 	_heading.position = Vector3(0.0, BAND_HEIGHT + 0.001, -BAND_CENTRE)
 	parent.add_child(_heading)
 
-	var cost_label := _add_label("Cost", str(cost), 100, element)
-	cost_label.position.x = -FACE.x * 0.34
-	var name_label := _add_label("CardName", title, 84, element)
-	name_label.position.x = -FACE.x * 0.22
+	var cost_label := _add_label("Cost", cost, 96, label_color(element))
+	if element == "土":
+		cost_label.outline_size = label_outline_size(element)
+		cost_label.outline_modulate = DARK_INK
+	cost_label.position.x = (COST_U - 0.5) * FACE.x
+	_fit_label(cost_label, half_width * 1.68)
+	cost_label.pixel_size *= COST_LABEL_SCALE
+	var name_label := _add_label("CardName", title, 84, Color("#252535") if backup else Color("#fffdf8"))
+	name_label.position.x = -FACE.x * 0.255
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var text_width: float = name_label.font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, name_label.font_size).x
-	var available_width := FACE.x * 0.67
+	_fit_label(name_label, FACE.x * 0.67)
+
+
+func _fit_label(label: Label3D, available_width: float) -> void:
+	var text_width := label.font.get_string_size(label.text, label.horizontal_alignment, -1, label.font_size).x
 	if text_width > 0.0:
-		name_label.pixel_size = minf(name_label.pixel_size, available_width / text_width)
+		label.pixel_size = minf(label.pixel_size, available_width / text_width)
 
 
-func _add_label(node_name: String, wording: String, size: int, element: String) -> Label3D:
+func _add_label(node_name: String, wording: String, size: int, ink: Color) -> Label3D:
 	var label := Label3D.new()
 	label.name = node_name
 	label.rotation.x = -PI * 0.5
@@ -164,9 +205,8 @@ func _add_label(node_name: String, wording: String, size: int, element: String) 
 	label.font_size = size
 	label.pixel_size = LABEL_PIXEL_SIZE
 	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	label.modulate = label_color(element)
-	label.outline_modulate = DARK_INK
-	label.outline_size = label_outline_size(element)
+	label.modulate = ink
+	label.outline_size = 0
 	label.double_sided = false
 	label.text = wording
 	_heading.add_child(label)

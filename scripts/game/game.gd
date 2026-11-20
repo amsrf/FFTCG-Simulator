@@ -666,11 +666,6 @@ var auto_pass: bool:
 	set(value):
 		pass_mode = PASS_SMART if value else PASS_STOP_ALL
 
-## The other player's last move was a PASS: passing now would be the second pass in a row, which resolves the top of
-## the stack or, with the stack empty, ends the phase (rule 11.1.7). Set before each priority question; the pass button
-## reads it to say what passing does.
-var other_player_passed: bool = false
-
 ## Who holds priority (1 = this machine's player). The pass button follows it: only the holder has one.
 var priority_holder: int = 0:
 	set(value):
@@ -2030,7 +2025,7 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			var local_attack: bool = attacker_agent.is_human()
 			if local_attack:
 				GlobalVariables.push_modal(GlobalVariables.Player_Mode.ATTACKING)
-				assistant.set_declare_attack_button('No Attack')
+				assistant.set_declare_attack_button(false)
 			# A PARTY IS A LIST. The human's clicks already formed theirs; the AI's list has to be applied. Both go
 			# through the same rebuild so there is one definition of "what is attacking".
 			var attackers: Array = await attacker_agent.decide_attackers(turn_owner)
@@ -2173,7 +2168,6 @@ func priority() -> void:
 		await apply_rule_processes()
 		if match_over:
 			break
-		other_player_passed = passed_since_action
 		priority_holder = holder
 		# WHO IS BEING ASKED, and in what state. With the two lines at the top of this function and the mode log, a stall can
 		# be read off the console: the last "asking" line names the player the game is waiting on, and if it is never followed
@@ -2747,10 +2741,7 @@ func _on_field_attacker_changed() -> void:
 	# player is the one declaring attackers — i.e. the ATTACKING modal is open.
 	if GlobalVariables.get_player_mode() != GlobalVariables.Player_Mode.ATTACKING:
 		return
-	if field.attacker_card != null:
-		assistant.set_declare_attack_button('Attack')
-	else:
-		assistant.set_declare_attack_button('No Attack')
+	assistant.set_declare_attack_button(field.attacker_card != null)
 
 func _on_field_blocker_changed() -> void:
 	# Same guard as the attacker button: blocker_card changes for both sides, so

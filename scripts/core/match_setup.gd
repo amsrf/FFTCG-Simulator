@@ -37,7 +37,7 @@ var editing_deck_name: String = ""
 func get_presets() -> Array:
 	# THE MAIN MENU IS UNCHANGED. Test grounds live behind their own "Test Mode" screen, so the everyday menu stays
 	# short and the mechanic-specific boards do not read as ways to start a normal match.
-	return ["custom", "ai", "standard", "debug"]
+	return ["custom", "ai", "ai_cosmos", "standard", "debug"]
 
 ## The boards listed on the Test Mode screen.
 func get_test_grounds() -> Array:
@@ -51,6 +51,8 @@ func describe_preset(preset: String) -> String:
 			return "Custom Deck  (both players - saved in the Deck Editor)"
 		"ai":
 			return "Vs AI  (Practice Board - opponent plays cards and attacks)"
+		"ai_cosmos":
+			return "Vs AI as Cosmos  (same board - you sit on the forest side with the Cosmos button)"
 		"standard":
 			return "Standard Match  (empty board - seeded shuffled decks)"
 		"debug":
@@ -67,6 +69,12 @@ func build_config(preset: String, overrides: Dictionary = {}) -> Dictionary:
 			cfg[key] = overrides[key]
 		return cfg
 	match preset:
+		"ai_cosmos":
+			# The Vs AI board from the other seat: seat 2 is the forest (Cosmos) side, so the board, the button
+			# stations and the local priority button are Cosmos (ButtonStations.configure_seat()).
+			cfg = build_config("ai")
+			cfg["preset"] = "ai_cosmos"
+			cfg["local_seat"] = 2
 		"custom":
 			cfg = _custom()
 		"ai":

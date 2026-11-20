@@ -667,7 +667,8 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 		tween = null
 	current_zone = zone
 	if mat != null:
-		field_face.enter_zone(hand_mesh, mat, zone == Zone.FIELD, revealed, _printed_texture, code, card_name, cost, element)
+		field_face.enter_zone(hand_mesh, mat, zone == Zone.FIELD, revealed, _printed_texture, code, card_name, cost,
+			element, type == BACKUP)
 		if zone == Zone.FIELD:
 			power_label.set_field_ink(element)
 	set_hidden(false)
@@ -965,7 +966,11 @@ func turn_end():
 			# Permanent entries in power_array are legacy; new continuous effects live in _continuous_power.
 			remaining_buffs.append(p)
 	power_array = remaining_buffs
+	var power_before: int = power
 	recompute_power()
+	# An expiry is not an effect: the readout just counts, without the power-up / power-down animations.
+	if power != power_before and power_fx != null:
+		power_fx.mark_quiet()
 	# "can attack twice THIS turn" - the allowance expires with the turn, not with the card.
 	extra_attacks = 0
 	clear_damage()

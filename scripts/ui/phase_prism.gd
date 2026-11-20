@@ -1,20 +1,8 @@
 extends Node3D
-## THE PHASE PRISM: a TRIANGULAR crystal prism lying in a stone cradle above the local priority buttons, like a
-## rotating triangular sign. At rest its top face lies FLAT AND FLUSH with the cradle's lip, its two edges on the
-## slot's two edges (a plain rectangular slot: no gap anywhere), and its other two faces are hidden below. That face
-## shows the current phase by the Comprehensive Rules' name (9.1-9.5: Active Phase ... End Phase); during the Attack
-## Phase it shows the current step instead (10.1.1-10.1.4, e.g. "Block Declaration Step"). A phase change TURNS it
-## forward 120 degrees: the name is written on the hidden face that is about to come up, so three faces carry all
-## six phases. The angle only ever increases. Filled in the turn's colour: BLUE on your turn, RED on the opponent's
-## (the mana crystal's own shader, so it matches the cost row). Tried and removed at the user's request: a coloured
-## glow on the lip, a sweeping glint, and deeper matte colours.
-##
-## History: a six-sided crystal came first (floating, then in a hexagonal cradle). A horizontal lip never lines up
-## with a hexagon's faces, so it always showed slivers, cut tips and gaps; a triangle with one face up does line up.
-##
-## The cradle is baked into the board by Blender/build_phase_cradle.py, which READS FACE_WIDTH / LENGTH /
-## CRADLE_TOP_Y / FACE_ABOVE_LIP / CENTRE from this file: change them here, then re-run it and re-export the board
-## (both seats). Fed by Game.phase_entered. World coordinates (top_level), fixed for both seats.
+## A faceted crystal with three broad reading faces, beveled edges and tapered ends. Its crown sits just above
+## the carved socket in the board. A phase change brings the next reading face up with a 120-degree roll.
+## Blender/build_phase_cradle.py shares the cavity dimensions and CENTRE below. Rebuild and export both seats
+## after changing the socket. Fed by Game.phase_entered. World coordinates are fixed for both seats.
 
 const CRYSTAL_SHADER := preload("res://shaders/mana_crystal.gdshader")
 const FONT := preload("res://assets/fonts/FOT-NewRodin Pro EB.otf")
@@ -24,14 +12,17 @@ const STEP_NAMES: Array[String] = ["Attack Preparation Step", "Attack Declaratio
 	"Damage Resolution Step"]
 enum Slot { ACTIVE, DRAW, MAIN_1, ATTACK, MAIN_2, END }
 
-## The prism: an equilateral triangle FACE_WIDTH on a side, LENGTH long, lying along world X.
-const FACE_WIDTH := 0.12
-const LENGTH := 1.0
-## The cradle (Blender/build_phase_cradle.py): lip top height, and how far ABOVE it the top face stands: negative =
-## just below, flush, the stone's edge framing it (raised 1.5 cm was tried and reverted). Above the lip the cradle
-## would narrow its slot to the prism's width at the lip.
-const CRADLE_TOP_Y := 0.10
-const FACE_ABOVE_LIP := -0.002
+## Dimensions before cutting the three long edges of the triangular cross section.
+const FACE_WIDTH := 0.194
+const LENGTH := 0.98
+const EDGE_CUT := 0.18
+const END_CUT := 0.115
+const END_SCALE := 0.38
+const CRADLE_TOP_Y := 0.073
+const FACE_ABOVE_LIP := 0.033
+const CAVITY_LENGTH := 0.998
+const CAVITY_WIDTH := 0.179
+const CAVITY_FLOOR_Y := -0.053
 ## The axis (the triangle's centre) sits one inradius under the top face.
 const INRADIUS := FACE_WIDTH / (2.0 * 1.7320508)
 const CENTRE := Vector3(-2.85, CRADLE_TOP_Y + FACE_ABOVE_LIP - INRADIUS, -0.85)
@@ -48,15 +39,17 @@ const COLOUR_SECONDS := 0.4
 ## darker toward the bottom): mana_crystal.gdshader's gradient_* uniforms read the vertex colour _build_mesh writes.
 const YOUR_COLOUR := Color(0.24, 0.47, 0.92)
 const THEIR_COLOUR := Color(0.74, 0.06, 0.13)
-const EMISSION := 0.5
-const GRADIENT_TOP := 1.12
-const GRADIENT_BOTTOM := 0.55
+const EMISSION := 0.30
+const GRADIENT_TOP := 1.34
+const GRADIENT_BOTTOM := 0.49
 const TURN := TAU / 3.0
+## Tilt the reading face toward the camera so the near bevel recedes and the far bevel shows.
+const REST_TILT := -12.0 * PI / 180.0
 
 var _prism: MeshInstance3D
 var _material: ShaderMaterial
 var _labels: Array[Label3D] = []   # one per face (3)
-var _angle := 0.0                  # roll about world X, only ever increased; face f is up at f * TURN
+var _angle := 0.0                  # roll progress about world X, before the visual rest tilt
 var _face := 0                     # the face that is up (or coming up)
 var _roll: Tween
 var _tint_tween: Tween
@@ -75,9 +68,15 @@ func _ready() -> void:
 	_material.set_shader_parameter("tint", YOUR_COLOUR)
 	_material.set_shader_parameter("paid", 1.0)
 	_material.set_shader_parameter("emission_energy", EMISSION)
+	_material.set_shader_parameter("pulse", 0.0)
+	_material.set_shader_parameter("roughness_value", 0.2)
+	_material.set_shader_parameter("occlusion_y", CAVITY_FLOOR_Y)
+	_material.set_shader_parameter("occlusion_depth", CRADLE_TOP_Y - CAVITY_FLOOR_Y)
+	_material.set_shader_parameter("occlusion_floor", 0.32)
 	_material.set_shader_parameter("gradient_amount", 1.0)
 	_material.set_shader_parameter("gradient_top", GRADIENT_TOP)
 	_material.set_shader_parameter("gradient_bottom", GRADIENT_BOTTOM)
+	_material.set_shader_parameter("facet_seam_pixels", 0.8)
 	_material.render_priority = 2
 	_prism.material_override = _material
 	_prism.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -114,7 +113,7 @@ func _face_label(f: int) -> Label3D:
 	label.font_size = FONT_SIZE
 	label.pixel_size = PIXEL_SIZE
 	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	label.outline_size = 8
+	label.outline_size = 5
 	label.modulate = Color(1, 1, 1)
 	label.outline_modulate = Color(0.02, 0.03, 0.08, 0.85)
 	label.double_sided = false
@@ -126,44 +125,76 @@ func _face_label(f: int) -> Label3D:
 	_prism.add_child(label)
 	return label
 
-## Three flat glass faces and two end caps. Godot's front faces are CLOCKWISE seen from outside, so each triangle is
-## wound with (p1-p0)x(p2-p0) pointing INWARD, and its normal is set explicitly (outward, flat).
+func _write_face(f: int, text: String) -> void:
+	var label := _labels[f]
+	var width := label.font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, FONT_SIZE).x
+	label.pixel_size = minf(PIXEL_SIZE, (LENGTH - 2.0 * END_CUT - 0.05) / width)
+	label.text = text
+
 func _build_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := LENGTH * 0.5
-	var circ := INRADIUS * 2.0
-	var corners: Array[Vector2] = []   # (y, z); face f lies between corners f and f+1
-	for j in 3:
-		var a := -float(j) * TURN + TURN * 0.5
-		corners.append(Vector2(cos(a), sin(a)) * circ)
+	var corners: Array[Vector2] = []
 	for f in 3:
-		var a: Vector2 = corners[f]
-		var b: Vector2 = corners[(f + 1) % 3]
-		var a0 := Vector3(-half, a.x, a.y); var a1 := Vector3(half, a.x, a.y)
-		var b0 := Vector3(-half, b.x, b.y); var b1 := Vector3(half, b.x, b.y)
-		# The gradient runs from corner f (0: the face's TOP edge on screen once it is up, toward +z) to corner f+1 (1).
-		var shade := {a0: 0.0, a1: 0.0, b0: 1.0, b1: 1.0}
-		_tri(st, a0, b0, b1, face_normal(f), shade); _tri(st, a0, b1, a1, face_normal(f), shade)
-	for side: float in [-1.0, 1.0]:
-		var p: Array[Vector3] = []
-		for c in corners:
-			p.append(Vector3(half * side, c.x, c.y))
-		_tri(st, p[0], p[1], p[2], Vector3(side, 0, 0), {})
+		var angle := TURN * (0.5 - f)
+		corners.append(Vector2(cos(angle), sin(angle)) * INRADIUS * 2.0)
+	var profile: Array[Vector2] = []
+	for f in 3:
+		var a := corners[f]
+		var b := corners[(f + 1) % 3]
+		profile.append(a.lerp(b, EDGE_CUT))
+		profile.append(b.lerp(a, EDGE_CUT))
+	var rings: Array[PackedVector3Array] = []
+	var positions := [-half, -half + END_CUT, half - END_CUT, half]
+	var scales := [END_SCALE, 1.0, 1.0, END_SCALE]
+	for ring in positions.size():
+		var vertices := PackedVector3Array()
+		for p in profile:
+			vertices.append(Vector3(positions[ring], p.x * scales[ring], p.y * scales[ring]))
+		rings.append(vertices)
+
+	for ring in rings.size() - 1:
+		for i in profile.size():
+			var j := (i + 1) % profile.size()
+			var a := rings[ring][i]
+			var b := rings[ring][j]
+			var c := rings[ring + 1][j]
+			var d := rings[ring + 1][i]
+			var normal := (b - a).cross(c - a).normalized()
+			if normal.dot(Vector3(0.0, a.y + b.y, a.z + b.z)) < 0.0:
+				normal = -normal
+			# Even sides carry the labels. The narrow bevels and tapered ends have their own tones.
+			var reading_face := i % 2 == 0
+			var edge_tone := 0.82 if ring == 1 else (0.65 if reading_face else 0.28)
+			var shade_a := 0.2 if reading_face and ring == 1 else edge_tone
+			var shade_b := 0.36 if reading_face and ring == 1 else edge_tone
+			# Both triangles share one set of facet UVs, so the shader traces only the facet perimeter.
+			_tri(st, a, b, c, normal, Vector3(shade_a, shade_b, shade_b),
+				[Vector2.ZERO, Vector2.DOWN, Vector2.ONE])
+			_tri(st, a, c, d, normal, Vector3(shade_a, shade_b, shade_a),
+				[Vector2.ZERO, Vector2.ONE, Vector2.RIGHT])
+	for ring: int in [0, rings.size() - 1]:
+		var normal := Vector3.LEFT if ring == 0 else Vector3.RIGHT
+		for i in range(1, profile.size() - 1):
+			_tri(st, rings[ring][0], rings[ring][i], rings[ring][i + 1], normal, Vector3.ONE * 0.65)
 	return st.commit()
 
-## `shade` maps a vertex to its gradient value (vertex colour R); vertices not in it get the middle.
-func _tri(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, outward: Vector3, shade: Dictionary) -> void:
+## Godot expects clockwise winding seen from outside. Keep each facet's explicit flat normal.
+func _tri(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, outward: Vector3, shade: Vector3,
+		uv: Array[Vector2] = [Vector2(0.5, 0.5), Vector2(0.5, 0.5), Vector2(0.5, 0.5)]) -> void:
+	var vertices := [p0, p1, p2]
+	var order := [0, 1, 2]
 	if (p1 - p0).cross(p2 - p0).dot(outward) > 0.0:
-		var t := p1; p1 = p2; p2 = t
-	st.set_normal(outward.normalized())
-	for p in [p0, p1, p2]:
-		st.set_color(Color(float(shade.get(p, 0.5)), 0.0, 0.0))
-		st.set_uv(Vector2(p.x, p.y))
-		st.add_vertex(p)
+		order = [0, 2, 1]
+	for i in order:
+		st.set_normal(outward)
+		st.set_color(Color(shade[i], 0.0, 0.0))
+		st.set_uv(uv[i])
+		st.add_vertex(vertices[i])
 
 func _process(_delta: float) -> void:
-	_prism.basis = Basis(Vector3.RIGHT, _angle)
+	_prism.basis = Basis(Vector3.RIGHT, _angle + REST_TILT)
 	_fade_labels()
 
 ## ONE NAME AT A TIME: a label shows only while its face is up. The other faces are under the lip anyway; mid-turn
@@ -189,7 +220,7 @@ func show_phase(phase: int, yours: bool) -> void:
 	_yours = yours
 	if not visible:
 		_slot = slot
-		_labels[_face].text = text
+		_write_face(_face, text)
 		_angle = float(_face) * TURN
 		visible = true
 		return
@@ -199,7 +230,7 @@ func show_phase(phase: int, yours: bool) -> void:
 		return
 	# Write the name on the hidden face that comes up next, then turn it up. Always forward.
 	_face = (_face + 1) % 3
-	_labels[_face].text = text
+	_write_face(_face, text)
 	if _roll != null and _roll.is_valid():
 		_roll.kill()
 	# From wherever it is (mid-wobble included) to the next face up, never backwards.
@@ -211,7 +242,7 @@ func show_phase(phase: int, yours: bool) -> void:
 	_roll.tween_method(func(p: float) -> void: _angle = lerpf(from, target, _spring(p)), 0.0, 1.0, ROLL_SECONDS)
 
 ## A damped spring from 0 to 1 over p in 0..1: rises fast, overshoots (~13% of the turn), swings back, settles. The
-## (1 - p) factor on the wobble makes it land EXACTLY on 1 at p = 1, so the face rests square in the slot.
+## (1 - p) factor on the wobble makes it land exactly on the next face's resting pose.
 static func _spring(p: float) -> float:
 	return 1.0 - exp(-SPRING_DAMPING * p) * cos(SPRING_WOBBLE * PI * p) * (1.0 - p)
 

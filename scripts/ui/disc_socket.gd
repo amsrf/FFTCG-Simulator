@@ -1,18 +1,7 @@
 extends Node3D
-## One board button sitting in a well of a button station (the housing is baked into the board; see
-## Blender/build_button_housing.py). The button is a LENS — two shallow domes joined at a thin metal bezel — on an axle
-## along local X. The +Y dome is the gem, with the label or a symbol IMPRINTED in white (shaders/disc_face.gdshader);
-## the -Y dome is carved stone. It fills its well, so its rim tucks under the station's iron ring: no gap.
-##
-## A button is never hidden. It TURNS, and always FORWARD (rotation only ever increases): gem-up when offered, stone-up
-## when not. A press FLICKS it (see PRESS_SPIN_*): it spins down to the stone, holds, and only then follows its claims.
-##
-## The disc is SHARED. Several logical buttons may claim it (Confirm and Pass both use the large one); it shows its gem
-## while ANY claimant wants it. Claims are COALESCED to the end of the frame: Assistant routinely hides and re-shows a
-## button within one frame (show_modal() hides everything first), and turning on each call would make it twitch.
-##
-## Hover lights the ring around the button (an additive annulus over the baked iron ring, shaders/disc_ring_glow);
-## a press flashes it.
+## A shared board control on an axle inside its socket. The large sockets use the copper priority coin and the
+## small Cancel sockets use the gem disc. The front face is offered and the reverse is inactive.
+## Claims coalesce at the end of the frame so switching from Pass to Confirm only changes the face's wording.
 
 const HALF_TURN_SECONDS := 0.42
 const FULL_TURN_SECONDS := 0.7
@@ -25,6 +14,8 @@ const FULL_TURN_SECONDS := 0.7
 const PRESS_SPIN_SPEED := 6.0
 const PRESS_SPIN_MIN_TURNS := 2.5
 const PRESS_HOLD_SECONDS := 0.5
+const COIN_PRESS_TURN_SECONDS := 0.34
+const COIN_PRESS_HOLD_SECONDS := 0.16
 ## The gem's text/symbol is blank while the disc spins; it comes back for the final full turn, so it reads only as the
 ## disc slows into its stop — and only if the button will be offered again (wants_active()). A press whose button
 ## stays taken away (no priority) keeps the gem blank for the whole spin.
@@ -40,6 +31,11 @@ const SETTLE_SECONDS := 0.45
 const GLOW_FADE_SECONDS := 0.15
 const HOVER_GLOW := 1.0
 const PRESS_GLOW := 1.8
+const COIN_READY_GLOW := 0.85
+const COIN_HOVER_GLOW := 1.08
+const COIN_PRESS_GLOW := 1.42
+const COIN_GLOW_COLOR := Color("#ffce88")
+const COIN_RING_COLOR := Color("#fff7e5")
 const IMPRINT_SIZE := 512
 const IMPRINT_FONT_SIZE := 92
 const IMPRINT_MIN_FONT_SIZE := 40
@@ -54,8 +50,12 @@ const RING_OUTSET := 0.014
 const AXLE_LIFT := 0.02
 
 const FACE_SHADER := preload("res://shaders/disc_face.gdshader")
+const PRIORITY_COIN := preload("res://scripts/ui/priority_coin.gd")
 const GLOW_SHADER := preload("res://shaders/disc_ring_glow.gdshader")
 const PILLAR_SHADER := preload("res://shaders/disc_light_pillar.gdshader")
+const COIN_RISE_SHADER := preload("res://shaders/priority_ring_rise.gdshader")
+const COIN_RISE_HEIGHT := 0.57
+const COIN_RISE_LAYERS := 40
 ## Light thrown UP off the ring on hover/press: an open cylinder this tall standing on the ring.
 const PILLAR_HEIGHT := 0.38
 ## While the ring's light is ON (hover/press), a few slow motes of light rise off it, as bright as the ring.
@@ -67,7 +67,11 @@ const MOTE_THRESHOLD := 0.3
 
 ## The disc's radius: it fills the well (the well is this + 0.002).
 @export var radius: float = 0.314
-## What the gem carries: the claimant's TEXT (its meaning changes: Pass / Next Phase / Confirm…), or a fixed SYMBOL.
+@export var use_priority_coin := false
+## Which side's colours: "chaos" (gold rim, leather, ruby) or "cosmos" (wood rim, cream stone, slate, jade). The same
+## coin, flip, lift, press spin and ring light; the seat decides it (ButtonStations.configure_seat()).
+@export_enum("chaos", "cosmos") var coin_style: String = "chaos"
+## The claimant's wording when present, or the disc's fixed symbol.
 @export_enum("text", "symbol") var imprint_mode: String = "text"
 ## The symbol, and the text fallback: "play" (go forward) or "cross" (decline).
 @export_enum("play", "cross") var glyph: String = "play"
@@ -100,20 +104,62 @@ signal released
 
 var _pivot: Node3D
 var _gem_material: ShaderMaterial
+var _ruby_material: ShaderMaterial
 var _stone_material: ShaderMaterial
 var _bezel_material: StandardMaterial3D
 var _glow_material: ShaderMaterial
-var _pillar_material: ShaderMaterial
+var _rise_material: ShaderMaterial
+var _coin_rise: MultiMeshInstance3D
 var _motes: CPUParticles3D
 var _viewport: SubViewport
 var _label: Label
 var _symbol: Node2D
+var _built: Array[Node] = []          # what _build() added, so a coin style change can rebuild it
 
 
 func _ready() -> void:
-	_build()
-	_pivot.rotation.x = PI      # starts stone-up: nothing has claimed it yet
+	_build_tracked()
+	_set_angle(PI)
 	_apply_colors()
+
+
+func _build_tracked() -> void:
+	var before := get_children()
+	_build()
+	_built.clear()
+	for child in get_children():
+		if not before.has(child):
+			_built.append(child)
+
+
+## Which side's coin this socket shows. The board's seat decides it (ButtonStations.configure_seat()): the volcanic
+## seat 1 is Chaos, the forest seat 2 is Cosmos, whoever sits there. Rebuilds the coin, keeping its pose and light.
+func set_coin_style(style: String) -> void:
+	if style == coin_style:
+		return
+	coin_style = style
+	if not is_node_ready() or not use_priority_coin:
+		return
+	# Land where the disc was HEADING: a turn or fade killed half way would otherwise leave it stuck there, because
+	# _apply() only starts a turn when the goal changes.
+	for tween in [_turn_tween, _glow_tween]:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	for node in _built:
+		remove_child(node)
+		node.queue_free()
+	_pivot = null; _gem_material = null; _ruby_material = null; _glow_material = null
+	_rise_material = null; _coin_rise = null; _viewport = null; _label = null; _symbol = null
+	var was_busy := _busy
+	_busy = false
+	_build_tracked()
+	_normalise()        # seats it at its goal, wrapped into [0, TAU) as a finished turn would be
+	_apply_colors()
+	_set_glow(_resting_glow())
+	_imprint_drawn = false
+	_refresh_imprint(_active)
+	if was_busy:
+		_release()          # a press spin cut short still owes its button the `released` signal
 
 
 # --------------------------------------------------------------------------------------------- claims
@@ -144,11 +190,11 @@ func label_text() -> String:
 
 func set_hovered(on: bool) -> void:
 	_hovered = on
-	_glow_to(HOVER_GLOW if on else 0.0)
+	_glow_to(_resting_glow())
 
 ## True while a press spin (or the hold after it) is playing.
 func is_busy() -> bool:
-	return _busy
+	return _busy or _spin_pending
 
 ## How long a press spin starting at `from` lasts until it has settled on the stone (the hold comes after).
 static func press_spin_seconds(from: float = 0.0) -> float:
@@ -157,12 +203,12 @@ static func press_spin_seconds(from: float = 0.0) -> float:
 
 ## A press: the ring flashes and the button spins (started at the end of the frame). Refused while a spin is playing.
 func pulse() -> void:
-	if _busy:
+	if is_busy():
 		return
 	_spin_pending = true
 	if _glow_material != null:
-		_set_glow(PRESS_GLOW)
-		_glow_to(HOVER_GLOW if _hovered else 0.0, 0.45)
+		_set_glow(COIN_PRESS_GLOW if use_priority_coin else PRESS_GLOW)
+		_glow_to(_resting_glow(), 0.45)
 	_mark_dirty()
 
 func set_colors(gem: Color, emission: Color, stone: Color, groove: Color, glow: Color) -> void:
@@ -189,7 +235,9 @@ func _apply() -> void:
 	var goal := _goal
 	if target != _active:
 		goal = _next_angle(_goal, target)
-	_active = target
+		_active = target
+		if use_priority_coin:
+			_glow_to(_resting_glow())
 	if is_equal_approx(goal, _goal):
 		return
 	var from := _pivot.rotation.x
@@ -207,12 +255,12 @@ func _apply() -> void:
 ## and the arrival slope as its end slope), then the settle.
 func _pose_turn(t: float, from: float, goal: float, seconds: float) -> void:
 	if t >= seconds:
-		_pivot.rotation.x = _settle_angle(goal, t - seconds)
+		_set_angle(_settle_angle(goal, t - seconds))
 		return
 	var d := goal - from
 	var x := t / seconds
 	var s := _settle_speed() * seconds / d
-	_pivot.rotation.x = from + d * ((3.0 * x * x - 2.0 * x * x * x) + s * (x * x * x - x * x))
+	_set_angle(from + d * ((3.0 * x * x - 2.0 * x * x * x) + s * (x * x * x - x * x)))
 
 ## Constant deceleration from PRESS_SPIN_SPEED to the settle speed on the stone, the settle, the hold, then release.
 func _start_press_spin() -> void:
@@ -220,14 +268,20 @@ func _start_press_spin() -> void:
 	if _turn_tween != null and _turn_tween.is_valid():
 		_turn_tween.kill()
 	var from := _pivot.rotation.x
-	_goal = _stone_angle_past(from + PRESS_SPIN_MIN_TURNS * TAU)
 	_active = false
 	_set_imprint_shown(false)
-	var total := press_spin_seconds(from)
 	_turn_tween = create_tween()
-	_turn_tween.tween_method(_pose_press.bind(from, _goal), 0.0, total, total)
+	if use_priority_coin:
+		_goal = _stone_angle_past(maxf(from, _goal) + 0.002)
+		var turn_seconds := COIN_PRESS_TURN_SECONDS if _goal - from <= PI * 1.5 else FULL_TURN_SECONDS
+		var total := turn_seconds + SETTLE_SECONDS
+		_turn_tween.tween_method(_pose_turn.bind(from, _goal, turn_seconds), 0.0, total, total)
+	else:
+		_goal = _stone_angle_past(from + PRESS_SPIN_MIN_TURNS * TAU)
+		var total := press_spin_seconds(from)
+		_turn_tween.tween_method(_pose_press.bind(from, _goal), 0.0, total, total)
 	_turn_tween.tween_callback(_normalise)
-	_turn_tween.tween_interval(PRESS_HOLD_SECONDS)
+	_turn_tween.tween_interval(COIN_PRESS_HOLD_SECONDS if use_priority_coin else PRESS_HOLD_SECONDS)
 	_turn_tween.tween_callback(_release)
 
 func _pose_press(t: float, from: float, goal: float) -> void:
@@ -255,12 +309,21 @@ func _process(_delta: float) -> void:
 		var want := glow_intensity() > MOTE_THRESHOLD
 		if _motes.emitting != want:
 			_motes.emitting = want
-	if _busy and _imprint_hidden and _goal - _pivot.rotation.x <= IMPRINT_RETURN_ANGLE and wants_active():
+	if not use_priority_coin and _busy and _imprint_hidden \
+			and _goal - _pivot.rotation.x <= IMPRINT_RETURN_ANGLE and wants_active():
 		_set_imprint_shown(true)
 
 func _set_imprint_shown(on: bool) -> void:
 	_imprint_hidden = not on
+	_sync_imprint_material()
+
+func _sync_imprint_material() -> void:
 	if _gem_material != null:
+		var on := not _imprint_hidden
+		if use_priority_coin:
+			var stamp := PRIORITY_COIN.stamp_for_imprint(_imprinted)
+			_gem_material.set_shader_parameter("stamp_kind", stamp)
+			on = on and not _imprinted.is_empty() and stamp == PRIORITY_COIN.Stamp.CRYSTAL
 		_gem_material.set_shader_parameter("use_imprint", on)
 
 ## True when the gem currently carries its text or symbol (false during the fast part of a press spin, and through a
@@ -292,8 +355,20 @@ func _normalise() -> void:
 	var wrapped := fposmod(_goal, TAU)
 	if is_equal_approx(wrapped, TAU):
 		wrapped = 0.0
-	_pivot.rotation.x = wrapped
+	_set_angle(wrapped)
 	_goal = wrapped
+
+func _set_angle(angle: float) -> void:
+	_pivot.rotation.x = angle
+	if use_priority_coin:
+		_pivot.position.y = PRIORITY_COIN.axle_height(angle)
+
+func _resting_glow() -> float:
+	if use_priority_coin:
+		if not _active or is_busy():
+			return 0.0
+		return COIN_HOVER_GLOW if _hovered else COIN_READY_GLOW
+	return HOVER_GLOW if _hovered else 0.0
 
 func _glow_to(value: float, seconds: float = GLOW_FADE_SECONDS) -> void:
 	if _glow_material == null:
@@ -302,12 +377,20 @@ func _glow_to(value: float, seconds: float = GLOW_FADE_SECONDS) -> void:
 		_glow_tween.kill()
 	_glow_tween = create_tween()
 	_glow_tween.tween_method(_set_glow, glow_intensity(), value, seconds)
+	if _ruby_material != null:
+		var hovered := _hovered and _active and not is_busy()
+		var from := float(_ruby_material.get_shader_parameter("ruby_glow"))
+		_glow_tween.parallel().tween_method(_set_ruby_glow, from, 1.0 if hovered else 0.0, seconds)
 
-## The ring and the pillar above it share one intensity.
+func _set_ruby_glow(value: float) -> void:
+	_ruby_material.set_shader_parameter("ruby_glow", value)
+
 func _set_glow(v: float) -> void:
 	_glow_material.set_shader_parameter("intensity", v)
-	if _pillar_material != null:
-		_pillar_material.set_shader_parameter("intensity", v)
+	if _rise_material != null:
+		_rise_material.set_shader_parameter("intensity", v)
+	if _coin_rise != null:
+		_coin_rise.visible = v > 0.001
 	_tint_motes()
 
 ## Motes are the ring's own light: its colour, at its brightness (the ring's core is drawn at 0.9 * intensity).
@@ -348,12 +431,15 @@ func _refresh_imprint(target: bool) -> void:
 		return
 	_imprint_drawn = true
 	_imprinted = text
-	_label.text = text
-	_label.visible = not text.is_empty()
-	_symbol.visible = text.is_empty()
-	if not text.is_empty():
+	var stamped := use_priority_coin and PRIORITY_COIN.stamp_for_imprint(text) != PRIORITY_COIN.Stamp.CRYSTAL
+	_label.text = "" if stamped else text
+	_label.visible = not _label.text.is_empty()
+	if _symbol != null:
+		_symbol.visible = text.is_empty()
+	if _label.visible:
 		_fit_label()
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_sync_imprint_material()
 
 ## Shrink the font until the text fits the dome: two lines at most, inside the circle.
 func _fit_label() -> void:
@@ -372,10 +458,30 @@ func _fit_label() -> void:
 
 func _build() -> void:
 	_pivot = Node3D.new(); _pivot.name = "Pivot"
-	# The axle rides a little above the well's centre line, so the rim sits just under the ring's lip rather than
-	# leaving a dark band of well wall showing inside it.
 	_pivot.position.y = AXLE_LIFT
 	add_child(_pivot)
+	if use_priority_coin:
+		if imprint_mode == "text":
+			_build_imprint()
+		var imprint := _viewport.get_texture() if _viewport != null else null
+		_gem_material = PRIORITY_COIN.build_cap(_pivot, imprint, coin_style == "cosmos")
+		_ruby_material = PRIORITY_COIN.build_socket(self, coin_style == "cosmos")
+		# The glow starts at the seated cap's brass edge and stays upright while the cap flips.
+		_glow_material = _build_ring_glow(0.80, PRIORITY_COIN.EDGE_LIGHT_RADIUS,
+			PRIORITY_COIN.EDGE_LIGHT_Y + 0.007, 0.025, 0.0)
+		_glow_material.set_shader_parameter("inner_spill_limit", 0.021)
+		_glow_material.set_shader_parameter("core_color", COIN_RING_COLOR)
+		_build_coin_light_rise(PRIORITY_COIN.EDGE_LIGHT_RADIUS, PRIORITY_COIN.EDGE_LIGHT_Y + 0.007)
+	else:
+		_build_gem_disc()
+		var reach := radius + RING_OUTSET + 0.09
+		_glow_material = _build_ring_glow(reach * 2.0, radius + RING_OUTSET, RING_HEIGHT + 0.02,
+			0.02 / (reach * 2.0), 0.045 / (reach * 2.0))
+		_build_light_rise(radius + RING_OUTSET, RING_HEIGHT, PILLAR_HEIGHT)
+		_build_motes()
+
+
+func _build_gem_disc() -> void:
 	var dome_height := radius * 0.26     # thick enough for the gem's setting to read as a step
 
 	_build_imprint()
@@ -412,44 +518,72 @@ func _build() -> void:
 	bezel.rings = 128; bezel.ring_segments = 12
 	_add_mesh("Bezel", bezel, _bezel_material)
 
-	# The ring glow belongs to the STATION, not the button: it is a child of the socket, not of the pivot.
-	var reach := radius + RING_OUTSET + 0.09
+
+func _build_ring_glow(diameter: float, ring_radius: float, height: float,
+		core: float, spill: float) -> ShaderMaterial:
+	# The light stays on the socket while the disc turns.
 	var quad := PlaneMesh.new()
-	quad.size = Vector2(reach * 2.0, reach * 2.0)
-	_glow_material = ShaderMaterial.new(); _glow_material.shader = GLOW_SHADER
-	_glow_material.set_shader_parameter("ring_radius", (radius + RING_OUTSET) / (reach * 2.0))
-	_glow_material.set_shader_parameter("core_width", 0.02 / (reach * 2.0))
-	_glow_material.set_shader_parameter("spill_width", 0.045 / (reach * 2.0))
-	_glow_material.set_shader_parameter("intensity", 0.0)
+	quad.size = Vector2.ONE * diameter
+	var material := ShaderMaterial.new()
+	material.shader = GLOW_SHADER
+	material.set_shader_parameter("ring_radius", ring_radius / diameter)
+	material.set_shader_parameter("core_width", core)
+	material.set_shader_parameter("spill_width", spill)
 	var glow := MeshInstance3D.new()
 	glow.name = "RingGlow"
 	glow.mesh = quad
-	glow.material_override = _glow_material
-	glow.position = Vector3(0, RING_HEIGHT + 0.02, 0)
+	glow.material_override = material
+	glow.position.y = height
 	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(glow)
-	_build_pillar()
-	_build_motes()
+	return material
 
-## An open cylinder of light standing on the ring (no caps: a cap would be a lit disc over the button).
-func _build_pillar() -> void:
+## Overlapping annuli give the light thickness when viewed from above. Each slice depth-tests against the socket.
+func _build_coin_light_rise(ring_radius: float, base_y: float) -> void:
+	var slice := PlaneMesh.new()
+	slice.size = Vector2.ONE * (ring_radius + 0.35) * 2.0
+	var layers := MultiMesh.new()
+	layers.transform_format = MultiMesh.TRANSFORM_3D
+	layers.use_custom_data = true
+	layers.mesh = slice
+	layers.instance_count = COIN_RISE_LAYERS
+	for i in range(COIN_RISE_LAYERS):
+		var h := (float(i) + 0.5) / COIN_RISE_LAYERS
+		layers.set_instance_transform(i, Transform3D(Basis.IDENTITY, Vector3.UP * h * COIN_RISE_HEIGHT))
+		layers.set_instance_custom_data(i, Color(h, 0.0, 0.0, 1.0))
+	_rise_material = ShaderMaterial.new()
+	_rise_material.shader = COIN_RISE_SHADER
+	_rise_material.set_shader_parameter("ring_radius", ring_radius)
+	_rise_material.set_shader_parameter("slice_weight", 1.0 / COIN_RISE_LAYERS)
+	_rise_material.set_shader_parameter("glow_color", COIN_GLOW_COLOR)
+	_coin_rise = MultiMeshInstance3D.new()
+	_coin_rise.name = "RingLightRise"
+	_coin_rise.multimesh = layers
+	_coin_rise.material_override = _rise_material
+	_coin_rise.position.y = base_y
+	_coin_rise.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_coin_rise.visible = false
+	add_child(_coin_rise)
+
+## An open cylinder of light rising from the Cancel ring.
+func _build_light_rise(ring_radius: float, base_y: float, height: float) -> void:
 	var tube := CylinderMesh.new()
-	tube.top_radius = radius + RING_OUTSET
-	tube.bottom_radius = radius + RING_OUTSET
-	tube.height = PILLAR_HEIGHT
+	tube.top_radius = ring_radius
+	tube.bottom_radius = ring_radius
+	tube.height = height
 	tube.radial_segments = 64
 	tube.rings = 8
 	tube.cap_top = false
 	tube.cap_bottom = false
-	_pillar_material = ShaderMaterial.new(); _pillar_material.shader = PILLAR_SHADER
-	_pillar_material.set_shader_parameter("height", PILLAR_HEIGHT)
-	_pillar_material.set_shader_parameter("intensity", 0.0)
-	_pillar_material.render_priority = 1
+	_rise_material = ShaderMaterial.new()
+	_rise_material.shader = PILLAR_SHADER
+	_rise_material.set_shader_parameter("height", height)
+	_rise_material.render_priority = 1
 	var pillar := MeshInstance3D.new()
 	pillar.name = "LightPillar"
 	pillar.mesh = tube
-	pillar.material_override = _pillar_material
-	pillar.position = Vector3(0, RING_HEIGHT + PILLAR_HEIGHT * 0.5, 0)
+	pillar.material_override = _rise_material
+	pillar.position.y = base_y + height * 0.5
 	pillar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(pillar)
 
@@ -523,6 +657,8 @@ func _build_imprint() -> void:
 	_label.add_theme_font_size_override("font_size", IMPRINT_FONT_SIZE)
 	_label.visible = false
 	_viewport.add_child(_label)
+	if use_priority_coin:
+		return
 	_symbol = Node2D.new()
 	_viewport.add_child(_symbol)
 	var s := float(IMPRINT_SIZE)
@@ -544,13 +680,16 @@ func _build_imprint() -> void:
 func _apply_colors() -> void:
 	if _gem_material == null:
 		return
+	if use_priority_coin:
+		_glow_material.set_shader_parameter("glow_color", COIN_GLOW_COLOR)
+		return
 	_gem_material.set_shader_parameter("base_color", gem_color.linear_to_srgb())
 	_gem_material.set_shader_parameter("emission_color", gem_emission.linear_to_srgb())
 	_gem_material.set_shader_parameter("emission_energy", gem_energy)
 	_stone_material.set_shader_parameter("base_color", stone_color.linear_to_srgb())
 	_stone_material.set_shader_parameter("groove_color", groove_color.linear_to_srgb())
 	_glow_material.set_shader_parameter("glow_color", glow_color.linear_to_srgb())
-	_pillar_material.set_shader_parameter("glow_color", glow_color.linear_to_srgb())
+	_rise_material.set_shader_parameter("glow_color", glow_color.linear_to_srgb())
 	_tint_motes()
 
 func _add_mesh(node_name: String, mesh: Mesh, material: Material) -> MeshInstance3D:

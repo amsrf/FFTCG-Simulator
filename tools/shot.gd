@@ -51,6 +51,9 @@ func _ready() -> void:
 		MatchSetup.config = MatchSetup.build_config(preset)
 		var game: Node = load("res://scenes/game/game.tscn").instantiate()
 		add_child(game)
+		if _args.has("hover-priority"):
+			await get_tree().create_timer(1.0).timeout
+			game.assistant.passPhaseButton._on_hover(true)
 		# --hover-field <index>: open the field's hover preview on a battlefield card so a shot can show it.
 		# The preview only appears on hover and a screenshot harness cannot hover, which meant every claim about
 		# its rounded corners, its bottom line and where it lands was unverifiable until a person looked — and
@@ -206,6 +209,27 @@ func _ready() -> void:
 		# --cam-zoom <f>: multiply the game's camera size (or fov) so a small detail can be inspected at
 		# full resolution. With a payment up, the camera also centres on the readout — zooming about the
 		# screen centre alone would push a readout that sits low on the screen straight out of frame.
+		# --opponent-coin: raise the opponent's priority coin (as when they hold priority) so its face shows.
+		if _args.has("opponent-coin"):
+			await _settle(3)
+			game.get_node("Assistant/ButtonStations").set_opponent_priority(true)
+			# --opponent-flip <s>: once it is up, take their priority away and shoot <s> seconds into the turn.
+			if _args.has("opponent-flip"):
+				await get_tree().create_timer(2.0).timeout
+				game.get_node("Assistant/ButtonStations").set_opponent_priority(false)
+				await get_tree().create_timer(float(_args["opponent-flip"])).timeout
+			if _args.has("opponent-hover"):
+				await _settle(30)
+				game.get_node("Assistant/ButtonStations/OpponentForward").set_hovered(true)
+		# --focus x,y,z [--focus-dist d] [--focus-fov f]: keep the board camera's direction but frame a close-up
+		# of that world point (a board fixture such as a coin, at full resolution).
+		if _args.has("focus"):
+			await _settle(3)
+			var fcam: Camera3D = get_viewport().get_camera_3d()
+			var xyz: PackedStringArray = str(_args["focus"]).split(",")
+			var point := Vector3(float(xyz[0]), float(xyz[1]), float(xyz[2]))
+			fcam.global_position = point + fcam.global_transform.basis.z * float(_args.get("focus-dist", 2.0))
+			fcam.fov = float(_args.get("focus-fov", 30.0))
 		if _args.has("cam-zoom"):
 			await _settle(3)
 			var cam: Camera3D = get_viewport().get_camera_3d()

@@ -4,10 +4,11 @@ extends RefCounted
 ##
 ##   play_out()  where the card was cast it turns into a translucent hologram in its element's colour, its printed face
 ##               gives way to a line drawing, and that dissolves from the bottom up, shedding sparks  (148-163)
-##   play_in()   a faint line drawing of the card comes out of where it left and CROSSES THE BOARD to its slot
-##               (170-180), sharpens there (181-188), fills with white light (189-191), and the real card is there
-##               (192). Then, our addition: it SLAMS onto the board from a hand's height, kicking up dust, and a big card
-##               jolts the camera (193-196): no jolt for cost 0-4, small for 5-7, bigger for 8+ (Field.slam_tier).
+##   play_in()   a faint line drawing of the card comes out of where it left and CROSSES THE BOARD to hover over its
+##               slot (170-180), sharpens there (181-188), then FALLS onto it in a few frames, still a drawing (188-189).
+##               The contact floods it with white light and throws sparks off its rim (189-191); the real card is there,
+##               at rest, its art popping out of the white while the glow around it fades (192-200), and the camera
+##               takes the hit (193-198): every play jolts, cost 5-7 and 8+ harder (Field.slam_tier).
 ## The reference's empty beat between the two (164-169) is dropped, and every beat is slower than the clip (user: the
 ## clip's speed was too fast to read). A field card is a solid piece from the moment it appears (card_edge.gd).
 ##
@@ -22,16 +23,24 @@ const CARD_EDGE := preload("res://scripts/cards/card_edge.gd")
 
 ## Reference timings (frames at 60 fps).
 const FPS := 60.0
-## How high over its slot the drawing hovers and the card appears, before it slams down (world metres).
+## How high over its slot the drawing hovers before it falls onto it (world metres).
 const SLAM_HEIGHT := 0.35
 ## With no departure to leave from (a card put onto the field out of a hidden zone): the drawing comes down from here.
 const FALLBACK_HEIGHT := 0.6
 ## The line drawing's quad reaches this far past the card, for the construction lines.
 const BLUEPRINT_MARGIN := 0.1
-const SLAM_DUST := preload("res://scripts/vfx/slam_dust.gd")
-## Camera jolt per slam tier, in PIXELS at 1080 p for the card's depth (the reference: ~10 px).
-const JOLT_PIXELS: Array[float] = [0.0, 5.0, 11.0]
-## The reference's whole-frame shift on frames 193-197 relative to the peak, then still.
+## The drawing lies this far above the card's face once it has fallen (coplanar it z-fights the card into a wedge).
+const LIGHT_LIFT := 0.006
+## Sparks thrown off the drawing's rim at contact, per slam tier (the reference: bright motes along the edges).
+const CONTACT_SPARKS: Array[int] = [26, 36, 48]
+const CONTACT_SPARK_COLOUR := Color(1.0, 0.95, 0.82)
+## The drawing's brightness once it is filled: a cream slab, not a blown-out white (ref 190-191; at the hold's 1.35 the
+## fill clipped to pure white and bloomed past the card).
+const FILL_INTENSITY := 0.75
+## Camera jolt per slam tier, in PIXELS at 1080 p for the card's depth. The reference (a cost-4 card) shifts the whole
+## frame ~23 px at 4K = ~11 px at 1080 p, so every play jolts and the tiers only make it heavier.
+const JOLT_PIXELS: Array[float] = [10.0, 13.0, 17.0]
+## The reference's whole-frame shift on frames 193-197 relative to the peak, then still (measured: 1.0, 0.3, 0.6, ~0).
 const JOLT_KEYS: Array[float] = [0.0, 1.0, 0.35, 0.65, -0.12, 0.0]
 ## A bigger card's jolt plays a little slower, so it reads as heavier.
 const JOLT_STRETCH: Array[float] = [1.0, 1.0, 1.4]
@@ -111,9 +120,9 @@ func play_out() -> float:
 
 ## The arrival at the card's CURRENT transform (the caller has already put the hidden card on its slot). The drawing
 ## leaves from where play_out() left the card (or from above the slot when there was no departure), crosses the board
-## to hover over the slot, sharpens, fills with white light, and the real card appears there and SLAMS down onto the
-## slot: dust, the field pulse's tier, and the camera jolt. Awaitable: returns once the card has hit the board; the
-## light, dust and jolt finish on their own.
+## to hover over the slot, sharpens, falls onto it, floods white on contact, and the real card is shown there at rest;
+## `tier` (Field.slam_tier) sizes the sparks and the camera jolt. Awaitable: returns once the card is revealed; the
+## light and the jolt finish on their own.
 func play_in(tier: int) -> void:
 	if not _card.is_inside_tree():
 		_card.visible = true
@@ -157,45 +166,39 @@ func play_in(tier: int) -> void:
 		mat.set_shader_parameter("intensity", 0.7 + 0.65 * v)
 		mat.set_shader_parameter("crisp", 0.3 + 0.7 * v)
 		_set_slab(lines, 0.45 + 0.35 * v, 0.3 + 0.7 * v), 0.0, 1.0, hold_seconds)
-	# 3. Fills with white light.
-	t.tween_callback(func() -> void: phase = "fill")
+	# 3. The DRAWING falls onto the slot: slowly at first, then all at once (ref 188-189). The card stays hidden.
+	var floor_pose := home.translated(Vector3.UP * LIGHT_LIFT)
+	t.tween_callback(func() -> void: phase = "drop")
 	t.tween_method(func(v: float) -> void:
-		mat.set_shader_parameter("fill", v), 0.0, 1.0, fill_seconds)
+		lines.global_transform = hover.interpolate_with(floor_pose, v), 0.0, 1.0, drop_seconds)\
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	# 4. Contact: it floods with white light where it lies and sparks jump off its rim (ref 189-191).
+	t.tween_callback(func() -> void:
+		phase = "fill"
+		lines.global_transform = floor_pose
+		_sparks(floor_pose, CONTACT_SPARK_COLOUR, CONTACT_SPARKS[clampi(tier, 0, CONTACT_SPARKS.size() - 1)],
+			0.5, 0.25, true))
+	t.tween_method(func(v: float) -> void:
+		mat.set_shader_parameter("fill", v)
+		mat.set_shader_parameter("halo", v)
+		mat.set_shader_parameter("intensity", lerpf(1.35, FILL_INTENSITY, v)), 0.0, 1.0, flash_in_seconds)
+	t.tween_interval(white_hold_seconds)
 	await t.finished
-	# The card may have left the field while its drawing was still crossing (a response killed it): it is drawn in its
-	# new zone by then, so only the drawing goes.
+	# The card may have left the field while its drawing was still on its way (a response killed it): it is drawn in
+	# its new zone by then, so only the drawing goes.
 	if not is_instance_valid(_card) or not _card.is_drawn_on_field():
 		phase = ""
 		blueprint = null
 		if is_instance_valid(lines):
 			lines.queue_free()
 		return
-	# 4. The card is there, over its slot, a solid piece already, and drops onto the board.
-	phase = "drop"
-	var rest: Vector3 = _card.position
-	var lift: Vector3 = _card.get_parent().global_basis.inverse() * (Vector3.UP * SLAM_HEIGHT)
-	_card.position = rest + lift
-	_card.visible = true
-	_fade_light(lines, mat)
-	var drop := _card.create_tween()
-	drop.tween_property(_card, "position", rest, drop_seconds).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	# The light rides ON the falling card, a hair above its face: left at the hover height it was coplanar with the
-	# card for the first frame and z-fought into a white wedge.
-	var ride := func() -> void:
-		if is_instance_valid(lines) and is_instance_valid(face_mesh):
-			lines.global_transform = face_mesh.global_transform.translated(Vector3.UP * 0.006)
-	ride.call()
-	drop.parallel().tween_method(func(_v: float) -> void: ride.call(), 0.0, 1.0, drop_seconds)
-	await drop.finished
-	if not is_instance_valid(_card):
-		return
-	_card.position = rest
-	# 5. Impact.
+	# 5. The card is there, already at rest; the white leaves its face at once, the glow around it more slowly, and
+	# the camera takes the hit (ref 192-198).
 	phase = "landed"
 	blueprint = null
-	SLAM_DUST.spawn(_card, home, tier)
-	if tier > 0:
-		jolt(_card, tier)
+	_card.visible = true
+	_fade_light(lines, mat)
+	jolt(_card, tier)
 
 ## Timings (seconds). The reference runs this in ~0.6 s at 60 fps; at our play rate that was too fast to read, so each
 ## beat is longer. Static so a probe or demo can set them in one place.
@@ -203,21 +206,25 @@ static var out_holo_seconds := 0.10       # ref 148-151: the art drains into the
 static var out_dissolve_seconds := 0.28   # ref 152-163: it dissolves
 static var travel_seconds := 0.32         # ref 170-180: the drawing crosses to the slot
 static var hold_seconds := 0.22           # ref 181-188: it sharpens over the slot
-static var fill_seconds := 0.10           # ref 189-191: white fill
-static var drop_seconds := 0.12           # the card falls the last SLAM_HEIGHT and hits the board
-static var flash_seconds := 0.14          # the drawing's light leaving the card
+static var drop_seconds := 0.10           # ref 188-189: the drawing falls SLAM_HEIGHT onto the slot (cubic ease-in)
+static var flash_in_seconds := 0.04       # ref 189: contact, the drawing floods white
+static var white_hold_seconds := 0.05     # ref 190-191: a solid white slab on the wood
+static var unfill_seconds := 0.05         # ref 192: the white leaves the card's face, the art is there
+static var flash_seconds := 0.24          # ref 192-200: the glow around the card fades
 
-## Total time from the start of play_in() until the card hits the board.
+## Total time from the start of play_in() until the card is revealed on its slot.
 static func seconds_to_land() -> float:
-	return travel_seconds + hold_seconds + fill_seconds + drop_seconds
+	return travel_seconds + hold_seconds + drop_seconds + flash_in_seconds + white_hold_seconds
 
 func _fade_light(lines: MeshInstance3D, mat: ShaderMaterial) -> void:
 	if not is_instance_valid(lines):
 		return
 	var out := lines.create_tween()
+	# The face clears fast (the art pops, ref 192); the glow outside the card and the lines fade over flash_seconds.
 	out.tween_method(func(v: float) -> void:
-		mat.set_shader_parameter("fill", 1.0 - v)
-		mat.set_shader_parameter("intensity", 1.35 * (1.0 - v) * (1.0 - v))
+		mat.set_shader_parameter("fill", 1.0 - minf(v * flash_seconds / maxf(unfill_seconds, 0.001), 1.0))
+		mat.set_shader_parameter("halo", (1.0 - v) * (1.0 - v))
+		mat.set_shader_parameter("intensity", FILL_INTENSITY * (1.0 - v) * (1.0 - v))
 		_set_slab(lines, 0.8 * (1.0 - v) * (1.0 - v), 1.0), 0.0, 1.0, flash_seconds)
 	out.tween_callback(lines.queue_free)
 
@@ -342,7 +349,7 @@ func _sparks(at: Transform3D, colour: Color, amount: int, lifetime: float, rise:
 ## The landing jolt: the board camera knocked toward the card and up the screen, then damped back over a few frames,
 ## shaped like the reference's measured whole-frame shift. Sized in screen pixels at the card's depth.
 static func jolt(card: Node3D, tier: int) -> void:
-	if tier <= 0 or card == null or not card.is_inside_tree():
+	if tier < 0 or card == null or not card.is_inside_tree():
 		return
 	var camera := card.get_viewport().get_camera_3d()
 	if camera == null:

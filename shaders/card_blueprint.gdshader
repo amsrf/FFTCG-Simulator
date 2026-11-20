@@ -16,6 +16,9 @@ uniform float crisp : hint_range(0.0, 1.0) = 1.0;
 uniform float intensity : hint_range(0.0, 4.0) = 1.0;
 // White light filling the card's silhouette.
 uniform float fill : hint_range(0.0, 1.0) = 0.0;
+// The glow spilling OUTSIDE the silhouette. Separate from `fill` so the face can clear (the art pops) while the glow
+// around the card fades more slowly; the larger of the two is used.
+uniform float halo : hint_range(0.0, 1.0) = 0.0;
 // Noise dissolve, eaten from the bottom up with a glowing front (the departure). 0 = whole, 1 = gone.
 uniform float dissolve : hint_range(0.0, 1.0) = 0.0;
 uniform float seed = 0.0;
@@ -38,8 +41,8 @@ float line(float d, float w, float glow_w) {
 	float ad = abs(d);
 	float aa = fwidth(d) + 1e-5;
 	float core = 1.0 - smoothstep(w, w + aa, ad);
-	float halo = exp(-ad / max(glow_w, 1e-4)) * 0.45;
-	return max(core, halo);
+	float soft = exp(-ad / max(glow_w, 1e-4)) * 0.45;
+	return max(core, soft);
 }
 
 float hash(vec2 p) {
@@ -110,7 +113,7 @@ void fragment() {
 	float inside = 1.0 - smoothstep(-0.002, 0.002, outer);
 	float rim = exp(outer / 0.03);
 	colour = mix(colour, fill_color.rgb * (0.85 + 0.6 * rim), fill * inside);
-	colour += fill_color.rgb * fill * exp(-max(outer, 0.0) / 0.035) * 0.8 * (1.0 - inside);
+	colour += fill_color.rgb * max(fill, halo) * exp(-max(outer, 0.0) / 0.035) * 0.8 * (1.0 - inside);
 
 	// Dissolve: eaten from the bottom (high y) upward, ragged, with a glowing front.
 	if (dissolve > 0.0) {

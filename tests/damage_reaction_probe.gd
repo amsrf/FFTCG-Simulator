@@ -62,6 +62,8 @@ func _ready() -> void:
 	var near_at := func() -> Vector3: return card.global_transform * (card.hand_mesh.transform * Vector3(0, 0, 0.3))
 	var rest_far: Vector3 = far_at.call()
 	var rest_near: Vector3 = near_at.call()
+	# The first hit is pinned to the TIP style (the far edge toward the camera); the others are swept below.
+	fx.next_style = "tip"
 	card.suffer_damage(5000, "Ability", "player")
 	# SNAP: up within a couple of frames (reference frames 62 -> 63).
 	await get_tree().create_timer(0.08).timeout
@@ -70,7 +72,7 @@ func _ready() -> void:
 	var far_rise: float = far_at.call().y - rest_far.y
 	_expect(near_rise > 0.10 and near_rise < 0.32, "the card snaps up off the board: a little jump (bottom edge +%.2f m)" % near_rise)
 	var tip: float = rad_to_deg(asin(clampf((far_rise - near_rise) / (0.6 * card.global_basis.get_scale().y), -1.0, 1.0)))
-	_expect(tip > 15.0 and tip < 28.0, "it tips toward the camera about its bottom edge (%.1f deg)" % tip)
+	_expect(tip > 27.0 and tip < 42.0, "it PITCHES hard toward the camera about its bottom edge (%.1f deg)" % tip)
 	var toward: Vector3 = card.get_viewport().get_camera_3d().global_position - card.global_position
 	toward.y = 0.0
 	_expect((far_at.call() - rest_far).dot(toward) > 0.0, "the far edge swings toward the camera")
@@ -89,54 +91,145 @@ func _ready() -> void:
 	var lowest := INF
 	var in_range := true
 	var yaw_signs := {}
-	for seed_value in range(60):
+	var styles_seen := {}
+	var lowest_style := ""
+	var by_name := {}
+	for style in fx.STYLES:
+		by_name[style.name] = style
+	for seed_value in range(120):
 		var tier: int = seed_value % 4
 		var p: Dictionary = fx.roll_reaction(tier, seed_value)
-		in_range = in_range and p.lift >= fx.REACTION_LIFT[tier] * 0.85 - 0.0001 and p.lift <= fx.REACTION_LIFT[tier] * 1.15 + 0.0001 \
-			and absf(p.pitch - fx.REACTION_PITCH_DEG[tier]) <= 3.0001 and p.end > 1.0 and p.end < 2.5
+		var style: Dictionary = by_name[p.style]
+		styles_seen[p.style] = true
+		var base_lift: float = fx.REACTION_LIFT[tier] * float(style.lift)
+		in_range = in_range and p.lift >= base_lift * 0.85 - 0.0001 and p.lift <= base_lift * 1.15 + 0.0001 \
+			and absf(p.pitch - fx.REACTION_PITCH_DEG[tier] * float(style.tilt)) <= 3.0001 * float(style.tilt) \
+			and p.end > 0.7 and p.end < 2.0 and (style.axis as Array).has(p.axis_deg)
 		yaw_signs[signf(p.yaw)] = true
 		for far_sign in [-1.0, 1.0]:
 			var t := 0.0
 			while t <= float(p.end):
 				var pose: Transform3D = fx.reaction_pose(t, far_sign, p)
 				for corner in [Vector3(-0.2145, 0, -0.3), Vector3(0.2145, 0, -0.3), Vector3(-0.2145, 0, 0.3), Vector3(0.2145, 0, 0.3)]:
-					lowest = minf(lowest, (pose * corner).y)
+					if (pose * corner).y < lowest:
+						lowest = (pose * corner).y
+						lowest_style = p.style
 				t += 0.01
-	_expect(in_range, "60 rolls keep every size and timing inside its range")
+	_expect(in_range, "120 rolls keep every size and timing inside their style's range")
+	_expect(styles_seen.size() == fx.STYLES.size(), "every hit style turns up (%s)" % str(styles_seen.keys()))
 	_expect(yaw_signs.size() == 2, "rolls turn both ways")
-	_expect(lowest > -0.001, "no corner ever enters the board, in any roll, through the whole return (%.4f)" % lowest)
+	_expect(lowest > -0.001, "no corner ever enters the board, in any roll of any style, through the whole return (%.4f, %s)"
+		% [lowest, lowest_style])
+	# Styles are different MOTIONS: at the top of the jump each tips the face a different way (or turns it).
+	var tops := {}
+	for style in fx.STYLES:
+		var axes: Array = style.axis
+		var q: Dictionary = fx.roll_reaction(2, 7, [], style.name)
+		var top: Transform3D = fx.reaction_pose(float(q.rise), 1.0, q)
+		tops[style.name] = [top.basis * Vector3.UP, top.basis * Vector3.FORWARD, top.origin.y]
+	var closest := INF
+	var closest_pair := ""
+	var names: Array = tops.keys()
+	for i in names.size():
+		for j in range(i + 1, names.size()):
+			var a_top: Array = tops[names[i]]
+			var b_top: Array = tops[names[j]]
+			var apart: float = (a_top[0] - b_top[0]).length() + (a_top[1] - b_top[1]).length() + absf(a_top[2] - b_top[2])
+			if apart < closest:
+				closest = apart
+				closest_pair = "%s/%s" % [names[i], names[j]]
+	_expect(closest > 0.05, "every style's top pose differs from every other's (closest %s: %.3f)" % [closest_pair, closest])
+	# Never the same style twice in a row: on one card, and across the board.
+	var repeats := 0
+	var last := ""
+	for seed_value in range(50):
+		var r: Dictionary = fx.roll_reaction(1, 1000 + seed_value, [last])
+		if r.style == last:
+			repeats += 1
+		last = r.style
+	_expect(repeats == 0, "a roll never repeats the style it is told to avoid (%d repeats in 50)" % repeats)
 	var a: Dictionary = fx.roll_reaction(1, 11)
 	var b: Dictionary = fx.roll_reaction(1, 12)
-	var differ: float = (fx.reaction_pose(0.3, 1.0, a).origin - fx.reaction_pose(0.3, 1.0, b).origin).length() \
+	var pose_a: Transform3D = fx.reaction_pose(0.3, 1.0, a)
+	var pose_b: Transform3D = fx.reaction_pose(0.3, 1.0, b)
+	var differ: float = (pose_a.origin - pose_b.origin).length() + (pose_a.basis * Vector3.UP - pose_b.basis * Vector3.UP).length() \
 		+ absf(fx.reaction_spring(0.7, a) - fx.reaction_spring(0.7, b))
 	_expect(differ > 0.01, "two hits of the same strength do not look the same (%.3f)" % differ)
-	# The shape of one roll: a fast snap, then a SLOW return on a WEAKLY damped spring, with no snap back.
-	var p0: Dictionary = fx.roll_reaction(1, 5)
+	# The shape of one roll: a fast snap, a hang and a SLOW fall, then it settles on its bottom edge and never jumps again.
+	var p0: Dictionary = fx.roll_reaction(1, 5, [], "tip")
 	_expect(fx.reaction_spring(float(p0.rise), p0) > 0.99 and float(p0.rise) <= 0.05,
 		"the jump is a snap: full height in %.2f s" % float(p0.rise))
-	var back_down := -1.0
-	var swings: Array[float] = []
+	var landed_at: float = float(p0.rise) + float(p0.fall)
+	_expect(float(p0.fall) > 0.35 and float(p0.fall) < 0.6, "the fall back is slow: on the board %.2f s after the top (0.35-0.6)" % float(p0.fall))
+	var hang: float = fx.reaction_spring(float(p0.rise) + 0.1 * float(p0.fall), p0)
+	_expect(hang > 0.95, "it HANGS at the top before falling (%.2f of the jump after a tenth of the fall)" % hang)
+	var peaks: Array[float] = []
 	var biggest_step := 0.0
+	var below := 0.0
+	var relifted := 0.0
+	var bottom_edge_up := 0.0
+	var rising := false
+	var prev: float = fx.reaction_spring(landed_at, p0)
 	var t0 := float(p0.rise)
 	while t0 < float(p0.end):
 		var value: float = fx.reaction_spring(t0, p0)
-		if back_down < 0.0 and value <= 0.0:
-			back_down = t0 - float(p0.rise)
-		if absf(value) > 0.03:
-			if swings.is_empty() or signf(value) != signf(swings.back()):
-				swings.append(value)
-			elif absf(value) > absf(swings.back()):
-				swings[swings.size() - 1] = value
+		below = minf(below, value)
 		biggest_step = maxf(biggest_step, absf(fx.reaction_spring(t0 + 0.01, p0) - value))
-		t0 += 0.005
-	_expect(back_down > 0.2, "the return is slow: back on the board %.2f s after the jump" % back_down)
-	var decays := swings.size() >= 3
-	for i in range(1, swings.size()):
-		decays = decays and absf(swings[i]) < absf(swings[i - 1])
-	_expect(decays, "weak damping: it swings past rest and back %d times, each smaller (%s)" % [
-		swings.size() - 1, str(swings.map(func(v): return snappedf(v, 0.01)))])
+		if t0 > landed_at:
+			var pose: Transform3D = fx.reaction_pose(t0, 1.0, p0)
+			relifted = maxf(relifted, fx.reaction_lift(t0, p0))
+			bottom_edge_up = maxf(bottom_edge_up, maxf((pose * Vector3(-0.2145, 0, 0.3)).y, (pose * Vector3(0.2145, 0, 0.3)).y))
+			if value < prev and rising:
+				peaks.append(prev)
+			rising = value > prev
+			prev = value
+		t0 += 0.002
+	_expect(below >= 0.0, "it never tips the other way (lowest %.3f)" % below)
+	_expect(relifted < 0.0001 and bottom_edge_up < 0.001,
+		"after landing it never leaves the board again: lift %.4f, bottom edge %.4f m" % [relifted, bottom_edge_up])
+	var settles := peaks.size() >= 2 and peaks[0] > 0.06 and peaks[0] < 0.25
+	for i in range(1, peaks.size()):
+		settles = settles and peaks[i] < peaks[i - 1] * 0.6
+	_expect(settles, "it settles on a damped bounce on its bottom edge, each kick smaller (%s of the jump's tip)"
+		% str(peaks.map(func(v): return snappedf(v, 0.01))))
+	_expect(fx.reaction_wobble(landed_at + 0.05, p0) == 0.0, "the tip style lands square (no side wobble)")
+	# THE WOBBLE (~/Desktop/Clips/damage 83-90): a wobbling style comes down on ONE long edge, then rocks onto the other,
+	# back, ..., each rock smaller, and never pushes an edge into the board.
+	var pw: Dictionary = fx.roll_reaction(1, 9, [], "corner")
+	var landed_w: float = float(pw.rise) + float(pw.fall)
+	var side_gap := func(at: float) -> float:
+		var pose: Transform3D = fx.reaction_pose(at, 1.0, pw)
+		return (pose * Vector3(0.2145, 0, 0)).y - (pose * Vector3(-0.2145, 0, 0)).y
+	var at_touch: Transform3D = fx.reaction_pose(landed_w, 1.0, pw)
+	var left_y: float = (at_touch * Vector3(-0.2145, 0, 0)).y
+	var right_y: float = (at_touch * Vector3(0.2145, 0, 0)).y
+	_expect(minf(left_y, right_y) < 0.001 and absf(left_y - right_y) > 0.02,
+		"it touches down on ONE long edge first (edge heights %.3f / %.3f m)" % [left_y, right_y])
+	var rocks: Array[float] = []
+	var last_sign: float = signf(side_gap.call(landed_w))
+	var extreme: float = absf(side_gap.call(landed_w))
+	var tw: float = landed_w
+	while tw < float(pw.end):
+		var gap: float = side_gap.call(tw)
+		if signf(gap) != last_sign and absf(gap) > 0.001:
+			rocks.append(extreme)
+			extreme = 0.0
+			last_sign = signf(gap)
+		extreme = maxf(extreme, absf(gap))
+		tw += 0.002
+	rocks.append(extreme)
+	var visible_rocks: int = rocks.filter(func(v): return v > 0.012).size()
+	_expect(rocks[0] > 0.07 and visible_rocks >= 3 and visible_rocks <= 4,
+		"a BIG first lean (%.3f m of edge lift) and 3-4 rocks you can see (%d over 1.2 cm)" % [rocks[0], visible_rocks])
+	var rock_seconds: float = PI / float(pw.wobble_w)
+	_expect(rock_seconds > 0.12 and rock_seconds < 0.2, "each rock is slow: %.2f s from one edge to the other" % rock_seconds)
+	var rocking := rocks.size() >= 3
+	for i in range(1, rocks.size()):
+		rocking = rocking and rocks[i] < rocks[i - 1]
+	_expect(rocking, "then rocks from edge to edge, each rock smaller (%s m of edge lift)"
+		% str(rocks.map(func(v): return snappedf(v, 0.001))))
 	_expect(biggest_step < 0.08, "after the snap nothing jumps: the largest change in 10 ms is %.3f of the jump" % biggest_step)
-	_expect(absf(fx.reaction_spring(float(p0.end) - 0.001, p0)) < 0.001, "the spring is exactly at rest when it ends")
+	_expect(absf(fx.reaction_spring(float(p0.end) - 0.001, p0)) < 0.001, "it is exactly at rest when it ends")
 
 	await get_tree().create_timer(float(fx.reaction_params().end) + 0.2).timeout
 	_expect(not fx.is_reacting(), "the hit reaction finishes")
@@ -156,6 +249,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.5).timeout
 	var dulled_tilt: float = _screen_tilt(card.hand_mesh)
 	_expect(card.tapped and dulled_tilt > 8.0, "attacking dulls the card (%.1f° on screen)" % dulled_tilt)
+	fx.next_style = "tip"   # the twist style turns more than this check's few degrees on purpose
 	card.suffer_damage(3000, "Ability", "opponent")
 	var hit_start: int = Time.get_ticks_msec()
 	var worst_hit := 0.0

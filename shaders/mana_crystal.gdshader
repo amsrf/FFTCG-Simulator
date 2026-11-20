@@ -1,9 +1,8 @@
 shader_type spatial;
 // The mana crystal's BODY — surface 0, Material.001 — and nothing else.
 //
-// The black facet edges and the outer outline are the model's own second surface (Material.003), so nothing here
-// draws lines. The script applies this with set_surface_override_material(0, ...), which leaves surface 1 exactly
-// as it was exported.
+// Payment crystals carry their edges on a second surface. The procedural phase crystal uses the optional facet
+// seams below, using one set of UVs per facet.
 //
 // TWO STATES, EMPTY AND FILLED (`paid` runs 0..1 continuously, so paying FILLS the crystal and unpaying DRAINS it):
 //   * OWED   - an EMPTY socket: a dark, desaturated, matte body with only a faint glow of the element's colour, rim
@@ -65,6 +64,9 @@ uniform float gradient_amount : hint_range(0.0, 1.0) = 0.0;
 uniform float gradient_top : hint_range(0.5, 2.0) = 1.15;
 uniform float gradient_bottom : hint_range(0.0, 1.0) = 0.55;
 
+// Screen-space seam width on one side of a facet edge. Off by default for the payment crystals.
+uniform float facet_seam_pixels : hint_range(0.0, 2.0) = 0.0;
+
 void vertex() {
 	world_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
 }
@@ -88,4 +90,14 @@ void fragment() {
 	float shade = mix(1.0, mix(gradient_top, gradient_bottom, COLOR.r), gradient_amount);
 	ALBEDO *= contact * shade;
 	EMISSION *= contact * shade;
+	if (facet_seam_pixels > 0.0) {
+		vec2 dx = dFdx(UV);
+		vec2 dy = dFdy(UV);
+		vec2 units_per_pixel = sqrt(dx * dx + dy * dy);
+		vec2 edge_px = min(UV, 1.0 - UV) / max(units_per_pixel, vec2(0.0001));
+		float seam = 1.0 - smoothstep(facet_seam_pixels - 0.5, facet_seam_pixels + 0.5, min(edge_px.x, edge_px.y));
+		ALBEDO = mix(ALBEDO, tint.rgb * 0.045, seam * 0.8);
+		EMISSION *= 1.0 - seam * 0.8;
+		SPECULAR *= 1.0 - seam * 0.7;
+	}
 }

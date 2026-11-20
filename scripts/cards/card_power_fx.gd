@@ -25,6 +25,8 @@ var _flush_queued := false
 var _field_since_ms := -1
 var _burst: Node3D = null
 var _drain: Node3D = null
+## The pending change is an EXPIRY (Card.turn_end()), not an effect: shown as a plain count, no swords, no drain.
+var _quiet := false
 
 
 func _init(card: Node3D) -> void:
@@ -56,6 +58,12 @@ func notice_power_change() -> void:
 		return
 	_flush_queued = true
 	_flush.call_deferred()
+
+
+## The change just made is an expiry, not an effect. Call only after a change really happened, so a turn end that
+## changes nothing cannot silence the next effect's animation.
+func mark_quiet() -> void:
+	_quiet = true
 
 
 func is_playing() -> bool:
@@ -103,9 +111,13 @@ func _flush() -> void:
 		return
 	var final_power: int = int(_card.power)
 	var heading: int = int(label.target_power)
+	var quiet := _quiet
+	_quiet = false
 	if final_power == heading:
 		return
-	if final_power > heading and can_celebrate():
+	if quiet:
+		label.changePower(final_power)
+	elif final_power > heading and can_celebrate():
 		_play(final_power)
 	elif final_power < heading and can_celebrate() and not is_playing():
 		_play_drain(final_power, heading - final_power)

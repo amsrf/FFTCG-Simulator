@@ -2,7 +2,7 @@ extends Node
 ## Viewing harness for how a Character is played (card_hologram.gd). Boots a board with a few Forwards already down,
 ## casts one from hand through the real payment path and saves every 2nd frame (1/30 s of game time) to --out-dir.
 ## Run windowed with --fixed-fps 60, so every frame is exactly 1/60 s however long the PNG takes to write:
-##   godot --resolution 1920x1080 --fixed-fps 60 res://tools/card_play_demo.tscn -- --out-dir <dir> [--big]
+##   godot --resolution 1920x1080 --fixed-fps 60 res://tools/card_play_demo.tscn -- --out-dir <dir> [--big] [--every N]
 ## --big raises the card's cost to 9 (slam tier 2: the camera jolt).
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
@@ -14,6 +14,10 @@ func _ready() -> void:
 		if args[i] == "--out-dir" and i + 1 < args.size():
 			out_dir = args[i + 1]
 	var big := args.has("--big")
+	var every := 2
+	for i in args.size():
+		if args[i] == "--every" and i + 1 < args.size():
+			every = maxi(int(args[i + 1]), 1)
 	MatchSetup.config = MatchSetup.build_config("clean", {
 		"player_hand": [25, 6],
 		"player_field": [{"id": 37, "tapped": false}],
@@ -34,7 +38,7 @@ func _ready() -> void:
 	game.get("assistant").on_charge_complete()
 	for frame in 120:
 		await RenderingServer.frame_post_draw
-		if frame % 2 == 0:
+		if frame % every == 0:
 			var img := get_viewport().get_texture().get_image()
 			img.save_png("%s/f_%03d.png" % [out_dir, frame])
 	get_tree().quit()

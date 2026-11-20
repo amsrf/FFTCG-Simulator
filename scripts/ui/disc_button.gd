@@ -38,6 +38,10 @@ func _ready() -> void:
 	var cylinder := CylinderShape3D.new()
 	cylinder.radius = float(_socket.get("radius"))
 	cylinder.height = 0.14
+	if bool(_socket.get("use_priority_coin")):
+		cylinder.radius = preload("res://scripts/ui/priority_coin.gd").SOCKET_FOOTPRINT
+		cylinder.height = 0.24
+		shape.position.y = 0.045
 	shape.shape = cylinder
 	_area.add_child(shape)
 	add_child(_area)

@@ -16,6 +16,7 @@ class_name Assistant
 # UI stays owned by one node.
 const COST_READOUT := preload("res://scenes/ui/crystal_cost.tscn")
 const ELEMENTS := preload("res://scripts/core/elements.gd")
+const PRIORITY_COIN := preload("res://scripts/ui/priority_coin.gd")
 ## Where the readout sits relative to the player's hand, in WORLD terms — so the hand's own 180-degree
 ## frame is irrelevant. +z is up the screen (the hand sits at the bottom, nearest the camera) and +y
 ## lifts it clear of the cards. Screen-up is 0.985 of +z and 0.174 of +y at this camera angle, so z does
@@ -91,7 +92,6 @@ const PASS_MODE_SELECTOR := preload("res://scripts/ui/pass_mode_selector.gd")
 var pass_mode_selector: CanvasLayer = null
 
 func _ready():
-	passPhaseButton.set_text('Next Phase')
 	passPhaseButton.set_on_press_callback(func(): _pass_priority())
 	GlobalVariables.player_mode_change.connect(_on_player_mode_change)
 	# The choose-card "Play" button enables as soon as a legal hand card is selected.
@@ -161,7 +161,8 @@ func show_choose_card_buttons(p_confirm_text: String = "Play card", p_cancel_tex
 func set_play_card_enabled(enabled: bool):
 	confirmButton.set_disabled(not enabled)
 
-func set_declare_attack_button(button_text: String):
+func set_declare_attack_button(has_attacker: bool) -> void:
+	var button_text := "Attack" if has_attacker else PRIORITY_COIN.SECOND_MAIN_IMPRINT
 	show_modal(button_text, "",
 		func():
 			advance_attack_declaration_step.emit()
@@ -273,19 +274,10 @@ func show_pass_priority_button():
 		# skipped phase. LocalAgent raises it itself if a play turns up before the pass.
 		passPhaseButton.hide_button()
 	else:
-		# THE LABEL SAYS WHAT PRESSING IT WILL DO (rule 11.1.7). "Next Phase" when your pass ENDS the phase: the opponent
-		# has just passed and the stack is empty. Everywhere else it is "Pass": priority goes to the opponent, or (after
-		# their pass) the top of the stack resolves.
-		#
-		# SKIPPED IN THE ATTACK STEPS: the same button is the Attack / No Attack declaration there, and
-		# set_declare_attack_button() owns its text. Overwriting it would relabel the attack declaration as a phase pass.
-		var phase_now = get_parent().get("phase")
-		if phase_now != GlobalVariables.Phase.ATTACK_DECLARATION_STEP \
-				and phase_now != GlobalVariables.Phase.BLOCKER_DECLARATION_STEP:
-			var stack_now = get_parent().get("stack")
-			var waiting: int = stack_now.stack_length() if stack_now != null else 0
-			var ends_phase: bool = bool(get_parent().get("other_player_passed")) and waiting == 0
-			passPhaseButton.set_text("Next Phase" if ends_phase else "Pass")
+		var game = get_parent()
+		var attack_next: bool = game.turn_owner == 1 and game.phase == GlobalVariables.Phase.FIRST_MAIN_PHASE \
+			and stack.stack_length() == 0 and game.turn_owner_has_forwards()
+		passPhaseButton.set_text(PRIORITY_COIN.ATTACK_PHASE_IMPRINT if attack_next else "")
 		passPhaseButton.show_button()
 
 ## True while the local player's pass mode will answer this priority window for them, so the button is not offered.

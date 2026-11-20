@@ -34,6 +34,35 @@ func _settle(prism) -> void:
 func _tint(prism) -> Color:
 	return (prism.get_node("Prism").material_override as ShaderMaterial).get_shader_parameter("tint")
 
+func _has_rest_tilt(prism) -> bool:
+	var mesh := prism.get_node("Prism") as MeshInstance3D
+	var normal := mesh.basis * PRISM.face_normal(prism.up_face())
+	return normal.z < 0.0 and normal.is_equal_approx(Vector3.UP.rotated(Vector3.RIGHT, PRISM.REST_TILT))
+
+func _check_crystal_fit(prism) -> void:
+	var mesh: ArrayMesh = prism.get_node("Prism").mesh
+	var vertices: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var sweep_radius := 0.0
+	for vertex in vertices:
+		sweep_radius = maxf(sweep_radius, Vector2(vertex.y, vertex.z).length())
+	_expect(prism.position.y + mesh.get_aabb().end.y > PRISM.CRADLE_TOP_Y,
+		"the crystal crown stands above the lip")
+	_expect(prism.position.y - sweep_radius > PRISM.CAVITY_FLOOR_Y,
+		"the crystal clears the floor throughout the roll")
+	var side_clearance := PRISM.CAVITY_WIDTH * 0.5 - sweep_radius
+	var end_clearance := (PRISM.CAVITY_LENGTH - mesh.get_aabb().size.x) * 0.5
+	_expect(side_clearance > 0.0 and side_clearance < 0.012 and end_clearance > 0.0 and end_clearance < 0.015,
+		"the cavity mouth fits closely around the crystal's sweep and tips")
+	var body_radius := 0.0
+	var tip_radius := 0.0
+	for vertex in vertices:
+		var radius := Vector2(vertex.y, vertex.z).length()
+		if is_equal_approx(absf(vertex.x), PRISM.LENGTH * 0.5):
+			tip_radius = maxf(tip_radius, radius)
+		else:
+			body_radius = maxf(body_radius, radius)
+	_expect(tip_radius > 0.0 and tip_radius < body_radius, "both tips taper down from the full crystal body")
+
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("clean", {})
 	var game: Node = GAME_SCENE.instantiate()
@@ -42,12 +71,14 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var prism = game.get("phase_prism")
 	_expect(prism != null and prism.visible, "the game builds the phase prism and shows it")
+	_check_crystal_fit(prism)
 	_expect(game.get_node("PhaseText").text.find("PHASE") < 0, "the debug phase line is gone from PhaseText")
 	var slot_now: int = PRISM.slot_for(game.phase)
 	_expect(prism.shown_slot() == slot_now and prism.shown_text() == PRISM.NAMES[slot_now],
 		"it shows the game's current phase on its up face ('%s')" % prism.shown_text())
 	await get_tree().process_frame
 	_expect(_only_up_readable(prism), "one name at a time: only the up face is readable")
+	_expect(_has_rest_tilt(prism), "the first reading face rests tilted toward the camera")
 
 	# Drive it directly from here on: every phase, in order, on your turn.
 	prism.show_phase(P.ACTIVE_PHASE, true)
@@ -87,6 +118,7 @@ func _ready() -> void:
 	_expect(peak > target_step + deg_to_rad(5.0), "the turn overshoots the face (by %.1f deg)" % rad_to_deg(peak - target_step))
 	_expect(absf(settled - target_step) < 0.001, "and settles exactly on it (%.3f deg off)" % rad_to_deg(settled - target_step))
 	_expect(prism.shown_text() == "Block Declaration Step", "showing Block Declaration Step")
+	_expect(_has_rest_tilt(prism), "the same tilt is applied after the crystal rolls")
 	prism.show_phase(P.SECOND_MAIN_PHASE, true)
 	await _settle(prism)
 	_expect(prism.shown_text() == "Main Phase 2", "phases use the Comprehensive Rules' names (Main Phase 2)")

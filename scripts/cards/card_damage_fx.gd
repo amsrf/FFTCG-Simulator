@@ -9,29 +9,50 @@ extends RefCounted
 ## Preloaded by PATH (no class_name): a class_name added since Godot last scanned is not in the global cache, which is
 ## a parse error on every headless run.
 
-## RECOIL: the card SNAPS up and tips toward the camera about its near edge (a little jump), then RETURNS SLOWLY on a
-## weakly damped spring: it sinks back over ~0.3 s, the tip swings past flat onto the other edge and back a few times,
-## each swing smaller, and it comes to rest after 1.4-2.1 s. There is no snap back: the spring is faded to
-## exactly zero before the pose is reset. The lift never goes below the board (the card rests on it while the tip
-## rocks), and a tip either way pivots on the edge that stays down, so no corner enters the board.
-##   SHADING   the face brightens as it turns toward the light (camera side), and flickers as it rocks
+## RECOIL: the card SNAPS up and PITCHES about its BOTTOM edge (the one nearest the camera; ~30-39 deg, the top edge
+## swinging up toward the viewer), hangs, FALLS back over ~0.4 s (FALL_SECONDS) and lands flat, then SETTLES on a
+## damped bounce hinged on that same bottom edge: the top edge kicks up a few degrees and drops, two or three times,
+## each smaller, in ~0.4 s. After landing the card never leaves the board again (no second jump) and never tips the
+## other way (the old spring swung past flat, lifting the bottom edge, then lifted the whole card: user: "jumps again").
+## The tip pivots on the edge or corner that stays down, so no corner enters the board.
+##   SHADING   the face brightens as it turns toward the light (camera side), and flickers as it bounces
 ##             (card.gdshader `face_light`);
 ##   SHADOW    a soft board shadow that grows with height.
-## Every hit is ROLLED (roll_reaction): each size and timing below is a base that the roll varies within its range,
-## so two hits never look the same but always look like the same kind of hit.
+## Every hit is ROLLED (roll_reaction): first a STYLE (STYLES: which way it tips, how high it jumps, how much it
+## turns), never the one the card or the board played last; then each size and timing below is a base that the roll
+## varies within its range. So consecutive hits are different MOTIONS, not just different sizes of one motion.
 ## The snap: seconds from rest to the full jump.
 const REACTION_RISE := 0.04
-## The return spring: one full swing takes this long (slow), and its amplitude falls by e every 1/damping seconds
-## (weak: after one swing about a third is left).
-const SPRING_PERIOD := 0.85
-const SPRING_DAMPING := 2.4
-## The spring is cut when its envelope is this small, faded to zero over the last REACTION_FADE seconds.
-const SPRING_CUTOFF := 0.02
+## THE FALL BACK: from the top of the jump to the board takes this long (rolled by VARY_FALL and the style's `fall`).
+## A gravity parabola (1 - k^2): it leaves the top at rest (a hang) and speeds up into the board (user: the spring's
+## own quarter swing, ~0.25 s, was too fast).
+const FALL_SECONDS := 0.42
+const VARY_FALL := Vector2(0.9, 1.1)
+## THE SETTLE after landing: bounces on the bottom edge. The first kick leaves the board with RESTITUTION of the
+## landing speed and lasts BOUNCE_SECONDS; each next kick is BOUNCE_DECAY of the one before. Cut at BOUNCE_CUTOFF of the
+## jump, faded to zero over the last REACTION_FADE seconds.
+const RESTITUTION := Vector2(0.45, 0.6)
+const BOUNCE_SECONDS := 0.18
+const VARY_BOUNCE := Vector2(0.9, 1.1)
+const BOUNCE_DECAY := 0.35
+const BOUNCE_CUTOFF := 0.004
 const REACTION_FADE := 0.15
-## Sizes, by damage tier: a LITTLE jump. The tip stays near 20 deg: on this ~67 deg board camera a flat card is already
-## 23 deg from facing it, so more tip makes the card look SHORTER, not tipped (measured; see AGENTS.md).
+## THE WOBBLE (reaction_wobble): how far the card leans onto one long edge as it comes down, before the style's
+## `wobble` multiplier; one rock from side to side takes WOBBLE_SWING_SECONDS and each is WOBBLE_DECAY of the last.
+## WOBBLE_YAW turns that much of the roll into an in-plane rattle. Big and slow, and only 3-4 rocks you can see
+## (user: "higher amplitude, less frequency, 3 to 4 times max"): 12 -> 6.6 -> 3.6 -> 2 deg, then it is still. It
+## ends once a rock would be under WOBBLE_CUTOFF_DEG.
+const WOBBLE_DEG := 12.0
+const VARY_WOBBLE := Vector2(0.85, 1.15)
+const WOBBLE_SWING_SECONDS := 0.15
+const VARY_WOBBLE_SWING := Vector2(0.9, 1.1)
+const WOBBLE_DECAY := 0.55
+const WOBBLE_CUTOFF_DEG := 0.6
+const WOBBLE_YAW := 0.3
+## Sizes, by damage tier: a LITTLE jump and a big pitch. On this ~67 deg board camera a flat card is 23 deg from facing
+## it, so the pitch toward the viewer turns the face square to the camera and a little past (user: "pitch more").
 const REACTION_LIFT := [0.16, 0.19, 0.22, 0.25]
-const REACTION_PITCH_DEG := [18.0, 20.0, 22.0, 24.0]
+const REACTION_PITCH_DEG := [30.0, 33.0, 36.0, 39.0]
 const REACTION_YAW_DEG := [3.0, 3.5, 4.0, 4.5]
 ## Roll ranges (multipliers unless noted).
 const VARY_LIFT := Vector2(0.85, 1.15)
@@ -39,8 +60,22 @@ const VARY_PITCH_DEG := Vector2(-3.0, 3.0)
 const VARY_YAW := Vector2(0.6, 1.4)
 ## Most hits turn left, a few right.
 const YAW_LEFT_CHANCE := 0.7
-const VARY_PERIOD := Vector2(0.85, 1.15)
-const VARY_DAMPING := Vector2(0.8, 1.2)
+## THE HIT STYLES. `axis` = where the tip axis points, in degrees about the card's up axis from its local +X (0 = the
+## top edge swings up toward the camera about the bottom edge; +-30 = a top CORNER leads, the card hinged on a bottom
+## corner; +-65 = mostly a lean onto one side, still hinged low). Every axis stays within 90 deg of 0, so every style
+## pivots on the bottom edge or one of its corners. One is picked per hit. `tilt`, `lift`, `yaw` scale the tier's REACTION_* sizes, `rise` is
+## the snap's length (a hop rises a little slower, so the jump reads), `fall` scales FALL_SECONDS, `wobble` scales
+## WOBBLE_DEG (0 = it lands square and only bounces on its bottom edge). Whatever the axis, the card pivots on the edge
+## or corner that stays down (reaction_pose), so no style puts a corner into the board.
+const STYLES: Array[Dictionary] = [
+	{"name": "tip", "axis": [0.0], "tilt": 1.0, "lift": 1.0, "yaw": 1.0, "rise": 0.04, "fall": 1.0, "wobble": 0.0},
+	{"name": "lean", "axis": [65.0, -65.0], "tilt": 0.8, "lift": 0.9, "yaw": 0.6, "rise": 0.045, "fall": 1.0, "wobble": 0.75},
+	{"name": "corner", "axis": [30.0, -30.0], "tilt": 1.0, "lift": 1.0, "yaw": 1.3, "rise": 0.045, "fall": 1.0, "wobble": 1.0},
+	{"name": "hop", "axis": [0.0], "tilt": 0.45, "lift": 1.35, "yaw": 0.6, "rise": 0.075, "fall": 1.15, "wobble": 1.0},
+	{"name": "twist", "axis": [0.0], "tilt": 0.65, "lift": 0.85, "yaw": 3.0, "rise": 0.05, "fall": 0.95, "wobble": 0.7},
+]
+## The style the board played last: the next hit anywhere avoids it (so a multi-target hit shows several styles).
+static var _last_style_on_board: String = ""
 ## Half the card face in its local units (Card._card_face_size() / 2).
 const HALF_FACE := Vector2(0.2145, 0.3)
 ## Shading: the light sits above, on the camera side and a little to the right; FACE_LIGHT_GAIN turns the change in
@@ -77,6 +112,10 @@ var earth_contact_seconds := 0.0
 ## This hit's roll (roll_reaction): sizes, timings and directions; see reaction_pose() for the keys.
 var _params: Dictionary = {}
 var _far_sign := 1.0
+## The style this card played last (it never plays it twice in a row).
+var _last_style: String = ""
+## Probe/demo hook: the style name the NEXT hit must use ("" = rolled).
+var next_style: String = ""
 ## How far the card is turned from upright about its up axis when the hit starts (radians): its DULL TILT. The hit
 ## undoes it, so a dulled card is shown STRAIGHT while it is knocked loose and dulled again once it settles.
 var _untilt := 0.0
@@ -111,7 +150,10 @@ func play_reaction(damage: int, delay: float = 0.0) -> void:
 		return
 	var tier: int = VfxEvent.damage_tier_for(damage)
 	normalize()
-	_params = roll_reaction(tier, _rng.randi())
+	_params = roll_reaction(tier, _rng.randi(), [_last_style, _last_style_on_board], next_style)
+	next_style = ""
+	_last_style = _params.style
+	_last_style_on_board = _params.style
 	_far_sign = _toward_camera_sign()
 	_untilt = wrapf(deg_to_rad(_card.rotation_degrees.y - float(_card.get("_upright_y"))), -PI, PI)
 	var seconds: float = _params.end
@@ -231,28 +273,64 @@ static func _smoother(u: float) -> float:
 	u = clampf(u, 0.0, 1.0)
 	return u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
 
-## Rolls one hit: every size and timing varied within its range, and the turn's direction. Static and seeded, so a
-## probe can sweep many seeds.
-static func roll_reaction(tier: int, seed_value: int) -> Dictionary:
+## Rolls one hit: a STYLE (not one of `avoid`, unless `force` names one), then every size and timing varied within
+## its range, and the turn's direction. Static and seeded, so a probe can sweep many seeds.
+static func roll_reaction(tier: int, seed_value: int, avoid: Array = [], force: String = "") -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	tier = clampi(tier, 0, REACTION_LIFT.size() - 1)
 	var vary := func(range_value: Vector2) -> float: return rng.randf_range(range_value.x, range_value.y)
+	var choices: Array[Dictionary] = []
+	for entry in STYLES:
+		if force != "" and entry.name == force:
+			choices.assign([entry])
+			break
+		if force == "" and not avoid.has(entry.name):
+			choices.append(entry)
+	if choices.is_empty():
+		choices.assign(STYLES)
+	var style: Dictionary = choices[rng.randi_range(0, choices.size() - 1)]
+	var axes: Array = style.axis
+	var axis_deg: float = float(axes[rng.randi_range(0, axes.size() - 1)])
 	var yaw_sign := 1.0 if rng.randf() < YAW_LEFT_CHANCE else -1.0
-	var damping: float = SPRING_DAMPING * vary.call(VARY_DAMPING)
+	var fall: float = FALL_SECONDS * float(style.fall) * vary.call(VARY_FALL)
+	var rise: float = float(style.rise)
+	# The settle: |sin| arches of length `bounce`, each BOUNCE_DECAY of the last; the first leaves the board with
+	# RESTITUTION of the landing speed (2 / fall, in jumps per second, from the parabola).
+	var bounce: float = BOUNCE_SECONDS * vary.call(VARY_BOUNCE)
+	var bounce_w: float = PI / bounce
+	var bounce_d: float = log(1.0 / BOUNCE_DECAY) / bounce
+	var bounce_amp: float = vary.call(RESTITUTION) * (2.0 / fall) / bounce_w
+	# The wobble: which long edge lands first is a coin toss.
+	var wobble_sign := 1.0 if rng.randf() < 0.5 else -1.0
+	var wobble: float = deg_to_rad(WOBBLE_DEG * float(style.wobble)) * vary.call(VARY_WOBBLE) * wobble_sign
+	var swing: float = WOBBLE_SWING_SECONDS * vary.call(VARY_WOBBLE_SWING)
+	# The tip axis and the direction that rises under a positive tip (`normal` = up x axis), both in the face plane.
+	var axis := Basis(Vector3.UP, deg_to_rad(axis_deg)) * Vector3.RIGHT
+	var normal := Vector3.UP.cross(axis)
 	return {
-		"rise": REACTION_RISE,
-		"period": SPRING_PERIOD * vary.call(VARY_PERIOD),
-		"damping": damping,
-		"end": REACTION_RISE + log(1.0 / SPRING_CUTOFF) / damping,
-		"lift": float(REACTION_LIFT[tier]) * vary.call(VARY_LIFT),
-		"pitch": float(REACTION_PITCH_DEG[tier]) + vary.call(VARY_PITCH_DEG),
-		"yaw": float(REACTION_YAW_DEG[tier]) * vary.call(VARY_YAW) * yaw_sign,
+		"style": String(style.name),
+		"axis_deg": axis_deg,
+		"rise": rise,
+		"fall": fall,
+		"bounce_w": bounce_w,
+		"bounce_d": bounce_d,
+		"bounce_amp": bounce_amp,
+		"wobble": wobble,
+		"wobble_w": PI / swing,
+		"wobble_d": log(1.0 / WOBBLE_DECAY) / swing,
+		"end": rise + fall + maxf(log(maxf(bounce_amp / BOUNCE_CUTOFF, 1.0)) / bounce_d,
+			log(maxf(absf(wobble) / deg_to_rad(WOBBLE_CUTOFF_DEG), 1.0)) * swing / log(1.0 / WOBBLE_DECAY)),
+		"lift": float(REACTION_LIFT[tier]) * float(style.lift) * vary.call(VARY_LIFT),
+		"pitch": (float(REACTION_PITCH_DEG[tier]) + vary.call(VARY_PITCH_DEG)) * float(style.tilt),
+		"yaw": float(REACTION_YAW_DEG[tier]) * float(style.yaw) * vary.call(VARY_YAW) * yaw_sign,
+		# How far the face's centre is from the edge it pivots on, along `normal` (the shadow's height).
+		"reach": absf(normal.x) * HALF_FACE.x + absf(normal.z) * HALF_FACE.y,
 	}
 
-## The hit's shape at `t`, 1 at the top of the jump: the snap (0 -> 1 in `rise`), then the return spring, released from
-## rest at the top so it starts slowly: e^(-d u) (cos w u + d/w sin w u). It goes NEGATIVE (the overshoot) and is faded
-## to exactly 0 at `end`.
+## The hit's shape at `t`, 1 at the top of the jump: the snap (0 -> 1 in `rise`), the FALL (1 - k^2 over `fall`), then
+## the SETTLE: amp e^(-d b) |sin(w b)|, bounces that never go below 0 (the card never tips the other way), faded to
+## exactly 0 at `end`. This drives the TIP; the lift is reaction_lift().
 static func reaction_spring(t: float, p: Dictionary) -> float:
 	var rise: float = p.rise
 	var end: float = p.end
@@ -261,9 +339,39 @@ static func reaction_spring(t: float, p: Dictionary) -> float:
 	if t < rise:
 		return _ease_out(t / rise)
 	var u: float = t - rise
-	var w: float = TAU / float(p.period)
-	var d: float = p.damping
-	var value: float = exp(-d * u) * (cos(w * u) + d / w * sin(w * u))
+	var fall: float = p.fall
+	var value: float
+	if u < fall:
+		var k: float = u / fall
+		value = 1.0 - k * k
+	else:
+		var b: float = u - fall
+		value = float(p.bounce_amp) * exp(-float(p.bounce_d) * b) * absf(sin(float(p.bounce_w) * b))
+	return value * (1.0 - smoothstep(end - REACTION_FADE, end, t))
+
+## The whole card's height, 1 at the top of the jump: the snap and the fall, and 0 once it has landed. The settle
+## only rocks the card on its bottom edge; it never lifts it off the board again.
+static func reaction_lift(t: float, p: Dictionary) -> float:
+	if t >= float(p.rise) + float(p.fall):
+		return 0.0
+	return reaction_spring(t, p)
+
+## THE WOBBLE (radians of roll about the card's long axis; + and - are the two long edges). In the air it leans in to
+## `wobble` (0 at the start of the jump, all of it at touchdown), so it comes down on ONE long edge first; from landing
+## it rocks side to side, wobble e^(-d b) cos(w b): flat, onto the other edge, back, each rock WOBBLE_DECAY of the last
+## (~/Desktop/Clips/damage 83-90: lands on one edge, slaps flat, other edge, first edge, still). 0 for a style without.
+static func reaction_wobble(t: float, p: Dictionary) -> float:
+	var amp: float = float(p.get("wobble", 0.0))
+	var end: float = p.end
+	if amp == 0.0 or t <= 0.0 or t >= end:
+		return 0.0
+	var landed: float = float(p.rise) + float(p.fall)
+	var value: float
+	if t < landed:
+		value = amp * smoothstep(0.0, landed, t)
+	else:
+		var b: float = t - landed
+		value = amp * exp(-float(p.wobble_d) * b) * cos(float(p.wobble_w) * b)
 	return value * (1.0 - smoothstep(end - REACTION_FADE, end, t))
 
 ## STRAIGHTENING A DULLED CARD for the hit: 0 at rest, 1 by the top of the snap, held through the swings, and back to 0
@@ -278,25 +386,46 @@ static func untilt_weight(t: float, p: Dictionary) -> float:
 
 ## The HandMesh pose at `t` for the rolled hit `p`, in the CARD'S LOCAL frame (local +Y is world up; field cards are
 ## turned half a turn about Y, so never convert this through the card's world basis). `scale` divides the world
-## metres into local units. LIFT * YAW * TIP. The lift follows only the positive half of the spring (the card rests on
-## the board through the overshoot); the tip follows all of it, and pivots on whichever edge stays down: the near edge
-## while the far edge rises toward the camera, the far edge while the overshoot lifts the near one.
+## metres into local units. LIFT * YAW * TIP. The lift is reaction_lift() (the jump and fall only); the tip and turn
+## follow reaction_spring() (also the settle's bounces), about the style's axis (`axis_deg`), and pivot on the edge or
+## corner that stays down: the face's extreme point AGAINST the rising direction, so every other point of the face
+## rises (exactly, not just for small angles: a point's height is sin(angle) * its distance along `normal`). The tip is
+## never negative, so that is always the bottom edge (or a bottom corner).
 ##
 ## `untilt` is the card's dull tilt (radians about its up axis); it is turned back out for the hit (untilt_weight), so a
 ## dulled card is knocked loose STRAIGHT. The card's own up axis is the board's, so this undoes the tap exactly.
 static func reaction_pose(t: float, far_sign: float, p: Dictionary, scale: float = 1.0, untilt: float = 0.0) -> Transform3D:
 	var s := reaction_spring(t, p)
+	var wobble := reaction_wobble(t, p)
 	var straighten := Transform3D(Basis(Vector3.UP, -untilt * untilt_weight(t, p)), Vector3.ZERO)
-	if s == 0.0:
+	if s == 0.0 and wobble == 0.0:
 		return straighten
-	var pitch_angle := deg_to_rad(float(p.pitch)) * s
-	var pitch_basis := Basis(Vector3.RIGHT, pitch_angle * far_sign)
-	var pivot := Vector3(0.0, 0.0, HALF_FACE.y * far_sign * signf(s))
-	var pitch := Transform3D(pitch_basis, pivot - pitch_basis * pivot)
-	# Positive about world up is counter-clockwise seen from the downward-looking camera: the turn to the left.
-	var yaw := Transform3D(Basis(Vector3.UP, deg_to_rad(float(p.yaw)) * s), Vector3.ZERO)
-	var height := float(p.lift) * maxf(s, 0.0) / scale
-	return Transform3D(Basis.IDENTITY, Vector3.UP * height) * straighten * yaw * pitch
+	# ONE rotation: the style's tip plus the side-to-side wobble (a roll about the card's long axis), added as rotation
+	# vectors. Turned about the face's extreme point against the side that rises, whichever way the sum points, so the
+	# card hinges on its bottom edge, a corner, or the long edge it is rocking on, and no corner enters the board.
+	# In the air the tip follows the style's axis; once landed the settle's kicks are on the BOTTOM EDGE only (a diagonal
+	# kick would lift one long edge and muddle the side-to-side rocking). s is 0 at touchdown, so the switch is seamless.
+	var airborne: bool = t < float(p.rise) + float(p.fall)
+	var axis_deg: float = float(p.get("axis_deg", 0.0)) if airborne else 0.0
+	var tilt_axis := Basis(Vector3.UP, deg_to_rad(axis_deg)) * Vector3.RIGHT
+	var turn := tilt_axis * (deg_to_rad(float(p.pitch)) * s * far_sign) + Vector3.BACK * wobble
+	var angle := turn.length()
+	var tip := Transform3D.IDENTITY
+	if angle > 1e-6:
+		var axis := turn / angle
+		var normal := Vector3.UP.cross(axis)
+		var pivot := Vector3(-_sign0(normal.x) * HALF_FACE.x, 0.0, -_sign0(normal.z) * HALF_FACE.y)
+		var tip_basis := Basis(axis, angle)
+		tip = Transform3D(tip_basis, pivot - tip_basis * pivot)
+	# Positive about world up is counter-clockwise seen from the downward-looking camera: the turn to the left. The
+	# wobble rattles it a little in the plane too, alternating with the rocking.
+	var yaw := Transform3D(Basis(Vector3.UP, deg_to_rad(float(p.yaw)) * s + wobble * WOBBLE_YAW), Vector3.ZERO)
+	var height := float(p.lift) * reaction_lift(t, p) / scale
+	return Transform3D(Basis.IDENTITY, Vector3.UP * height) * straighten * yaw * tip
+
+## sign() with a dead zone: an axis exactly along a card edge pivots on that EDGE's midpoint line, not a corner.
+static func _sign0(value: float) -> float:
+	return 0.0 if absf(value) < 1e-4 else signf(value)
 
 func _set_reaction_pose(seconds: float) -> void:
 	var hand_mesh = _card.hand_mesh
@@ -311,8 +440,9 @@ func _set_reaction_pose(seconds: float) -> void:
 	_apply_chrome(pose)
 	_set_face_light(face_light_for(pose))
 	var tip: float = deg_to_rad(float(_params.pitch))
-	var height: float = pose.origin.y * card_scale + HALF_FACE.y * absf(sin(tip * reaction_spring(seconds, _params)))
-	_set_shadow(clampf(height / (float(_params.lift) + HALF_FACE.y * sin(tip)), 0.0, 1.0), height)
+	var reach: float = float(_params.get("reach", HALF_FACE.y))
+	var height: float = pose.origin.y * card_scale + reach * absf(sin(tip * reaction_spring(seconds, _params)))
+	_set_shadow(clampf(height / maxf(float(_params.lift) + reach * sin(tip), 0.001), 0.0, 1.0), height)
 
 ## Probe hook: this hit's roll.
 func reaction_params() -> Dictionary:

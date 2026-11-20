@@ -3,9 +3,8 @@ extends Node3D
 ## station's discs are driven by the match buttons (disc_button.gd). The opponent's are a read-out only: their
 ## forward disc lights while the opponent holds priority, and their Cancel never lights.
 ##
-## Colour has two owners. The GEM says whose button it is (local teal/red, opponent violet) whatever the seat. The
-## STONE follows the biome the station is set in, and the biomes swap with the seat (seat 1 plays from the volcanic
-## side, seat 2 from the forest side), exactly as BoardEnvironment.configure_seat() swaps the baked board.
+## Both forward coins use amber to indicate priority. The small gem discs use the seat's accent colours.
+## The station's stone follows the biome, exactly as BoardEnvironment.configure_seat() swaps the baked board.
 
 # Linear colours, the same numbers as the Blender mock-up.
 const VOLCANIC_STONE := Color(0.035, 0.034, 0.036)
@@ -35,6 +34,9 @@ func configure_seat(seat: int) -> void:
 	local_cancel.set_colors(LOCAL_CANCEL[0], LOCAL_CANCEL[1], local_stone, local_groove, LOCAL_CANCEL[2])
 	opponent_forward.set_colors(OPPONENT_FORWARD[0], OPPONENT_FORWARD[1], far_stone, far_groove, OPPONENT_FORWARD[2])
 	opponent_cancel.set_colors(OPPONENT_FORWARD[0], OPPONENT_FORWARD[1], far_stone, far_groove, OPPONENT_FORWARD[2])
+	# The priority coins belong to the SEAT, like the biome: seat 1 (volcanic) is Chaos, seat 2 (forest) is Cosmos.
+	local_forward.set_coin_style("chaos" if local_volcanic else "cosmos")
+	opponent_forward.set_coin_style("cosmos" if local_volcanic else "chaos")
 
 ## The opponent holds priority: their forward disc is up. Their Cancel never is.
 func set_opponent_priority(on: bool) -> void:

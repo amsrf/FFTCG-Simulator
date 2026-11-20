@@ -161,7 +161,9 @@ func _build_pop(card_pose: Transform3D, art: Material, card_mesh: Mesh) -> void:
 	_pop_mat.render_priority = RENDER_PRIORITY
 	_pop_mat.set_shader_parameter("texture_albedo", texture)
 	var source_material := art as ShaderMaterial
-	for parameter in ["field_face", "field_art_texture", "field_art_rect", "field_band_color", "field_band_fraction"]:
+	for parameter in ["field_face", "field_art_texture", "field_art_rect", "field_band_color", "field_band_fraction",
+			"field_nameplate_texture", "field_nameplate_color", "field_nameplate_shadow",
+			"field_cost_color", "field_cost_rect"]:
 		var value: Variant = source_material.get_shader_parameter(parameter)
 		if value != null:
 			_pop_mat.set_shader_parameter(parameter, value)

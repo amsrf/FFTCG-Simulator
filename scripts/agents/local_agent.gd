@@ -96,11 +96,11 @@ func _auto_pass_if_nothing_to_do(serial: int) -> void:
 		# something else is going on (a modal): check again once it has had time to close
 
 func decide_attacker(_player_id: int) -> Card:
-	# The human selects an attacker by clicking cards; the (Attack / No Attack)
-	# button ends the declaration step. Whatever is selected at that point is
+	# The human selects an attacker by clicking cards. The button shows Attack or II
+	# and ends the declaration step. Whatever is selected at that point is
 	# the declared attacker, or null for no attack.
 	var assistant: Assistant = game.assistant
-	assistant.set_declare_attack_button('No Attack')
+	assistant.set_declare_attack_button(false)
 	await assistant.advance_attack_declaration_step
 	var field: Field = game.field
 	return field.attacker_card
@@ -109,7 +109,7 @@ func decide_attacker(_player_id: int) -> Card:
 ## which for a single click is a list of one.
 func decide_attackers(_player_id: int) -> Array:
 	var assistant: Assistant = game.assistant
-	assistant.set_declare_attack_button('No Attack')
+	assistant.set_declare_attack_button(false)
 	await assistant.advance_attack_declaration_step
 	var field: Field = game.field
 	return field.party_members().duplicate()

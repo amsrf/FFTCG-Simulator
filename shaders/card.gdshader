@@ -426,7 +426,10 @@ void fragment() {
 
     if (dull_amount > 0.001) {
         float grey = dot(base, vec3(0.299, 0.587, 0.114));
-        base = mix(base, vec3(grey), 0.85 * dull_amount) * (1.0 - 0.28 * dull_amount);
+        // Only the portrait greys: the nameplate and element stripe of a field face keep their colour.
+        float art_only = field_face && min(UV.y, 1.0 - UV.y) <= field_band_fraction + 0.00001 ? 0.0 : 1.0;
+        float dull = dull_amount * art_only;
+        base = mix(base, vec3(grey), 0.85 * dull) * (1.0 - 0.28 * dull);
     }
     if (drain_blobs > 0.001) {
         // Two octaves of value noise in card space (the card is ~0.7:1), thresholded so the blobs GROW from their
