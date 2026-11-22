@@ -1277,6 +1277,18 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
   so a new arrival path must hide AFTER enter_zone. `VfxDirector.release_hold()` keeps a held card hidden when its
   parent has `swallow_stand_in` - any new hold/release flow inherits that. Discard/mill/receive go through
   `_swallow()`; the hover point is lifted along the line of sight (`mouth_transform()`), because a straight-up lift
+- **The play area is framed by a timber rail** (`Blender/build_timber_rim.py`, 2026-11-22): a U per slab (far edge +
+  short ends, open at the river), its inner edge on the slab edge, crown 0.105 (the wood is 0.065). Wells are cut out
+  of it with cylinders from the ` ring ` objects. The forest rail line is y -2.19 (not the slab's -2.32) because the
+  grass bank covers the slab's last 15 cm. Changing the rail moves the rock under the top life crystals: re-sample
+  `LifeCrown.SOCKET_SETS`.
+- **The Damage Zone does not show its cards (2026-11-22).** A hit's card still flies from the deck to the zone's spot
+  (the flight below) and is REVEALED there: the zoom and the EX BURST reveal look at it. Those cards are
+  `DamageZone.pending`, the only ones laid out. When the zoom hands the view back, the life crystals call
+  `DamageZone.absorb(card, crystal_point)`: it flies to the crystal it breaks, shrinking to nothing, and is then
+  `park()`ed hidden in the zone (`_absorbing` keeps the layout from parking it mid-flight). `cards` remains the rules'
+  list; setup/instant cards are parked at once. Clicking the crystal row (`LifeCrown._on_click`) opens
+  `Game._show_zone_view` on it. The zoom aims at the last PENDING slot.
 - **The Damage Zone does not show its cards (2026-11-22).** A hit's card still flies from the deck to the zone's spot
   (the flight below) and is REVEALED there: the zoom and the EX BURST reveal look at it. Those cards are
   `DamageZone.pending`, the only ones laid out. When the zoom hands the view back, the life crystals call

@@ -43,6 +43,11 @@ All notable changes to the FF TCG Simulator project.
   Break Zone pit housing) round a darker floor at the deck's base, with the scenery under it cleared. Both seats
   re-exported. (The decks used to lie straight on the corner rocks/grass.)
 - Board brightness 0.70 -> 0.78 (`BoardEnvironment.brightness`).
+- **Timber rim.** `Blender/build_timber_rim.py` (the stage after `build_deck_cradles.py`, now the export source) frames
+  each slab with a raised, rounded wooden rail round its far edge and short ends, open where the river crosses, like
+  Artifact's frame. The pit and button wells are cut out of it; the forest rail is drawn ~15 cm in to cover the strip
+  where the grass bank lay over the wood. 'Timber rim' is fixed in the seat-2 export like the wood. The life crystals'
+  `SOCKET_SETS` were re-sampled (the top crystals now stand on the forest rail).
 - **Screen vignette** on the board and river (`board_vignette()` in `shaders/board_edge_shade.gdshaderinc`,
   `vignette_strength` 0.18, from 0.85 of the way out; 0.45 was "way too dark"): a soft corner falloff; cards, the hand and UI are not darkened.
 - `Game.board_camera()`; `tools/shot.gd --life-break <n>` (break n crystals with the animation, pair with `--seconds`).
