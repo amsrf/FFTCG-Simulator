@@ -473,6 +473,19 @@ the screen layout unchanged. Change one of the three and recompute the others th
 `Field.use_crystal_teleport`. `card_play_probe` is the spec; `tools/card_play_demo.tscn` (`--fixed-fps 60`, every
 frame is exactly 1/60 s however slow the PNG save) is the filmstrip.
 
+**The Chaos life crystals** (`scripts/ui/life_crown.gd`) are part of the BOARD, not an overlay: seven world-space
+crystals in basalt collars on the volcanic stones of the hand–Backup band (the user rejected a camera-facing crown: "the
+crystals need to belong to the board"). `SOCKET_SETS` holds world x/z and the LOWEST/HIGHEST rock y under each collar,
+sampled from `assets/board/board_mesh.bin` by casting straight down (numpy is not in the system Python; the board mesh
+is 140k triangles, too many to raycast in GDScript). Re-sample if a socket moves or the board is re-exported. Screen-left
+is world +x. Crystals lean `lean_degrees` back toward the field: under the 67° camera an upright one shows ~40% of its
+height. `sync()` reads `PlayerSide.damage_count()` and breaks/restores the difference in `BREAK_ORDER` on
+`Game.damage_zoom_finished` (or a fallback timer). `_setup_life_crown()` runs AFTER the test board's zones are
+pre-filled. The halo shader is billboarded; the burst is laid out in a camera-facing plane. There are TWO: `Game.life_crown` (local, bottom edge) and
+`opponent_life_crown` (top edge); the style (`chaos` red/basalt, `cosmos` teal/grey stone) follows the biome, so seat 2
+swaps them, and `SOCKET_SETS[seat][edge]` is sampled on that seat's board mesh. Index 0 is the OWNER's left (the top
+list is reversed). The top crystals are bigger in the world to match the near ones on screen, and stand on the far edge of the wood (past it there is only ~50 px before the opponent's hand); `life_crown_probe` pins both.
+
 **The phase prism** (`scripts/ui/phase_prism.gd`) is a crystal with three reading faces, beveled edges and tapered
 ends. Its crown sits above the lip of a socket carved into the wood. A phase change (`Game.phase_entered`) rolls it
 forward 120 degrees to the next name. The board generator (`Blender/build_phase_cradle.py`) reads the cavity
@@ -1026,9 +1039,10 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
 - **The deck and Break Zone lie flat on the wood** (a stone deck station was tried and removed at the user's request;
   do not bring one back unasked). `Blender/fill_deck_pockets.py` fills the old shallow deck pockets so the wood under
   the piles is plain. Layout per side: deck toward the OUTER edge, Break Zone beside it toward the centre, the
-  `DamageZone` directly above the deck, on the wood (y 0.08), as ONE STRAIGHT ROW (every card the same world x), set a
-  little RIGHT of the deck's centre on screen (12 px at 1920x1080, mirrored for the opponent). Its x in game.tscn
-  (player 3.434, opponent -3.128) is fixed, and differs from the Deck's because under perspective an equal world x at
+  `DamageZone` directly above the deck, on the wood (y 0.08; since 2026-11-22 only REVEALED cards show there, see "The Damage Zone does not show its cards"), as ONE STRAIGHT ROW (every card the same world x), set a
+  little RIGHT of the deck's centre on screen (12 px at 1920x1080, mirrored for the opponent), pulled back to the Backup
+  row's depth (z -0.85 / 1.45) so a full row of seven still ends above the bigger deck. Its x in game.tscn
+  (player 3.693, opponent -3.484) is fixed, and differs from the Deck's because under perspective an equal world x at
   another depth is another screen x. Do NOT shift cards per card onto a screen column: that was tried, it slants the
   row in the world and the stepped edges read as a zig-zag. `flow_probe` checks the zone centre and one world x.
 - **The damage zoom is the board view dollied in.** `Game._zoom_to_damage()` copies the board camera's lens onto the
@@ -1263,6 +1277,13 @@ Node tree + all signal connections live at the bottom of `game.tscn` (read it be
   so a new arrival path must hide AFTER enter_zone. `VfxDirector.release_hold()` keeps a held card hidden when its
   parent has `swallow_stand_in` - any new hold/release flow inherits that. Discard/mill/receive go through
   `_swallow()`; the hover point is lifted along the line of sight (`mouth_transform()`), because a straight-up lift
+- **The Damage Zone does not show its cards (2026-11-22).** A hit's card still flies from the deck to the zone's spot
+  (the flight below) and is REVEALED there: the zoom and the EX BURST reveal look at it. Those cards are
+  `DamageZone.pending`, the only ones laid out. When the zoom hands the view back, the life crystals call
+  `DamageZone.absorb(card, crystal_point)`: it flies to the crystal it breaks, shrinking to nothing, and is then
+  `park()`ed hidden in the zone (`_absorbing` keeps the layout from parking it mid-flight). `cards` remains the rules'
+  list; setup/instant cards are parked at once. Clicking the crystal row (`LifeCrown._on_click`) opens
+  `Game._show_zone_view` on it. The zoom aims at the last PENDING slot.
   draws beside the pit under the perspective camera. The pit top is OPAQUE on purpose: it clips the sinking card.
 - **A pile that shares a scene needs its zone as data.** `Graveyard` and `Removed` are the same `.tscn` with a different exported `zone`; `add_card()` used to hardcode `Card.Zone.GRAVEYARD`, which made an exiled card indistinguishable from a broken one. Any new pile (exile, warp, deck-out) should reuse the scene and set `zone`, and `Card.Zone` values must be **appended**, never inserted — they are written into scenes and printed by probes.
 

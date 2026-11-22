@@ -686,6 +686,11 @@ var priority_holder: int = 0:
 ##
 ## Anything added to the payment/absorb effects belongs in this list.
 const EFFECT_SHADERS: Array[Shader] = [
+	# The life crown's crystals, their halos and the burst (life_crown.gd / life_crystal_burst.gd).
+	preload("res://shaders/life_crystal.gdshader"),
+	preload("res://shaders/life_crystal_halo.gdshader"),
+	# A field card charging / flashing its ability (card_activation_fx.gd).
+	preload("res://shaders/activation_aura.gdshader"),
 	# How a Character is played (card_hologram.gd): the hologram where it was cast and the line drawing on the slot.
 	preload("res://shaders/card_hologram.gdshader"),
 	preload("res://shaders/card_blueprint.gdshader"),
@@ -891,6 +896,8 @@ func start_match(config: Dictionary) -> void:
 		var ids: Array = zone_setup[0]
 		var zone: Node = get_node_or_null("%s/%s" % [zone_setup[2], zone_setup[3]])
 		if zone == null:
+	# AFTER the zones are pre-filled: a test board's starting damage is already broken when the crown appears.
+	_setup_life_crown()
 			continue
 		for id in ids:
 			var card = create_card(int(id), 'opponent' if zone_setup[1] else 'player')
@@ -1512,6 +1519,38 @@ const DAMAGE_CAMERAS := {
 @export var damage_zoom_hold_seconds: float = 1.0
 @export var damage_zoom_out_seconds: float = 0.4
 ## How close the damage shot comes: metres from the landing slot along the board camera's line of sight (the board
+## The side the running damage zoom is looking at, reported by `damage_zoom_finished` when the view is back.
+var _zoom_side: PlayerSide = null
+
+## The damage zoom has handed the view back to the board camera. The life crown breaks its crystals on this, so the
+## player sees the card land first and the crown lose a stone after.
+signal damage_zoom_finished(side: PlayerSide)
+
+## The board view (the camera that is NOT inside a damage zone). Board-anchored UI (the life crown) places itself from
+## this rather than from the active camera, which is a damage camera during a zoom.
+func board_camera() -> Camera3D:
+	return _board_camera
+
+const LIFE_CROWN := preload("res://scripts/ui/life_crown.gd")
+## The local player's life crystals (bottom edge) and the opponent's (top edge).
+var life_crown: Node3D = null
+var opponent_life_crown: Node3D = null
+
+## THE LIFE CRYSTALS follow the BIOME, like the coins: Chaos (seat 1) has red crystals in basalt on the volcanic edge,
+## Cosmos (seat 2) teal crystals in grey stone on the forest edge. The local player is always the bottom edge.
+func _setup_life_crown() -> void:
+	var local_style: String = "chaos" if local_seat != 2 else "cosmos"
+	var opponent_style: String = "cosmos" if local_seat != 2 else "chaos"
+	if life_crown == null:
+		life_crown = LIFE_CROWN.new()
+		life_crown.name = "LifeCrystals"
+		add_child(life_crown)
+	if opponent_life_crown == null:
+		opponent_life_crown = LIFE_CROWN.new()
+		opponent_life_crown.name = "OpponentLifeCrystals"
+		add_child(opponent_life_crown)
+	life_crown.setup(self, player, local_style, "bottom", local_seat)
+	opponent_life_crown.setup(self, opponent, opponent_style, "top", local_seat)
 ## view itself is ~8 m away).
 @export var damage_zoom_distance: float = 3.2
 
@@ -1586,10 +1625,10 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	if _board_camera == null or _board_camera == cam:
 		return
 
-	var cards: Array = zone.get("cards")
-	# The card that JUST LANDED: the zoom runs on `damaged`, after DamageZone.draw() has already added it to the row, so
-	# cards.size() is the slot AFTER it (the shot used to aim one card too far).
-	var next_index: int = maxi((cards.size() if cards != null else 0) - 1, 0)
+	# The card that JUST LANDED: the zoom runs on `damaged`, after DamageZone.draw() has already added it to the
+	# zone's on-show row (`pending`: the zone no longer lays out absorbed cards), so it is the LAST pending slot.
+	var shown: Variant = zone.get("pending")
+	var next_index: int = maxi((shown.size() if shown != null else 0) - 1, 0)
 	var slot: Vector3 = _damage_slot_world(zone, next_index)
 	# THE BOARD VIEW, DOLLIED IN. The shot keeps the board camera's ORIENTATION and LENS exactly and only moves along
 	# its line of sight until the landing slot sits at the centre, damage_zoom_distance away. The old shot flew to a
@@ -1609,6 +1648,7 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	cam.current = true
 	LOG.info("DamageZoom", "%s -> %s (slot %d)" % [which, cam.name, next_index])
 
+	_zoom_side = side
 	_damage_tween = create_tween()
 	_damage_tween.set_trans(Tween.TRANS_SINE)
 	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
@@ -1668,6 +1708,9 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 		LOG.info("ExBurst", "%s: no legal target, the burst does nothing" % card.card_name)
 	elif stack.stack_length() > 0:
 		await stack.resolve_top_effect()
+	var zoomed: PlayerSide = _zoom_side
+	_zoom_side = null
+	damage_zoom_finished.emit(zoomed)
 
 
 

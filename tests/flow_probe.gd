@@ -60,19 +60,21 @@ func _ready() -> void:
 		var want: float = deck_x + DAMAGE_RIGHT_OF_DECK_PX * (1.0 if side == "Player" else -1.0)
 		print("[FlowProbe] %s deck centre x %.1f, damage zone centre x %.1f (want %.1f)" % [side, deck_x, damage_x, want])
 		_expect(absf(want - damage_x) < 4.0, "%s damage zone stands over its deck, a little to its right" % side)
-		var off_row := 0
-		var wrong_size := 0
+		# 2026-11-22: the zone no longer shows its cards; they go into the life crystals (life_crown.gd) and are kept
+		# hidden here, so a setup board's starting damage must not be drawn.
+		var drawn := 0
 		for dmg in side_damage.get("cards"):
-			if absf(dmg.global_position.x - side_damage.global_position.x) > 0.001:
-				off_row += 1
-			if absf(dmg.global_basis.get_scale().x - 1.0) > 0.02:
-				wrong_size += 1
-		print("[FlowProbe] %s damage row: %d cards, %d off the straight row, %d not deck-sized" % [
-			side, side_damage.get("cards").size(), off_row, wrong_size])
-		_expect(off_row == 0 and wrong_size == 0, "%s damage cards form one straight row, deck-sized" % side)
-	_expect(is_equal_approx(float(Card.ZONE_PRESENTATION[Card.Zone.DAMAGE]["scale"]),
-		float(Card.ZONE_PRESENTATION[Card.Zone.DECK]["scale"]) * game.get_node("Player/Deck").global_basis.get_scale().x),
-		"damage cards are the same world size as deck cards")
+			if dmg.visible:
+				drawn += 1
+		print("[FlowProbe] %s damage zone: %d cards, %d drawn" % [side, side_damage.get("cards").size(), drawn])
+		_expect(side_damage.get("cards").size() > 0 and drawn == 0, "%s damage cards are kept hidden (the crystals show the count)" % side)
+	# 2026-11-21: the deck grew (Card.DECK_WORLD_SCALE) when it moved off the wood; the damage row
+	# stays at PILE_WORLD_SCALE, or seven cards would not fit above it.
+	var deck_world: float = float(Card.ZONE_PRESENTATION[Card.Zone.DECK]["scale"]) \
+		* game.get_node("Player/Deck").global_basis.get_scale().x
+	_expect(is_equal_approx(deck_world, Card.DECK_WORLD_SCALE)
+		and is_equal_approx(float(Card.ZONE_PRESENTATION[Card.Zone.DAMAGE]["scale"]), Card.PILE_WORLD_SCALE),
+		"deck cards are DECK_WORLD_SCALE (%.2f) and damage cards PILE_WORLD_SCALE in world" % deck_world)
 	var board_visual = game.get_node("Board/MeshInstance3D")
 	_expect(board_visual.mesh != null and board_visual.mesh.get_surface_count() == 1,
 		"the scenery geometry loads on the existing Board node path")

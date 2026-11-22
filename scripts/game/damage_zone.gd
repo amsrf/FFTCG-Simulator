@@ -12,8 +12,19 @@ const CARD_CHARGE = 2
 const FLIGHT_SECONDS := 1.3
 ## How high (metres, zone-local = world Y) the damage card's arc pulls up off the deck and above its slot.
 const FLIGHT_LIFT := 0.6
+## The absorb: how long a revealed damage card takes to fly into its life crystal, and how high its arc rises.
+const ABSORB_SECONDS := 0.6
+const ABSORB_LIFT := 0.5
 
 var cards = []
+## THE DAMAGE ZONE NO LONGER SHOWS ITS CARDS (2026-11-22). A hit's card still flips up off the deck into the zone's
+## spot, where the damage zoom and the EX BURST reveal look at it; those are `pending`. Once the zoom hands the view
+## back, the life crystals (scripts/ui/life_crown.gd) call `absorb()`: the card flies to the crystal it breaks,
+## shrinking to nothing, and is then PARKED HIDDEN here. `cards` stays the rules' list of every damage card; the
+## crystals' click opens the zone viewer on it.
+var pending: Array = []
+## Cards flying into a crystal right now: neither on show nor parked yet, so the layout leaves them alone.
+var _absorbing: Array = []
 var deck: Node = null
 var card_width = GlobalVariables.get_card_width();
 var card_spacing = -0.3
@@ -39,6 +50,7 @@ func draw(card):
 	var was_in_tree: bool = card.is_inside_tree()
 	card.enter_zone(Card.Zone.DAMAGE)
 	add_card_to_tree(card)
+	pending.append(card)
 	if was_in_tree:
 		card.global_transform = start_xf
 	update_card_positions(cards.size() - 1)
@@ -52,7 +64,7 @@ func draw(card):
 	path_follow.loop = false
 	path.add_child(path_follow)
 	var curve = Curve3D.new()
-	var target_position = calculate_card_position(cards.size() - 1)
+	var target_position = calculate_card_position(pending.size() - 1)
 	var plane: float = target_position.y
 
 	# ONE ARC FROM THE DECK TO THE SLOT: straight up off the deck, across ABOVE the board, straight down onto the slot.
@@ -102,7 +114,8 @@ func draw(card):
 ## A flight is over: the card joins the zone's frame, its path goes, and the whole row is laid out again (the row
 ## re-centres as it grows, so cards that landed earlier in the same hit move to their final slots too).
 func _land(card: Card, path: Node) -> void:
-	if is_instance_valid(card) and card.get_parent() != self:
+	# Absorbed (or removed) while still flying: the flight no longer owns it.
+	if is_instance_valid(card) and card.get_parent() != self and pending.has(card):
 		card.reparent(self)
 	if is_instance_valid(path):
 		path.queue_free()
@@ -120,14 +133,57 @@ func add_card_to_tree(card):
 	
 	
 func add_card(card):
-	# Damage-zone cards are laid flat and must not show the field readout.
+	# The instant path (a test board's starting damage): straight into the zone, hidden.
 	card.enter_zone(Card.Zone.DAMAGE)
 	add_card_to_tree(card)
 	update_card_positions()
 
+## Fly a pending damage card to `target` (world) while it shrinks to nothing, then park it hidden. Returns the tween
+## (null when the card was not on show: it is simply parked). The life crystal bursts when this finishes.
+func absorb(card: Card, target: Vector3, seconds: float = ABSORB_SECONDS) -> Tween:
+	if card == null or not is_instance_valid(card):
+		return null
+	if not pending.has(card):
+		park(card)
+		return null
+	pending.erase(card)
+	_absorbing.append(card)
+	if card.get_parent() != self:
+		card.reparent(self)
+	var from: Vector3 = card.global_position
+	var from_scale: Vector3 = card.scale
+	var lift := Vector3.UP * ABSORB_LIFT
+	var tween := create_tween()
+	tween.tween_method(func(t: float) -> void:
+		# Taken out of the zone mid-flight (an effect moved it): the flight no longer owns it.
+		if not is_instance_valid(card) or not _absorbing.has(card):
+			return
+		# A quadratic arc over the board, and a shrink that holds the card readable for the first part of the flight.
+		var mid: Vector3 = (from + target) * 0.5 + lift
+		card.global_position = from.lerp(mid, t).lerp(mid.lerp(target, t), t)
+		var k: float = 1.0 - pow(clampf((t - 0.15) / 0.85, 0.0, 1.0), 1.6)
+		card.scale = from_scale * maxf(k, 0.001),
+		0.0, 1.0, seconds).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(card) and _absorbing.has(card):
+			park(card))
+	update_card_positions()
+	return tween
+
+## Put a card out of sight in the zone (the rules still see it in `cards`).
+func park(card: Card) -> void:
+	pending.erase(card)
+	_absorbing.erase(card)
+	if card.get_parent() != self:
+		card.reparent(self, false)
+	card.position = Vector3.ZERO
+	card.rotation = Vector3.ZERO
+	card.scale = Vector3.ONE * float(Card.ZONE_PRESENTATION[Card.Zone.DAMAGE]["scale"])
+	card.set_hidden(true)
+
 
 func calculate_total_width():
-	return (cards.size() * card_width) + ((cards.size() - 1) * card_spacing)
+	return (pending.size() * card_width) + ((pending.size() - 1) * card_spacing)
 
 # Function to update the positions of the cards in the hand
 func update_card_positions(ignore = -1):
@@ -138,6 +194,13 @@ func update_card_positions(ignore = -1):
 		if(i == ignore):
 			continue
 		var card = cards[i]
+		if _absorbing.has(card):
+			continue
+		if not pending.has(card):
+			# Not on show: parked hidden (absorbed by a crystal, or placed by a setup board).
+			if card.get_parent() == self and card.visible:
+				park(card)
+			continue
 		if(card.is_dragging):
 			continue
 		# Still flying on the path: its position belongs to the flight, which lands it on calculate_card_position().
@@ -145,7 +208,7 @@ func update_card_positions(ignore = -1):
 			continue
 		card.index = i
 		card.rotation = Vector3.ZERO
-		animate_card(card, calculate_card_position(i)) # Position relative to the Hand
+		animate_card(card, calculate_card_position(pending.find(card))) # Position relative to the Hand
 		
 		
 func last_card_position():
@@ -173,7 +236,9 @@ func calculate_card_position(i):
 	return Vector3(x_offset, y_offset, 0)
 	
 func remove_card(card):
-	cards.remove_at(card.index)
+	cards.erase(card)
+	pending.erase(card)
+	_absorbing.erase(card)
 	
 
 		

@@ -12,3 +12,18 @@ float board_edge_shade(vec2 world_xz) {
 	float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - focus_corner;
 	return 1.0 - edge_darkness * smoothstep(0.0, max(edge_falloff, 1e-4), d);
 }
+
+// THE SCREEN VIGNETTE (2026-11-22, after Artifact's board): the corners of the VIEW fall off on top of the world-space
+// edge darkening above, so the eye stays on the play area and the scenery at the screen edges sinks into shadow.
+// Board and river only (both include this): cards, the hand and UI are not darkened. Elliptical in screen space,
+// corrected for the aspect so it is round-cornered rather than stretched.
+uniform float vignette_strength : hint_range(0.0, 1.0) = 0.18;
+uniform float vignette_start : hint_range(0.0, 1.5) = 0.85;   // distance from the centre where it begins (1 = edge)
+uniform float vignette_end : hint_range(0.5, 2.0) = 1.35;     // where it reaches full strength (corners ~1.25)
+
+float board_vignette(vec2 screen_uv, vec2 viewport_size) {
+	vec2 d = (screen_uv - 0.5) * 2.0;
+	d.x *= mix(1.0, viewport_size.x / max(viewport_size.y, 1.0), 0.35);
+	float r = length(d);
+	return 1.0 - vignette_strength * smoothstep(vignette_start, vignette_end, r);
+}

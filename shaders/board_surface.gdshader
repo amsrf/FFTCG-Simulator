@@ -14,5 +14,5 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = texture(appearance, UV).rgb * brightness * board_edge_shade(world_xz);
+	ALBEDO = texture(appearance, UV).rgb * brightness * board_edge_shade(world_xz) * board_vignette(SCREEN_UV, VIEWPORT_SIZE);
 }

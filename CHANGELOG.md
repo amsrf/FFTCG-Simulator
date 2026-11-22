@@ -2,6 +2,57 @@
 
 All notable changes to the FF TCG Simulator project.
 
+## [Unreleased] — 2026-11-22
+
+### Added
+- **The Chaos life crystals** (`scripts/ui/life_crown.gd`, created by `Game._setup_life_crown()`): seven blood
+  crystals growing out of the volcanic stones along the local edge, in the reserved hand–Backup band. They are part of
+  the BOARD: world-space at `SOCKETS` (rock heights sampled from `assets/board/board_mesh.bin`), each in a basalt
+  collar with an ember seam, leaning 25° back toward the field so the 67° camera does not flatten them. A hit breaks
+  crystals in `BREAK_ORDER` (outer left, outer right, next left … the centre is the last life), leaving a dark stub,
+  once the damage zoom hands the view back (new `Game.damage_zoom_finished(side)`; a 4 s fallback covers a hit with no
+  zoom; `--fast` syncs at once). The count is read from `PlayerSide.damage_count()`, so a heal restores crystals in
+  reverse.
+- **Cosmos life crystals**: the same piece on the forest edge in teal crystals and grey stone (`LifeCrown.STYLES`).
+  The styles follow the biome like the coins: seat 1 = Chaos crystals at the bottom (local) and Cosmos at the top
+  (opponent); seat 2 swaps them. `SOCKET_SETS` holds rock heights sampled on BOTH board meshes for both edges. The
+  far (top) crystals are sized ~0.9x larger in the world so they come out as tall on screen as the near ones (centre
+  79 vs 78 px, pinned by `life_crown_probe`), and stand on the far edge of the wood (z 2.28-2.37), pulled in toward
+  the field so they clear the opponent's hand. Index 0 is the OWNER's leftmost, so an opponent hit breaks their left (your screen-right) first.
+  `Game.opponent_life_crown`; the burst takes the style's colours. (Iterated the same day: a camera-facing iron crown, then stone towers, both
+  replaced at the user's request because they floated over the board instead of belonging to it.)
+- `Blender/build_life_crown.py`: decimates the user's Meshy "blood crystal" (133k → 900 tris, saved as
+  `Blender/life_crown/blood_crystal.blend`; `-- --fbx <file>` re-imports) and builds the rock collar + ember seam;
+  writes `assets/life_crown/life_crown.bin` (import-free, like the board) and a Cycles preview.
+- `shaders/life_crystal.gdshader` (faceted, glow from the foot), `shaders/life_crystal_halo.gdshader` (additive, billboarded
+  outer glow; no bloom under Compatibility), `scripts/vfx/life_crystal_burst.gd` (flash, shards, sparks). Both shaders are in
+  `Game.EFFECT_SHADERS`.
+- **Damage cards go into the crystals.** The Damage Zone no longer lays its cards out: a hit's card still flips up off
+  the deck into the zone's spot (the zoom and the EX BURST reveal frame it), then, once the view is back, flies to the
+  crystal it breaks while shrinking to nothing (`DamageZone.absorb()`, `ABSORB_SECONDS` 0.6), and the crystal bursts
+  on arrival. The cards stay in `DamageZone.cards`, hidden (`park()`); clicking the crystal row opens the zone viewer
+  (`LifeCrown.open_damage_view()`). `tools/shot.gd --hit <n>` / `--opponent-hit <n>` film real damage.
+  `damage_zoom_probe` now measures the revealed (`pending`) cards; `flow_probe` asserts the zone's cards are hidden.
+- **The board fills the screen.** New pipeline stage `Blender/extend_board_edges.py` (board_pit_stations ->
+  board_edges, which `export_board_to_godot.py` now exports): ground (forest soil / lava), the river and seeded copies of
+  the board's own foliage, basalt and river stones out to x +-7.6. The background no longer shows at the left/right
+  edges (1015 -> 0 background pixels in the edge columns at 1920x1080) and the river runs off both sides. Both seats
+  re-exported.
+- **Deck trays.** Each deck sits in a recessed wooden tray baked into the board (`Blender/build_deck_cradles.py`, the stage
+  after `extend_board_edges.py`, now the export source): a warm timber rim (10 cm on the outer sides, slim against the
+  Break Zone pit housing) round a darker floor at the deck's base, with the scenery under it cleared. Both seats
+  re-exported. (The decks used to lie straight on the corner rocks/grass.)
+- Board brightness 0.70 -> 0.78 (`BoardEnvironment.brightness`).
+- **Screen vignette** on the board and river (`board_vignette()` in `shaders/board_edge_shade.gdshaderinc`,
+  `vignette_strength` 0.18, from 0.85 of the way out; 0.45 was "way too dark"): a soft corner falloff; cards, the hand and UI are not darkened.
+- `Game.board_camera()`; `tools/shot.gd --life-break <n>` (break n crystals with the animation, pair with `--seconds`).
+- `tests/life_crown_probe.tscn`: on the stone strip, leaning toward the field, inside the band, centre crystal 60–120 px, the break order on real `take_damage()` hits, bursts freeing
+  themselves, heal restore.
+
+### Known Issues
+- `tests/flow_probe.tscn` currently reports 15 stack-layout FAILs and stops at its frame cap; identical with the crown
+  disabled, so they come from the in-progress stack work, not from the crown.
+
 ## [Unreleased] — 2026-11-19
 
 ### Added

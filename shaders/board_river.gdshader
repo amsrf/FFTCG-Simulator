@@ -82,5 +82,5 @@ void fragment() {
 		+ vec3(0.10, 0.25, 0.23) * (shimmer + foam * 0.18)
 		+ vec3(0.28, 0.55, 0.49) * streaks * streak_strength
 		+ vec3(0.38, 0.62, 0.55) * (patches * side_pools + entrance_wake * 0.7) * foam_strength;
-	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre) * brightness * board_edge_shade(world_xz);
+	ALBEDO = max(vec3(0.0), still_water + movement * moving_centre) * brightness * board_edge_shade(world_xz) * board_vignette(SCREEN_UV, VIEWPORT_SIZE);
 }

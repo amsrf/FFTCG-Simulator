@@ -124,8 +124,9 @@ func _ready() -> void:
 		var shot: Camera3D = get_viewport().get_camera_3d()
 		var view: Vector2 = get_viewport().get_visible_rect().size
 		# Where the card that just landed sits NOW: the row re-centres as it grows, so the pre-hit slot has moved.
+		# The zone only lays out its revealed (`pending`) cards now; absorbed ones are hidden.
 		var landed: Vector3 = zone.global_transform * (
-			zone.call("calculate_card_position", zone.get("cards").size() - 1) as Vector3)
+			zone.call("calculate_card_position", zone.get("pending").size() - 1) as Vector3)
 		var slot_px: Vector2 = shot.unproject_position(landed)
 		var turned: float = shot.global_basis.orthonormalized().get_rotation_quaternion().angle_to(
 			board.global_basis.orthonormalized().get_rotation_quaternion())
@@ -171,16 +172,17 @@ func _ready() -> void:
 	# --- 4. TWO damage in one hit: each card gets its OWN slot -----------------------------------------------
 	# The zone used to share one flight path, so the second flight rewrote the curve the first card was riding and both
 	# landed on the last slot.
+	# Measured while the two cards are still ON SHOW (revealed, before the zoom ends and the life crystals absorb them).
 	player_side.take_damage(2)
-	await get_tree().create_timer(DamageZone.FLIGHT_SECONDS + 0.6).timeout
+	await get_tree().create_timer(DamageZone.FLIGHT_SECONDS + 0.15).timeout
 	var slots: Dictionary = {}
 	var row_x: Dictionary = {}
-	for c in zone.get("cards"):
+	for c in zone.get("pending"):
 		slots[str(c.position.snapped(Vector3.ONE * 0.001))] = true
 		row_x[snappedf(c.global_position.x, 0.001)] = true
-	print("[DamageZoom] after a 2-damage hit: %d cards, %d distinct slots, %d distinct world x" % [
-		zone.get("cards").size(), slots.size(), row_x.size()])
-	_expect(slots.size() == zone.get("cards").size(), "a 2-damage hit lands each card in its own slot")
+	print("[DamageZoom] after a 2-damage hit: %d cards on show, %d distinct slots, %d distinct world x" % [
+		zone.get("pending").size(), slots.size(), row_x.size()])
+	_expect(zone.get("pending").size() == 2 and slots.size() == 2, "a 2-damage hit reveals each card in its own slot")
 	_expect(row_x.size() == 1, "and the row is one straight line (one world x)")
 
 	# --- THE OPPONENT IS ZOOMED TOO --------------------------------------------------------------------------------
@@ -215,8 +217,8 @@ func _check_opponent_zoom(game, opp_side, board: Camera3D) -> void:
 	tw.pause()
 	tw.custom_step(float(game.get("damage_zoom_in_seconds")) + 0.01)
 	await get_tree().process_frame
-	var cards: Array = opp_zone.get("cards")
-	var landed: Vector3 = opp_zone.global_transform * (opp_zone.call("calculate_card_position", cards.size() - 1) as Vector3)
+	var shown: Array = opp_zone.get("pending")
+	var landed: Vector3 = opp_zone.global_transform * (opp_zone.call("calculate_card_position", shown.size() - 1) as Vector3)
 	var slot_px: Vector2 = opp_cam.unproject_position(landed)
 	var view: Vector2 = get_viewport().get_visible_rect().size
 	_expect(slot_px.distance_to(view * 0.5) < 3.0,
@@ -229,4 +231,6 @@ func _check_opponent_zoom(game, opp_side, board: Camera3D) -> void:
 func _finish() -> void:
 	print("[DamageZoom] %d checks | failures: %d" % [_checks, _fails])
 	print("[DamageZoom] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
+	# The life crystals' shatter sound may still be playing; quitting under it reports the streams as leaked.
+	await get_tree().create_timer(1.5).timeout
 	get_tree().quit()
