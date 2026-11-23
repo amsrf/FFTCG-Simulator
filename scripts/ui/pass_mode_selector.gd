@@ -16,8 +16,8 @@ const MODES: Array = [
 ]
 const KEY_HINT := "\n\n[Tab] next mode   [Space] pass"
 
-## Pixels between the bottom of the pass disc's ring and the top of the selector.
-@export var gap_px: float = 16.0
+## Distance from the screen's right and bottom edges, px.
+@export var corner_margin_px: float = 14.0
 @export var font_size: int = 15
 
 var game: Node = null
@@ -149,23 +149,9 @@ func _process(_delta: float) -> void:
 	_panel.visible = human and not bool(game.get("match_over"))
 	if not _panel.visible:
 		return
-	var cam: Camera3D = socket.get_viewport().get_camera_3d()
-	if cam == null:
-		return
-	var centre: Vector3 = socket.global_position
-	if cam.is_position_behind(centre):
-		return
-	var radius: float = float(socket.get("radius")) + 0.06
-	var c: Vector2 = cam.unproject_position(centre)
-	# The disc's lowest point ON SCREEN: the rim point furthest down the screen (toward the camera along the board).
-	var down: Vector3 = -cam.global_basis.y
-	down.y = 0.0
-	down = down.normalized() if down.length_squared() > 0.0001 else Vector3.BACK
-	var low: Vector2 = cam.unproject_position(centre + down * radius)
+	# THE BOTTOM-RIGHT CORNER OF THE SCREEN (2026-11-21). With the zoomed-out camera the coin moved down into that corner
+	# and the old "just under the coin" spot fell on top of it; the selector now sits in the corner, beside the hand.
 	var size: Vector2 = _panel.get_combined_minimum_size()
 	_panel.size = size
 	var view: Vector2 = socket.get_viewport().get_visible_rect().size
-	var pos := Vector2(c.x - size.x * 0.5, maxf(low.y, c.y) + gap_px)
-	pos.x = clampf(pos.x, 8.0, view.x - size.x - 8.0)
-	pos.y = clampf(pos.y, 8.0, view.y - size.y - 8.0)
-	_panel.position = pos
+	_panel.position = Vector2(view.x - size.x - corner_margin_px, view.y - size.y - corner_margin_px)

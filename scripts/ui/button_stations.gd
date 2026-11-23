@@ -19,10 +19,30 @@ const OPPONENT_FORWARD := [Color(0.17, 0.04, 0.30), Color(0.45, 0.14, 0.80), Col
 @onready var local_cancel: Node3D = $LocalCancel
 @onready var opponent_forward: Node3D = $OpponentForward
 @onready var opponent_cancel: Node3D = $OpponentCancel
+const PHASE_DIAL := preload("res://scripts/ui/phase_dial.gd")
+## The phase marks + pointer around each big button (scripts/ui/phase_dial.gd); both show the current phase.
+var local_dial: Node3D
+var opponent_dial: Node3D
 
 
 func _ready() -> void:
 	configure_seat(1)
+	local_dial = _add_dial(local_forward)
+	opponent_dial = _add_dial(opponent_forward)
+
+
+func _add_dial(socket: Node3D) -> Node3D:
+	var dial: Node3D = PHASE_DIAL.new()
+	dial.name = "PhaseDial"
+	socket.add_child(dial)
+	return dial
+
+
+## Game.phase_entered: both dials point at the phase (it is the same phase for both players).
+func show_phase(phase: int) -> void:
+	for dial in [local_dial, opponent_dial]:
+		if dial != null:
+			dial.show_phase(phase)
 
 func configure_seat(seat: int) -> void:
 	var local_volcanic := seat != 2
@@ -37,6 +57,8 @@ func configure_seat(seat: int) -> void:
 	# The priority coins belong to the SEAT, like the biome: seat 1 (volcanic) is Chaos, seat 2 (forest) is Cosmos.
 	local_forward.set_coin_style("chaos" if local_volcanic else "cosmos")
 	opponent_forward.set_coin_style("cosmos" if local_volcanic else "chaos")
+	local_cancel.set_coin_style("chaos" if local_volcanic else "cosmos")
+	opponent_cancel.set_coin_style("cosmos" if local_volcanic else "chaos")
 
 ## The opponent holds priority: their forward disc is up. Their Cancel never is.
 func set_opponent_priority(on: bool) -> void:

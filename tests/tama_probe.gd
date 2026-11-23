@@ -75,7 +75,10 @@ func _ready() -> void:
 		"X is capped by the best Character in hand and by the two available mana sources")
 
 	await field.begin_skill_activation(tama, 0)
-	_expect(tama.tapped, "the Dull cost is paid at activation")
+	# The 《Dull》 is paid at COMMIT with every other cost; until then Tama is only reserved for it, so it cannot also
+	# pay its own mana (Stack.is_reserved_for_cost).
+	_expect(not tama.tapped and stack.is_reserved_for_cost(tama),
+		"the Dull cost is reserved at activation, not paid yet")
 	_expect(stack.skill_activation_proxy != null, "the ability has a stack proxy before payment")
 	_expect(stack.skill_activation_proxy.ability_x_value == 2,
 		"the declared X is stored on the stack proxy")

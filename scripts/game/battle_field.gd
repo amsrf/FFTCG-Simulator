@@ -200,6 +200,10 @@ func show_card_preview(card: Card) -> void:
 	# they belong to.
 	if mana_choice != null and is_instance_valid(mana_choice):
 		return
+	# Nor while an ability badge is up: the badge is the focus and the preview covered it (the badge allows the pointer
+	# over its own card, so a hover can still arrive).
+	if ability_badge_card() != null:
+		return
 	_ensure_preview()
 	if _preview == null:
 		return
@@ -418,6 +422,10 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# and they were not "just played". Card.turn_end() decrements the status, so one turn is the right duration.
 	if animate:
 		card.add_status_effect("summoning_sickness", 1)
+	# RULE 5.2.3.1.1.3: a Backup enters the field DULL. Rules state now; the node is drawn tilted when it lands
+	# (Card.enter_zone keeps an already-dull card's tilt). A setup board (animate == false) stays active.
+	if animate and card.type == Card.BACKUP:
+		card.tap()
 	
 	var target_node
 	var target_array
@@ -499,7 +507,21 @@ func play_card(card, is_opponent: bool = false, animate = true, record: bool = t
 	# when its arrival animation lands. A trigger that needs a decision (a target) still waits for the queue
 	# (Agent._settle), so the player sees the card arrive before being asked.
 	if animate and not suppress_auto:
-		execute_card_effect.call_deferred(card, EVENTS.Event.ENTER_FIELD)
+		_pending_enter_triggers.append(card)
+		flush_enter_triggers.call_deferred()
+
+## Characters whose ENTER_FIELD abilities are owed but not yet enqueued. They are flushed at the end of the frame, OR
+## earlier by Game.apply_rule_processes() — whichever comes first. Relying on the end of the frame alone was a race:
+## whether the priority loop reached its trigger declaration before or after that frame boundary depended on timing,
+## so the two machines of an online match disagreed on whether a target choice came before the next priority
+## (net_probe: "expected a 'choose_target' decision, the other machine sent 'take_priority'" on Onion Knight).
+var _pending_enter_triggers: Array = []
+
+func flush_enter_triggers() -> void:
+	while not _pending_enter_triggers.is_empty():
+		var entered = _pending_enter_triggers.pop_front()
+		if is_instance_valid(entered):
+			execute_card_effect(entered, EVENTS.Event.ENTER_FIELD)
 
 ## Each field card's HOME slot (local x), recorded when it is placed. Occupancy is read from here, not from
 ## `position`, because a card can be mid-arrival or pushed aside by a party formation.
@@ -726,9 +748,50 @@ func try_activate_from_field(card: Card) -> void:
 	var skills: Array = card.activation_skills()
 	if skills.is_empty():
 		return
-	# ONE ENTRY POINT. A single ability activates immediately; two or more open the skill picker modal, which shows
-	# each ability's text (see scripts/skill_choice.gd).
+	# ONE ENTRY POINT. Two or more abilities open the skill picker modal, which shows each ability's text
+	# (scripts/ui/skill_choice.gd). A SINGLE ability gets one extra step first: the ability badge beside the card (its
+	# cost and text, scripts/ui/ability_badge.gd), which the player clicks to confirm they want to use it.
+	if skills.size() == 1 and card.controller == Card.PLAYER and can_activate_now(card):
+		open_ability_badge(card)
+		return
 	begin_skill_activation(card, -1)
+
+const ABILITY_BADGE := preload("res://scripts/ui/ability_badge.gd")
+var _ability_badge: CanvasLayer = null
+
+## The badge for `card`'s single ability; clicking it starts the activation. Opening it again on the same card keeps the
+## one that is up; another card replaces it.
+func open_ability_badge(card: Card) -> void:
+	if ability_badge_card() == card:
+		return
+	close_ability_badge()
+	# No hover while the badge is up (its catcher stops the pointer reaching the board): drop the preview the click left.
+	hide_card_preview()
+	var badge: CanvasLayer = ABILITY_BADGE.new()
+	badge.name = "AbilityBadgeLayer"
+	add_child(badge)
+	badge.open(card, card.activation_skill(0))
+	badge.confirmed.connect(func() -> void:
+		_ability_badge = null
+		# Re-checked: anything may have happened while the badge was up.
+		if is_instance_valid(card) and can_activate_now(card):
+			begin_skill_activation(card, 0))
+	badge.dismissed.connect(func() -> void: _ability_badge = null)
+	_ability_badge = badge
+
+func close_ability_badge() -> void:
+	if _ability_badge != null and is_instance_valid(_ability_badge):
+		_ability_badge.dismiss()
+	_ability_badge = null
+
+## The card whose ability badge is up, or null (probe hook, and the poll that closes a stale badge).
+func ability_badge_card() -> Card:
+	if _ability_badge == null or not is_instance_valid(_ability_badge) or _ability_badge.is_queued_for_deletion():
+		return null
+	return _ability_badge.card
+
+func ability_badge() -> CanvasLayer:
+	return _ability_badge if ability_badge_card() != null else null
 
 ## True while the LOCAL player holds the window. Holding a card you *could* activate is not the
 ## same as being allowed to activate it: while the OPPONENT holds priority the input mode is
@@ -956,6 +1019,11 @@ func refresh_available_effects() -> void:
 	# The ring means "you can do this now", cost included: an ability you could not pay for is not offered.
 	for card in get_all_cards():
 		card.set_available_highlight(can_activate_now(card, false, true))
+	# An ability badge offers exactly that, so it goes the moment its card stops being activatable (priority moved on,
+	# a modal opened, the card left).
+	var badged: Card = ability_badge_card()
+	if badged != null and not can_activate_now(badged):
+		close_ability_badge()
 	# ...and the same for the cards in your hand you could cast right now.
 	if game != null:
 		var own_hand: Hand = game.hand_for(1)
@@ -1032,15 +1100,9 @@ func begin_skill_activation(card: Card, skill_index: int = -1, by_agent: bool = 
 		return
 	assistant.clear_payment_accumulator()
 	def = stack.skill_activation_proxy.skill_def_override
-	# TAP THE SOURCE NOW, BEFORE THE MANA STEP. Tapping is part of the ability's cost, so it belongs at the moment
-	# of activation rather than at stack commit — and an untapped source during payment could be selected as mana
-	# for its own ability (paying the Red Mage's skill with the Red Mage). Tapped, it is out of the pool by the same
-	# rule that keeps every other tapped Backup out.
-	#
-	# Stack._clear_skill_proxy() undoes this when the player backs out, so the tap is only really spent once the
-	# activation commits.
-	if def.get("tap", false) and not card.tapped:
-		card.tap()
+	# THE 《Dull》 IS PAID AT COMMIT, with every other cost (Stack._apply_skill_source_tap_from_proxy): the card turns only
+	# once the ability is really going on the stack, so backing out never shows it dulling and turning back. Until then
+	# the source is reserved for that cost (Stack.is_reserved_for_cost), which keeps it from paying its own mana.
 	# PUT-INTO-THE-BREAK-ZONE COST (Mystic 96). Paid at activation like the S discard, and chosen by the owner through
 	# the agent seam, so the human gets a picker and the AI picks for itself. A cancelled pick aborts the whole
 	# activation: the proxy is cleared (which refunds the tap) and nothing is sacrificed.
@@ -1134,19 +1196,16 @@ func continue_skill_activation_after_mana(_proxy: Card) -> void:
 		return
 	var choose_target = def.get("choose_target", null)
 	if choose_target:
-		# The arc starts from the PROXY in the stack, not from the card on the field:
-		# that is the object the player is actually resolving, and it is where the
-		# arrow should appear to come from. The proxy carries the same controller, and
-		# source_kind below is what the protection rules read, so targeting behaviour
-		# is unchanged.
+		# The session's source is the PROXY (it carries the controller and stores the picks, and source_kind below is
+		# what the protection rules read). It is not on the stack until committed, so the arc is drawn from the raised
+		# source card instead (arrow_origin).
 		request_target(choose_target, _proxy, true, "Ability")
 	else:
-		if _activation_by_agent:
-			# Nothing left to decide: only the UI gets a Confirm to press.
-			stack.confirm_skill_without_target_then_priority()
-			return
+		# NOTHING LEFT TO DECIDE: every cost is chosen and there is no target, so the ability commits now, for a human
+		# too. (A Confirm here asked the player to confirm twice: Aerith's S cost was picked and confirmed, and then a
+		# second Confirm stood between them and an ability with nothing more to choose.)
 		GlobalVariables.refresh_mode()
-		assistant.generate_confirm_button(func(): stack.confirm_skill_without_target_then_priority())
+		stack.confirm_skill_without_target_then_priority()
 	
 func execute_card_effect(card, event):
 	# A CARD'S ABILITY TRIGGERED. The stack copy records the event id; Game resolves it by calling
@@ -1324,8 +1383,16 @@ func _spawn_aiming_arrow(from: Card) -> void:
 		add_child(fresh)
 	else:
 		_hidden_arrow_parent().add_child(fresh)
-	fresh.set_is_aiming_from_card(true, from)
+	fresh.set_is_aiming_from_card(true, arrow_origin(from))
 	targeting_arrows.append(fresh)
+
+## WHERE A TARGETING ARC STARTS for `card`: the card itself, unless it is an ability still being paid for, whose proxy is
+## not on the stack yet (hidden, Stack._hidden_activations); then the arc comes from the raised source on the field.
+func arrow_origin(card: Card) -> Card:
+	if card != null and is_instance_valid(card) and stack != null and stack._hidden_activations.has(card) \
+			and card.effect_source != null and is_instance_valid(card.effect_source):
+		return card.effect_source
+	return card
 
 ## The open targeting session is the LOCAL player's (only then is any of it drawn).
 func _session_is_local() -> bool:
@@ -1352,7 +1419,7 @@ func _aim_with_current() -> void:
 		# It must not stay locked: at a full session the last element is a PICK's arc, and borrowing it would set that
 		# pick's arrow following the pointer and leave its card bare.
 		pointing.locked = false
-		pointing.set_is_aiming_from_card(true, source_card)
+		pointing.set_is_aiming_from_card(true, arrow_origin(source_card))
 
 ## Drop one pick: its ring, its arc, and its claim on being the current target.
 ##
@@ -1512,7 +1579,7 @@ func clear_target_selection() -> void:
 		# `locked` is what froze the arc on the pick (see lock_arc); dropping it and re-aiming puts the arc back on the
 		# pointer. Both, because unlocking alone leaves the arc pointing at wherever the pick was.
 		arrow.locked = false
-		arrow.set_is_aiming_from_card(true, source_card)
+		arrow.set_is_aiming_from_card(true, arrow_origin(source_card))
 	if assistant != null:
 		if targeting_allow_cancel:
 			assistant.prepare_targeting_phase_cancel()
@@ -2429,7 +2496,8 @@ func finish_targeting_state() -> void:
 func on_card_grabbed(card: Card) -> void:
 	match GlobalVariables.get_player_mode():
 		GlobalVariables.Player_Mode.PAYING_COST:
-			if card.type == Card.BACKUP and card.tapped == false and card.controller == Card.PLAYER:
+			if card.type == Card.BACKUP and card.tapped == false and card.controller == Card.PLAYER \
+					and (stack == null or not stack.is_reserved_for_cost(card)):
 				# The Field owns the "selected for mana" marker (Card.show_mana_crystal).
 				if selected_cards_for_mana_conversion.has(card):
 					remove_card_from_mana_conversion(card)

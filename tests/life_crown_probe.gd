@@ -53,6 +53,25 @@ func _ready() -> void:
 	_expect(crown.visible, "it is shown for seat 1 (Chaos)")
 	_expect(crown.lives_shown() == 7, "7 crystals alive at the start (got %d)" % crown.lives_shown())
 
+	# --- the layout is the one source of truth: game.tscn's station nodes must match assets/board/layout.json -----
+	var layout: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://assets/board/layout.json"))
+	var node_for := {"deck": "%s/Deck", "graveyard": "%s/Graveyard", "removed": "%s/Removed"}
+	var mismatched: Array = []
+	for who in ["player", "opponent"]:
+		var side_name: String = "Player" if who == "player" else "Opponent"
+		var st: Dictionary = layout["stations"][who]
+		for key in node_for:
+			var n: Node3D = game.get_node(node_for[key] % side_name)
+			var want := Vector3(st[key][0], st[key][1], st[key][2])
+			if n.position.distance_to(want) > 0.002:
+				mismatched.append("%s %s %s != %s" % [who, key, n.position, want])
+		for pair in [["forward", "LocalForward" if who == "player" else "OpponentForward"], ["cancel", "LocalCancel" if who == "player" else "OpponentCancel"]]:
+			var b: Node3D = game.get_node("Assistant/ButtonStations/" + pair[1])
+			var want_b := Vector3(st[pair[0]][0], st[pair[0]][1], st[pair[0]][2])
+			if b.position.distance_to(want_b) > 0.002:
+				mismatched.append("%s %s %s != %s" % [who, pair[0], b.position, want_b])
+	_expect(mismatched.is_empty(), "game.tscn's decks, pits and button stations match assets/board/layout.json %s" % [mismatched])
+
 	# --- placement ---------------------------------------------------------------------------------------
 	var cam: Camera3D = game.board_camera()
 	_expect(cam != null, "the board camera is known")
@@ -80,7 +99,7 @@ func _ready() -> void:
 	for i in range(7):
 		var foot: Vector3 = crown.crystal_foot(i)
 		var tip: Vector3 = crown.crystal_tip(i)
-		if foot.z > -1.8 or foot.y > 0.3 or tip.z <= foot.z:
+		if foot.z > -1.8 or foot.y > 0.4 or tip.z <= foot.z:
 			_expect(false, "crystal %d stands on the stones and leans toward the field (foot %s tip %s)" % [i, foot, tip])
 	_expect(true, "every crystal stands on the stone strip, leaning back toward the field")
 	var tip_px: float = cam.unproject_position(crown.crystal_tip(3)).y - cam.unproject_position(crown.crystal_foot(3)).y

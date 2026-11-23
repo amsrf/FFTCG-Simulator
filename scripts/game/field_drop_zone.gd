@@ -9,8 +9,9 @@ extends MeshInstance3D
 ## Move or resize the slab in Blender and these numbers must follow.
 
 const SHADER := preload("res://shaders/field_drop_glow.gdshader")
-const SLAB_MIN := Vector2(-4.01, -1.71)   # (x, z)
-const SLAB_MAX := Vector2(4.01, 0.215)
+# x +-4.30 since Blender/widen_board.py widened both slabs by 0.28 m at each end (2026-11-21).
+const SLAB_MIN := Vector2(-4.30, -1.71)   # (x, z)
+const SLAB_MAX := Vector2(4.30, 0.215)
 const SLAB_TOP_Y := 0.065
 ## Lifted off the wood so it never z-fights the slab top.
 const GLOW_LIFT := 0.006

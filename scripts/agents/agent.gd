@@ -193,7 +193,9 @@ func choose_mana_color(_owner_id: int, _card: Card, options: Array) -> String:
 	return str(options[0]) if not options.is_empty() else ""
 
 
-func choose_discard(_owner_id: int, _cards: Array) -> Card:
+## `required` = the discard is mandatory (the End Phase hand limit): a human gets no Cancel, and the caller treats
+## null as "no opinion" and picks for the player instead of stopping.
+func choose_discard(_owner_id: int, _cards: Array, _required: bool = false) -> Card:
 	await _settle()
 	return null
 

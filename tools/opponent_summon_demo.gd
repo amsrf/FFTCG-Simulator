@@ -105,7 +105,12 @@ func _preview_ability(card_id: int) -> void:
 		await _cast()
 	for source in game.get_node("Field").get_all_cards():
 		if source.id == card_id and source.controller == "player":
-			stack.create_skill_proxy(source, 0, source.activation_skill(0))
+			# Nothing reaches the stack until it is paid for, so the preview commits at once (nothing is owed): the
+			# source flashes and the ability card flies out of it.
+			stack.skill_activation_proxy = stack.create_skill_proxy(source, 0, source.activation_skill(0))
+			stack.skill_mana_deferred_until_target_confirm = true
+			stack.commit_skill_activation_costs_if_pending()
+			stack.skill_activation_proxy = null
 			_update_hud()
 			return
 

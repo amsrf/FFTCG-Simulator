@@ -45,6 +45,16 @@ const JOLT_KEYS: Array[float] = [0.0, 1.0, 0.35, 0.65, -0.12, 0.0]
 ## A bigger card's jolt plays a little slower, so it reads as heavier.
 const JOLT_STRETCH: Array[float] = [1.0, 1.0, 1.4]
 const DEFAULT_TINT := Color(0.55, 0.87, 0.98)
+const POWER_ENTRY := preload("res://scripts/vfx/power_entry_burst.gd")
+## THE POWER SHAKE (~/Desktop/Clips/entry 45-57, measured by registering a patch of the board in every frame): where
+## the picture is, in 1080p pixels (x right, y down), on each frame from the contact on. Irregular, every frame a new
+## direction, ~20 px at first and ~4 px by the end, 0.2 s in all. Tier 1 plays it at POWER_SHAKE_SCALE[1].
+const POWER_SHAKE_PX: Array[Vector2] = [
+	Vector2(0, 0), Vector2(20, 3), Vector2(-2, -20), Vector2(13, 4), Vector2(1, -16), Vector2(10, -4),
+	Vector2(16, -1), Vector2(-4, -2), Vector2(-13, -5), Vector2(6, 5), Vector2(2, 8), Vector2(-4, 1),
+	Vector2(1, -3), Vector2(0, 0),
+]
+const POWER_SHAKE_SCALE: Array[float] = [0.0, 0.7, 1.0]
 
 var _card: Node3D
 ## Probe hooks: what is on screen right now. "" | "travel" | "hold" | "fill" | "drop" | "landed".
@@ -177,7 +187,10 @@ func play_in(tier: int) -> void:
 		phase = "fill"
 		lines.global_transform = floor_pose
 		_sparks(floor_pose, CONTACT_SPARK_COLOUR, CONTACT_SPARKS[clampi(tier, 0, CONTACT_SPARKS.size() - 1)],
-			0.5, 0.25, true))
+			0.5, 0.25, true)
+		# A STRONG CARD (cost 5+) hits harder: the burst in its colour, the board shaking, its neighbours jumping.
+		if tier >= 1:
+			_power_entry(home, colour, tier))
 	t.tween_method(func(v: float) -> void:
 		mat.set_shader_parameter("fill", v)
 		mat.set_shader_parameter("halo", v)
@@ -198,7 +211,9 @@ func play_in(tier: int) -> void:
 	blueprint = null
 	_card.visible = true
 	_fade_light(lines, mat)
-	jolt(_card, tier)
+	# A strong card's shake started at the contact (power_shake); the others take the small jolt now.
+	if tier < 1:
+		jolt(_card, tier)
 
 ## Timings (seconds). The reference runs this in ~0.6 s at 60 fps; at our play rate that was too fast to read, so each
 ## beat is longer. Static so a probe or demo can set them in one place.
@@ -384,6 +399,58 @@ static func jolt(card: Node3D, tier: int) -> void:
 		var i: int = mini(int(k), JOLT_KEYS.size() - 2)
 		var f: float = JOLT_KEYS[i] + (JOLT_KEYS[i + 1] - JOLT_KEYS[i]) * clampf(k - float(i), 0.0, 1.0)
 		camera.global_position = home + dir * amount * f, 0.0, total, total)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(camera):
+			camera.global_position = home)
+
+func _power_entry(face: Transform3D, colour: Color, tier: int) -> void:
+	if not is_instance_valid(_card) or not _card.is_inside_tree():
+		return
+	var neighbours: Array = []
+	var parent := _card.get_parent()
+	if parent != null and parent.has_method("get_all_cards"):
+		neighbours = parent.call("get_all_cards").filter(func(c): return c != _card)
+	var burst := POWER_ENTRY.new()
+	burst.name = "PowerEntryBurst"
+	_card.get_tree().root.add_child(burst)
+	burst.setup(face, colour, tier, neighbours)
+	power_shake(_card, tier)
+
+
+## The measured shake (POWER_SHAKE_PX), through the same bookkeeping as jolt() so the two never fight over the camera.
+static func power_shake(card: Node3D, tier: int) -> void:
+	if tier < 1 or card == null or not card.is_inside_tree():
+		return
+	var camera := card.get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	if _jolt_tween != null and _jolt_tween.is_valid():
+		_jolt_tween.kill()
+		if is_instance_valid(_jolt_camera):
+			_jolt_camera.global_position = _jolt_home
+	_jolt_camera = camera
+	_jolt_home = camera.global_position
+	var viewport_h: float = maxf(card.get_viewport().get_visible_rect().size.y, 1.0)
+	var depth: float = maxf(-(camera.global_transform.affine_inverse() * card.global_position).z, 0.5)
+	var metres_per_px: float = 2.0 * depth * tan(deg_to_rad(camera.fov) * 0.5) / viewport_h
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		metres_per_px = camera.size / viewport_h
+	var amount: float = POWER_SHAKE_SCALE[clampi(tier, 0, 2)] * (viewport_h / 1080.0) * metres_per_px
+	var right: Vector3 = camera.global_basis.x
+	var up: Vector3 = camera.global_basis.y
+	var frame_seconds: float = 1.0 / FPS
+	var total: float = frame_seconds * float(POWER_SHAKE_PX.size() - 1)
+	var home := _jolt_home
+	var t := card.get_tree().create_tween()
+	_jolt_tween = t
+	t.tween_method(func(seconds: float) -> void:
+		if not is_instance_valid(camera):
+			return
+		var k: float = seconds / frame_seconds
+		var i: int = mini(int(k), POWER_SHAKE_PX.size() - 2)
+		var px: Vector2 = POWER_SHAKE_PX[i].lerp(POWER_SHAKE_PX[i + 1], clampf(k - float(i), 0.0, 1.0))
+		# The PICTURE moves by px, so the camera moves the other way across and the same way vertically.
+		camera.global_position = home + (-right * px.x + up * px.y) * amount, 0.0, total, total)
 	t.tween_callback(func() -> void:
 		if is_instance_valid(camera):
 			camera.global_position = home)

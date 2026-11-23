@@ -186,6 +186,18 @@ func _ready() -> void:
 	await _boot()
 	await _check_player_strike()
 
+	# THE TOSS (death2 frames 56-109): a defeated card flips toward the camera, lands face up, and only then breaks.
+	_game.queue_free()
+	await get_tree().process_frame
+	await _boot()
+	await _check_toss_defeat("toss")
+	# THE POP (death frames 90-127): one flip, a hang at the top, dropped back beside its slot.
+	_game.queue_free()
+	await get_tree().process_frame
+	await _boot()
+	await _check_toss_defeat("pop")
+	_check_defeat_variety()
+
 	print("[Clash] %d checks | failures: %d" % [_checks, _fails])
 	print("[Clash] RESULT: %s" % ("all checks passed" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
@@ -510,3 +522,103 @@ func _check_player_strike() -> void:
 	_expect(_attacker.visible and _attacker.global_transform.is_equal_approx(dull_transform),
 		"the real attacker is shown again, home and dulled")
 	_expect(_cinematics() == 0, "the player strike cleans up after itself")
+
+
+## The toss defeat, forced: the loser climbs toward the camera (bigger on screen), shows its BACK on the way, lands on
+## the wood FACE UP near its slot, and its burst starts only after it has landed. The winner's return home never dips
+## under the wood (a back-ease overshoot once sank it there for a few frames: black slab, no art).
+func _check_toss_defeat(style: String) -> void:
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	var home: Vector3 = _defender.global_position
+	var winner_home_y: float = _attacker.global_position.y
+	CLASH_SCRIPT.next_defeat_style = style
+	var done: Array = [false]
+	var run := func() -> void:
+		await _game.call("_debug_clash", SCENARIO_ATTACKER_WINS, false)
+		done[0] = true
+	run.call()
+	var cinema: Node = null
+	for _i in range(600):
+		cinema = _live_cinematic()
+		if cinema != null and cinema.get("_proxy_b") != null:
+			break
+		await get_tree().process_frame
+	_expect(cinema != null, "the %s clash starts its cinematic" % style)
+	if cinema == null:
+		return
+	var loser: Card = cinema.get("_proxy_b")
+	var winner: Card = cinema.get("_proxy_a")
+	var size_at := func(card: Card) -> float:
+		var depth: float = (card.global_position - camera.global_position).dot(-camera.global_basis.z)
+		return card.global_basis.get_scale().x / maxf(depth, 0.01)
+	var rest_size: float = size_at.call(loser)
+	var biggest: float = rest_size
+	var showed_back := false
+	var winner_low: float = INF
+	var landed_at: Variant = null
+	var landed_up: float = -2.0
+	var burst_before_landing := false
+	var tossed := false
+	# THE LOSER STAYS OVER ITS OWN SIDE (death2: thrown up and back, it lands by its own slot). Every loser was once
+	# thrown "toward the camera", which sent the OPPONENT's card flying over the player's board.
+	var mid_ground: Vector3 = (home + _attacker.global_position) * 0.5
+	var own_side: Vector3 = Vector3(home.x - mid_ground.x, 0.0, home.z - mid_ground.z).normalized()
+	var deepest_cross: float = 0.0
+	for _i in range(900):
+		if done[0]:
+			break
+		if is_instance_valid(winner):
+			winner_low = minf(winner_low, winner.global_position.y)
+		if is_instance_valid(loser) and loser.visible:
+			var state: Dictionary = cinema.get("_defeated").get(loser, {})
+			if state.get("style", "") == style:
+				tossed = true
+				biggest = maxf(biggest, size_at.call(loser))
+				var off: Vector3 = loser.global_position - mid_ground
+				deepest_cross = maxf(deepest_cross, -Vector3(off.x, 0.0, off.z).dot(own_side))
+				var to_cam: Vector3 = (camera.global_position - loser.global_position).normalized()
+				if loser.global_basis.y.normalized().dot(to_cam) < -0.3:
+					showed_back = true
+				if bool(state.get("landed", false)) and landed_at == null:
+					landed_at = loser.global_position
+					landed_up = loser.global_basis.y.normalized().dot(Vector3.UP)
+				if landed_at == null and _shards() > 0:
+					burst_before_landing = true
+		await get_tree().process_frame
+	_expect(tossed, "the forced defeat is the %s" % style)
+	_expect(biggest > rest_size * 1.4, "%s: it climbs toward the camera: %.2fx its resting size on screen" % [style, biggest / rest_size])
+	_expect(showed_back, "it flips over: its BACK faces the camera on the way")
+	_expect(deepest_cross < 0.05, "%s: it never crosses to the WINNER's side of the board (%.2f m past the middle)" % [
+		style, deepest_cross])
+	_expect(landed_at != null and landed_up > 0.95, "it lands FACE UP (up . normal %.2f)" % landed_up)
+	_expect(landed_at != null and absf((landed_at as Vector3).y - home.y) < 0.01
+		and Vector2(landed_at.x - home.x, landed_at.z - home.z).length() < 1.0,
+		"on the wood near its slot (%s vs slot %s)" % [str(landed_at), str(home)])
+	if style == "pop":
+		_expect(landed_at != null and Vector2(landed_at.x - home.x, landed_at.z - home.z).length() < 0.35,
+			"the pop drops back BESIDE its slot (%.2f m off)" % (Vector2(landed_at.x - home.x, landed_at.z - home.z).length()
+				if landed_at != null else 99.0))
+	_expect(not burst_before_landing and _shards() > 0, "and breaks only once it has landed")
+	_expect(winner_low >= winner_home_y - 0.002,
+		"the winner never dips under the wood on its way home (lowest %.3f, slot %.3f)" % [winner_low, winner_home_y])
+
+
+## A death is never the same one twice in a row, and every style in the list comes up.
+func _check_defeat_variety() -> void:
+	var cinema = CLASH_SCRIPT.new()
+	cinema.set("random_seed", 7)
+	var seen: Dictionary = {}
+	var repeats: int = 0
+	var last: String = ""
+	cinema.get("_rng").seed = 7
+	for _i in range(60):
+		var style: String = cinema.call("_pick_defeat_style")
+		if style == last:
+			repeats += 1
+		CLASH_SCRIPT._last_defeat_style = style
+		last = style
+		seen[style] = true
+	cinema.free()
+	CLASH_SCRIPT._last_defeat_style = ""
+	_expect(repeats == 0 and seen.size() == 3,
+		"deaths vary: %d styles over 60 picks, %d back-to-back repeats" % [seen.size(), repeats])

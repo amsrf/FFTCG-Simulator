@@ -225,48 +225,27 @@ func _ready() -> void:
 			_expect(rack.name == "ButtonRack" and nodes[1].get_parent() == rack
 				and nodes[2].get_parent() == rack,
 				"all three buttons hang off the one ButtonRack that owns their shared position")
-		# The buttons have identity rotation, so button-x is world-x and button-z is world-z. Two of
-		# them clear each other if they are apart along x by the WIDTH **or** along z by the face
-		# HEIGHT — a plain distance check would demand a full width even when they are stacked along
-		# the short axis, which is exactly how Confirm and Cancel are arranged.
-		#
-		# The size is ASKED OF THE BUTTON rather than written here: this check exists to catch the plates
-		# overlapping, and a constant here goes stale the moment the model is resized — which is exactly
-		# what happened when the button went from 1.372 to 1.646 m wide.
-		var size: Vector2 = nodes[0].call("face_size") if nodes.size() > 0 else Vector2(1.801, 0.345)
-
-		# THE MAIN SLOT RULE. The pass-phase button reuses Confirm's position exactly, so the layout does
-		# not jump when a modal closes: Cancel's slot is simply left empty. That is a layout contract, so
-		# it is asserted rather than left as a coincidence that two transforms happen to share.
+		# THE BUTTONS ARE DISCS IN BOARD SOCKETS (DiscButton -> DiscSocket). Confirm and Pass share the one large
+		# coin (LocalForward) on purpose, so the layout never jumps when a modal closes; Cancel has its own socket,
+		# and the two wells must not overlap. The radius is ASKED OF THE SOCKET, never written here.
 		if nodes.size() == 3:
-			var confirm_pos: Vector3 = nodes[0].position
-			var cancel_pos: Vector3 = nodes[1].position
-			var pass_pos: Vector3 = nodes[2].position
-			print("[ButtonProbe] Confirm %s | Cancel %s | PassPhase %s"
-				% [str(confirm_pos), str(cancel_pos), str(pass_pos)])
-			_expect(pass_pos.is_equal_approx(confirm_pos),
-				"the pass-phase button sits in Confirm's slot, leaving Cancel's slot empty")
-			_expect(not cancel_pos.is_equal_approx(confirm_pos),
-				"Cancel keeps a slot of its own — it is not stacked on Confirm")
-
-		for i in range(nodes.size()):
-			for j in range(i + 1, nodes.size()):
-				var a: Vector3 = nodes[i].position
-				var c: Vector3 = nodes[j].position
-				var gap_x: float = absf(a.x - c.x) - size.x
-				var gap_z: float = absf(a.z - c.z) - size.y
-				print("[ButtonProbe] %s vs %s: dx %.3f (gap %+.3f) | dz %.3f (gap %+.3f)"
-					% [nodes[i].name, nodes[j].name, absf(a.x - c.x), gap_x, absf(a.z - c.z), gap_z])
-				# Only the Confirm/Cancel pair can be on screen together (a modal shows both), so only
-				# that pair is asserted. Anchoring on the Confirm PREFIX also pairs it with
-				# PassPhaseButton — and those two are deliberately the SAME placement, which the gap
-				# arithmetic reads as a total overlap. Identical positions are skipped: sharing a slot
-				# is the contract asserted above, not an accident to be flagged here.
-				if a.is_equal_approx(c):
-					continue
-				if String(nodes[i].name).begins_with("Confirm"):
-					_expect(gap_x >= 0.0 or gap_z >= 0.0,
-						"%s and %s do not overlap" % [nodes[i].name, nodes[j].name])
+			var sockets: Array[Node3D] = []
+			for btn in nodes:
+				sockets.append(btn.get_node_or_null(btn.get("socket_path")) as Node3D)
+			print("[ButtonProbe] sockets: Confirm %s | Cancel %s | PassPhase %s" % [
+				sockets[0].name if sockets[0] else "-", sockets[1].name if sockets[1] else "-",
+				sockets[2].name if sockets[2] else "-"])
+			_expect(sockets[0] != null and sockets[1] != null and sockets[2] != null,
+				"every match button claims a socket on the board")
+			if sockets[0] != null and sockets[1] != null and sockets[2] != null:
+				_expect(sockets[0] == sockets[2],
+					"the pass-phase button shares Confirm's coin, leaving Cancel's socket on its own")
+				_expect(sockets[1] != sockets[0], "Cancel keeps a socket of its own")
+				var d: float = Vector2(sockets[0].position.x - sockets[1].position.x,
+					sockets[0].position.z - sockets[1].position.z).length()
+				var reach: float = float(sockets[0].get("radius")) + float(sockets[1].get("radius"))
+				print("[ButtonProbe] Confirm/Cancel centres %.3f m apart, radii sum %.3f m" % [d, reach])
+				_expect(d > reach, "the Confirm and Cancel wells do not overlap")
 		g4.free()
 
 	print("[ButtonProbe] ---- materials ----")
@@ -389,78 +368,8 @@ func _ready() -> void:
 				"the top face lands on y = 0 — the contract the text quad is placed against")
 		g7.free()
 
-	# ---- the slide-in ---------------------------------------------------------------------------
-	# A button must not appear out of nowhere: it enters from beyond the right edge of the screen and
-	# eases into its slot. World -x is screen-right for this camera, so "starts to the right" means a
-	# MORE NEGATIVE x. This plays the animation, so it checks the effect itself rather than the
-	# parameters that are supposed to produce it.
-	if game_scene != null:
-		var g9: Node = game_scene.instantiate()
-		add_child(g9)
-		await get_tree().process_frame
-		var b9: Node3D = g9.get_node_or_null("Assistant/ButtonRack/CancelButton")
-		_expect(b9 != null, "the cancel button is reachable for the slide-in check")
-		if b9 != null:
-			var slot: Vector3 = b9.position
-			var duration: float = float(b9.get("slide_in_duration"))
-			# show_button() sets visible, the VISIBILITY notification fires and slide_in() offsets and
-			# turns the button — all synchronously — so the start can be read without waiting a frame.
-			b9.call("show_button")
-			var started_x: float = b9.position.x
-			print("[ButtonProbe] slide-in: starts at x %+.3f (slot %+.3f), turned over: up.y %+.3f (duration %.2f s)"
-				% [started_x, slot.x, b9.global_transform.basis.y.dot(Vector3.UP), duration])
-			_expect(started_x < slot.x - 1.0,
-				"a shown button starts well off to the right of its slot (screen-right is world -x)")
-			# The turn. Tested through the UP VECTOR rather than the Euler angle: what "back face to the
-			# camera" means physically is that the button's own up now points at the board, and that is
-			# also what makes the underside the front-facing surface (rotating a node rotates its
-			# normals with it, so the gem/label side is culled and needs no shader trickery).
-			_expect(b9.global_transform.basis.y.dot(Vector3.UP) < -0.9,
-				"a shown button starts turned over, its back face to the camera")
-			# Drive the tween deterministically rather than sleeping a real 0.5 s. Waiting on frames or
-			# on Engine.time_scale is unreliable in a headless run: headless frame deltas are tiny, so a
-			# scaled timer resolves having advanced the tween almost none of its duration. custom_step
-			# moves it by an exact amount, and the tween must be paused first for that to take effect.
-			var tw: Tween = b9.get("_slide_tween")
-			_expect(tw != null and tw.is_valid(), "showing a button starts a tween to slide it in")
-			if tw != null and tw.is_valid():
-				tw.pause()
-				tw.custom_step(duration + 0.1)
-				print("[ButtonProbe] slide-in: settles at x %+.3f, upright: up.y %+.3f"
-					% [b9.position.x, b9.global_transform.basis.y.dot(Vector3.UP)])
-				_expect(absf(b9.position.x - slot.x) < 0.001 and absf(b9.position.z - slot.z) < 0.001,
-					"and eases back exactly into the slot, so the rack stays the owner of the position")
-				_expect(b9.global_transform.basis.y.dot(Vector3.UP) > 0.99,
-					"and lands face-up: the turn is fully undone, so the content ends up facing the player")
-			# ---- the stagger ------------------------------------------------------------------------
-			# When a modal opens both buttons, the second must start a beat after the first rather than
-			# moving in lockstep. Cancel carries slide_in_delay (0.1, set in game.tscn); Confirm carries
-			# none. Stepped a little way in, Confirm must already be travelling and Cancel must not have
-			# moved at all — checked by distance travelled, so this tests the effect and not the number.
-			var confirm9: Node3D = g9.get_node_or_null("Assistant/ButtonRack/ConfirmButton")
-			if confirm9 != null:
-				var delay: float = float(b9.get("slide_in_delay"))
-				_expect(delay > 0.0, "the second button of the pair carries a start delay")
-				confirm9.call("show_button")
-				b9.call("show_button")
-				var tw_confirm: Tween = confirm9.get("_slide_tween")
-				var tw_cancel: Tween = b9.get("_slide_tween")
-				var confirm_start: float = confirm9.position.x
-				var cancel_start: float = b9.position.x
-				if tw_confirm != null and tw_cancel != null:
-					tw_confirm.pause()
-					tw_cancel.pause()
-					# Half the delay: the first has begun, the second is still inside its interval.
-					tw_confirm.custom_step(delay * 0.5)
-					tw_cancel.custom_step(delay * 0.5)
-					var confirm_moved: float = confirm9.position.x - confirm_start
-					var cancel_moved: float = b9.position.x - cancel_start
-					print("[ButtonProbe] stagger: after %.3f s the first moved %+.3f m, the second %+.3f m"
-						% [delay * 0.5, confirm_moved, cancel_moved])
-					_expect(confirm_moved > 0.2, "the first button is already on its way in")
-					_expect(absf(cancel_moved) < 0.001,
-						"and the second has not started yet — the pair is staggered, not in lockstep")
-		g9.free()
+	# (The slide-in and stagger checks went with the floating GemButton: the match buttons are now discs set into
+	# the board, whose press/flip motion pass_button_probe covers.)
 
 	print("[ButtonProbe] ---- the board's sky must not be black underfoot ----")
 	if game_scene != null:

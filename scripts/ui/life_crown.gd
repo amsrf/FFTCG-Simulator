@@ -3,10 +3,10 @@ extends Node3D
 ## life (FF TCG: 7 damage loses). They BELONG TO THE BOARD: world-space, lit by the scene, fixed on the rocks
 ## in the reserved hand-Backup band (memory: hand-backup-band), each in a hewn basalt collar with an ember seam.
 ##
-## Where: `SOCKET_SETS`, in WORLD coordinates per board seat and edge. The rock heights were sampled from
-## assets/board/board_mesh.bin straight down at each socket and on a 9 cm ring round it: a collar runs from below the
-## LOWEST rock under it to above the HIGHEST, so it never floats and never sinks out of sight. Move a socket or change
-## the board and re-sample. Screen-left is world +x (the board camera looks toward +z), so index 0 is +x.
+## Where: assets/board/layout.json (positions) + board_layout_baked.json (the ground under them, per seat, computed by
+## Blender/build_board.py from the terrain it builds): a collar runs from below the LOWEST ground under it to above the
+## HIGHEST, so it never floats and never sinks out of sight. Screen-left is world +x (the board camera looks toward
+## +z), so index 0 is +x.
 ##
 ## Lean: the board camera looks down at ~67 degrees, so an upright crystal is foreshortened to ~40% of its height.
 ## Leaning the top back TOWARD THE FIELD (+z) by `lean_degrees` turns it toward the view (~74% at 25 degrees).
@@ -32,27 +32,23 @@ const STONE := 0
 const EMBER := 1
 const CRYSTAL := 2
 
-## Sampled sockets, per board seat (the seat-2 board swaps the biomes) and per edge: world x, world z, lowest and
-## highest rock y within 8 cm (from assets/board/board_mesh*.bin, straight down). Listed from world +x to -x.
-## Re-sampled 2026-11-22 after the timber rim (Blender/build_timber_rim.py): the top crystals stand on the forest rail.
-const SOCKET_SETS := {
-	1: {
-		"bottom": [[0.81, -2.205, 0.163, 0.184], [0.54, -2.080, 0.075, 0.142], [0.27, -2.005, 0.030, 0.043],
-			[0.00, -1.980, 0.006, 0.043], [-0.27, -2.005, 0.031, 0.066], [-0.54, -2.080, 0.006, 0.075],
-			[-0.81, -2.205, 0.006, 0.074]],
-		"top": [[0.81, 2.370, 0.065, 0.098], [0.54, 2.320, 0.129, 0.149], [0.27, 2.290, 0.080, 0.122],
-			[0.00, 2.280, 0.065, 0.100], [-0.27, 2.290, 0.065, 0.100], [-0.54, 2.320, 0.062, 0.104],
-			[-0.81, 2.370, 0.064, 0.108]],
-	},
-	2: {
-		"bottom": [[0.81, -2.205, 0.131, 0.224], [0.54, -2.080, 0.105, 0.147], [0.27, -2.005, 0.059, 0.122],
-			[0.00, -1.980, 0.058, 0.061], [-0.27, -2.005, 0.060, 0.123], [-0.54, -2.080, 0.063, 0.129],
-			[-0.81, -2.205, 0.061, 0.073]],
-		"top": [[0.81, 2.370, 0.048, 0.098], [0.54, 2.320, 0.050, 0.104], [0.27, 2.290, 0.049, 0.100],
-			[0.00, 2.280, 0.048, 0.100], [-0.27, 2.290, 0.049, 0.100], [-0.54, 2.320, 0.050, 0.104],
-			[-0.81, 2.370, 0.049, 0.098]],
-	},
-}
+## THE GROUND UNDER EACH CRYSTAL is computed by the board generator (Blender/build_board.py) from the same terrain
+## function that builds the board, per seat (seat 2's board is turned 180 degrees), and written to this file:
+## life_crystal_sockets[seat][edge] = [[x, z, lowest ground y, highest ground y], ...], listed from world +x to -x.
+## The positions themselves come from assets/board/layout.json (life_crystals). Nothing here is copied by hand.
+const BAKED_LAYOUT_PATH := "res://assets/board/board_layout_baked.json"
+
+static func socket_sets() -> Dictionary:
+	var f := FileAccess.open(BAKED_LAYOUT_PATH, FileAccess.READ)
+	if f == null:
+		push_error("LifeCrown: %s missing (run Blender/build_board.py)" % BAKED_LAYOUT_PATH)
+		return {}
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if not (data is Dictionary) or not data.has("life_crystal_sockets"):
+		push_error("LifeCrown: %s has no life_crystal_sockets" % BAKED_LAYOUT_PATH)
+		return {}
+	return data["life_crystal_sockets"]
+
 ## Crystal height and collar radius (m) by distance from the centre (0..3). The TOP edge is ~15% farther from the
 ## camera, so its crystals are sized to come out the SAME on screen (centre ~78 px); they stand on the far edge of the
 ## wood, pulled in toward the field, because past the wood there is only ~50 px before the opponent's hand.
@@ -109,7 +105,12 @@ func setup(p_game, p_side: PlayerSide, p_style: String = "chaos", p_edge: String
 		style = p_style
 		edge = p_edge
 		sockets.clear()
-		var raw: Array = SOCKET_SETS[2 if seat == 2 else 1][edge]
+		var sets: Dictionary = socket_sets()
+		var seat_sets: Dictionary = sets.get(str(2 if seat == 2 else 1), {})
+		var raw: Array = seat_sets.get(edge, [])
+		if raw.size() != 7:
+			push_error("LifeCrown: baked layout has %d sockets for seat %d %s (want 7)" % [raw.size(), seat, edge])
+			return
 		for k in range(raw.size()):
 			var size: Array = SIZES[edge][absi(k - 3)]
 			sockets.append((raw[k] as Array) + size)

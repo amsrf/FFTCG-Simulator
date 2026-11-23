@@ -568,8 +568,15 @@ func _check_clash_presentation(game: Node) -> void:
 	var straight_b: Quaternion = cinema._straight_rotation(defender, original_b.basis.get_rotation_quaternion())
 	var straighten_time: float = 0.0 if straight_a.angle_to(original_a.basis.get_rotation_quaternion()) < 0.001 \
 		and straight_b.angle_to(original_b.basis.get_rotation_quaternion()) < 0.001 else cinema.straighten_seconds
-	await get_tree().create_timer(straighten_time + cinema.lift_seconds + cinema.windup_seconds - 0.10 + 0.02).timeout
+	# THE HOLD IS SHORT now (death2: 6 frames, 0.10 s), so a fixed timer can overshoot it into the charge. Wait for the
+	# wind-up to have FINISHED (the pose is its exact target from then until the charge leaves) and check on that frame.
+	await get_tree().create_timer(straighten_time).timeout
 	var proxy_a: Card = cinema._proxy_a
+	var windup_target := Basis(straight_a) * Basis(Vector3.RIGHT, deg_to_rad(cinema.windup_pitch_degrees))
+	for _f in 240:
+		if proxy_a.basis.orthonormalized().is_equal_approx(windup_target):
+			break
+		await get_tree().process_frame
 	var relative := Basis(straight_a).inverse() * proxy_a.basis.orthonormalized()
 	_expect(relative.is_equal_approx(Basis(Vector3.RIGHT, deg_to_rad(cinema.windup_pitch_degrees))),
 		"wind-up pitches around the STRAIGHT card's own X axis, with no turn toward the other card")
@@ -580,6 +587,16 @@ func _check_clash_presentation(game: Node) -> void:
 	away.y = 0.0
 	_expect((proxy_a.global_position - original_a.origin).dot(away.normalized()) > cinema.windup_distance * 0.8,
 		"wind-up draws the card backward before the impact")
+	# The proxy's wood shadow FOLLOWS it (it once froze on the home slot: the proxy is PROCESS_MODE_DISABLED, and the
+	# shadow is its child) and lands further away the higher the card is: the height cue.
+	var shadow: Node3D = proxy_a.field_shadow
+	if shadow != null and is_instance_valid(shadow):
+		var fall: Vector3 = shadow.global_position - proxy_a.global_position
+		fall.y = 0.0
+		_expect(fall.length() > 0.08 and fall.length() < 0.6 and shadow.is_visible_in_tree(),
+			"the lifted proxy's shadow follows it, offset by its height (%.2f m)" % fall.length())
+	else:
+		_expect(false, "the clash proxy has a wood shadow")
 	await get_tree().create_timer(cinema.windup_hold_seconds + cinema.charge_seconds + cinema.hitstop_seconds + 0.02).timeout
 	var defeated_proxy: Card = cinema._proxy_b
 	var tumble_start := defeated_proxy.global_transform

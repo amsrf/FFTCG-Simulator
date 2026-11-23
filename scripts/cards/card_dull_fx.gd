@@ -1,8 +1,8 @@
 extends RefCounted
 ## How a card SHOWS being dull, on top of the small tap tilt. Pure presentation; the rules state is `Card.tapped`.
 ##
-##   * DIM: card.gdshader's `dull_amount` greys and darkens the art while a NON-FORWARD is dull (tweened with the tap);
-##     a dull Forward keeps its colour and only tilts.
+##   * DIM: card.gdshader's `dull_amount` can grey and darken the art while a card is dull (tweened with the tap). It is
+##     OFF for every card now (`_greys()`): a dull card keeps its colour and only tilts.
 ##   * REFRESH: untapping in the Active Phase sweeps a soft light band across the art as its colour returns
 ##     (`refresh_sweep`), staggered card by card by Field.untap_cards_for().
 ##
@@ -21,10 +21,10 @@ var sweep: float = 0.0
 func _init(card: Node3D) -> void:
 	_card = card
 
-## FORWARDS KEEP THEIR COLOUR: a dull Forward is only tilted. The grey is for Backups (and anything else that dulls),
-## the cards whose art says "spent this turn" most usefully.
+## No card greys out when dulled any more (the user's call, 2026-11-21): the tilt alone says "dull". The dim stays wired
+## (dull_amount) should a look come back.
 func _greys() -> bool:
-	return str(_card.get("type")) != "Forward"
+	return false
 
 ## Ease the dim in (true) or out (false), after `delay` seconds.
 func set_dull(on: bool, delay: float = 0.0) -> void:

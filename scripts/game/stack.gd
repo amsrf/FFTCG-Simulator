@@ -84,9 +84,21 @@ var s_cost_selected_card: Card = null
 var pending_cost_sacrifices: Array[Card] = []
 var pending_cost_discards: Array[Card] = []
 
-## True while `card` is already committed to pay another cost of the activation in progress.
+## True while `card` is already committed to pay another cost of the activation in progress - including the SOURCE
+## whose 《Dull》 is part of the cost: it is dulled only at commit, so until then it must not also produce the mana
+## (Red Mage paying its own 《1》).
 func is_reserved_for_cost(card: Card) -> bool:
-	return card == s_cost_selected_card or pending_cost_sacrifices.has(card) or pending_cost_discards.has(card)
+	return card == s_cost_selected_card or pending_cost_sacrifices.has(card) or pending_cost_discards.has(card) \
+		or card == _pending_dull_source()
+
+func _pending_dull_source() -> Card:
+	if not skill_mana_deferred_until_target_confirm or skill_activation_proxy == null \
+			or not is_instance_valid(skill_activation_proxy):
+		return null
+	if not bool(skill_activation_proxy.skill_def_override.get("tap", false)):
+		return null
+	var source = skill_activation_proxy.effect_source
+	return source if source is Card and is_instance_valid(source) else null
 @onready var field: Field = game.get_node("Field") as Field
 @onready var hand: Hand = game.get_node("Player/Hand") as Hand
 @onready var assistant: Assistant = game.get_node("Assistant") as Assistant
@@ -170,6 +182,11 @@ func stack_length() -> int:
 ## AN EFFECT OF A CARD ON THE FIELD COMES OUT OF THAT CARD (_fly_from_source): it appears over the source, small,
 ## upright and facing the camera, and travels to its stack slot, turning into the stack pose and growing as it goes.
 @export_range(0.15, 1.5, 0.01) var source_flight_seconds: float = 0.45
+## How long a blinking source stays up and lit at the top before it settles (triggers and committed abilities alike).
+@export_range(0.0, 1.5, 0.01) var blink_hold_seconds: float = 0.3
+## The pause after a source has blinked (and, for an ability, dulled) before its card leaves for the stack. Shared by
+## committed abilities and triggers.
+@export_range(0.0, 1.0, 0.01) var blink_to_flight_seconds: float = 0.2
 ## The effect card's size where it appears, as a fraction of its size on the stack.
 @export_range(0.1, 1.0, 0.01) var source_flight_start_scale: float = 0.35
 ## How far in front of the source (toward the camera, metres) it appears, so the source does not cut through it.
@@ -185,7 +202,7 @@ func _refresh_stack_pose() -> void:
 
 ## Shallow arc and per-card tilt, mirroring the hand: a plain row collapsed into one unreadable
 ## overlap as soon as a third card arrived.
-const STACK_HOVER_SCALE := 1.4
+const STACK_HOVER_SCALE := 1.15  # on top of STACK_CARD_SCALE 2.7 (was 1.4 on 1.35); 1.4 would cover half the screen
 ## Height between neighbours, so the card in front is visibly in front.
 const FAN_HEIGHT_STEP := 0.016
 ## A selected card lifts within its slot so every newer card remains higher.
@@ -314,11 +331,13 @@ func update_card_positions(previous_hover: Card = null, hover_changed := false):
 				slot = to_local(world_slot + toward_camera * lift)
 		var hover_transition: bool = hover_changed and (card == previous_hover or card == hovered_card)
 		animate_card(card, slot, hover_transition)
+		_apply_chain_visibility(card, card.get("stack_tween"))
 
 	# The stack just changed, so what is on display may have too: the default display is the TOP
 	# of the stack, and after an add or a resolve that is a different card.
 	refresh_target_display()
 	refresh_top_aura()
+	_refresh_chain_numbers()
 	_shadow_track_seconds = 0.35
 	_update_stack_shadows()
 
@@ -338,14 +357,147 @@ func _update_stack_shadows() -> void:
 		settled.append(hovered_card)
 	preload("res://scripts/cards/card_overlap_shadow.gd").update(self, settled)
 
-## THE TOP SLOT IS FIXED (the newest card always lands in the same place), but not at the Stack node's origin: the fan
-## grows from the top card towards the bottom right, where the screen edge and the pass button are. Its length stops
-## growing at four cards (the spacing tightens with the count), at about (0.25, 0, 0.29) here, so the top slot sits half
-## of that up and to the left, and the longest fan fits around the stack's spot instead of running off the screen.
-const FAN_ANCHOR := Vector3(-0.123, 0.0, -0.144)
+## THE TOP SLOT (reference: ~/Desktop/Clips/damage 124-151, where the played card ends held up at the board's right edge,
+## just above the river). A new top card PUSHES the older ones to the RIGHT (FAN_DIRECTION +1): they peek out from
+## under its right edge. The board edge is right there, so the top slot starts at FAN_ANCHOR and slides LEFT only by
+## as much of the fan as does not fit in FAN_FREE_ROOM (card widths of fan the right edge can take), keeping the
+## longest fan on the wood. `_stack_spacing()` caps the fan at ~1.15 card widths however many cards there are.
+const FAN_ANCHOR := Vector3(0.0, 0.0, -0.075)
+## +1 = older cards peek out to the screen RIGHT of the newer one, -1 = to its LEFT.
+const FAN_DIRECTION := 1.0
+## How much fan (in card widths) fits right of a lone top card before the top slot has to move left.
+const FAN_FREE_ROOM := 0.1
+
+## Where the newest card sits for `count` cards on the stack: FAN_ANCHOR, moved against the fan direction by the part
+## of the fan that would otherwise leave the wood.
+func top_slot(count: int, pose: Basis) -> Vector3:
+	var fan_length: float = maxi(0, count - 1) * _stack_spacing(count)
+	var overflow: float = maxf(0.0, fan_length - FAN_FREE_ROOM * card_width)
+	return FAN_ANCHOR - pose.x * FAN_DIRECTION * overflow
 
 func calculate_card_position(i: int) -> Vector3:
+	if CHAIN_LAYOUT:
+		return _chain_position(i)
 	return _fan_position(i)
+
+## DRAFT (2026-11-21): THE STACK AS A CHAIN, after Master Duel. The local player's cards stand at the LEFT edge of the
+## screen, the opponent's at the RIGHT, so the middle of the board stays clear. Every card has its OWN height, by its
+## place in the whole chain (not in its side's column): the newest stands at CHAIN_Y (river height) and each older card,
+## whichever side it is on, steps UP the screen, BACK from the camera and smaller. Only the newest CHAIN_VISIBLE cards are
+## shown; older ones slide up out of the column and are hidden until the chain shrinks (browse arrows: later).
+## Every card wears its chain number (1 = first on the stack, resolves last) just outside its outer edge, level with its
+## header. The left side's yaw is the right side's mirrored (`_stack_card_local_basis`). Off = the single fan (`_fan_position`).
+const CHAIN_LAYOUT := true
+## How many of the newest chain links are on screen.
+const CHAIN_VISIBLE := 3
+## Card centre from the screen centre, as a fraction of the viewport width (0.365 -> x 259 / 1661 at 1920).
+const CHAIN_SIDE_X := 0.365
+## The newest card's centre, as a fraction of the viewport height.
+const CHAIN_Y := 0.45
+## Per chain link back from the newest: up the screen (fraction of height), outward (fraction of width), back from the
+## camera (metres), and its size relative to the link above it.
+const CHAIN_STEP_UP := 0.13
+const CHAIN_STEP_OUT := 0.0
+const CHAIN_STEP_BACK := 0.5
+const CHAIN_SHRINK := 0.88
+## Meta set on a stack card the chain has hidden (older than CHAIN_VISIBLE); Card.enter_zone() shows it again.
+const CHAIN_HIDDEN_META := &"chain_hidden"
+
+## -1 for the local player's side (left), +1 for the opponent's (right).
+func chain_side(card) -> float:
+	return -1.0 if card != null and card.get("controller") == Card.PLAYER else 1.0
+
+## How many cards in the whole chain are newer than `card` (0 = the newest), whichever side they are on.
+func chain_rank(card) -> int:
+	var list := layout_cards()
+	var index := list.find(card)
+	if index < 0:
+		return 0
+	return list.size() - 1 - index
+
+func chain_shown(card) -> bool:
+	return not CHAIN_LAYOUT or chain_rank(card) < CHAIN_VISIBLE
+
+## The size of a stack card relative to STACK_CARD_SCALE: 1 for the newest link.
+func chain_scale(card) -> float:
+	if not CHAIN_LAYOUT:
+		return 1.0
+	return pow(CHAIN_SHRINK, mini(chain_rank(card), CHAIN_VISIBLE))
+
+func _chain_position(i: int) -> Vector3:
+	var list := layout_cards()
+	if i < 0 or i >= list.size():
+		return FAN_ANCHOR
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return FAN_ANCHOR
+	var card = list[i]
+	var side := chain_side(card)
+	# A hidden link waits one step past the last shown one: it slides up and back out of the column, and back in.
+	var rank: int = mini(chain_rank(card), CHAIN_VISIBLE)
+	var size := get_viewport().get_visible_rect().size
+	var screen := Vector2(size.x * (0.5 + side * (CHAIN_SIDE_X + rank * CHAIN_STEP_OUT)),
+		size.y * (CHAIN_Y - rank * CHAIN_STEP_UP))
+	# Depth of the old anchor, so the newest card sits as far from the lens as the tuned single card did.
+	var base_depth: float = (to_global(FAN_ANCHOR) - camera.global_position).dot(-camera.global_basis.z)
+	return to_local(camera.project_position(screen, base_depth + rank * CHAIN_STEP_BACK))
+
+## Shows the newest CHAIN_VISIBLE links; an older one hides once its tween has carried it out of the column.
+func _apply_chain_visibility(card, tween: Tween) -> void:
+	if not CHAIN_LAYOUT or not is_instance_valid(card):
+		return
+	if chain_shown(card):
+		if card.has_meta(CHAIN_HIDDEN_META):
+			card.remove_meta(CHAIN_HIDDEN_META)
+			card.visible = true
+		return
+	if card.has_meta(CHAIN_HIDDEN_META) and not card.visible:
+		return
+	# Re-attached on EVERY layout pass while it is still drawn: a newer layout tween (another link arriving, a hover)
+	# kills the one that carried the previous hide callback, and returning early here left the link on screen forever.
+	card.set_meta(CHAIN_HIDDEN_META, true)
+	if tween != null and tween.is_valid():
+		tween.chain().tween_callback(func():
+			if is_instance_valid(card) and card.has_meta(CHAIN_HIDDEN_META):
+				card.visible = false)
+	else:
+		card.visible = false
+
+const CHAIN_NUMBER_NAME := "ChainNumber"
+
+## The chain number beside a stack card's header, on its outer side. Card.enter_zone() frees it when the card leaves the stack.
+func _refresh_chain_numbers() -> void:
+	var list := layout_cards()
+	for index in range(list.size()):
+		var card = list[index]
+		if not is_instance_valid(card):
+			continue
+		var label: Label3D = card.get_node_or_null(CHAIN_NUMBER_NAME)
+		if not CHAIN_LAYOUT:
+			if label != null:
+				label.queue_free()
+			continue
+		if label == null:
+			label = Label3D.new()
+			label.name = CHAIN_NUMBER_NAME
+			label.font_size = 160
+			label.outline_size = 36
+			label.pixel_size = 0.0012
+			label.modulate = Color(0.86, 0.98, 1.0)
+			label.outline_modulate = Color(0.02, 0.18, 0.28)
+			label.render_priority = 20
+			label.outline_render_priority = 19
+			label.double_sided = false
+			# Label3D draws in its XY plane facing +Z; the card face is its XZ plane facing +Y, top at -Z.
+			label.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+			card.add_child(label)
+		label.text = str(index + 1)
+		var face: Vector2 = card._card_face_size()
+		var outer := chain_side(card)
+		# Just OUTSIDE the card's outer edge, level with its header: an older card's header is the part a newer card
+		# leaves showing, so its number stays readable. Aligned so the digits grow outward, away from the card.
+		label.position = Vector3(outer * (face.x * 0.5 + 0.015), 0.012, -face.y * 0.5 + 0.07)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if outer > 0.0 else HORIZONTAL_ALIGNMENT_RIGHT
 
 func _fan_position(i: int) -> Vector3:
 	var list := layout_cards()
@@ -355,31 +507,35 @@ func _fan_position(i: int) -> Vector3:
 	var pose := _stack_card_local_basis(list[top])
 	var spacing := _stack_spacing(list.size())
 	var fraction: float = spacing / card_width
-	var half_width: Vector3 = pose.x * card_width * 0.5
 	var camera := get_viewport().get_camera_3d()
-	var center := FAN_ANCHOR
-	# The anchor's sideways part is carried by `center` (the search below works along pose.x from it); the rest is
+	var slot := top_slot(list.size(), pose)
+	var center := slot
+	# The slot's sideways part is carried by `center` (the search below works along pose.x from it); the rest is
 	# added to each layer.
-	var anchor_off_axis := FAN_ANCHOR - pose.x * FAN_ANCHOR.dot(pose.x)
+	var anchor_off_axis := slot - pose.x * slot.dot(pose.x)
 	for index in range(top - 1, i - 1, -1):
-		var layer := anchor_off_axis - pose.y * ((top - index) * FAN_HEIGHT_STEP) + pose.z * ((top - index) * spacing * 0.85)
-		var sideways := center.dot(pose.x) + spacing
+		var layer := anchor_off_axis - pose.y * ((top - index) * FAN_HEIGHT_STEP) + pose.z * ((top - index) * spacing * 0.25)
+		# `along` is the card's axis pointing the way the fan grows, so the search below is written once for both sides.
+		var along: Vector3 = pose.x * FAN_DIRECTION
+		var sideways := center.dot(along) + spacing
 		if camera != null:
-			var covering_edge := camera.unproject_position(to_global(center + half_width)).x
-			var low: float = center.dot(pose.x) - card_width * 2.0
-			var high: float = center.dot(pose.x) + card_width * 3.0
+			# Screen x grows to the right; a left-growing fan (FAN_DIRECTION -1) measures in mirrored units (-x).
+			var sx := func(p: Vector3) -> float: return camera.unproject_position(to_global(p)).x * FAN_DIRECTION
+			var covering_edge: float = sx.call(center + along * card_width * 0.5)
+			var low: float = center.dot(along) - card_width * 2.0
+			var high: float = center.dot(along) + card_width * 3.0
 			# Solve the exposed fraction in camera space with the newest card fixed.
 			for iteration in range(24):
 				sideways = (low + high) * 0.5
-				var candidate := layer + pose.x * sideways
-				var left := camera.unproject_position(to_global(candidate - half_width)).x
-				var right := camera.unproject_position(to_global(candidate + half_width)).x
-				var exposed := (right - covering_edge) / (right - left)
+				var candidate := layer + along * sideways
+				var near_edge: float = sx.call(candidate - along * card_width * 0.5)
+				var far_edge: float = sx.call(candidate + along * card_width * 0.5)
+				var exposed := (far_edge - covering_edge) / (far_edge - near_edge)
 				if exposed < fraction:
 					low = sideways
 				else:
 					high = sideways
-		center = layer + pose.x * sideways
+		center = layer + along * sideways
 	return center
 
 func animate_card(card, target_position, hover_transition := false):
@@ -389,7 +545,7 @@ func animate_card(card, target_position, hover_transition := false):
 	if card.has_method("stop_stack_layout"):
 		card.stop_stack_layout()
 	var pose := _stack_card_local_basis(card)
-	var size := Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE
+	var size := Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE * chain_scale(card)
 	var camera := get_viewport().get_camera_3d()
 	if card == hovered_card and camera != null:
 		var screen := camera.global_basis.orthonormalized()
@@ -411,20 +567,22 @@ func animate_card(card, target_position, hover_transition := false):
 
 ## The local orientation of a stack card, from the tuned Stack Rotation exports. One owner, so
 ## the opponent flight can land on EXACTLY the pose the layout uses instead of a lookalike.
-func _stack_card_local_basis(_card, yaw_roll_weight: float = 1.0) -> Basis:
+func _stack_card_local_basis(card, yaw_roll_weight: float = 1.0) -> Basis:
 	# THE CARD IS HELD UP AND ANGLED, NOT SQUARE TO THE CAMERA. Start from the local pitch/roll,
 	# then rotate the whole thing around the CAMERA'S UP AXIS. That last rotation is the one that
 	# moves the card's left edge into the screen and its right edge out (or the reverse); the local
 	# Euler angles alone only spin it inside its own plane, which is why it read as flat.
+	# The chain's LEFT column (the local player's) is the right column's mirror image: every yaw/roll flips sign.
+	var mirror: float = chain_side(card) if CHAIN_LAYOUT else 1.0
 	var target_basis := Basis.from_euler(Vector3(
 		deg_to_rad(stack_pitch_degrees),
-		deg_to_rad(stack_local_yaw_degrees) * yaw_roll_weight,
-		deg_to_rad(stack_roll_degrees) * yaw_roll_weight))
+		deg_to_rad(stack_local_yaw_degrees) * yaw_roll_weight * mirror,
+		deg_to_rad(stack_roll_degrees) * yaw_roll_weight * mirror))
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	if cam != null:
 		var parent_basis: Basis = global_transform.basis.orthonormalized()
 		var cam_up_local: Vector3 = (parent_basis.inverse() * cam.global_transform.basis.y).normalized()
-		target_basis = Basis(cam_up_local, deg_to_rad(stack_screen_yaw_degrees) * yaw_roll_weight) * target_basis
+		target_basis = Basis(cam_up_local, deg_to_rad(stack_screen_yaw_degrees) * yaw_roll_weight * mirror) * target_basis
 	return target_basis
 	
 
@@ -676,13 +834,14 @@ func create_skill_proxy(source: Card, skill_index: int, definition: Dictionary, 
 	proxy.effect_source = source
 	proxy.effect_kind = "Ability"
 	add_created_card_to_tree(proxy, preload("res://scripts/effects/ability_spec.gd").stack_wording(proxy.skill_def_override))
-	# WHO SEES IT, AND WHEN. The activating player's card comes out of the source now and waits on the stack while they
-	# pay. An opponent's stays hidden until it is paid for (commit_skill_activation_costs_if_pending), then flies.
+	# NOTHING GOES ON THE STACK UNTIL IT IS PAID FOR. The proxy exists for the rules (costs, targets) but stays hidden
+	# and off the layout for EVERYONE until commit_skill_activation_costs_if_pending() flies it out of the source. While
+	# the local player pays, the source card itself stands raised and lit: that is what they are paying for
+	# (card_activation_fx.gd). An opponent's source does not move until their play is committed.
+	proxy.visible = false
+	_hidden_activations.append(proxy)
 	if _is_local_play(source):
-		_present_source_entry(proxy, _source_point(source))   # not awaited, and not queued: it answers the click
-	else:
-		proxy.visible = false
-		_hidden_activations.append(proxy)
+		source.activation_fx.raise()
 	update_card_positions()
 	return proxy
 
@@ -699,7 +858,9 @@ func _apply_skill_source_tap_from_proxy() -> void:
 	if def.is_empty():
 		return
 	if def.get("tap", false):
-		src.tap()
+		# The rules dull it NOW; a source on the field shows the turn only after it has settled and blinked
+		# (_present_activation_entry calls present_tap()).
+		src.tap(_source_point(src) == Vector3.INF or PRESENTATION.fast_mode)
 
 ## Skill stack commit: activation is legally complete (costs paid, target on proxy if required).
 ## Resolution (execute instructions) happens later in resolve_top_effect -> game._on_stack_execute_card_effect.
@@ -766,18 +927,15 @@ func commit_skill_activation_costs_if_pending() -> void:
 		# Kept off the layout until its flight starts, exactly like a queued trigger card.
 		_incoming_triggers.append(reveal)
 		update_card_positions()
-		Vfx.present(_present_source_entry.bind(reveal, reveal_from))
+		Vfx.present(_present_activation_entry.bind(reveal, reveal_from, reveal.effect_source))
 	# THE ACTIVATION IS THE ACTION: everything is paid and it sits on the stack, so priority moves on.
 	skill_activation_committed.emit(skill_activation_proxy)
 	game.note_action_taken()
 
 func _clear_skill_proxy() -> void:
-	# WAS THIS ACTIVATION STILL PENDING? If so its cost never committed, and the tap that
-	# begin_skill_activation() applied has to be refunded — otherwise a cancelled ability leaves the card tapped and
-	# silently spent for the rest of the turn.
-	#
-	# `skill_mana_deferred_until_target_confirm` is exactly that flag: set when the proxy is created, cleared by
-	# commit_skill_activation_costs_if_pending(). So it is still true here only when the player backed out.
+	# WAS THIS ACTIVATION STILL PENDING? `skill_mana_deferred_until_target_confirm` is set when the proxy is created and
+	# cleared by commit_skill_activation_costs_if_pending(), so it is still true here only when the player backed out.
+	# Nothing was spent (the 《Dull》 too is paid only at commit); the raised source just settles.
 	var was_pending: bool = skill_mana_deferred_until_target_confirm
 	s_cost_active = false
 	s_cost_source = null
@@ -795,8 +953,8 @@ func _clear_skill_proxy() -> void:
 	game.clear_damage_division()
 	if was_pending:
 		var src: Card = p.effect_source
-		if src != null and is_instance_valid(src) and src.tapped:
-			src.untap()
+		if src != null and is_instance_valid(src):
+			src.activation_fx.lower()   # backed out: the raised source settles, no flash
 	cards.erase(p)
 	_hidden_activations.erase(p)
 	_drop_incoming(p)
@@ -881,7 +1039,12 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 	# local +X (screen right). Keeping the angle signed fixes the flip direction.
 	var launch_pose := _stack_card_local_basis(card, 0.0)
 	card.quaternion = (launch_pose * Basis(Vector3.RIGHT, PI)).get_rotation_quaternion()
-	card.scale = Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)
+	# IT LEAVES THE HAND AT HAND SIZE and grows into the stack card on the way to the centre (~/Desktop/Clips/damage
+	# 124-133). Starting at the stack size popped a card twice the hand's size out of the hand once STACK_CARD_SCALE
+	# became 2.7. `start` is the card's world pose in the hand; Stack-local scale = world / the Stack's own scale.
+	var start_scale: float = start.basis.get_scale().x / global_basis.get_scale().x
+	var full_scale: float = Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE
+	card.scale = Vector3.ONE * start_scale
 	card.global_position = opponent_flight_path.to_global(flight_curve.get_point_position(0))
 	var flight := create_tween()
 	_end_flight_with_card(card, flight)
@@ -910,6 +1073,8 @@ func _fly_opponent_summon(card: Card, start: Transform3D, entrance_curve: Curve3
 			remaining_pitch = lerpf(PI * 0.5, 0.0, settle)
 		var stack_pose := _stack_card_local_basis(card, smoothstep(0.0, 1.0, p))
 		card.quaternion = (stack_pose * Basis(Vector3.RIGHT, remaining_pitch)).get_rotation_quaternion()
+		var grow: float = smoothstep(0.0, 1.0, minf(1.0, p / OPPONENT_CENTER_TIME))
+		card.scale = Vector3.ONE * lerpf(start_scale, full_scale * chain_scale(card), grow)
 		card.global_position = opponent_flight_path.to_global(flight_curve.samplef(segment))
 	, 0.0, 1.0, opponent_flight_seconds)
 	# Presentation only: nothing in the rules awaits this flight (the cast commits at once).
@@ -955,6 +1120,8 @@ func _queue_local_summon(card: Card) -> void:
 
 ## LOCAL SUMMON, PRESENTATION half (queued): fade the printed card where it is, then fly the stack card in.
 func _present_local_summon(printed: Card, effect_card: Card) -> void:
+	# The size the player was holding it at: the stack card launches at that size and grows into the stack's.
+	var held_scale: float = printed.global_basis.get_scale().x if is_instance_valid(printed) else -1.0
 	if is_instance_valid(printed):
 		await printed.teleport.play_out(0.08, 0.20).finished
 		if is_instance_valid(printed):
@@ -969,7 +1136,7 @@ func _present_local_summon(printed: Card, effect_card: Card) -> void:
 		var launch := effect_card.global_transform
 		launch.origin = hit if hit != null else camera.project_ray_origin(pixel) + camera.project_ray_normal(pixel) * 6.0
 		effect_card.visible = true
-		await _fly_local_summon_translation(effect_card, launch.origin)
+		await _fly_local_summon_translation(effect_card, launch.origin, true, held_scale)
 	_local_summon_presentation = null
 	update_card_positions()
 	local_summon_landed.emit()
@@ -979,12 +1146,16 @@ func local_summon_flight_seconds() -> float:
 	return 50.0 / 60.0
 
 ## `shared`: as for _fly_opponent_summon — a triggered ability's flight passes false.
-func _fly_local_summon_translation(card: Card, launch: Vector3, shared: bool = true) -> void:
+## `start_world_scale` > 0: launch at that WORLD size and grow to the stack size by the apex (a Summon leaves the hand
+## at the size it was held; starting at STACK_CARD_SCALE 2.7 made a huge card rise over the Backups). Triggers omit it.
+func _fly_local_summon_translation(card: Card, launch: Vector3, shared: bool = true, start_world_scale: float = -1.0) -> void:
 	if shared:
 		_stop_opponent_summon_flight()
 	card.stop_stack_layout()
 	card.set_revealed(true)
-	card.basis = _stack_card_local_basis(card).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE))
+	var full_scale: float = Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE
+	var launch_scale: float = start_world_scale / global_basis.get_scale().x if start_world_scale > 0.0 else full_scale
+	card.basis = _stack_card_local_basis(card).scaled(Vector3.ONE * launch_scale)
 	var camera := get_viewport().get_camera_3d()
 	var screen_start := camera.unproject_position(launch)
 	var screen_height := get_viewport().get_visible_rect().size.y
@@ -1039,13 +1210,19 @@ func _fly_local_summon_translation(card: Card, launch: Vector3, shared: bool = t
 		var base := Basis(facing.get_rotation_quaternion().slerp(final_pose.get_rotation_quaternion(), settling))
 		# Local Y turns the artwork upside down in its own plane; local Z
 		# brings the back through edge-on to the front. No animated X turn.
-		var y_turn := turn * (1.0 - smoothstep(0.0, 0.30, rotation_descent))
-		var z_turn := turn
+		# The turns were authored for a stack on the RIGHT of the screen. The local player's chain column is on the
+		# LEFT, so their sense flips with the column (as _stack_card_local_basis mirrors the resting pose); unmirrored,
+		# the card rolled against its own travel and wrenched through a distorted flip to reach the mirrored pose.
+		var mirror: float = chain_side(card) if CHAIN_LAYOUT else 1.0
+		var y_turn := turn * (1.0 - smoothstep(0.0, 0.30, rotation_descent)) * mirror
+		var z_turn := turn * mirror
 		# The reference stays foreshortened after the reveal: its upper edge
 		# recedes in depth before the card opens fully. This is a small depth
 		# tilt, not the earlier full X-axis flip.
 		var depth_tilt := deg_to_rad(40.0) * rotation_descent * rotation_descent * pow(1.0 - rotation_descent, 8.0) / (0.04 * pow(0.8, 8.0))
-		card.basis = (base * Basis(Vector3.UP, y_turn) * Basis(Vector3.BACK, z_turn) * Basis(Vector3.RIGHT, depth_tilt)).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE))
+		var size: float = lerpf(launch_scale, full_scale * chain_scale(card), smoothstep(0.0, peak_t, t)) \
+			if launch_scale != full_scale else full_scale
+		card.basis = (base * Basis(Vector3.UP, y_turn) * Basis(Vector3.BACK, z_turn) * Basis(Vector3.RIGHT, depth_tilt)).scaled(Vector3.ONE * size)
 		var screen := screen_start.lerp(camera.unproject_position(destination), t)
 		screen.y -= screen_height * 0.24 * 4.0 * t * (1.0 - t)
 		var plane := Plane(Vector3.UP, lerpf(launch.y, destination.y, t))
@@ -1078,6 +1255,11 @@ func _clear_local_flight_from_stack(card: Card, camera: Camera3D) -> void:
 		# Only SETTLED cards. Another card still flying (a staggered trigger group) is itself being lifted above the
 		# rest: measuring against it makes the two leapfrog each other toward the camera every frame, off the screen.
 		if _incoming_triggers.has(other) or other == _local_summon_presentation or other == _opponent_summon_flight_card:
+			continue
+		# THE CHAIN: only links in THIS card's column that are drawn can be flown through. Measuring the other column
+		# (or a hidden link) pushed the card ~1.45x its size toward the camera for the whole descent, and it shrank
+		# back the moment it landed.
+		if CHAIN_LAYOUT and (chain_side(other) != chain_side(card) or not other.visible):
 			continue
 		ceiling = maxf(ceiling, _card_face_depth_range(other, normal).y)
 	if ceiling == -INF:
@@ -1195,6 +1377,7 @@ func _present_trigger_batch() -> void:
 			group.append(card)
 	_trigger_batch.clear()
 	_trigger_batch_posted = false
+	await _flash_trigger_sources(group)
 	for i in range(group.size()):
 		if i > 0:
 			await PRESENTATION.wait(get_tree().create_timer(trigger_stagger_seconds))
@@ -1269,6 +1452,51 @@ func _drop_incoming(card) -> void:
 		if not is_instance_valid(_incoming_triggers[i]) or _incoming_triggers[i] == card:
 			_incoming_triggers.remove_at(i)
 
+## A COMMITTED ABILITY LEAVES ITS SOURCE, in beats: the raised source SETTLES back into its slot, BLINKS (the ordinary
+## flash every trigger gets) and settles again, turns DULL if the 《Dull》 was part of the cost (the rules dulled it at
+## commit; Card.present_tap()), and after `blink_to_flight_seconds` its card flies out to the stack. An opponent's
+## source was never raised, so it only blinks and dulls. A source no longer on the field (a cost returned or
+## sacrificed it) skips all that; the card still leaves where the source was.
+func _present_activation_entry(card, from: Vector3, source) -> void:   # untyped: either may be gone by now
+	if not (source is Card and is_instance_valid(source)):
+		await _present_source_entry(card, from)
+		return
+	var src: Card = source
+	if _source_point(src) == Vector3.INF:
+		src.activation_fx.normalize()
+		src.present_tap()
+		await _present_source_entry(card, from)
+		return
+	if src.activation_fx.lift_amount() > 0.0:
+		src.activation_fx.lower()
+		await src.activation_fx.wait_idle()
+	await src.activation_fx.flash(blink_hold_seconds)
+	await src.activation_fx.wait_idle()
+	if not is_instance_valid(src):
+		await _present_source_entry(card, from)
+		return
+	src.present_tap()
+	await PRESENTATION.wait(get_tree().create_timer(blink_to_flight_seconds))
+	await _present_source_entry(card, _source_point(src) if is_instance_valid(src) else from)
+
+## Blink every distinct field source in `group` ONCE, together, and return once the blink is OVER and
+## `blink_to_flight_seconds` have passed - the same beat as a committed ability (_present_activation_entry): several
+## triggers of one card (Gadot) share one blink, and several cards triggering off the same event blink at the same time.
+func _flash_trigger_sources(group: Array[Card]) -> void:
+	var sources: Array[Card] = []
+	for card in group:
+		var source = card.effect_source if is_instance_valid(card) else null
+		if source is Card and is_instance_valid(source) and not sources.has(source) and _source_point(source) != Vector3.INF:
+			sources.append(source)
+	if sources.is_empty() or PRESENTATION.fast_mode:
+		return
+	for source in sources:
+		source.activation_fx.flash(blink_hold_seconds)   # not awaited: they blink together
+	for source in sources:
+		if is_instance_valid(source):
+			await source.activation_fx.wait_idle()
+	await PRESENTATION.wait(get_tree().create_timer(blink_to_flight_seconds))
+
 ## An ability's card comes out of its source `from` (see _fly_from_source) and settles into the fan. With no source on
 ## the field, in fast mode or without a camera it simply appears in its slot.
 func _present_source_entry(card, from: Vector3) -> void:   # untyped: a queued entry may outlive its card
@@ -1322,6 +1550,12 @@ func _fly_from_source(card: Card, from: Vector3) -> void:
 		_clear_local_flight_from_stack(card, camera)
 		card.global_position = straight.lerp(card.global_position, smoothstep(0.25, 0.85, t))
 	sample.call(0.0)
+	# THE START POSE IS DRAWN FOR ONE FRAME before the flight moves. A tween created from a timer or a process_frame
+	# resume is stepped in that same frame (tweens are processed after both), so the card would first be seen a frame
+	# into its flight, ~20 px off its source and already growing.
+	await get_tree().process_frame
+	if not is_instance_valid(card) or card.get_parent() != self:
+		return
 	var flight := create_tween()
 	_end_flight_with_card(card, flight)
 	flight.tween_method(sample, 0.0, 1.0, source_flight_seconds)

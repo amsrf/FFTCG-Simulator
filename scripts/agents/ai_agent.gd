@@ -100,7 +100,7 @@ func pay_cost(player_id: int, cost: Dictionary) -> bool:
 	var matching: Array = []
 	var rest: Array = []
 	for card in field.get_back_cards_for(controller):
-		if card.tapped:
+		if card.tapped or field.stack.is_reserved_for_cost(card):
 			continue
 		if cost.has(card.element):
 			matching.append(card)
@@ -258,7 +258,7 @@ func choose_target(owner_id: int, _source: Card, _criteria: Dictionary) -> void:
 ## "Your opponent discards 1 card from their hand." The DISCARDER chooses, so this asks the side that owns the hand.
 ## The AI keeps its cheapest card: it is a weak heuristic, but discarding the most expensive thing it holds would be
 ## strictly worse, and a stable rule is better than a random one while the rest of the effect system is still thin.
-func choose_discard(player_id: int, cards: Array) -> Card:
+func choose_discard(player_id: int, cards: Array, _required: bool = false) -> Card:
 	await _settle()
 	var cheapest: Card = null
 	for card in cards:

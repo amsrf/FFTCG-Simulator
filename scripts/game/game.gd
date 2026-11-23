@@ -169,6 +169,36 @@ func play_from_break_zone(owner_id: int, source: Card, criteria: Dictionary = {}
 	field.play_card(picked, owner_id == 2, true, true, false, false, slot)
 
 
+## RULE 9.5.1.2: in the End Phase the TURN PLAYER discards down to the hand size (five). A special action, no stack.
+## Mandatory: the owner picks (a human with no Cancel); an agent that answers nothing gets its highest-cost card
+## discarded for it, so the turn can never stall here. Chosen together, discarded as one batch (as discard_from).
+const HAND_LIMIT := 5
+
+func enforce_hand_limit(player_id: int) -> void:
+	var owner_hand: Hand = hand_for(player_id)
+	var agent: Agent = agent_for(player_id)
+	if owner_hand == null or agent == null:
+		return
+	var excess: int = owner_hand.cards.size() - HAND_LIMIT
+	if excess <= 0:
+		return
+	LOG.info("EndPhase", "P%d has %d cards and discards %d down to %d" % [
+		player_id, owner_hand.cards.size(), excess, HAND_LIMIT])
+	var picks: Array = []
+	while picks.size() < excess and not match_over:
+		var remaining: Array = owner_hand.cards.filter(func(c): return not picks.has(c))
+		if remaining.is_empty():
+			break
+		var picked: Card = await agent.choose_discard(player_id, remaining, true)
+		if picked == null or picks.has(picked) or not remaining.has(picked):
+			picked = remaining[0]
+			for c in remaining:
+				if int(c.cost) > int(picked.cost):
+					picked = c
+		LOG.info("EndPhase", "P%d discards %s (hand limit)" % [player_id, picked.card_name])
+		picks.append(picked)
+	owner_hand.discard_cards(picks)
+
 func discard_from(player_id: int, count: int = 1) -> int:
 	var owner_hand: Hand = hand_for(player_id)
 	if owner_hand == null:
@@ -420,11 +450,15 @@ func extra_attacks_from_damage(owner_id: int, source: Card) -> void:
 ## +1000" (Sylph). Sibling of untap_all_matching(): same evaluator, same source-relative reading, so the criteria may
 ## say "player"/"your" and still mean the caster's side.
 ## Returns the draw flight (null when nothing was drawn) — see Hand.draw_many().
-func draw_cards(count: int, owner_id: int) -> Tween:
+func draw_cards(count: int, owner_id: int, source: Card = null) -> Tween:
 	var d = deck if owner_id == 1 else opponent_deck
 	var h: Hand = hand_for(owner_id)
 	if d == null or h == null:
 		return null
+	# A WATER card's effect makes this draw: water splashes up off the deck top as the cards leave it. Read from the top
+	# card BEFORE it is popped; the flight starts this same frame, so the card bursts up out of the splash.
+	if count > 0 and not d.deck_cards.is_empty() and _is_water_source(source):
+		_splash_deck_top(d.deck_cards[0])
 	var drawn: Array = []
 	for _i in range(maxi(0, count)):
 		if d.deck_cards.is_empty():
@@ -435,6 +469,24 @@ func draw_cards(count: int, owner_id: int) -> Tween:
 	LOG.info("Draw", "P%d draws %d" % [owner_id, drawn.size()])
 	# One flight for all of them: "draw 2" is one motion of two cards, not two draws (Hand.draw_many).
 	return h.draw_many(drawn)
+
+const WATER_SPLASH := preload("res://scripts/vfx/water_splash.gd")
+const WATER_ELEMENT := "水"
+
+func _is_water_source(source: Card) -> bool:
+	return source != null and is_instance_valid(source) and source.current_elements().has(WATER_ELEMENT)
+
+## Presentation only: a WATER_SPLASH under the tree root (it outlives nothing it depends on and frees itself).
+func _splash_deck_top(top: Card) -> void:
+	if PRESENTATION.fast_mode or top == null or not is_instance_valid(top) or not top.is_inside_tree():
+		return
+	var at: Transform3D = top.global_transform
+	var height: float = top._card_face_size().y * absf(at.basis.get_scale().z)
+	var splash := WATER_SPLASH.new()
+	splash.name = "WaterSplash"
+	get_tree().root.add_child(splash)
+	# Seeded from the card, never from Game.rng: presentation must not consume the rules' randomness (determinism).
+	splash.setup(at.origin, height, Color(0.32, 0.58, 1.0), int(top.get_instance_id() % 100000))
 
 ## Buff EVERY member of the attacking party — "Chocobo and all the Forwards forming a party with it gain +3000 power".
 ##
@@ -759,21 +811,23 @@ const EFFECT_SHADERS: Array[Shader] = [
 	preload("res://shaders/destroy_swirl.gdshader"),
 	preload("res://shaders/destroy_sparkle.gdshader"),
 	preload("res://shaders/destroy_card_pop.gdshader"),
+	# The water splash on the deck (water_splash.gd): a Water card's effect makes its controller draw.
+	preload("res://shaders/water_ring.gdshader"),
+	preload("res://shaders/water_drop.gdshader"),
+	preload("res://shaders/water_crown.gdshader"),
+	# The power entry (power_entry_burst.gd): a cost 5+ card landing on the field.
+	preload("res://shaders/power_entry_burst.gdshader"),
+	preload("res://shaders/power_entry_column.gdshader"),
+	preload("res://shaders/power_entry_flames.gdshader"),
 ]
 
-## THE PHASE PRISM (scripts/ui/phase_prism.gd): the crystal lying above the priority buttons that rolls to the
-## current phase. Built here, before the first phase is entered, and fed by phase_entered. It replaced the debug phase
-## line in PhaseText (which still carries match messages).
-const PHASE_PRISM := preload("res://scripts/ui/phase_prism.gd")
-var phase_prism: Node3D = null
 ## A phase or step was entered. `turn_owner` is the player id (1 = this machine's player).
 signal phase_entered(phase: int, turn_owner: int)
 
 func _ready():
-	phase_prism = PHASE_PRISM.new()
-	phase_prism.name = "PhasePrism"
-	add_child(phase_prism)
-	phase_entered.connect(func(p: int, owner_id: int) -> void: phase_prism.show_phase(p, owner_id == 1))
+	# THE PHASE DIALS (scripts/ui/phase_dial.gd, built by ButtonStations): carved phase marks around each big button
+	# and a pointer that turns to the current phase. They replaced the phase prism.
+	phase_entered.connect(func(p: int, _owner_id: int) -> void: $Assistant/ButtonStations.show_phase(p))
 	start_match(MatchSetup.resolve_config())
 
 ## Forces each effect shader to compile by putting a 1-pixel quad using it on screen for one frame. The quads free
@@ -896,14 +950,14 @@ func start_match(config: Dictionary) -> void:
 		var ids: Array = zone_setup[0]
 		var zone: Node = get_node_or_null("%s/%s" % [zone_setup[2], zone_setup[3]])
 		if zone == null:
-	# AFTER the zones are pre-filled: a test board's starting damage is already broken when the crown appears.
-	_setup_life_crown()
 			continue
 		for id in ids:
 			var card = create_card(int(id), 'opponent' if zone_setup[1] else 'player')
 			# add_child FIRST: add_card reparents, and a node with no parent has no meaningful transform.
 			add_child(card)
 			zone.call("add_card", card)
+	# AFTER the zones are pre-filled: a test board's starting damage is already broken when the crown appears.
+	_setup_life_crown()
 
 	match str(config.get("first_phase", "first_main")):
 		"active":
@@ -1519,6 +1573,12 @@ const DAMAGE_CAMERAS := {
 @export var damage_zoom_hold_seconds: float = 1.0
 @export var damage_zoom_out_seconds: float = 0.4
 ## How close the damage shot comes: metres from the landing slot along the board camera's line of sight (the board
+## view itself is ~8 m away).
+@export var damage_zoom_distance: float = 3.2
+
+## The board view to come back to. Captured on the first zoom, because at that moment it IS the board view.
+var _board_camera: Camera3D = null
+var _damage_tween: Tween = null
 ## The side the running damage zoom is looking at, reported by `damage_zoom_finished` when the view is back.
 var _zoom_side: PlayerSide = null
 
@@ -1551,12 +1611,6 @@ func _setup_life_crown() -> void:
 		add_child(opponent_life_crown)
 	life_crown.setup(self, player, local_style, "bottom", local_seat)
 	opponent_life_crown.setup(self, opponent, opponent_style, "top", local_seat)
-## view itself is ~8 m away).
-@export var damage_zoom_distance: float = 3.2
-
-## The board view to come back to. Captured on the first zoom, because at that moment it IS the board view.
-var _board_camera: Camera3D = null
-var _damage_tween: Tween = null
 
 
 ## The world point the NEXT damage card will occupy in `zone` — the same formula the zone uses for an incoming
@@ -1648,13 +1702,13 @@ func _zoom_to_damage(side: PlayerSide) -> void:
 	cam.current = true
 	LOG.info("DamageZoom", "%s -> %s (slot %d)" % [which, cam.name, next_index])
 
-	_zoom_side = side
 	_damage_tween = create_tween()
 	_damage_tween.set_trans(Tween.TRANS_SINE)
 	_damage_tween.tween_property(cam, "global_transform", target, damage_zoom_in_seconds).set_ease(Tween.EASE_OUT)
 	_damage_tween.tween_interval(hold)
 	# Back out to the BOARD pose, then hand the view back. Ending exactly on the board pose makes the handoff invisible.
 	_damage_tween.tween_property(cam, "global_transform", board_pose, damage_zoom_out_seconds).set_ease(Tween.EASE_IN_OUT)
+	_zoom_side = side
 	_damage_tween.tween_callback(_end_damage_zoom)
 
 
@@ -1708,15 +1762,15 @@ func run_ex_burst(side: PlayerSide, card: Card, event: int) -> void:
 		LOG.info("ExBurst", "%s: no legal target, the burst does nothing" % card.card_name)
 	elif stack.stack_length() > 0:
 		await stack.resolve_top_effect()
-	var zoomed: PlayerSide = _zoom_side
-	_zoom_side = null
-	damage_zoom_finished.emit(zoomed)
 
 
 
 func _end_damage_zoom() -> void:
 	if _board_camera != null and is_instance_valid(_board_camera):
 		_board_camera.current = true
+	var zoomed: PlayerSide = _zoom_side
+	_zoom_side = null
+	damage_zoom_finished.emit(zoomed)
 
 func _end_match(winner_id: int) -> void:
 	if match_over:
@@ -1752,8 +1806,13 @@ func halt_match(message: String) -> void:
 		$PhaseText.text = message
 	assistant.hide_buttons()
 
+## False keeps the board on screen after the match ends (the trailer films the victory; tools/trailer/).
+var return_to_menu_on_end: bool = true
+
 func _return_to_menu_after_delay() -> void:
 	await get_tree().create_timer(2.5).timeout
+	if not return_to_menu_on_end:
+		return
 	MatchSetup.go_to_menu()
 
 func take_damage_to_controller(source: Card, amount: int = 1) -> void:
@@ -2152,6 +2211,8 @@ func _enter_phase(phase_enum: GlobalVariables.Phase):
 			# NOTE: there is no end-of-turn priority window yet, so cleanup
 			# runs immediately on entering the phase. Once end-of-turn
 			# auto-abilities exist, a priority round must run first.
+			# 9.5.1.2 comes before the damage/"until end of turn" cleanup (9.5.1.3).
+			await enforce_hand_limit(turn_owner)
 			field.end_phase_cleanup()
 			next_phase()
 			pass
@@ -2449,7 +2510,14 @@ func would_break_light_dark_limit(card: Card) -> bool:
 ## RULE PROCESSES THAT NEED A DECISION, run before any player gains priority (11.1.3, 12.3). The automatic ones
 ## (zero power, lethal damage) stay in enforce_game_state_rules(), which runs right after the change that causes them.
 func apply_rule_processes() -> void:
+	# A Character that just entered owes its ENTER_FIELD triggers; enqueue them now, so the declaration below never
+	# depends on whether the end of the frame has come yet (Field.flush_enter_triggers).
+	field.flush_enter_triggers()
 	await _enforce_backup_limit()
+	# 12.4.4 / 12.4.5 are RULE PROCESSES: checked before anyone gains priority, whatever changed the board (a power
+	# drop with no damage, an aura leaving). Damage and EffectContext.power_change() also check at once.
+	if not match_over:
+		enforce_game_state_rules()
 	# 11.8.7: triggered auto-abilities are put on the stack before anyone gains priority, and one that CHOOSES
 	# declares its targets then (11.11.2). The stack card carries the picks from here on, so it shows them.
 	await stack.declare_trigger_choices()

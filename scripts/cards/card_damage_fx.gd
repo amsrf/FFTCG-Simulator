@@ -165,6 +165,128 @@ func play_reaction(damage: int, delay: float = 0.0) -> void:
 	t.tween_callback(_finish)
 	tween = t
 
+## A STRONG CARD LANDED NEAR THIS ONE (power_entry_burst.gd). KEYED OFF ~/Desktop/Clips/entry 46-57, every frame at
+## full size (16.7 ms each):
+##   46     at rest
+##   47-48  THROWN in one frame: ~35 px up the screen (~0.25 card heights), tipped hard away from the new card (~35
+##          degrees: the face squashes to ~85% and the edge facing the blast shows as a dark band). (The reference
+##          also turns them 10-20 degrees in the board plane; ours does NOT, see below.)
+##   49-52  HELD up there
+##   53     down;  54 flat and upright;  55-57 a tiny wobble, still  (ours falls and wobbles longer: see HOP_KEYS_T)
+## Each card rolls its own tip direction (away from the new card, wobbled), tip, size and pace from `_rng`, and its
+## own cost scales it (cheap cards higher, HOP_COST_SCALE). `strength` 0..1 (distance) scales all of it. Posed on the
+## HandMesh + chrome like every reaction here; the Card root (its layout) is never touched.
+
+## The jump's keys, in seconds at pace 1. The SHAPE is the reference's (thrown up tipped, held, down, a little rebound,
+## rocks). The speed sits between the reference's (~0.5 s, "too fast") and a 1.4 s version ("too slow"), the user's
+## calls on 2026-11-22: up in 0.06 s, hangs ~0.15 s while the tip eases off, falls ~0.2 s accelerating (the keys follow
+## a parabola), a small rebound, three rocks edge to edge (~0.09 s each, each smaller), still at ~0.9 s. Values are
+## fractions of the rolled amounts; a tilt with no rise is a rock ON the wood (the clearance lifts the centre just
+## enough for the low edge to touch).
+const HOP_KEYS_T: Array[float] = [0.0, 0.06, 0.13, 0.21, 0.29, 0.36, 0.42, 0.48, 0.53, 0.62, 0.71, 0.80, 0.90]
+const HOP_KEYS_RISE: Array[float] = [0.0, 1.0, 0.97, 0.88, 0.70, 0.42, 0.0, 0.06, 0.0, 0.0, 0.0, 0.0, 0.0]
+const HOP_KEYS_TILT: Array[float] = [0.0, 1.0, 0.96, 0.88, 0.72, 0.55, 0.40, -0.10, -0.26, 0.16, -0.09, 0.04, 0.0]
+## NO TURN IN THE BOARD PLANE (the user, 2026-11-22): a push from underneath cannot spin the card about the vertical,
+## so the card only TIPS (about a horizontal axis). An in-plane turn made the throw look wrong.
+## Full-strength amounts, measured off the reference.
+## A modest tip (the reference's ~35 degrees, with the jump below, left one edge where it was on screen, so the card
+## read as LEANING on that edge, never leaving the wood: the user, 2026-11-22).
+const HOP_TILT_DEG := 14.0
+## The JUMP, in world metres STRAIGHT UP, on top of the clearance the tip needs. NOT along the camera's line of sight:
+## a point moved along the line of sight stays on the same pixel, so the low edge never left its spot on screen. Up
+## separates the WHOLE card from its shadow (which stays on the wood) and moves it up the screen.
+const HOP_HEIGHT := 0.45
+const HOP_PUSH := 0.04
+## Cost 1 -> x, cost 8+ -> y.
+const HOP_COST_SCALE := Vector2(1.25, 0.75)
+## Probe hook: the last hop's rolled numbers.
+var hop_params: Dictionary = {}
+
+func play_tremor(source: Vector3, strength: float, delay: float = 0.0) -> void:
+	var hand_mesh = _card.hand_mesh
+	if strength <= 0.0 or hand_mesh == null or not _card.is_drawn_on_field() or is_reacting():
+		return
+	normalize()
+	var away: Vector3 = _card.global_position - source
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 0.0001 else Vector3.RIGHT
+	# Each card tips about its OWN axis: "away from the new card", wobbled by up to 30 degrees.
+	var wobble: float = deg_to_rad(_rng.randf_range(-30.0, 30.0))
+	var push_dir: Vector3 = away.rotated(Vector3.UP, wobble)
+	var inv: Basis = _card.global_basis.orthonormalized().inverse()
+	var tip_axis: Vector3 = (inv * Vector3.UP.cross(push_dir)).normalized()
+	var up_local: Vector3 = (inv * Vector3.UP).normalized()
+	var push_local: Vector3 = (inv * push_dir).normalized()
+	var card_scale: float = maxf(_card.global_basis.get_scale().y, 0.0001)
+	var cost_total: int = 0
+	if _card.has_method("get_cost"):
+		for value in _card.get_cost().values():
+			cost_total += int(value)
+	var weight: float = lerpf(HOP_COST_SCALE.x, HOP_COST_SCALE.y, clampf(float(cost_total - 1) / 7.0, 0.0, 1.0))
+	var amount: float = strength * weight
+	hop_params = {
+		"pace": _rng.randf_range(0.9, 1.15),
+		"cost": cost_total,
+		"height_m": HOP_HEIGHT * amount * _rng.randf_range(0.85, 1.15),
+		"tilt": deg_to_rad(HOP_TILT_DEG) * minf(amount, 1.1) * _rng.randf_range(0.85, 1.15),
+		"push": HOP_PUSH * amount / card_scale,
+		"wobble": wobble,
+	}
+	hop_params["height"] = float(hop_params.height_m) / card_scale
+	var params: Dictionary = hop_params
+	var total: float = HOP_KEYS_T[HOP_KEYS_T.size() - 1] * float(params.pace)
+	var t := _card.create_tween()
+	if delay > 0.0:
+		t.tween_interval(delay)
+	t.tween_callback(func() -> void: _capture_chrome(false))
+	t.tween_method(func(time: float) -> void:
+		if not _card.is_drawn_on_field():
+			_reset_pose()
+			return
+		var p: Dictionary = hop_at(time / float(params.pace))
+		var tilt: float = float(params.tilt) * float(p.tilt)
+		var rot := Basis(tip_axis, tilt)
+		# EXACT clearance: how far the rotated face's lowest corner would drop below the wood, nothing more.
+		var drop: float = 0.0
+		for corner in [Vector3(-HALF_FACE.x, 0, -HALF_FACE.y), Vector3(HALF_FACE.x, 0, -HALF_FACE.y),
+				Vector3(HALF_FACE.x, 0, HALF_FACE.y), Vector3(-HALF_FACE.x, 0, HALF_FACE.y)]:
+			drop = maxf(drop, -(rot * corner).dot(up_local))
+		var push: Vector3 = push_local * float(params.push) * float(p.rise)
+		# The JUMP is clear air under the lowest corner: first lift the tipped card until that corner is on the wood,
+		# then add the jump straight up ON TOP.
+		var base: float = maxf(0.0, drop - push.dot(up_local))
+		var jump: Vector3 = up_local * float(params.height) * float(p.rise)
+		var offset: Vector3 = push + jump
+		var h: float = base
+		var pose := Transform3D(rot, up_local * h + offset)
+		hand_mesh.transform = pose
+		_apply_chrome(pose)
+		_set_face_light(face_light_for(pose))
+		# ITS SHADOW STAYS ON THE WOOD: the tremor moves the art, not the Card, so the board shadow cannot tell it left
+		# the ground; the lift shadow stays behind as it rises.
+		var world_h: float = (h + offset.dot(up_local)) * card_scale
+		# Soft: a full-strength lift shadow read as a black slab under every airborne card.
+		_set_shadow(clampf(float(p.rise), 0.0, 1.0) * 0.45, world_h), 0.0, total, total)
+	t.tween_callback(_finish)
+	tween = t
+
+## The jump at `time` (seconds at pace 1): `rise` and `tilt` as fractions of the rolled amounts, read off the
+## HOP_KEYS_* (smoothstep between keys). Everything is exactly 0 at the last key.
+static func hop_at(time: float) -> Dictionary:
+	var n: int = HOP_KEYS_T.size()
+	if time >= HOP_KEYS_T[n - 1]:
+		return {"rise": 0.0, "tilt": 0.0}
+	var i: int = 0
+	while i < n - 2 and time >= HOP_KEYS_T[i + 1]:
+		i += 1
+	var k: float = clampf((time - HOP_KEYS_T[i]) / maxf(HOP_KEYS_T[i + 1] - HOP_KEYS_T[i], 0.0001), 0.0, 1.0)
+	# Half smoothstep, half linear: pure smoothstep stops dead at every key (a floaty fall, a soft landing).
+	var s: float = lerpf(k, k * k * (3.0 - 2.0 * k), 0.5)
+	return {
+		"rise": lerpf(HOP_KEYS_RISE[i], HOP_KEYS_RISE[i + 1], s),
+		"tilt": lerpf(HOP_KEYS_TILT[i], HOP_KEYS_TILT[i + 1], s),
+	}
+
 func earth_launch_seconds(damage: int) -> float:
 	return sqrt(8.0 * EARTH_LAUNCH_HEIGHTS[VfxEvent.damage_tier_for(damage)] / EARTH_LAUNCH_GRAVITY)
 

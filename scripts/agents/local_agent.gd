@@ -233,7 +233,7 @@ func choose_deck_cards(_owner_id: int, ids: Array, filter: Dictionary, request, 
 	window.open_multi(ids, filter, request, prompt)
 	return await window.finished_multi
 
-func choose_discard(player_id: int, cards: Array) -> Card:
+func choose_discard(player_id: int, cards: Array, required: bool = false) -> Card:
 	var hand: Hand = game.hand_for(player_id)
 	if hand == null:
 		return null
@@ -247,7 +247,8 @@ func choose_discard(player_id: int, cards: Array) -> Card:
 		if not cards.has(card):
 			card.set_selected_highlight(true)
 	hand.refresh_highlights()
-	assistant.show_choose_card_buttons("Discard", "Cancel")
+	# A mandatory discard (the hand limit) offers no Cancel: the only way out is to pick a card.
+	assistant.show_choose_card_buttons("Discard", "" if required else "Cancel")
 	var play: bool = await assistant.choose_card_finished
 	var chosen: Card = hand.selected_card_for_effect
 	hand.end_choose_card()

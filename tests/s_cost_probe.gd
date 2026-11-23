@@ -61,7 +61,9 @@ func _ready() -> void:
 		stack.s_cost_active, stack.skill_activation_proxy != null])
 	_expect(stack.s_cost_active, "activating an s_cost skill opens the s-cost step first")
 	_expect(stack.skill_activation_proxy != null, "and the activation has its stack proxy")
-	_expect(source.tapped, "the source is tapped as part of the activation")
+	# The 《Dull》 is paid at COMMIT with the other costs; until then the source is only reserved for it.
+	_expect(not source.tapped and stack.is_reserved_for_cost(source),
+		"the source is NOT dulled while the costs are chosen, only reserved for its dull cost")
 
 	# Picking the card marks it PINK, not orange: it is a payment, not a targeting pick.
 	hand.toggle_effect_card_selection(sacrifice)
@@ -70,57 +72,45 @@ func _ready() -> void:
 	_expect(sacrifice.ring_s_cost(), "the picked card wears the PINK s-cost ring")
 	_expect(not sacrifice.ring_selected(), "and not the orange targeting one")
 
-	# Confirm -> the mana step. The discard itself is deferred until the skill commits.
-	stack._on_choose_card_finished(true)
-	print("[SCost] after Confirm: chosen=%s s_cost_active=%s proxy=%s" % [
-		stack.s_cost_selected_card.card_name if stack.s_cost_selected_card != null else "<none>",
-		stack.s_cost_active, stack.skill_activation_proxy != null])
-	_expect(stack.s_cost_selected_card == sacrifice, "Confirm records the card as the s cost")
-	_expect(not stack.s_cost_active, "and closes the s-cost step")
-	_expect(stack.skill_activation_proxy != null, "the activation continues to the mana step")
-
-	# --- NO MANA STAGE WHEN THERE IS NOTHING TO PAY -------------------------------------------------------------------
-	# Aerith's cost is {} — the discarded card IS the whole payment — so the activation goes straight on instead of asking
-	# the player to press Confirm on an empty screen. The mode is the check: a payment modal would put us in PAYING_COST.
-	var mode_after: int = GlobalVariables.get_player_mode()
-	print("[SCost] after an S cost with an EMPTY mana cost: mode=%s (PAYING_COST would be %s), proxy=%s" % [
-		mode_after, GlobalVariables.Player_Mode.PAYING_COST, stack.skill_activation_proxy != null])
-	_expect(mode_after != GlobalVariables.Player_Mode.PAYING_COST,
-		"an ability with no mana cost never opens a payment stage")
-	_expect(field.cost_is_free({}), "and an empty cost counts as free")
-	_expect(field.cost_is_free({"neutral": 0}), "as does one listing zero")
-	_expect(not field.cost_is_free({"neutral": 1}), "while any real mana does not")
-
-	# --- the exclusion ------------------------------------------------------------------------------------------------
-	hand.selected_cards_for_mana_conversion.clear()
-	hand.add_card_to_mana_conversion(sacrifice)
-	print("[SCost] mana pool after trying to spend the s-cost card: %s" % [
-		hand.selected_cards_for_mana_conversion])
-	_expect(not hand.selected_cards_for_mana_conversion.has(sacrifice),
-		"the card already spent on the s cost CANNOT pay the mana as well")
-
-	# --- cancelling the mana step goes BACK one step ------------------------------------------------------------------
-	stack._on_assistant_charge_cancelled()
-	print("[SCost] after cancelling the mana step: s_cost_active=%s chosen=%s proxy=%s" % [
-		stack.s_cost_active,
-		stack.s_cost_selected_card != null, stack.skill_activation_proxy != null])
-	_expect(stack.s_cost_active, "cancelling the MANA step returns to the s-cost step")
-	_expect(stack.s_cost_selected_card == null, "with the previous pick given back")
-	_expect(stack.skill_activation_proxy != null, "and the activation still alive, not abandoned")
-	_expect(not sacrifice.ring_s_cost(), "the pink ring came off with the pick")
-
-	# --- cancelling AT the s-cost step is what abandons the activation -------------------------------------------------
-	hand.toggle_effect_card_selection(sacrifice)
+	# --- cancelling AT the s-cost step abandons the activation, and costs nothing -------------------------------------
 	stack._on_choose_card_finished(false)
 	print("[SCost] after cancelling the s-cost step: proxy=%s source tapped=%s" % [
 		stack.skill_activation_proxy != null, source.tapped])
 	_expect(stack.skill_activation_proxy == null, "cancelling the s-cost step abandons the activation")
-	_expect(not source.tapped, "and the source untaps, because the cost was never really paid")
+	_expect(not source.tapped and not stack.is_reserved_for_cost(source) and hand.cards.has(sacrifice),
+		"and nothing was spent: the source was never dulled and is free again, the picked card is still in hand")
+	_expect(not sacrifice.ring_s_cost(), "the pink ring came off with the pick")
+
+	# --- CONFIRMING THE PICK IS THE LAST STEP -------------------------------------------------------------------------
+	# Aerith's mana cost is {} and her ability chooses no target: the discarded card IS the whole payment, so confirming
+	# the pick commits the ability at once. A second Confirm on an empty screen (the reported annoyance) or a payment stage
+	# would be a button that exists only to be pressed.
+	field.begin_skill_activation(source, 0)
+	hand.toggle_effect_card_selection(sacrifice)
+	var proxy: Card = stack.skill_activation_proxy
+	stack._on_choose_card_finished(true)
+	await get_tree().process_frame
+	var mode_after: int = GlobalVariables.get_player_mode()
+	var assistant_node = game.get_node("Assistant")
+	print("[SCost] after confirming the pick: mode=%s proxy committed=%s s-cost card in hand=%s confirm visible=%s" % [
+		mode_after, not stack.skill_mana_deferred_until_target_confirm, hand.cards.has(sacrifice),
+		assistant_node.confirmButton.visible])
+	_expect(proxy != null and stack.cards.has(proxy) and not stack.skill_mana_deferred_until_target_confirm,
+		"confirming the S-cost pick commits the ability straight onto the stack")
+	_expect(not hand.cards.has(sacrifice), "the picked card is discarded as the cost")
+	_expect(mode_after != GlobalVariables.Player_Mode.PAYING_COST and not assistant_node.confirmButton.visible,
+		"no payment stage and no second Confirm: there is nothing left to decide")
+	_expect(source.tapped == bool(source.activation_skill(0).get("tap", false)),
+		"the source is dulled at commit exactly when its cost says so")
+	_expect(field.cost_is_free({}), "an empty cost counts as free")
+	_expect(field.cost_is_free({"neutral": 0}), "as does one listing zero")
+	_expect(not field.cost_is_free({"neutral": 1}), "while any real mana does not")
 
 	# --- THE REPORTED BUG: an s cost you cannot pay must not be offered at all ----------------------------------------
 	# It used to be activatable, which TAPPED the source and then aborted silently — and because the abort untaps again,
 	# every further click re-tapped it. The card reads as broken: it taps, nothing happens, and clicking it taps it more.
-	hand.discard_card(sacrifice)
+	if hand.cards.has(sacrifice):
+		hand.discard_card(sacrifice)
 	print("[SCost] with the last matching card discarded from hand: can_activate_now=%s tapped=%s" % [
 		field.can_activate_now(source), source.tapped])
 	_expect(not field.can_activate_now(source),

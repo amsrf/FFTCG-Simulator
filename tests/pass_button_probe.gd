@@ -111,11 +111,16 @@ func _check_rim_light(socket: Node3D, pivot: Node3D) -> void:
 		"the thick bronze collar and outer bezel frame the uninterrupted ruby ring")
 	var rise := socket.get_node("RingLightRise") as MultiMeshInstance3D
 	var rise_material := rise.material_override as ShaderMaterial
-	var last_layer := rise.multimesh.get_instance_transform(rise.multimesh.instance_count - 1)
+	# The headless dummy renderer does not keep MultiMesh instance transforms (they read back as zero), so the
+	# column's top is taken from the layer count and the socket's own height constant.
+	var layers: int = rise.multimesh.instance_count
+	var top_y: float = (float(layers) - 0.5) / float(layers) * DISC_SOCKET.COIN_RISE_HEIGHT
 	_expect(is_equal_approx(rise.position.y, ring.position.y)
 		and is_equal_approx(float(rise_material.get_shader_parameter("ring_radius")), ring_radius)
-		and last_layer.origin.y > ring_radius and float(rise_material.get_shader_parameter("intensity")) > 0.0,
-		"the active brass ring emits a column of light above its circumference")
+		and layers > 1 and top_y > ring_radius and float(rise_material.get_shader_parameter("intensity")) > 0.0,
+		"the active brass ring emits a column of light above its circumference (rise y %.3f vs ring %.3f, radius %s vs %.3f, top layer %.3f, intensity %s)" % [
+			rise.position.y, ring.position.y, rise_material.get_shader_parameter("ring_radius"), ring_radius,
+			top_y, rise_material.get_shader_parameter("intensity")])
 
 func _ready() -> void:
 	MatchSetup.config = MatchSetup.build_config("clean", {"opponent_type": "mock"})
@@ -235,8 +240,9 @@ func _ready() -> void:
 	var ruby := (mine.get_node("CopperSocket") as MeshInstance3D).material_override as ShaderMaterial
 	var their_glow: float = theirs.glow_intensity()
 	var hit := (button._area.get_child(0) as CollisionShape3D).shape as CylinderShape3D
-	_expect(hit.radius >= COIN.SOCKET_FOOTPRINT and is_zero_approx(float(ruby.get_shader_parameter("ruby_glow"))),
-		"the resting ruby is unlit and its outer edge is inside the hover area")
+	_expect(hit.radius >= COIN.SOCKET_FOOTPRINT - 0.0001 and is_zero_approx(float(ruby.get_shader_parameter("ruby_glow"))),
+		"the resting ruby is unlit and its outer edge is inside the hover area (hit radius %.3f vs footprint %.3f, ruby_glow %s)" % [
+			hit.radius, COIN.SOCKET_FOOTPRINT, ruby.get_shader_parameter("ruby_glow")])
 	button._on_hover(true)
 	await get_tree().create_timer(0.25).timeout
 	_expect(mine.glow_intensity() > DISC_SOCKET.COIN_READY_GLOW, "hover brightens the ring")

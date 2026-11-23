@@ -179,6 +179,11 @@ func _human_activate(game: Node, cancel: bool) -> String:
 		await get_tree().process_frame
 		if _driver_stop or not is_instance_valid(game):
 			return "none"
+		# A single ability shows its badge first; clicking the badge is the click that confirms it.
+		var badge = field.ability_badge()
+		if badge != null:
+			badge.confirm()
+			await get_tree().process_frame
 		if stack.skill_activation_proxy == null:
 			continue
 		if stack.s_cost_active:

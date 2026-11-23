@@ -68,6 +68,9 @@ const MOTE_THRESHOLD := 0.3
 ## The disc's radius: it fills the well (the well is this + 0.002).
 @export var radius: float = 0.314
 @export var use_priority_coin := false
+## A priority coin WITHOUT its ruby socket ring: the bare coin, scaled so its rim is `radius` (the Cancel coins, which
+## sit in the small stone wells baked for the old gem discs). `glyph` "cross" stamps it with an X.
+@export var coin_ring := true
 ## Which side's colours: "chaos" (gold rim, leather, ruby) or "cosmos" (wood rim, cream stone, slate, jade). The same
 ## coin, flip, lift, press spin and ring light; the seat decides it (ButtonStations.configure_seat()).
 @export_enum("chaos", "cosmos") var coin_style: String = "chaos"
@@ -149,7 +152,7 @@ func set_coin_style(style: String) -> void:
 		remove_child(node)
 		node.queue_free()
 	_pivot = null; _gem_material = null; _ruby_material = null; _glow_material = null
-	_rise_material = null; _coin_rise = null; _viewport = null; _label = null; _symbol = null
+	_rise_material = null; _coin_rise = null; _viewport = null; _label = null; _symbol = null; _motes = null
 	var was_busy := _busy
 	_busy = false
 	_build_tracked()
@@ -321,7 +324,7 @@ func _sync_imprint_material() -> void:
 	if _gem_material != null:
 		var on := not _imprint_hidden
 		if use_priority_coin:
-			var stamp := PRIORITY_COIN.stamp_for_imprint(_imprinted)
+			var stamp := PRIORITY_COIN.Stamp.CROSS if glyph == "cross" else PRIORITY_COIN.stamp_for_imprint(_imprinted)
 			_gem_material.set_shader_parameter("stamp_kind", stamp)
 			on = on and not _imprinted.is_empty() and stamp == PRIORITY_COIN.Stamp.CRYSTAL
 		_gem_material.set_shader_parameter("use_imprint", on)
@@ -397,7 +400,7 @@ func _set_glow(v: float) -> void:
 func _tint_motes() -> void:
 	if _motes == null:
 		return
-	var c := glow_color.linear_to_srgb()
+	var c := COIN_GLOW_COLOR if use_priority_coin else glow_color.linear_to_srgb()
 	c.a = clampf(glow_intensity() * 0.9, 0.0, 1.0)
 	_motes.color = c
 
@@ -465,21 +468,49 @@ func _build() -> void:
 			_build_imprint()
 		var imprint := _viewport.get_texture() if _viewport != null else null
 		_gem_material = PRIORITY_COIN.build_cap(_pivot, imprint, coin_style == "cosmos")
-		_ruby_material = PRIORITY_COIN.build_socket(self, coin_style == "cosmos")
+		if coin_ring:
+			_ruby_material = PRIORITY_COIN.build_socket(self, coin_style == "cosmos")
+		if glyph == "cross":
+			_gem_material.set_shader_parameter("stamp_kind", PRIORITY_COIN.Stamp.CROSS)
 		# The glow starts at the seated cap's brass edge and stays upright while the cap flips.
 		_glow_material = _build_ring_glow(0.80, PRIORITY_COIN.EDGE_LIGHT_RADIUS,
 			PRIORITY_COIN.EDGE_LIGHT_Y + 0.007, 0.025, 0.0)
 		_glow_material.set_shader_parameter("inner_spill_limit", 0.021)
 		_glow_material.set_shader_parameter("core_color", COIN_RING_COLOR)
 		_build_coin_light_rise(PRIORITY_COIN.EDGE_LIGHT_RADIUS, PRIORITY_COIN.EDGE_LIGHT_Y + 0.007)
+		if not coin_ring:
+			_shrink_bare_coin()
+		# The same motes the gem discs had, rising off the coin's rim light.
+		_build_motes(PRIORITY_COIN.EDGE_LIGHT_RADIUS * coin_scale(), PRIORITY_COIN.EDGE_LIGHT_Y * coin_scale() + 0.01)
 	else:
 		_build_gem_disc()
 		var reach := radius + RING_OUTSET + 0.09
 		_glow_material = _build_ring_glow(reach * 2.0, radius + RING_OUTSET, RING_HEIGHT + 0.02,
 			0.02 / (reach * 2.0), 0.045 / (reach * 2.0))
 		_build_light_rise(radius + RING_OUTSET, RING_HEIGHT, PILLAR_HEIGHT)
-		_build_motes()
+		_build_motes(radius + RING_OUTSET, RING_HEIGHT + 0.01)
 
+
+## The bare coin: everything the coin branch built (cap, glow, light rise) goes under one node scaled so the coin's
+## rim lands on `radius`. The turn's axle lift scales with it, so the small coin clears its well the same way.
+func _shrink_bare_coin() -> void:
+	var holder := Node3D.new()
+	holder.name = "BareCoin"
+	holder.scale = Vector3.ONE * coin_scale()
+	for node: Node in [_pivot, get_node("RingGlow"), _coin_rise]:
+		remove_child(node)
+		holder.add_child(node)
+	add_child(holder)
+
+## How much smaller than the big priority coin this socket's coin is drawn (1 with the ruby ring).
+func coin_scale() -> float:
+	return 1.0 if coin_ring else radius / PRIORITY_COIN.EDGE_LIGHT_RADIUS
+
+## The clickable radius on the board.
+func hit_radius() -> float:
+	if not use_priority_coin:
+		return radius
+	return PRIORITY_COIN.SOCKET_FOOTPRINT if coin_ring else radius
 
 func _build_gem_disc() -> void:
 	var dome_height := radius * 0.26     # thick enough for the gem's setting to read as a step
@@ -588,7 +619,7 @@ func _build_light_rise(ring_radius: float, base_y: float, height: float) -> void
 	add_child(pillar)
 
 ## Slow motes of light drifting up off the ring while its light is on.
-func _build_motes() -> void:
+func _build_motes(ring_radius: float, base_y: float) -> void:
 	_motes = CPUParticles3D.new()
 	_motes.name = "Motes"
 	_motes.emitting = false
@@ -597,8 +628,8 @@ func _build_motes() -> void:
 	_motes.randomness = 0.6
 	_motes.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
 	_motes.emission_ring_axis = Vector3.UP
-	_motes.emission_ring_radius = radius + RING_OUTSET
-	_motes.emission_ring_inner_radius = radius + RING_OUTSET - 0.008
+	_motes.emission_ring_radius = ring_radius
+	_motes.emission_ring_inner_radius = ring_radius - 0.008
 	_motes.emission_ring_height = 0.01
 	_motes.direction = Vector3.UP
 	_motes.spread = 12.0
@@ -636,7 +667,7 @@ func _build_motes() -> void:
 	quad.size = Vector2(MOTE_SIZE, MOTE_SIZE)
 	quad.material = mat
 	_motes.mesh = quad
-	_motes.position = Vector3(0, RING_HEIGHT + 0.01, 0)
+	_motes.position = Vector3(0, base_y, 0)
 	add_child(_motes)
 
 func _build_imprint() -> void:

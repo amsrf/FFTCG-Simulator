@@ -176,14 +176,31 @@ func _ready() -> void:
 		rest_box["top"], view.y, rest_box["bottom"], rest_box["visible"] * 100.0])
 	_expect(rest_box["top"] > 0.0, "its top edge is on screen, so the name and cost can be read")
 	_expect(rest_box["bottom"] > view.y, "and its bottom hangs off the bottom of the screen")
-	_expect(rest_box["visible"] > 0.6 and rest_box["visible"] < 0.85,
-		"showing most of each card, with the rest under the bottom edge")
-	# AND IT HAS TO BE WORTH LOOKING AT, IN PIXELS. The FRACTION alone is not a check, and this is the one that was
-	# missing: 46% of a card that is only 180 px tall is an 82 px strip — comfortably inside "40-50% visible" and
-	# impossible to read. The spec said "cards are large" and only the fraction ever got verified.
+	# 2026-11-21: the zoomed-out camera (9.6 / 67 / fov 22) shows only the NAME-AND-COST STRIP at rest
+	# (FAN_VISIBLE_FRACTION 0.42), so a band stays free between the Backup row and the hand (checked below). The card
+	# keeps its old screen size; a hover still brings it up whole.
+	_expect(rest_box["visible"] > 0.35 and rest_box["visible"] < 0.5,
+		"showing the top strip of each card, with the rest under the bottom edge")
+	# AND IT HAS TO BE WORTH LOOKING AT, IN PIXELS. The FRACTION alone is not a check: 46% of a card that is only
+	# 180 px tall is an 82 px strip. The card's SCREEN size is pinned too (the fan-card size check above).
 	var band: float = view.y - rest_box["top"]
 	print("[HandHover] the visible band is %.0f px — %.0f%% of the screen height" % [band, band / view.y * 100.0])
-	_expect(band > 140.0, "and the strip left showing is big enough to actually read")
+	_expect(band > 85.0 and band < 115.0, "and the strip left showing holds the name and cost (85-115 px)")
+	# THE RESERVED BAND between the local Backup row and the resting hand (the user will put an element there, like
+	# Artifact's hero plaque): ~168 px at 1080p since the hand was raised a bit. Nothing may grow into it.
+	var field_node = game.get("field")
+	var backup_bottom: float = -INF
+	if field_node != null:
+		for backup in field_node.get("back_cards"):
+			for corner in _corners(backup):
+				backup_bottom = maxf(backup_bottom, cam.unproject_position(corner).y)
+	if backup_bottom > -INF:
+		var gap: float = rest_box["top"] - backup_bottom
+		print("[HandHover] Backup row bottom y %.0f, hand top y %.0f: reserved band %.0f px" % [
+			backup_bottom, rest_box["top"], gap])
+		_expect(gap > 150.0 and gap < 190.0, "a ~168 px band stays free between the Backup row and the hand")
+	else:
+		_expect(false, "the debug board has Backups to measure the reserved band against")
 
 	# The arch: the MIDDLE highest, the ends lower. Measured per card and printed as a table, because "the edges sit
 	# higher" and "the edges sit lower" are 20 px apart and impossible to argue about by eye.

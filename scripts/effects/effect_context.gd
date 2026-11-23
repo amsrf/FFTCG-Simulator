@@ -487,6 +487,11 @@ func power_change(cards: Array, amount: int, duration: int = 1) -> void:
 	for card in cards:
 		if card != null and is_instance_valid(card):
 			card.power_change(amount, duration)
+	# 12.4.4: a Forward at 0 power or less goes to the Break Zone. Checked IN THE SAME FRAME, like damage: the drain
+	# death (Card.power_fx.is_drop_lethal_cause()) needs the sweep to see the drop while it is still being presented.
+	# Without this a power-down to 0 (Kain 1-127's arrival) left the Forward on the field at 0.
+	if amount < 0 and game != null:
+		game.enforce_game_state_rules()
 
 
 func opponent_discards(count: int = 1) -> void:
@@ -608,7 +613,7 @@ func each_player_discards(count: int = 1) -> void:
 
 func draw(player_id: int, count: int = 1) -> void:
 	if game != null:
-		game.draw_cards(count, player_id)
+		game.draw_cards(count, player_id, source)
 
 
 func power_change_party(amount: int, duration: int = 1) -> void:

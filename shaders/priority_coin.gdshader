@@ -6,6 +6,7 @@ const vec3 METAL_LIGHT = vec3(0.30, 0.85, 0.43);
 const float ROMAN_STEM_OFFSET = 0.164;
 const int SECOND_MAIN_STAMP = 1;
 const int CROSSED_SWORDS_STAMP = 2;
+const int CROSS_STAMP = 3;  // the Cancel coins: an X of two chamfered bars
 uniform int component = 0;
 uniform bool use_imprint = false;
 uniform int stamp_kind = 0;
@@ -87,6 +88,12 @@ float stamp_distance(vec2 p) {
 		float serif = min(0.122 - q.x, stem + (q.y - 0.315) * 0.75);
 		float chamfer = (0.524 - q.x - q.y) * 0.7071;
 		return min(max(stem, serif), min(0.434 - q.y, chamfer));
+	}
+	if (stamp_kind == CROSS_STAMP) {
+		vec2 q = sword_coordinates(p);
+		float bar_a = min(0.105 - abs(q.y), (0.62 - abs(q.x) - 0.6 * abs(q.y)));
+		float bar_b = min(0.105 - abs(q.x), (0.62 - abs(q.y) - 0.6 * abs(q.x)));
+		return max(bar_a, bar_b);
 	}
 	return crystal(p);
 }
@@ -339,6 +346,13 @@ vec3 coin_surface(vec2 p, vec3 n, vec3 eye, mat3 model_basis, float key, float f
 	}
 	float face_left = 1.0 - smoothstep(-aa, aa, facet_x);
 	float end_facet = smoothstep(-aa, aa, abs(p.y) + 0.31 * abs(facet_x) - 0.32);
+	if (stamp_kind == CROSS_STAMP) {
+		// Each bar is chiselled along its length: the half toward the light is the bright facet.
+		vec2 q = sword_coordinates(p);
+		facet_x = abs(q.y) < abs(q.x) ? q.y : -q.x;
+		face_left = 1.0 - smoothstep(-aa, aa, facet_x);
+		end_facet = 0.0;
+	}
 	vec3 stamp = mix(vec3(0.48, 0.31, 0.125), vec3(0.68, 0.48, 0.23), face_left);
 	stamp = mix(stamp, mix(vec3(0.37, 0.23, 0.093), vec3(0.76, 0.56, 0.28),
 		smoothstep(-0.22, 0.22, p.y)), end_facet);

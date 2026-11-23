@@ -309,8 +309,8 @@ func choose_number(owner_id: int, minimum: int, maximum: int, prompt: String = "
 	pending_kind = "choose_number"; var slot := _reserve("choose_number"); var r: int = await inner.choose_number(owner_id, minimum, maximum, prompt); pending_kind = ""; _fill(slot, r); return r
 func choose_mana_color(owner_id: int, card: Card, options: Array) -> String:
 	pending_kind = "choose_mana_color"; var slot := _reserve("choose_mana_color"); var r: String = await inner.choose_mana_color(owner_id, card, options); pending_kind = ""; _fill(slot, r); return r
-func choose_discard(owner_id: int, cards: Array) -> Card:
-	pending_kind = "choose_discard"; var slot := _reserve("choose_discard"); var r: Card = await inner.choose_discard(owner_id, cards); pending_kind = ""; _fill(slot, r); return r
+func choose_discard(owner_id: int, cards: Array, required: bool = false) -> Card:
+	pending_kind = "choose_discard"; var slot := _reserve("choose_discard"); var r: Card = await inner.choose_discard(owner_id, cards, required); pending_kind = ""; _fill(slot, r); return r
 func choose_skill(player_id: int, card: Card, skills: Array, usable: Array = []) -> int:
 	pending_kind = "choose_skill"; var slot := _reserve("choose_skill"); var r: int = await inner.choose_skill(player_id, card, skills, usable); pending_kind = ""; _fill(slot, r); return r
 func choose_sacrifice(player_id: int, candidates: Array) -> Card:

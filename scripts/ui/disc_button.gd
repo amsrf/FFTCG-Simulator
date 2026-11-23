@@ -36,10 +36,9 @@ func _ready() -> void:
 	_area.set_script(AREA_SCRIPT)
 	var shape := CollisionShape3D.new()
 	var cylinder := CylinderShape3D.new()
-	cylinder.radius = float(_socket.get("radius"))
+	cylinder.radius = float(_socket.call("hit_radius"))
 	cylinder.height = 0.14
 	if bool(_socket.get("use_priority_coin")):
-		cylinder.radius = preload("res://scripts/ui/priority_coin.gd").SOCKET_FOOTPRINT
 		cylinder.height = 0.24
 		shape.position.y = 0.045
 	shape.shape = cylinder

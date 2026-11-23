@@ -255,7 +255,6 @@ func load_card_data():
 ## revealing restores the SAME instance — rebuilding it would drop the shader's
 ## `effect_enabled` highlight state.
 var revealed: bool = true
-var _card_back_material: StandardMaterial3D = null
 
 ## Show the card's art, or a plain back for a card whose identity is not public
 ## knowledge yet (a card parked while its cost is being paid). There is no back
@@ -302,16 +301,9 @@ func set_hidden(hidden: bool) -> void:
 	if area is CollisionObject3D:
 		area.input_ray_pickable = not hidden
 
+## A face-down card shows the printed back on its face (the same material as the edge prism's bottom cap).
 func _get_card_back_material() -> StandardMaterial3D:
-	if _card_back_material == null:
-		_card_back_material = StandardMaterial3D.new()
-		# A NORMAL GREY, not near-black. This was (0.10, 0.11, 0.16), which is fine for one card turning over during a
-		# draw and reads as a black hole when a whole hand of them sits on screen — the opponent's five cards measured
-		# #3f3f3f and covered 6% of the frame. It is meant to say "there is a card here, face down", and the rest of the
-		# board's card-sized greys sit around 0.6.
-		_card_back_material.albedo_color = Color(0.58, 0.60, 0.64)
-		_card_back_material.roughness = 0.85
-	return _card_back_material
+	return CARD_EDGE.back_material()
 
 func assign_card_texture():
 	var texture_path = "res://assets/cards/%s.jpg" % code
@@ -412,6 +404,7 @@ func _notification(what):
 	# Being freed: modules that hold tweens/awaits must let go, or they outlive the card (card_stack_aura.gd).
 	if what == NOTIFICATION_PREDELETE:
 		stack_aura.release()
+		activation_fx.release()
 		return
 	# Arriving on a Field refreshes the power readout and the board's continuous effects.
 	if what == NOTIFICATION_PARENTED and get_parent() is Field:
@@ -528,10 +521,10 @@ const READABLE_ROTATION := Vector3(0, PI, 0)
 ## popping. That only stays true while this and the table agree, so the table reads this constant.
 ##
 ## A SIZE CHOICE for the perspective board. The stack sits closer to the lens than the field, so 1.0 world renders
-## around 1.25x a field card; 1.35 (since 2026-11) makes a stack card clearly the thing to read while it waits, about
-## 1.7x a field card, and still sits in the board rather than reading as a UI overlay. The hand hover has its own HOVER_CARD_SCALE, and the stack's
+## around 1.25x a field card; 2.7 (2026-11-21, from 1.35: the size of the card in ~/Desktop/Clips/damage frame 151, ~227x387 px at 1080p), about
+## 2x a field card, and still sits in the board rather than reading as a UI overlay. The hand hover has its own HOVER_CARD_SCALE, and the stack's
 ## pose lives in the Stack node's "Stack Rotation" exports.
-const STACK_CARD_SCALE := 1.35
+const STACK_CARD_SCALE := 2.7
 
 ## The Stack scene node's OWN scale (game.tscn). A card's `scale` is LOCAL to its container, so a world size written
 ## straight into it would come out 2.3x bigger than the number says.
@@ -563,10 +556,16 @@ const HAND_CARD_SCALE := 1.0
 const HAND_CONTAINER_SCALE := 1.0 / 1.35
 const PILE_WORLD_SCALE := 1.0
 const PILE_LOCAL_SCALE := PILE_WORLD_SCALE / 1.4
+## THE DECK IS HAND-CARD SIZE (2026-11-21): with the zoomed-out camera the deck moved off the wood into the bottom-left
+## corner and grew (1.8 = a resting hand card, ~164 px wide at 1080p; then reduced to 1.4 at the user's request).
+## Break Zone / Removed piles are
+## hidden in their pits and the Damage Zone row keeps PILE_WORLD_SCALE.
+const DECK_WORLD_SCALE := 1.4
+const DECK_LOCAL_SCALE := DECK_WORLD_SCALE / 1.4
 
 const ZONE_PRESENTATION := {
 	Zone.NONE:      {"scale": 1.0, "rotation": Vector3.ZERO,      "power_ui": false},
-	Zone.DECK:      {"scale": PILE_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
+	Zone.DECK:      {"scale": DECK_LOCAL_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 	# HAND is the RESTING size of a fan card (1.0 in WORLD; LOCAL 1.35 inside the 1/1.35 Hand node, see
 	# HAND_CONTAINER_SCALE), and Hand lays the fan out for it. The hand sits ~4.6 m from the camera, so proximity, not
 	# scale, is what makes it read larger than the field.
@@ -584,7 +583,8 @@ const ZONE_PRESENTATION := {
 	# TODO: the damage-zone node is identity like the Field, so by this rule it
 	# needs READABLE_ROTATION too. Left alone until it can be eyeballed, because
 	# the OPPONENT's damage zone is authored with a +90 deg frame instead.
-	# Same size as the deck it sits above (PILE_WORLD_SCALE; the DamageZone node is unscaled).
+	# PILE_WORLD_SCALE (the DamageZone node is unscaled). Since 2026-11-21 the deck below it is bigger (DECK_WORLD_SCALE):
+	# seven damage cards at deck size would not fit above it.
 	Zone.DAMAGE:    {"scale": PILE_WORLD_SCALE, "rotation": Vector3.ZERO, "power_ui": false},
 }
 
@@ -627,10 +627,17 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	if zone == Zone.STACK and _stack_face == null:
 		_stack_face = preload("res://scenes/cards/stack_ability_face.tscn").instantiate()
 		add_child(_stack_face)
-		var portrait_code := "" if type == SUMMON else code
-		_stack_face.configure(_printed_texture, element, stack_wording if not stack_wording.is_empty() else text, portrait_code)
+		_stack_face.configure(_printed_texture, element, stack_wording if not stack_wording.is_empty() else text)
 		mat.set_shader_parameter("texture_albedo", _stack_face.get_texture())
-	elif zone != Zone.STACK and _stack_face != null:
+	if zone != Zone.STACK and has_meta(&"chain_hidden"):
+		# The stack's chain hid this card as an old link (Stack._apply_chain_visibility); leaving the stack shows it.
+		remove_meta(&"chain_hidden")
+		visible = true
+	if zone != Zone.STACK and has_node("ChainNumber"):
+		var chain_number: Node = get_node("ChainNumber")   # Stack._refresh_chain_numbers(): it belongs to the stack
+		chain_number.name = "ChainNumberFreed"   # free its name now, or a same-frame re-entry would reuse a dying node
+		chain_number.queue_free()
+	if zone != Zone.STACK and _stack_face != null:
 		mat.set_shader_parameter("texture_albedo", _printed_texture)
 		remove_child(_stack_face)
 		_stack_face.queue_free()
@@ -646,6 +653,9 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 	# And the stack aura: a card changing zone (leaving the stack, or arriving on it) starts with none; the Stack lights
 	# the top card itself (Stack.refresh_top_aura).
 	stack_aura.normalize()
+	# And a raised / flashing field card (card_activation_fx.gd): the lift belongs to the slot it is leaving.
+	activation_fx.normalize()
+	_tap_presentation_owed = false   # a dull still waiting to be shown belonged to the slot it is leaving
 	# Same for a power-up burst: the swords belong to the field slot the card just left.
 	power_fx.on_enter_zone(zone == Zone.FIELD)
 	# Leaving the stack must stop the fan tween HERE. Otherwise a tween created
@@ -728,11 +738,29 @@ func enter_zone(zone: Zone, stack_wording: String = "") -> void:
 ## resting orientation is decided — so tap()/untap() always have an absolute angle to aim at.
 var _upright_y: float = 0.0
 
-func tap():
+## `present` false = the RULES dull now, the turn and the dim later, through present_tap(): an activated ability's
+## 《Dull》 is paid at commit, but the card is shown turning only after it has settled and blinked
+## (Stack._present_activation_entry).
+var _tap_presentation_owed := false
+
+func tap(present: bool = true):
 	if tapped: return
 	
 	tapped = true
-	
+	if not present:
+		_tap_presentation_owed = true
+		return
+	_present_tap_turn()
+
+## Shows a tap the rules already made (tap(false)); nothing when none is owed or the card is no longer dull.
+func present_tap() -> void:
+	if not _tap_presentation_owed:
+		return
+	_tap_presentation_owed = false
+	if tapped and is_inside_tree():
+		_present_tap_turn()
+
+func _present_tap_turn() -> void:
 	if tween != null and tween.is_valid():
 		tween.kill()
 	
@@ -749,6 +777,7 @@ func tap():
 ## `visual_delay` holds only the PRESENTATION (the turn back and the colour returning): the rules state changes now.
 ## `refresh` adds the Active Phase's light sweep. Field.untap_cards_for() uses both to stagger the untap across the row.
 func untap(visual_delay: float = 0.0, refresh: bool = false):
+	_tap_presentation_owed = false
 	if not tapped: return
 	
 	tapped = false
@@ -784,6 +813,9 @@ var damage_fx: CARD_DAMAGE_FX = CARD_DAMAGE_FX.new(self)
 ## The top-of-stack aura and the resolve pulse. See card_stack_aura.gd.
 const CARD_STACK_AURA := preload("res://scripts/cards/card_stack_aura.gd")
 var stack_aura: CARD_STACK_AURA = CARD_STACK_AURA.new(self)
+## A field card starting an effect: the rise, the flash and the settle. See card_activation_fx.gd.
+const CARD_ACTIVATION_FX := preload("res://scripts/cards/card_activation_fx.gd")
+var activation_fx: CARD_ACTIVATION_FX = CARD_ACTIVATION_FX.new(self)
 ## Power-up presentation (swords + red gas, then the readout swells as it counts). See card_power_fx.gd.
 const CARD_POWER_FX := preload("res://scripts/cards/card_power_fx.gd")
 var power_fx: CARD_POWER_FX = CARD_POWER_FX.new(self)

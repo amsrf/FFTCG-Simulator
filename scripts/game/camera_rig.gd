@@ -25,9 +25,13 @@ enum Mode { ORTHOGRAPHIC, PERSPECTIVE }
 @export var target: Vector3 = Vector3(0.0, 0.35, -0.25)
 ## 67 deg is the "B" candidate: still clearly a table, but cards keep their readable shape.
 @export_range(30.0, 90.0, 0.5) var elevation_deg: float = 67.0
-@export_range(10.0, 90.0, 0.5) var fov_deg: float = 30.0
+## 22 deg (2026-11-21, from 30): a longer lens flattens the perspective the way Artifact's board does, so the far rows
+## stay nearly as big as the near ones.
+@export_range(10.0, 90.0, 0.5) var fov_deg: float = 22.0
 ## Visible width at `target`, in metres. Derived distance keeps this fixed when fov changes.
-@export_range(2.0, 20.0, 0.1) var frame_width: float = 8.0
+## 9.6 (2026-11-21, from 8.0): zoomed out so the table reads as a table, and so a band opens between the local Backup
+## row and the hand (~195 px at 1080p) for a future element; keep it free.
+@export_range(2.0, 20.0, 0.1) var frame_width: float = 9.6
 
 var _ortho_transform: Transform3D
 

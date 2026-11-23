@@ -20,8 +20,18 @@ extends Node
 ##   --preset <name>  boot the real GAME through MatchSetup instead (ai / standard / debug)
 ##   --pay <spec>     with --preset: open the crystal payment modal at that cost, e.g. "火:1,neutral:1",
 ##                    so a shot can show the payment UI mid-selection without a human clicking
-##   --phase <name>   with --preset: roll the phase prism to that phase (--theirs = the opponent's turn)
+##   --phase <name>   with --preset: turn both phase dials to that phase
+##   --frame-width <m>  with --preset: board camera frame width (zoom out = larger; default 8.0)
+##   --elevation <deg>  with --preset: board camera elevation (90 = straight down; default 67)
+##   --fov <deg>      with --preset: board camera lens (default 30; frame width is kept, so only perspective changes)
 ##   --hold <i>       with --preset: hold hand card i in the cast stance (--armed 0 = pointer over the hand band)
+##   --stack-card <ids>  put cards on the Stack in order (oldest first); "o:<id>" = an opponent's card
+##   --badge <id>     with --preset: click my field card <id>; a single ability shows its badge
+##   --activate <id>  with --preset: activate my field card <id>'s ability as a click does, printing its pose per frame
+##   --raise <id>[:flash]  with --preset: raise my field card <id> as while paying for its ability (":flash" = at the flash)
+##   --damage <n>     with --preset: put n cards straight into both damage zones (checks a long row's reach)
+##   --hit <n>        with --preset: real damage to me (--opponent-hit <n>: to them); the reveal, zoom and absorb
+##   --life-break <n> with --preset: n more damage on MY side, broken by the life crown with its animation (use --seconds)
 ##   --out <path>     PNG to write (default tools/shots/shot.png)
 ##   --cost <spec>    e.g. "fire:1,neutral:1" — set on the subject if it has a `cost`
 ##   --element <e>    set on the subject if it has an `element` (a lone badge)
@@ -50,6 +60,20 @@ func _ready() -> void:
 		# and waits. MatchSetup is an autoload, which is exactly why this is a scene rather than --script.
 		MatchSetup.config = MatchSetup.build_config(preset)
 		var game: Node = load("res://scenes/game/game.tscn").instantiate()
+		# --frame-width <m>: the board camera's visible width (BoardCameraRig.frame_width, default 8.0).
+		# Set before add_child so the rig's _ready() and every layout that reads the camera see it.
+		if _args.has("frame-width"):
+			var rig: Node = game.get_node_or_null("Camera3D")
+			if rig != null:
+				rig.set("frame_width", float(_args["frame-width"]))
+		if _args.has("elevation"):
+			var rig_e: Node = game.get_node_or_null("Camera3D")
+			if rig_e != null:
+				rig_e.set("elevation_deg", float(_args["elevation"]))
+		if _args.has("fov"):
+			var rig_f: Node = game.get_node_or_null("Camera3D")
+			if rig_f != null:
+				rig_f.set("fov_deg", float(_args["fov"]))
 		add_child(game)
 		if _args.has("hover-priority"):
 			await get_tree().create_timer(1.0).timeout
@@ -118,6 +142,42 @@ func _ready() -> void:
 					await _settle(4)
 					print("[Shot] character charge started=%s" % str(stance_hand.get("charging_card") != null))
 			await _settle(4)
+		# --damage <n>: put n cards straight into BOTH damage zones (no flight, no zoom), so a shot can check what a long
+		# damage row reaches, e.g. the stack beside the opponent's row.
+		if _args.has("damage"):
+			await _settle(3)
+			for side_name in ["Player", "Opponent"]:
+				var zone: Node = game.get_node_or_null(side_name + "/DamageZone")
+				if zone == null:
+					continue
+				for i in range(int(_args["damage"])):
+					var dc = game.call("create_card", 101 + i, "player" if side_name == "Player" else "opponent")
+					if dc != null:
+						game.add_child(dc)
+						zone.call("add_card_to_tree", dc)
+				zone.call("update_card_positions")
+			await _settle(30)
+		# --life-break <n>: put n more cards into MY damage zone and let the life crown break them with its animation
+		# (no zoom), so `--seconds` can catch a crystal mid-burst. `--life-break 6 --seconds 3` = only the centre left.
+		if _args.has("life-break"):
+			await _settle(3)
+			var lzone: Node = game.get_node_or_null("Player/DamageZone")
+			for i in range(int(_args["life-break"])):
+				var lc = game.call("create_card", 151 + i, "player")
+				if lc != null and lzone != null:
+					game.add_child(lc)
+					lzone.call("add_card_to_tree", lc)
+			if lzone != null:
+				lzone.call("update_card_positions")
+			var crown = game.get("life_crown")
+			if crown != null:
+				crown.sync(true)
+		# --hit <n> / --opponent-hit <n>: REAL damage (PlayerSide.take_damage): the reveal, the zoom, then the card flying
+		# into its life crystal. Pair with --seconds to catch a moment.
+		if _args.has("hit") or _args.has("opponent-hit"):
+			await _settle(3)
+			var hit_side = game.get("player") if _args.has("hit") else game.get("opponent")
+			hit_side.take_damage(int(_args.get("hit", _args.get("opponent-hit", 1))))
 		# --stack-card <id[,id...]>: put real cards on the Stack so the stack presentation can be
 		# captured without playing a match. Uses the same add_card_to_tree() the game uses.
 		if _args.has("stack-card"):
@@ -126,8 +186,11 @@ func _ready() -> void:
 			var ids: PackedStringArray = str(_args["stack-card"]).split(",", false)
 			var added: int = 0
 			for id_text in ids:
-				var cid: int = int(id_text.strip_edges())
-				var c = game.call("create_card", cid, "player")
+				# "o:<id>" puts an OPPONENT's card on the stack (the chain layout puts the two sides in different columns).
+				var spec := id_text.strip_edges()
+				var who := "opponent" if spec.begins_with("o:") else "player"
+				var cid: int = int(spec.trim_prefix("o:"))
+				var c = game.call("create_card", cid, who)
 				if stack_node != null and c != null:
 					game.add_child(c)
 					stack_node.call("add_card_to_tree", c)
@@ -136,6 +199,98 @@ func _ready() -> void:
 				stack_node.call("update_card_positions")
 			await _settle(10)
 			print("[Shot] stack cards added: %d" % added)
+			# The top card's face corners on screen, to compare its size, lean and perspective with a reference frame.
+			var stack_cards: Array = stack_node.get("cards") if stack_node != null else []
+			if not stack_cards.is_empty():
+				await get_tree().create_timer(0.5).timeout   # the 0.3 s layout tween must have landed
+				var top_card = stack_cards.back()
+				var face: Vector2 = top_card.call("_card_face_size")
+				var cam: Camera3D = get_viewport().get_camera_3d()
+				var corners := []
+				for c in [Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(1, 0, 1), Vector3(-1, 0, 1)]:
+					corners.append(cam.unproject_position(top_card.to_global(Vector3(c.x * face.x, 0, c.z * face.y) * 0.5)))
+				print("[Shot] stack top corners (screen px): %s" % str(corners))
+		# --activate <id>: click-activate my field card <id>'s ability (Field.begin_skill_activation, as a click does) and
+		# print its rotation / lift for a second, to watch the activation pose on the real path.
+		if _args.has("activate"):
+			await _settle(3)
+			var act_id: int = int(_args["activate"])
+			for fc in game.get_node("Field").call("get_all_cards"):
+				if fc.id == act_id and fc.controller == "player":
+					game.get_node("Field").call("begin_skill_activation", fc, -1)
+					for f in range(40):
+						await get_tree().process_frame
+						if f % 4 == 0:
+							print("[Shot] f%02d rot %s up %s lift %.2f tapped %s" % [f, str(fc.rotation_degrees.snapped(Vector3.ONE * 0.1)),
+								str(fc.global_basis.y.normalized().snapped(Vector3.ONE * 0.01)), fc.activation_fx.lift_amount(), str(fc.tapped)])
+					break
+		# --badge <id>: click my field card <id> as a player would (Field.try_activate_from_field): one ability shows its badge.
+		if _args.has("badge"):
+			await _settle(3)
+			for fc in game.get_node("Field").call("get_all_cards"):
+				if fc.id == int(_args["badge"]) and fc.controller == "player":
+					game.get_node("Field").call("try_activate_from_field", fc)
+					break
+			await _settle(4)
+			var shown = game.get_node("Field").call("ability_badge")
+			print("[Shot] badge: %s" % (str(shown.call("plate_rect")) + " " + str(shown.call("shown_text")) if shown != null else "none"))
+		# --raise <id>[:flash]: raise the local player's field card <id> as while its ability is being paid for
+		# (card_activation_fx.gd); ":flash" shoots it at the flash's peak instead.
+		if _args.has("raise"):
+			await _settle(3)
+			var spec := str(_args["raise"])
+			var raise_id: int = int(spec.get_slice(":", 0))
+			for fc in game.get_node("Field").call("get_all_cards"):
+				if fc.id == raise_id and fc.controller == "player":
+					if spec.ends_with(":flash"):
+						await fc.activation_fx.flash()
+					else:
+						fc.activation_fx.raise()
+						await get_tree().create_timer(0.4).timeout
+					break
+		# --local-summon <id>: MY Summon, staged and committed as tools/opponent_summon_demo.gd does (the printed card's
+		# fade, then the stack card's flight). With --film <dir> every frame is saved from the commit on.
+		if _args.has("local-summon"):
+			await _settle(3)
+			var local_hand: Node = game.get_node("Player/Hand")
+			var stack_node: Node = game.get_node("Stack")
+			var mine = game.call("create_card", int(_args["local-summon"]), "player")
+			local_hand.call("add_card", mine)
+			local_hand.call("set_hovered", mine, true)
+			local_hand.call("begin_character_drag", mine)
+			var view: Vector2 = get_viewport().get_visible_rect().size
+			local_hand.set("_character_drag_start_pointer_y", view.y * 0.95)
+			local_hand.call("update_character_drag", mine, view * Vector2(0.5, 0.6))
+			local_hand.call("remove_card", mine)
+			local_hand.set("charging_card", mine)
+			stack_node.call("_on_hand_charge_start", mine)
+			local_hand.call("begin_character_charge", mine)
+			await _settle(30)
+			stack_node.call("_commit_summon_to_stack")
+			if _args.has("film"):
+				var local_dir: String = str(_args["film"])
+				DirAccess.make_dir_recursive_absolute(local_dir)
+				for n in int(_args.get("film-frames", 60)):
+					await RenderingServer.frame_post_draw
+					get_viewport().get_texture().get_image().save_png("%s/f%03d.png" % [local_dir, n])
+				print("[Shot] filmed %s" % local_dir)
+		# --water-draw <id>: a Water card's effect makes its controller draw 1 (Game.draw_cards with that source), so
+		# the deck-top splash (water_splash.gd) can be filmed. Add --water-seat 2 for the opponent's deck.
+		if _args.has("water-draw"):
+			await _settle(3)
+			var seat: int = int(_args.get("water-seat", 1))
+			var water_src = game.call("create_card", int(_args["water-draw"]), "player" if seat == 1 else "opponent")
+			game.add_child(water_src)
+			water_src.visible = false
+			var ctx = preload("res://scripts/effects/effect_context.gd").new(game, water_src, "shot")
+			ctx.draw(seat, 1)
+			if _args.has("film"):
+				var water_dir: String = str(_args["film"])
+				DirAccess.make_dir_recursive_absolute(water_dir)
+				for n in int(_args.get("film-frames", 60)):
+					await RenderingServer.frame_post_draw
+					get_viewport().get_texture().get_image().save_png("%s/f%03d.png" % [water_dir, n])
+				print("[Shot] filmed %s" % water_dir)
 		# --opponent-summon <id>: drive one opponent Summon cast so the hand-to-stack flight can
 		# be captured without waiting for the AI. Calls the same Hand.charge() the AI uses.
 		if _args.has("opponent-summon"):
@@ -147,6 +302,18 @@ func _ready() -> void:
 				opponent_hand.call("stage_cast_card_at_middle", summon)
 				await _settle(4)
 				var started: bool = bool(opponent_hand.call("charge", summon))
+				# Commit it as a paid cast (as tools/opponent_summon_demo.gd does): charging alone leaves it waiting
+				# face down in the hand for a payment nobody makes, so the flight never starts.
+				if started:
+					game.get_node("Stack").call("_commit_summon_to_stack")
+					# --film <dir>: save every frame of the flight (use --fixed-fps 60, so frame n is n/60 s).
+					if _args.has("film"):
+						var film_dir: String = str(_args["film"])
+						DirAccess.make_dir_recursive_absolute(film_dir)
+						for n in int(_args.get("film-frames", 60)):
+							await RenderingServer.frame_post_draw
+							get_viewport().get_texture().get_image().save_png("%s/f%03d.png" % [film_dir, n])
+						print("[Shot] filmed %s" % film_dir)
 				print("[Shot] opponent summon %d charge=%s" % [
 					int(_args["opponent-summon"]), str(started)])
 			await _settle(2)
@@ -289,13 +456,10 @@ func _ready() -> void:
 						print("[Shot]   crystal for='%s' paid_by='%s' lit=%s colour=%s"
 							% [str(c.get("element")), str(c.get("paid_element")),
 							   str(c.get("lit")), str(c.call("display_colour") if c.has_method("display_colour") else c.call("colour_now"))])
-		# --phase <GlobalVariables.Phase name> [--theirs]: roll the phase prism there (on the opponent's turn with
-		# --theirs); add --seconds to catch it mid-roll or settled.
+		# --phase <GlobalVariables.Phase name>: turn both phase dials' pointers there; add --seconds to catch the turn.
 		if _args.has("phase"):
 			await _settle(3)
-			var prism = game.get("phase_prism")
-			if prism != null:
-				prism.show_phase(GlobalVariables.Phase[str(_args["phase"])], not _args.has("theirs"))
+			game.get_node("Assistant/ButtonStations").show_phase(GlobalVariables.Phase[str(_args["phase"])])
 		# --hold <hand index>: press and hold that hand card into the cast stance, with the pointer over the wood
 		# (--armed 1, default) or over the hand band (--armed 0), so the landing-slot ghost and the slab rim can be
 		# seen without a human holding the mouse. Driven through the Hand's own drag entry points, like drop_area_probe.

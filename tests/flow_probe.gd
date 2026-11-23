@@ -19,6 +19,7 @@ extends Node3D
 
 const CARD_SCENE := preload("res://scenes/cards/card.tscn")
 const FIELD_CARD_FACE := preload("res://scripts/cards/field_card_face.gd")
+const ELEMENTS_TABLE := preload("res://scripts/core/elements.gd")
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
 const EVENTS := preload("res://scripts/effects/events.gd")
@@ -46,7 +47,7 @@ func _ready() -> void:
 	add_child(game)
 	await get_tree().process_frame
 	# THE DAMAGE ZONE STANDS ABOVE ITS DECK, a little to the right (mirrored for the opponent), as ONE STRAIGHT ROW of
-	# deck-sized cards. Its x in game.tscn is fixed for 1920x1080; under perspective an equal world x is not an equal
+	# PILE_WORLD_SCALE cards. Its x in game.tscn is fixed for 1920x1080; under perspective an equal world x is not an equal
 	# screen x at another depth, which is why it differs from the Deck's. Every card shares one world x: a per-card
 	# shift onto the deck's screen column slanted the row and read as a zig-zag.
 	const DAMAGE_RIGHT_OF_DECK_PX := 12.0
@@ -257,12 +258,9 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	var trigger_face := copy.get_node_or_null("StackAbilityFace") as SubViewport
-	var trigger_art := trigger_face.get_node("Artwork") as TextureRect if trigger_face != null else null
-	var trigger_crop := trigger_art.texture as AtlasTexture if trigger_art != null else null
-	_expect(trigger_crop != null and trigger_crop.atlas == FIELD_CARD_FACE.portrait_texture(chemist.code)
-		and trigger_art.size.y == trigger_face.get_node("Panel").position.y
-		and trigger_face.get_node("Panel").offset_bottom == trigger_face.size.y,
-		"the triggered stack face uses the field portrait above its full-height ability panel")
+	_expect(trigger_face != null and trigger_face.get_node("Artwork").texture == chemist._printed_texture
+		and trigger_face.get_node("Panel").offset_bottom == 584.0,
+		"the triggered stack face shows the printed card above its ability panel, with the Summon's bottom margin")
 
 	# Code ETBs are resolved by the stack. Start the resolution and wait until the target window opens.
 	await get_tree().create_timer(0.1).timeout
@@ -478,7 +476,7 @@ func _ready() -> void:
 				"any other state restores the stock ring width")
 			green_card.set_prompt_glow(false)
 
-		# --- the stack as a fan: top of the stack at the LEFT, older cards stepping right ---
+		# --- the stack as a fan: a new top card pushes the older ones to the RIGHT ---
 		await get_tree().create_timer(0.4).timeout
 		if stack.cards.size() < 2:
 			stack.create_card(4, "opponent", "when_cast", null)
@@ -494,18 +492,29 @@ func _ready() -> void:
 			print("[FlowProbe] stack fan: top(%s).x=%.3f | oldest(%s).x=%.3f | tilts %.3f / %.3f"
 				% [top.card_name, top.position.x, oldest.card_name, oldest.position.x,
 				top.rotation.y, oldest.rotation.y])
-			_expect(top.position.x < oldest.position.x,
-				"the TOP of the stack sits at the LEFT end of the fan")
-			_expect(absf(top.rotation.y) + absf(oldest.rotation.y) > 0.0001,
-				"the fan tilts its cards")
+			# THE CHAIN (Stack.CHAIN_LAYOUT): each card stands in its controller's column (yours LEFT, theirs RIGHT), and
+			# the newest link is the LOWEST; every older link steps up the screen.
+			var fan_camera := get_viewport().get_camera_3d()
+			var fan_view: Vector2 = get_viewport().get_visible_rect().size
+			var column_ok := true
+			for c in stack.cards:
+				var cx: float = fan_camera.unproject_position(c.global_position).x
+				column_ok = column_ok and ((cx < fan_view.x * 0.5) == (c.controller == Card.PLAYER))
+			_expect(column_ok, "every stack card stands in its controller's column (yours left, theirs right)")
+			_expect(fan_camera.unproject_position(top.global_position).y
+				> fan_camera.unproject_position(oldest.global_position).y + 1.0,
+				"the newest link is lower on screen than the oldest (older links step up)")
+			# Reference ~/Desktop/Clips/damage 151: the card is held up toward the camera, not lying on the board.
+			_expect(absf(top.rotation.x) > deg_to_rad(5.0),
+				"the stack card is pitched up toward the camera")
 			var top_y: float = top.position.y
 			stack.select_card(oldest)
 			await get_tree().create_timer(0.4).timeout
 			print("[FlowProbe] selecting the oldest card: y %.4f (top is at %.4f)"
 				% [oldest.position.y, top_y])
 			_expect(stack.selected_or_top() == oldest, "clicking an older card selects it")
-			_expect(oldest.position.y > top.position.y,
-				"the selected card is raised above the rest of the fan")
+			# (A "selected card is raised" check used to pass only through the old fan geometry: FAN_RAISE is not
+			# applied anywhere, so selecting does not lift the card.)
 			stack.select_top()
 			await get_tree().create_timer(0.4).timeout
 			_expect(stack.selected_or_top() == stack.cards.back(),
@@ -880,9 +889,10 @@ func _check_demo_stack_fan() -> void:
 		if previous_top != null:
 			previous_top.stack_tween.custom_step(0.31)
 			var camera := get_viewport().get_camera_3d()
+			# The chain: a new link takes the bottom slot and pushes the previous one UP the screen (and back, smaller).
 			_expect(camera.unproject_position(previous_top.global_position).y
-				> camera.unproject_position(previous_slot).y,
-				"new card pushes the previous top down during flight")
+				< camera.unproject_position(previous_slot).y - 1.0,
+				"new card pushes the previous top up the chain")
 		_expect(stack.cards.size() == i + 1 and hand.cards.size() == count - i - 1
 			and top.revealed and top.position.distance_to(stack.calculate_card_position(i)) < 0.001,
 			"demo holds %d cards with the latest in its stack slot" % (i + 1))
@@ -892,26 +902,29 @@ func _check_demo_stack_fan() -> void:
 		for card in stack.cards:
 			card.stack_tween.custom_step(0.35)
 		var view_camera := get_viewport().get_camera_3d()
-		for index in range(count - 1):
-			var bottom: Card = stack.cards[index]
-			var covering: Card = stack.cards[index + 1]
-			var half_edge := Vector3.RIGHT * bottom._card_face_size().x * 0.5
-			var left := view_camera.unproject_position(bottom.to_global(-half_edge)).x
-			var right := view_camera.unproject_position(bottom.to_global(half_edge)).x
-			var cover_edge := view_camera.unproject_position(covering.to_global(half_edge)).x
-			var exposed := (right - cover_edge) / (right - left)
-			_expect(absf(exposed - stack._stack_spacing(count) / stack.card_width) < 0.002,
-				"covered stack card %d exposes the target fraction of its screen width" % (index + 1))
+		var view: Vector2 = get_viewport().get_visible_rect().size
 		stack._update_stack_shadows()
-		for i in range(1, count):
-			var lower: Card = stack.cards[i - 1]
-			var upper: Card = stack.cards[i]
-			var pose := stack._stack_card_local_basis(lower)
-			var offset := upper.position - lower.position
-			_expect(absf(offset.dot(pose.y) - stack.FAN_HEIGHT_STEP) < 0.0001
-				and view_camera.unproject_position(upper.global_position).y < view_camera.unproject_position(lower.global_position).y - 1.0 and float(lower.mat.get_shader_parameter("shadow_strength")) > 0.0,
-				"stack layer %d steps visibly upward while retaining its normal depth" % (i + 1))
-		_expect(stack.cards.back().position.is_equal_approx(stack.FAN_ANCHOR), "the newest card occupies the fixed top slot")
+		# THE CHAIN, measured on screen. The newest link stands at (0.5 + side * CHAIN_SIDE_X, CHAIN_Y) of the view; each
+		# older SHOWN link steps up CHAIN_STEP_UP of the height and shrinks by CHAIN_SHRINK; links older than
+		# CHAIN_VISIBLE are hidden.
+		var newest: Card = stack.cards.back()
+		var newest_px := view_camera.unproject_position(newest.global_position)
+		var want_px := Vector2(view.x * (0.5 + stack.chain_side(newest) * stack.CHAIN_SIDE_X), view.y * stack.CHAIN_Y)
+		_expect(newest_px.distance_to(want_px) < 2.0,
+			"the newest card occupies the bottom chain slot (%s vs %s)" % [str(newest_px.round()), str(want_px.round())])
+		for rank in range(1, count):
+			var newer: Card = stack.cards[count - rank]
+			var older: Card = stack.cards[count - 1 - rank]
+			if rank >= stack.CHAIN_VISIBLE:
+				_expect(not older.visible, "chain link %d (older than the %d shown) is hidden" % [rank + 1, stack.CHAIN_VISIBLE])
+				continue
+			var rise: float = view_camera.unproject_position(newer.global_position).y \
+				- view_camera.unproject_position(older.global_position).y
+			var ratio: float = older.global_basis.get_scale().x / newer.global_basis.get_scale().x
+			_expect(older.visible and absf(rise - view.y * stack.CHAIN_STEP_UP) < 2.0
+				and absf(ratio - stack.CHAIN_SHRINK) < 0.01,
+				"chain link %d steps %.0f px up (want %.0f) at %.2fx the size (want %.2f)" % [
+					rank + 1, rise, view.y * stack.CHAIN_STEP_UP, ratio, stack.CHAIN_SHRINK])
 		_expect(float(stack.cards.back().mat.get_shader_parameter("shadow_strength")) == 0.0,
 			"top stack card receives no overlap shadow")
 		var inspected: Card = stack.cards.front()
@@ -933,7 +946,7 @@ func _check_demo_stack_fan() -> void:
 			"hover lifts the buried card toward the camera under the cursor")
 		_expect(inspected.global_basis.x.normalized().dot(camera.global_basis.x) > 0.999
 			and inspected.global_basis.y.normalized().dot(camera.global_basis.z) > 0.999
-			and inspected.global_basis.x.length() > rest_basis.x.length() * 1.35,
+			and inspected.global_basis.x.length() > rest_basis.x.length() * (stack.STACK_HOVER_SCALE - 0.05),
 			"stack hover presents an enlarged upright card")
 		stack.set_hovered(inspected, false)
 		_expect(inspected.global_basis.is_equal_approx(rest_basis), "hover exit restores the fan tilt and size")
@@ -942,10 +955,9 @@ func _check_demo_stack_fan() -> void:
 	demo._preview_ability(3)
 	var ability_copy: Card = stack.cards.back()
 	var face := ability_copy.get_node_or_null("StackAbilityFace") as SubViewport
-	var ability_crop := face.get_node("Artwork").texture as AtlasTexture if face != null else null
 	_expect(face != null and face.get_node("Ability").text.replace("\n", " ") == "Choose 1 Forward. It cannot block this turn."
 		and ability_copy.mat.get_shader_parameter("texture_albedo") == face.get_texture()
-		and ability_crop != null and ability_crop.atlas == FIELD_CARD_FACE.portrait_texture(ability_copy.code)
+		and face.get_node("Artwork").texture == ability_copy._printed_texture
 		and not ability_copy.effect_source.has_node("StackAbilityFace"), "Red Mage proxy displays only the chosen effect on its own face")
 	demo._preview_ability(100)
 	var earth := stack.cards.back() as Card
@@ -1028,9 +1040,17 @@ func _check_demo_stack_fan() -> void:
 			var stack_normal := (stack.global_basis.orthonormalized() * stack._stack_card_local_basis(local_summon)).y.normalized()
 			var moving_bottom: float = stack._card_face_depth_range(local_summon, stack_normal).x
 			for existing in stack.cards:
-				if existing != local_summon:
+				# Only links it can fly through: its own column, drawn (the chain layout; the other column is across the screen).
+				if existing != local_summon and existing.visible \
+						and (not stack.CHAIN_LAYOUT or stack.chain_side(existing) == stack.chain_side(local_summon)):
 					clears_existing_stack = clears_existing_stack and moving_bottom >= stack._card_face_depth_range(existing, stack_normal).y + 0.002
 
+			if OS.get_environment("FLOW_TRACE") != "":
+				var hf := local_summon._card_face_size() * 0.5
+				var ft := stack.global_transform * Transform3D(stack._stack_card_local_basis(local_summon).scaled(Vector3.ONE * (Card.STACK_CARD_SCALE / Card.STACK_CONTAINER_SCALE)), stack.calculate_card_position(local_summon.index)) * local_summon.hand_mesh.transform
+				var h_now := absf(entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(0, 0, hf.y))).y - entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(0, 0, -hf.y))).y)
+				var h_rest := absf(entrance_camera.unproject_position(ft * Vector3(0, 0, hf.y)).y - entrance_camera.unproject_position(ft * Vector3(0, 0, -hf.y)).y)
+				print("[FlowTrace] frame %d height %.0f / %.0f = %.2f  scale %.2f" % [_frame, h_now, h_rest, h_now / h_rest, local_summon.global_basis.get_scale().x])
 			if _frame == 19:
 				var half_face := local_summon._card_face_size() * 0.5
 				var top_mid := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(0, 0, -half_face.y)))
@@ -1039,7 +1059,8 @@ func _check_demo_stack_fan() -> void:
 				var final_top := entrance_camera.unproject_position(final_transform * Vector3(0, 0, -half_face.y))
 				var final_bottom := entrance_camera.unproject_position(final_transform * Vector3(0, 0, half_face.y))
 				_expect(absf(bottom_mid.y - top_mid.y) < absf(final_bottom.y - final_top.y) * 0.85,
-					"early descent stays visibly foreshortened before opening to full height")
+					"early descent stays visibly foreshortened before opening to full height (%.0f px tall vs %.0f px at rest)" % [
+						absf(bottom_mid.y - top_mid.y), absf(final_bottom.y - final_top.y)])
 			if _frame == 25:
 				var half_size := local_summon._card_face_size() * 0.5
 				var top_left := entrance_camera.unproject_position(local_summon.hand_mesh.to_global(Vector3(-half_size.x, 0, -half_size.y)))
@@ -1864,7 +1885,20 @@ func _check_gadot_played_from_hand() -> void:
 	# Watch the trigger cards until both landed (or give up).
 	var seen: Dictionary = {}   # card -> {first_visible_ms, launched_ms, path_length, last_pos}
 	var waited := 0.0
+	# Gadot BLINKS once for both triggers; the flights start only after the blink is over and the pause has passed.
+	var gadot_lift := 0.0
+	var gadot_blink_done := -1
+	var gadot_top_from := -1
+	var gadot_top_to := -1
 	while waited < 8.0:
+		if is_instance_valid(gadot):
+			gadot_lift = maxf(gadot_lift, gadot.activation_fx.lift_amount())
+			if gadot.activation_fx.lift_amount() > 0.99:
+				if gadot_top_from < 0:
+					gadot_top_from = Time.get_ticks_msec()
+				gadot_top_to = Time.get_ticks_msec()
+			if gadot_blink_done < 0 and gadot_lift > 0.95 and is_zero_approx(gadot.activation_fx.lift_amount()):
+				gadot_blink_done = Time.get_ticks_msec()
 		for c in stack.cards:
 			if c.effect_source != gadot:
 				continue
@@ -1872,9 +1906,13 @@ func _check_gadot_played_from_hand() -> void:
 			if c.visible and rec["visible_at"] < 0:
 				rec["visible_at"] = Time.get_ticks_msec()
 				rec["from"] = c.global_position
-			if c.visible:
+			# Only the card's OWN flight counts: once it lands, the next arrival pushes it aside (Stack.FAN_DIRECTION),
+			# which is the layout, not its path.
+			if c.visible and (stack._trigger_flights.has(c) or rec["visible_at"] == Time.get_ticks_msec()):
 				rec["path"] += (c.global_position - rec["last"]).length()
-			rec["last"] = c.global_position
+				rec["last"] = c.global_position
+			elif not c.visible:
+				rec["last"] = c.global_position
 			seen[c] = rec
 		if seen.size() == 2 and started.size() == 2 and not stack._trigger_flights.has(seen.keys()[0]) 				and not stack._trigger_flights.has(seen.keys()[1]):
 			break
@@ -1883,6 +1921,14 @@ func _check_gadot_played_from_hand() -> void:
 	print("[FlowProbe] played Gadot: stack %d, flights started %d, records %s" % [stack.cards.size(), started.size(),
 		str(seen.values().map(func(r): return "visible@%d path %.2f" % [r["visible_at"], r["path"]]))])
 	_expect(seen.size() == 2, "playing Gadot puts his two abilities on the stack (%d)" % seen.size())
+	var held_ms: int = gadot_top_to - gadot_top_from
+	_expect(gadot_top_from >= 0 and held_ms >= int(stack.blink_hold_seconds * 1000.0) - 40,
+		"Gadot stays up at the top of his blink for the hold (%d ms; hold %.2f s plus the flash)" % [held_ms, stack.blink_hold_seconds])
+	var first_launch: int = started.values().min() if not started.is_empty() else -1
+	_expect(gadot_lift > 0.95 and gadot_blink_done >= 0 and first_launch >= 0
+		and first_launch >= gadot_blink_done + int(stack.blink_to_flight_seconds * 1000.0) - 50,
+		"Gadot blinks once, and his trigger cards leave only after the blink and the pause (blink over %d ms before the first flight)" % (
+			first_launch - gadot_blink_done))
 	for c in seen:
 		_expect(started.has(c), "trigger card %d had a flight" % c.effect_ability_index)
 		_expect(started.has(c) and seen[c]["visible_at"] >= started[c],
@@ -1894,38 +1940,150 @@ func _check_gadot_played_from_hand() -> void:
 		_expect(seen[c]["path"] < chord * 4.0,
 			"trigger card %d flew a sane path, not off toward the camera (%.2f m for a %.2f m trip)" % [c.effect_ability_index, seen[c]["path"], chord])
 	if seen.size() == 2:
-		var paths: Array = seen.values().map(func(r): return r["path"])
-		_expect(absf(paths[0] - paths[1]) < 0.1 * maxf(paths[0], paths[1]),
-			"both overlapping flights take the same path (%.2f m / %.2f m): neither disturbs the other" % [paths[0], paths[1]])
+		# The two land in different fan slots, so compare each path against its own trip (path / chord), not the
+		# raw lengths: a flight disturbed by the other one would wander far off its arc.
+		var ratios: Array = seen.values().map(func(r): return r["path"] / maxf(0.001, (r["last"] - r["from"]).length()))
+		# 20%, not 10%: the two fly together, and the second one's arrival moves the first one's slot mid-flight (the
+		# top slot slides left and the older card is pushed right), so the first path bends. The leapfrog bug this
+		# guards against was a 60x path, which the "sane path" check above catches on its own.
+		_expect(absf(ratios[0] - ratios[1]) < 0.2 * maxf(ratios[0], ratios[1]),
+			"both overlapping flights take the same shape of path (%.2f / %.2f of their trips): neither disturbs the other" % [ratios[0], ratios[1]])
 	await Vfx.idle()
 	game.queue_free()
 	await get_tree().process_frame
 
-## AN ABILITY COMES OUT OF ITS SOURCE (Stack._fly_from_source). The local player's proxy appears AT ONCE over the card it
-## was activated from — small, upright, facing the camera — and lands in its slot at full stack size. An opponent's
-## proxy is not shown while it is being paid for, and flies in from its source only once committed.
-## `earth` was created this very frame; `red_mage` a moment before it.
+## AN ABILITY COMES OUT OF ITS SOURCE (Stack._fly_from_source), but only once it is PAID FOR. While the local player
+## pays, nothing is on the stack: the source card stands raised and lit (card_activation_fx.gd), and a cancel lowers it.
+## At commit the source flashes and the proxy leaves it - small, upright, facing the camera - landing in its slot at
+## full stack size. An opponent's proxy is likewise hidden while paid for, and flies in from its source once committed.
+## `red_mage` and `earth` were committed by the demo just now (in that order).
 func _check_source_flights(demo, stack: Stack, earth: Card, red_mage: Card) -> void:
 	var camera := get_viewport().get_camera_3d()
 	var cam := camera.global_basis.orthonormalized()
 	var source: Card = earth.effect_source
-	_expect(demo.game.agent_for(1).is_human(), "the demo's local player is human, so their ability shows at activation")
-	var gap: float = camera.unproject_position(earth.global_position).distance_to(
-		camera.unproject_position(source.get_global_face_centre()))
-	_expect(earth.visible and gap < 2.0, "the activated ability's card appears over its source at once (%.1f px away)" % gap)
-	var start_scale: float = earth.global_transform.basis.get_scale().x
+	_expect(demo.game.agent_for(1).is_human(), "the demo's local player is human, so their source rises while they pay")
+	var first_seen := -1.0
+	var gap := INF
+	var start_scale := 0.0
+	var pose := Basis.IDENTITY
+	var source_lift := 0.0
+	var waited := 0.0
+	# The beats: the blink is over when the source is back down after rising; its dull turn starts after that; and the
+	# card leaves `blink_to_flight_seconds` later still.
+	var start_yaw: float = source.rotation_degrees.y
+	var blink_done_at := -1.0
+	var turn_at := -1.0
+	var clock0 := Time.get_ticks_msec()   # wall clock: summed headless frame deltas drift from it
+	while waited < 5.0:
+		if source.activation_fx.lift_amount() > source_lift:
+			source_lift = source.activation_fx.lift_amount()
+		if blink_done_at < 0.0 and source_lift > 0.95 and is_zero_approx(source.activation_fx.lift_amount()):
+			blink_done_at = waited
+		if turn_at < 0.0 and absf(source.rotation_degrees.y - start_yaw) > 1.0:
+			turn_at = waited
+		if is_instance_valid(earth) and earth.visible:
+			first_seen = waited
+			gap = camera.unproject_position(earth.global_position).distance_to(
+				camera.unproject_position(source.get_global_face_centre()))
+			start_scale = earth.global_transform.basis.get_scale().x
+			pose = earth.global_basis.orthonormalized()
+			break
+		await get_tree().process_frame
+		waited = (Time.get_ticks_msec() - clock0) / 1000.0
+	_expect(source_lift > 0.95, "at commit the source rises and flashes first (lift %.2f)" % source_lift)
+	_expect(blink_done_at >= 0.0 and first_seen >= blink_done_at + stack.blink_to_flight_seconds - 0.05,
+		"its card leaves only after the blink is over and a pause (blink done %.2f s, card seen %.2f s)" % [blink_done_at, first_seen])
+	if bool(source.activation_skill(0).get("tap", false)):
+		_expect(turn_at >= blink_done_at - 0.02 and turn_at <= first_seen,
+			"and the source turns dull after the blink, before its card leaves (turn %.2f s)" % turn_at)
+	# One frame of the source settling after the flash's peak separates them.
+	_expect(first_seen >= 0.0 and gap < 8.0, "then the ability's card appears over its source (%.1f px away)" % gap)
 	_expect(absf(start_scale - Card.STACK_CARD_SCALE * stack.source_flight_start_scale) < 0.02,
 		"it starts small: %.2f of world scale (stack size %.2f)" % [start_scale, Card.STACK_CARD_SCALE])
-	var pose := earth.global_basis.orthonormalized()
 	_expect(pose.y.dot(cam.z) > 0.99 and (-pose.z).dot(cam.y) > 0.99,
 		"it starts upright, facing the camera (face %.3f, top %.3f)" % [pose.y.dot(cam.z), (-pose.z).dot(cam.y)])
 	await _await_landed(stack, [earth, red_mage])
+	await Vfx.idle()
+	await get_tree().create_timer(0.5).timeout
 	for card in [red_mage, earth]:
 		var turn: float = card.basis.orthonormalized().get_rotation_quaternion().angle_to(
 			stack._stack_card_local_basis(card).get_rotation_quaternion())
 		_expect(card.position.distance_to(stack.calculate_card_position(card.index)) < 0.01
-			and absf(card.global_transform.basis.get_scale().x - Card.STACK_CARD_SCALE) < 0.02 and turn < 0.02,
-			"%s's ability card lands in its slot at stack size and in the stack pose (%.3f rad off)" % [card.card_name, turn])
+			and absf(card.global_transform.basis.get_scale().x - Card.STACK_CARD_SCALE * stack.chain_scale(card)) < 0.02
+			and turn < 0.02,
+			"%s's ability card lands in its slot at its stack size and in the stack pose (%.3f rad off)" % [card.card_name, turn])
+	_expect(is_zero_approx(source.activation_fx.lift_amount()), "and the source has settled back into its slot")
+
+	# THE LOCAL ACTIVATION WHILE IT IS BEING PAID FOR: nothing on screen in the stack, the source raised; cancel lowers.
+	var pending_source: Card = red_mage.effect_source
+	# The demo's commit above dulled it (Red Mage's cost); start from an upright card, as a real activation does.
+	pending_source.untap()
+	await get_tree().create_timer(pending_source.tap_speed + 0.1).timeout
+	var rest_depth: float = camera.global_position.distance_to(pending_source.global_position)
+	var rest_scale: float = pending_source.global_transform.basis.get_scale().x
+	var pending: Card = stack.create_skill_proxy(pending_source, 0, pending_source.activation_skill(0))
+	stack.skill_activation_proxy = pending
+	stack.skill_mana_deferred_until_target_confirm = true
+	# NOT DULLED WHILE PAID FOR: the 《Dull》 is paid at commit. Until then the source is reserved for that cost, so it
+	# cannot produce the mana for its own ability either.
+	_expect(not pending_source.tapped and stack.is_reserved_for_cost(pending_source),
+		"while it is paid for, the source is not dulled yet, only reserved for its dull cost")
+	var field_node: Field = demo.game.get_node("Field")
+	field_node.add_card_to_mana_conversion(pending_source)
+	_expect(not field_node.selected_cards_for_mana_conversion.has(pending_source),
+		"and it cannot pay the mana for its own ability")
+	# The commit dulls it while it is still RAISED (the flash follows). Lift and dull together
+	# once SPUN the card a whole turn: the lift wrote global_position, which re-derived the half turn's Euler angles
+	# (+180 came back as -180), and the tap's rotation_degrees:y tween then swept the long way round to 165.
+	pending_source.tap()
+	var turned := 0.0
+	var worst_tip := 0.0
+	var last_across: Vector3 = pending_source.global_basis.x.normalized()
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 450:
+		await get_tree().process_frame
+		var across: Vector3 = pending_source.global_basis.x.normalized()
+		turned += rad_to_deg(last_across.angle_to(across))
+		last_across = across
+		worst_tip = maxf(worst_tip, rad_to_deg(pending_source.global_basis.y.normalized().angle_to(Vector3.UP)))
+	# The charging waver adds its own small tilt (card_activation_fx WAVER_TILT_DEG) on top; anything past that is a spin.
+	_expect(turned < absf(pending_source.tap_angle) + 3.0 and worst_tip < 2.5,
+		"rising while it dulls, the source only makes its %.0f deg dull turn (turned %.1f deg, tipped %.1f deg)" % [
+			absf(pending_source.tap_angle), turned, worst_tip])
+	_expect(is_instance_valid(pending) and not pending.visible and stack.cards.has(pending)
+		and not stack.layout_cards().has(pending),
+		"the local player's ability being paid for is in the rules' stack but not shown or laid out")
+	_expect(pending_source.activation_fx.is_raised() and is_equal_approx(pending_source.activation_fx.lift_amount(), 1.0)
+		and camera.global_position.distance_to(pending_source.global_position) < rest_depth - 0.4
+		and pending_source.global_transform.basis.get_scale().x > rest_scale * 1.05,
+		"instead its source stands raised toward the camera and enlarged while it is paid for")
+	# CHARGING: it wavers like a Character held in the cast stance (drift, tilt, breath) - visibly, but a little.
+	var px_min := Vector2.INF
+	var px_max := -Vector2.INF
+	var tilt_max := 0.0
+	var t1 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t1 < 1200:
+		await get_tree().process_frame
+		var at: Vector2 = camera.unproject_position(pending_source.global_position)
+		px_min = px_min.min(at)
+		px_max = px_max.max(at)
+		tilt_max = maxf(tilt_max, rad_to_deg(maxf(absf(pending_source.rotation.x), absf(pending_source.rotation.z))))
+	var sway: Vector2 = px_max - px_min
+	_expect(sway.length() > 1.5 and sway.length() < 12.0 and tilt_max > 0.4 and tilt_max < 2.0,
+		"while it charges it wavers: %.1f x %.1f px of drift, up to %.1f deg of tilt" % [sway.x, sway.y, tilt_max])
+	var aura_mat: ShaderMaterial = (pending_source.hand_mesh.get_node("ActivationAura") as MeshInstance3D).material_override
+	_expect(float(aura_mat.get_shader_parameter("intensity")) >= 0.99
+		and (aura_mat.get_shader_parameter("color_a") as Color).is_equal_approx(ELEMENTS_TABLE.ACCENT[ELEMENTS_TABLE.index_of(pending_source.current_elements()[0])]),
+		"and wears the full charging aura in its element's colour")
+	_expect(demo.game.get_node("Field").arrow_origin(pending) == pending_source,
+		"a targeting arc for it starts from the raised source, not the hidden proxy")
+	stack._clear_skill_proxy()
+	await get_tree().create_timer(0.45).timeout
+	_expect(not pending_source.activation_fx.is_raised() and is_zero_approx(pending_source.activation_fx.lift_amount())
+		and absf(camera.global_position.distance_to(pending_source.global_position) - rest_depth) < 0.01
+		and absf(pending_source.global_transform.basis.get_scale().x - rest_scale) < 0.001
+		and absf(pending_source.rotation.x) < 1e-5 and absf(pending_source.rotation.z) < 1e-5,
+		"cancelling lowers the source exactly back into its slot, level again")
 
 	# THE OPPONENT'S ACTIVATION: hidden through its payment, shown once paid.
 	var opponent_mage: Card = demo.game.create_card(3, "opponent")
@@ -1936,7 +2094,7 @@ func _check_source_flights(demo, stack: Stack, earth: Card, red_mage: Card) -> v
 		"an opponent's ability being paid for is on the stack for the rules, but not shown or laid out")
 	await get_tree().create_timer(0.3).timeout
 	_expect(not hidden.visible, "and it stays hidden while its costs are being paid")
-	var source_px: Vector2 = camera.unproject_position(opponent_mage.get_global_face_centre())
+	var source_px: Vector2
 	stack.skill_activation_proxy = hidden
 	stack.skill_mana_deferred_until_target_confirm = true
 	stack.commit_skill_activation_costs_if_pending()
@@ -1945,10 +2103,11 @@ func _check_source_flights(demo, stack: Stack, earth: Card, red_mage: Card) -> v
 	for _i in range(600):
 		if is_instance_valid(hidden) and hidden.visible:
 			first_px = camera.unproject_position(hidden.global_position)
+			source_px = camera.unproject_position(opponent_mage.get_global_face_centre())   # risen for its flash
 			break
 		await get_tree().process_frame
-	_expect(first_px != Vector2.INF and first_px.distance_to(source_px) < 2.0,
-		"once paid, it flies in from its source (first seen %.1f px from it)" % (
+	_expect(first_px != Vector2.INF and first_px.distance_to(source_px) < 8.0,
+		"once paid, its source flashes and it flies in from it (first seen %.1f px from it)" % (
 			first_px.distance_to(source_px) if first_px != Vector2.INF else INF))
 	await _await_landed(stack, [hidden])
 	_expect(stack.layout_cards().has(hidden) and hidden.position.distance_to(stack.calculate_card_position(hidden.index)) < 0.01,

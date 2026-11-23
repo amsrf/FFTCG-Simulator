@@ -4,7 +4,74 @@ All notable changes to the FF TCG Simulator project.
 
 ## [Unreleased] — 2026-11-22
 
+### Changed — the board is rebuilt by one generator
+- **`Blender/build_board.py` + `assets/board/layout.json`.** The board is generated in one pass from a layout file that
+  is the single source of truth, instead of six stacked patch stages. One continuous terrain heightfield (no
+  overlapping sheets: the seams, steps, stray green and slab ends the user marked are gone by construction), one wood
+  floor per half cut to the symmetric outline, the stone curb and seam, deck trays, the river channel, lava blended into
+  the volcanic ground's material, and rule-based per-biome scatter with keep-out zones, symmetric by construction.
+  Removed: `extend_board_edges.py`, `build_deck_cradles.py`, `build_sunken_floor.py` and their stage folders.
+- **A little more light toward the wood floor's ends.** `board_surface.gdshader` lifts only the surface at the wood's
+  exact height (Godot y 0.065) by up to `wood_lift` 0.10 from |x| 1.6 m outward, softening the baked key light's
+  falloff; the scenery and corners are unchanged. (A full evening-out at 0.25 was rejected as too much.)
+- **Deck trays centred as seen.** The pile stands ~12 cm tall, so from the board camera its top lands up/sideways from
+  its base (more for the far deck). `build_board.py` centres each tray where a mid-pile height (9 cm) meets the ground
+  along the camera's line of sight, with an even 6 cm rim; the recess grows by the shift so the base still fits.
+- **Life crystals read `assets/board/board_layout_baked.json`** (written by the generator: the ground under each
+  crystal, per seat) instead of a hand-copied `SOCKET_SETS` table. `life_crown_probe` also checks that game.tscn's
+  decks, pits and button stations match layout.json.
+
 ### Added
+- **Trailer tooling** (`tools/trailer/`, see its README for the 12 beats). `trailer_shot.tscn` films one scripted shot of the real game: a board config, a camera path in the board camera's own terms (target / elevation / frame width / fov, eased between keys) and a scripted play (cards from hand paid for free), saving every frame at a fixed 60 fps; `--still` for a single pose. It hides the 2D overlays and both hands (they float in front of a camera that moves in). Shots so far: `crystals`, `backups_mine`, `backups_theirs`, `forwards`. `rough_cut.py` assembles shots, title cards and the music (Prologue Movie 20 s until the Forwards, then Trisection) with ffmpeg into a 33 s rough cut for pacing. All 12 beats are now shots: the play shots run REAL scripted matches through `tools/trailer/trailer_agent.gd` (an AIAgent whose attacks, blocks, targets and priority steps come from the shot; costs paid free), with event-driven camera moves (`_move`) and an end condition per shot. Beats as the user asked: Orlandeau's entry, Haste and row lightning (`forwards`); Ultimecia's Time Compression and Delita's Northswain's Strike (`break_through`); a stack that zig-zags player/opponent/player (`stack3`). `Game.return_to_menu_on_end` (default true) lets the victory shot stay on the board. The rough cut is now all 12 beats (139.5 s). Restructured at the user's request: "Break through your opponent's defences" is three quick clash WINS (toss, pop, tumble), a new beat "Use your characters' abilities to break through" cuts between Orlandeau, Alma (draw), Delita, Kefka (+5000), Kain (-5000) and Ultimecia, and the Summons are one scene each (Brynhildr, Shiva, Valefor 1-198S's tornado, Hecatoncheir, Odin). The scripted seats are HELD until the camera rolls (they used to play the first card during the settle, off camera), and pick targets with no think time (the aiming arrow follows the real pointer meanwhile). Arrow scenes use `ARROW_VIEW`, near the board view. The rough cut loops Trisection when it outlasts the track and renders titles from a text file (apostrophes).
+- **Test ground "Power entries (vs AI)"** (`TestGrounds.power_entries`, Sandbox): cost 5-6 Forwards in both hands
+  (you Fire: Garland, Jecht, Auron, Cloud; the AI Water: Cecil, Agrias, Vaan, Tidus) and cost 1-2 cards all over
+  both boards, five active Backups each. `tools/card_play_demo.tscn --ground <name>` plays the first hand card of
+  any ground.
+- **A strong card's entry shakes the board** (`scripts/vfx/power_entry_burst.gd`, shaders `power_entry_burst`,
+  `power_entry_column`, `power_entry_flames`; modelled on `~/Desktop/Clips/entry` frames 43-72). A Character with
+  `Field.slam_tier()` 1+ (cost 5+; tier 2, cost 8+, a little bigger) gets, at the moment its drawing touches the slot
+  (`CardHologram.play_in`, phase "fill"): a ring in its ELEMENT colour that snaps out to ~1.9 card heights with a
+  fainter one inside it and speed lines re-dealt every frame, a light column rising up-screen, flames licking up its
+  long edges; the MEASURED camera shake (`CardHologram.power_shake`, `POWER_SHAKE_PX`: the reference's per-frame
+  offsets, registered off a patch of its board: ~20 px at 1080p decaying over 12 frames), which replaces the small
+  jolt for these cards; and a shockwave through the other field cards (`CardDamageFx.play_tremor` / `hop_at`): each
+  one is THROWN (keyed off reference frames 46-57, studied every frame at full size: `HOP_KEYS_*`): it snaps into the
+  air in ~1 frame, tipped ~35 degrees away from the new card and turned ~15 degrees, holds there ~5 frames with the
+  turn swinging back, then (slower than the reference, at the user's request) FALLS over ~0.12 s, lands on one edge
+  and ROCKS edge to edge, each rock smaller, with a little bounce, still after ~0.5 s. Its lowest corner clears the
+  wood by ~10 cm (the jump height is added ON TOP of the clearance the tip needs; it used to be swallowed by it, so the
+  card only pivoted on a corner). Measured ON SCREEN by `power_entry_probe`: the nearest card rises ~34-36 px at 1080p
+  (0.25 card heights) against the reference's ~35 px, and reaches the top in under 0.05 s. Near cards get almost the
+  full blow (`1 - smoothstep(0.35, 1, d / reach)`) and the wave crosses the board at 30 m/s, so neighbours go
+  together as in the reference; each still rolls its own tip direction, tip, turn and pace, and its cost scales it
+  (`HOP_COST_SCALE` 1.25 at cost 1 to 0.75 at cost 8). A soft lift shadow stays on the wood. (The first versions
+  rocked cards in place, then floated them up slowly and too low; both were judged from downscaled frames.) Posed on its HandMesh + chrome, never a corner under the
+  wood. Shaders warmed in `EFFECT_SHADERS`. New
+  `tests/power_entry_probe.tscn` (16 checks, incl. the nearest card leaving the wood and no two neighbours alike); `tools/card_play_demo.tscn --big` films it.
+- **A second clash death: the toss** (`ClashCinematic._start_toss` / `_toss_pose`, modelled on
+  `~/Desktop/Clips/death2` frames 56-109). The loser is thrown back over its own side, climbing TOWARD THE CAMERA
+  along the line of sight (~1.8x on screen at the top) while it flips end over end about its width axis: two full
+  turns keyed off the reference frames (`TOSS_PITCH_KEYS`: edge, the back held large, edge, face, edge, the back
+  falling, edge, face), with a roll wobble and a ~35 degree turn it lands with. It lands face up on the wood between
+  the contact point and its slot, rests `toss_rest_seconds`, and only then breaks (the destroy burst). Its board
+  shadow is off in the air and returns on landing. `ClashCinematic.next_defeat_style` forces one;
+  `tools/clash_demo.tscn --defeat toss|pop|tumble` films it.
+- **A third clash death: the pop** (`~/Desktop/Clips/death` frames 90-127, the blue card). Same flight engine as the
+  toss (`_flight_profile("pop")`, `POP_PITCH_KEYS`), its own numbers: it pops nearly straight up over the clash, turns
+  over ONCE, hangs at the top with its back to the camera (~2x on screen), drops back beside its own slot almost
+  straight, bounces once and keeps turning slowly for `pop_rest_seconds` before it breaks. A loser now picks
+  uniformly from `defeat_styles` (tumble, toss, pop), never the style the previous loser used. The toss and pop
+  drift toward the WINNER on screen (it was a fixed screen-up drift, which threw an opponent's card off the top
+  edge). `clash_cinematic_probe` covers the pop and the no-repeat picker.
+  `clash_cinematic_probe` checks the climb, the back showing, the face-up landing near the slot and the late break.
+- **Water splash on the deck when a Water card makes you draw** (`scripts/vfx/water_splash.gd`; shaders
+  `water_ring`, `water_drop`, `water_crown`). `Game.draw_cards(count, owner_id, source)` takes the effect's source
+  (`EffectContext.draw()` passes it); when that source is Water (`current_elements()` has 水) a splash plays on the
+  drawing player's deck top in the same frame the cards lift off: a white burst of water that clears into a foaming
+  ring, ~48 droplet beads thrown up and out, and three ripples across the deck. Presentation only (skipped in fast
+  mode, seeded from the card, never `Game.rng`), never holds the queue, frees itself after 1.1 s. The Draw Phase draw
+  and non-Water sources do not splash. Shaders are warmed in `EFFECT_SHADERS`. New `tests/water_splash_probe.tscn`;
+  `tools/shot.tscn --water-draw <id> [--water-seat 2] --film <dir>` films it.
 - **The Chaos life crystals** (`scripts/ui/life_crown.gd`, created by `Game._setup_life_crown()`): seven blood
   crystals growing out of the volcanic stones along the local edge, in the reserved hand–Backup band. They are part of
   the BOARD: world-space at `SOCKETS` (rock heights sampled from `assets/board/board_mesh.bin`), each in a basalt
@@ -42,12 +109,64 @@ All notable changes to the FF TCG Simulator project.
   after `extend_board_edges.py`, now the export source): a warm timber rim (10 cm on the outer sides, slim against the
   Break Zone pit housing) round a darker floor at the deck's base, with the scenery under it cleared. Both seats
   re-exported. (The decks used to lie straight on the corner rocks/grass.)
-- Board brightness 0.70 -> 0.78 (`BoardEnvironment.brightness`).
-- **Timber rim.** `Blender/build_timber_rim.py` (the stage after `build_deck_cradles.py`, now the export source) frames
-  each slab with a raised, rounded wooden rail round its far edge and short ends, open where the river crosses, like
-  Artifact's frame. The pit and button wells are cut out of it; the forest rail is drawn ~15 cm in to cover the strip
-  where the grass bank lay over the wood. 'Timber rim' is fixed in the seat-2 export like the wood. The life crystals'
-  `SOCKET_SETS` were re-sampled (the top crystals now stand on the forest rail).
+- **Sunken floor.** `Blender/build_sunken_floor.py` (after `build_deck_cradles.py`, now the export source) raises the
+  scenery and stations 0.10 m and runs a curved bank down to the wood, bulging round the corner stations, so the play
+  area sits a level below the scenery like Artifact's; a STONE CURB runs along the floor's whole edge in front of the bank (Artifact frame 5): 45 cm carved blocks
+  with joints and a little height jitter, a lit top face, and a near-black 2.5 cm seam on the wood at its foot (the
+  'black line'; a seam against the dark basalt bank alone did not read). Grey stone on the forest edge, lightened
+  basalt on the volcanic edge. It
+  replaces the timber rail added earlier the same day (`build_timber_rim.py` removed). Godot: Deck / Graveyard / Removed
+  y 0.07 -> 0.17, ButtonStations 0.085 -> 0.185, `PhaseDial.WOOD_Y` on the ledge, DamageZone x 3.693 -> 3.735 /
+  -3.484 -> -3.506 (12 px right of the raised decks again, `flow_probe`), life crystal `SOCKET_SETS` re-sampled.
+- Brighter board: `BoardEnvironment.brightness` 0.78 -> 1.0, the world-space `edge_darkness` 0.5 -> 0.05, and the
+  screen vignette turned into a gentle corner LIFT (`vignette_strength` -0.22): the corners' darkness is mostly baked
+  into the board texture, so less darkening alone barely moved them (corners ~55 -> ~70 average).
+- **Stack chain: hidden links stayed on screen.** `Stack._apply_chain_visibility()` hid a link older than
+  `CHAIN_VISIBLE` with a callback on its layout tween and then skipped it on every later pass; a newer tween (another
+  link arriving, a hover) killed that one, so the 4th and 5th links never hid. The hide is now re-attached on every
+  pass while the card is still drawn.
+- **Stack chain: your Summon flew in ~1.45x too big and shrank on landing** whenever the stack already held cards.
+  `_clear_local_flight_from_stack()` lifted the flying card toward the camera above EVERY stack card, including the
+  other column's; it now measures only drawn links in its own column. The card now opens to exactly its rest size.
+- `flow_probe` rewritten for the chain layout (the old checks described the single fan: top at the left, older cards
+  pushed right, exposed strips): each card in its controller's column, the newest at `(0.5 ± CHAIN_SIDE_X, CHAIN_Y)`
+  within 2 px, each shown older link `CHAIN_STEP_UP` higher (140 px at 1080p) at `CHAIN_SHRINK` size, links past
+  `CHAIN_VISIBLE` hidden, a new link pushes the previous one UP. The foreshortening check prints its pixels, and
+  `FLOW_TRACE=1` prints the arriving card's height every frame. All checks pass.
+- **Backups enter the field dull** (rule 5.2.3.1.1.3): `Field.play_card()` dulls a Backup as it enters (every played
+  or effect-placed Backup; a setup board with `animate == false` stays active). `Card.enter_zone()` already draws an
+  already-dull card tilted when it lands.
+- **Hand limit** (rule 9.5.1.2): `Game.enforce_hand_limit(player_id)` (`HAND_LIMIT` 5) runs at the start of the End
+  Phase for the TURN player, before damage / "until end of turn" cleanup. The owner chooses through
+  `Agent.choose_discard(owner, cards, required = true)`: the human's picker has no Cancel, the AI discards its cheapest,
+  and an agent that answers nothing has its highest-cost card discarded for it, so the turn cannot stall. The picks are
+  discarded together as one batch. `choose_discard` gained the `required` parameter on every agent (and the three
+  probe agents). New `tests/turn_rules_probe.tscn` (10 checks).
+  `ultimecia_probe` now asks Ultimecia's own hook whether it touches a Backup (every Backup enters dull now).
+  (The Onion Knight `net_probe` desync and the `sacrifice_probe` / `tama_probe` failures noted here are fixed below,
+  under Fixed.)
+- **Opponent Summon flight fixed** (`Stack._fly_opponent_summon`): the card leaves the opponent's hand at HAND size
+  and grows into the stack card by the centre waypoint (~/Desktop/Clips/damage 124-133). It started at the full stack
+  size, which since `STACK_CARD_SCALE` 2.7 popped a card twice the hand's size out of the hand. `tools/shot.gd
+  --opponent-summon` now commits the cast (it used to wait unpaid in the hand), and `--film <dir> [--film-frames n]`
+  saves every frame of the flight (use `--fixed-fps 60`).
+- **Local Summon flight fixed the same way** (`Stack._fly_local_summon_translation(..., start_world_scale)`): the stack
+  card launches at the size the printed card was held at (`_present_local_summon` captures it before the fade) and
+  grows to the stack size by the apex; it launched at the full 2.7 and rose over the Backups as a huge card. Trigger
+  flights omit the argument and keep their size. `tools/shot.gd --local-summon <id>` stages and commits one (with
+  `--film`).
+- **Local Summon flip mirrored for the LEFT chain column** (`_fly_local_summon_translation`): its in-plane (Y) and
+  edge-on (Z) turns were authored for a stack on the right; the resting pose is mirrored by `chain_side()` but the
+  flight's turns were not, so the card rolled against its travel and wrenched through a sheared, unnatural flip to
+  reach the mirrored pose. Both turns now take the same `chain_side()` sign (also for trigger flights from the edge).
+- Darker view edges: the screen vignette is a real falloff again (`vignette_strength` -0.22 -> 0.30, `vignette_start`
+  0.85 -> 0.65, so the middle of each edge darkens too, not only the corners). 1080p shot: side edges ~48/64 -> ~25/36,
+  top corners ~82 -> ~45 average; the central wood is unchanged (114 -> 112).
+- **Room for the life crystals.** `build_sunken_floor.py` clears the bushes and stones within 0.20 m of every crystal
+  (CRYSTALS, for both seat layouts), so the crystals stand on clear ledge; `SOCKET_SETS` re-sampled. (Stone platforms
+  under the rows were tried the same day and rejected; the rows are back at their earlier places and sizes.)
+- The sunken floor's outline is MIRROR-SYMMETRIC: one right half, mirrored, with the same (deeper) corner bulge on both
+  sides; the top is its 180-degree turn, so all four corners match (the uneven bulges looked wrong).
 - **Screen vignette** on the board and river (`board_vignette()` in `shaders/board_edge_shade.gdshaderinc`,
   `vignette_strength` 0.18, from 0.85 of the way out; 0.45 was "way too dark"): a soft corner falloff; cards, the hand and UI are not darkened.
 - `Game.board_camera()`; `tools/shot.gd --life-break <n>` (break n crystals with the animation, pair with `--seconds`).
@@ -57,6 +176,210 @@ All notable changes to the FF TCG Simulator project.
 ### Known Issues
 - `tests/flow_probe.tscn` currently reports 15 stack-layout FAILs and stops at its frame cap; identical with the crown
   disabled, so they come from the in-progress stack work, not from the crown.
+
+### Fixed
+- **The clash played twice too fast**: `~/Desktop/Clips/death` and `death2` are 30 fps (their turn clock ticks every 30 frames), and the beats had been converted at 60. Now per reference frame = 1/30 s: wind-up 0.17 s, hold 0.20 s, charge 0.13 s (slowest), toss flight 1.0 s and rest 0.2 s, pop flight 0.75 s and rest 0.4 s (`clash_cinematic.gd`). The impact hit-stop stays at 0 (the user's call).
+- **Clash: the opponent's defeated card flew over the player's board, and every hit paused** (`clash_cinematic.gd`, compared frame by frame with `~/Desktop/Clips/death2` 48-100 at 60 fps). The toss/pop threw EVERY loser toward the camera, which is up and back over its own side only for the player's card; the opponent's crossed the board. A loser now goes up and back over its OWN side (near card: the 67 degree sight, unchanged; far card: straight up, no drift toward the winner, so it stays on screen) and the toss lands by its own slot (`toss_land_fraction` 0.35 -> 0.08). Timing to the reference: no hit-stop at contact (`hitstop_seconds` 0.10 -> 0), a 6-frame hold before the charge (`windup_hold_seconds` 0.35 -> 0.10), the slowest charge 4-5 frames (`charge_scale_range` 1.7..0.7 -> 1.0..0.55), and no 0.16 s straighten when neither card is dull. `clash_cinematic_probe` asserts no loser crosses the middle; `block_probe` now checks the wind-up on the frame it is reached (a fixed timer overshot the short hold). The flight's peak is also kept ON SCREEN for whatever camera is filming (the climb shrinks until the peak projects inside the frame with room for the enlarged card): the far card's pop left a closer camera's frame for ~16 frames. The trailer tool turns off physics picking, so a real mouse resting over the window no longer opens card hover previews in a take.
+- **A Forward lowered to 0 power by an ability stayed on the field** (rule 12.4.4). `EffectContext.power_change()` changed the power and stopped; only damage ran the state check, so Kain 1-127's "loses 5000 power" left a 5000 Forward on the field at 0. It now runs `Game.enforce_game_state_rules()` in the same frame (so the drain death presents it), and `Game.apply_rule_processes()` runs the check before every priority as the 12.4 backstop. `power_down_probe` asserts it; `b1`, `flow`, `turn_rules`, `determinism`, `lockstep` and `power_entry` probes pass. Found while filming the trailer's Kain scene.
+- **A revealed damage card slid under the stone border** (both seats). The generated board's curb runs a few cm inside the old floor edge, and the far edge of a card revealed in the Damage Zone (the EX BURST reveal, the zoom) went under it. Both `DamageZone` nodes moved 0.12 m in toward the middle (`game.tscn`: player z -0.85 -> -0.73, opponent 1.45 -> 1.33); x unchanged. Checked on screen from both seats (`tools/trailer/trailer_shot.tscn --shot hit_me` / `hit_exburst`); `flow_probe`, `damage_zoom_probe` and `life_crown_probe` pass.
+- **The power-entry neighbours' jump** (`CardDamageFx.play_tremor` / `HOP_KEYS_*`). The reference's timing (~0.5 s in all, a 60 ms fall, a 1-frame snap hidden under the burst) read as too fast; a 1.4 s retime as too slow; the speed now sits between: up in 0.06 s, ~0.39 s off the wood, a ~0.2 s accelerating fall, three ~0.09 s rocks, still at ~0.9 s. NO turn in the board plane any more (the user: a push from underneath cannot spin the card about the vertical), so the card only TIPS, and only 14 degrees (`HOP_TILT_DEG`, was 35), then rises STRAIGHT UP 0.45 m (`HOP_HEIGHT`, was 0.10) on top of the tip's clearance. A version that jumped along the camera's line of sight was rejected: with a big tip, the low edge stayed on the same pixels, so the card read as leaning on that edge and never leaving the wood. `power_entry_probe`: EVERY corner of every neighbour must rise >= 12 px on screen (36-51 px measured), no rotation about a vertical axis, air time 0.28-0.5 s. `tools/card_play_demo.gd` gained `--frames N` and parks the pointer so no hover preview opens mid-film.
+- **The phase dial vanished.** `Blender/build_board.py` raised the ledge round the button stations to 0.165 (+noise; 0.158-0.171 under the dial), but `PhaseDial.WOOD_Y` still put the marks and the brass pointer at 0.155, so the board covered both on each seat. They now sit at 0.172 (`scripts/ui/phase_dial.gd`), and `phase_dial_probe` reads the baked board mesh under the arc and the pointer's ring and fails if any vertex is higher.
+- **A clash winner sank under the wood on its way home** (`ClashCinematic._start_recovery`): the return's back-ease
+  overshoot dipped below the slot, and since field cards rest ON the wood that took the card under the board for
+  ~8 frames: its art vanished and its own wood shadow showed through as a black slab. The overshoot is now
+  sideways only (height clamped to the slot); `clash_cinematic_probe` asserts the winner never goes below its slot.
+- **Online desync on enter-the-field target choices** (`Field.flush_enter_triggers`, `Game.apply_rule_processes`).
+  A played Character's ENTER_FIELD abilities were enqueued with `call_deferred` (end of frame), so whether the priority
+  loop's trigger declaration ran before or after them depended on frame timing; the two machines could disagree on
+  whether a target choice came before the next priority (`net_probe`: "expected a 'choose_target' decision, the other
+  machine sent 'take_priority'" on Onion Knight). The owed entries are now queued in `_pending_enter_triggers` and
+  flushed by whichever comes first: the end of the frame or `apply_rule_processes()`.
+- **Stale probes brought up to date** (no game change): `sacrifice_probe` (refusing the picker loses nothing; picking
+  the last cost commits at once, no second Confirm), `tama_probe` (the 《Dull》 is reserved at activation and paid at
+  commit), `button_probe` (the match buttons are disc sockets, not a rectangle rack; the old GemButton slide-in checks
+  removed), `keyword_icons_probe` (the row sits just above the field card's power band, at `ICON_FRACTION`),
+  `pass_button_probe` (MultiMesh layers read back as zero headless; float edge on the hover radius),
+  `power_down_probe` (the /damage part is compared with its own amber rest colour). Failure messages now print the
+  measured values.
+- No card hover preview while an ability badge is up (`Field.show_card_preview()` returns while `ability_badge_card()`
+  is set): the badge lets the pointer over its own card, so a hover could open the big preview over the badge.
+  `activation_payment_probe` asserts it.
+
+## [Unreleased] — 2026-11-21
+
+### Added
+- `tools/clash_demo.tscn`: films a blocked clash through the real attack/block path (`Game.resolve_blocked_clash()`)
+  at a fixed 60 fps, one PNG per frame (`--swap`, `--loser attacker|blocker|both|none`, `--frame-width`, `--elevation`).
+- `tools/shot.gd`: `--frame-width <m>`, `--elevation <deg>` and `--fov <deg>` set the board camera (`BoardCameraRig`) for a `--preset`
+  shot, so zoom levels and angles can be compared without editing the game.
+- `tools/shot.gd`: `--damage <n>` puts n cards straight into both damage zones, to check what a long row reaches.
+- `tools/shot.gd`: `--raise <id>[:flash]` raises my field card <id> as while its ability is paid for, or shoots it at
+  the flash's peak.
+- **A field card starting an effect rises and flashes** (`scripts/cards/card_activation_fx.gd`, `Card.activation_fx`;
+  after ~/Desktop/Clips/trigger 172-216, shortened). `raise()` lifts the card 0.55 m toward the camera, grows it 10% and
+  lights a pale blue-white rim (the stack aura shader); `flash()` flares the rim, sends a wave off the outline and
+  brightens the art, returning at the peak, when the stack card leaves; then the card settles. `lower()` is a cancel.
+  It moves the Card root only by its own difference each frame, so the tap and the field placement keep working, and
+  `Card.enter_zone()` forgets it. It moves the root through `position`, never `global_position`: a global write makes
+  the node re-derive its Euler angles (a field card's +180 came back as -180), and the dull's `rotation_degrees:y`
+  tween then spun the card 345 degrees the long way round. `flow_probe` raises and dulls together and measures the
+  total turn; `tools/shot.gd --activate <id>` prints the pose per frame on the real click path. Triggers: `Stack._flash_trigger_sources()` flashes every distinct field source of a
+  trigger batch ONCE, together (Gadot's two abilities share one flash); the staggered flights start once the blink is
+  OVER and `blink_to_flight_seconds` has passed, the same beat as a committed ability. The blink HOLDS at the top,
+  raised, flared and bright, for `Stack.blink_hold_seconds` (0.3, exported; the clip holds ~18 frames) before it
+  settles; its wave leaves at the flash and travels through the hold (`card_activation_fx._after_peak_step`).
+  `flow_probe` checks the hold and the order on Gadot.
+  While raised it CHARGES: the hand cast stance's waver (same sines, scaled for the distance: drift, pitch/roll tilt,
+  a slow breath) and a dense aura in the card's element colours (`shaders/activation_aura.gdshader`: hot core, thick
+  two-hue band with licking noise, wide haze, the flash's wave; added to `Game.EFFECT_SHADERS`).
+
+### Changed
+- **Nothing goes on the stack until it is paid for.** The local player's activated ability no longer flies onto the
+  stack at the click: its proxy is hidden and off the layout (`Stack._hidden_activations`, as the opponent's already
+  was) and the SOURCE CARD stands raised and lit while costs and targets are chosen. At commit the source flashes and
+  the card flies out of it (`Stack._present_activation_entry`, both players); a cancel lowers it. The targeting arc for
+  a hidden proxy starts from its source (`Field.arrow_origin()`). `opponent_summon_demo._preview_ability()` commits its
+  preview. `flow_probe` checks the hidden proxy, the raise, the cancel, and the flight from the flashing source.
+- **The ability badge: one extra step before a single ability** (`scripts/ui/ability_badge.gd`,
+  `Field.open_ability_badge()`). Clicking a field card with exactly ONE ability it can activate now shows a badge with
+  only that ability's cost (chips: one per elemental CP in its colour, a generic-CP number, S, Dull) and its effect
+  text, on the empty wood past the end of the card's row (the board side nearer to it), joined to the card by a gold
+  leader. The badge is the button: clicking it calls `begin_skill_activation(card, 0)`. While it is up a transparent
+  full-screen catcher (`BadgeCatcher`, under the badge) takes every pointer event, so NOTHING HOVERS and nothing behind
+  it can be clicked: a click on the card does nothing, any other click (or a right click, or Escape) only dismisses the
+  badge, and `refresh_available_effects()` closes it once the card stops being activatable. Opening it hides the
+  field hover preview. 2+ abilities still open skill_choice.
+  `activation_payment_probe` checks it (badge first, text and chips, no overlap with the row, the catcher, a click on
+  the card vs. elsewhere, confirm, stale close); `lockstep_probe` clicks through it; `tools/shot.gd --badge <id>` shows it.
+- **A committed ability leaves in beats** (`Stack._present_activation_entry`): the raised source settles back into its
+  slot, blinks (the ordinary flash, settle included), turns dull if 《Dull》 was in its cost, and after
+  `Stack.blink_to_flight_seconds` (0.2, exported) its card flies to the stack. The rules dull at commit:
+  `Card.tap(false)` records it and `Card.present_tap()` shows the turn later (`untap()` / `enter_zone()` drop an owed
+  one). `_fly_from_source` draws the start pose for one frame before its tween moves (a tween made from a timer resume
+  is stepped that same frame, so the card was first seen ~20 px into its flight). `flow_probe` checks the order.
+- **Confirming the last cost finishes the activation**, whatever that cost is (mana, an S card, a discard, a
+  sacrifice): with no target left to choose, `Field.continue_skill_activation_after_mana()` - the step every cost path
+  ends in - commits for a human too, instead of standing up one more Confirm (the AI already committed there). An
+  ability whose costs are all free (a lone 《Dull》) commits on the click. `generate_confirm_button()` has no callers
+  left. `activation_payment_probe` checks the mana path (Firion 22: the payment Confirm puts it on the stack; it fails
+  with the old second Confirm), `s_cost_probe` / `skill_flow_probe` the S-card path.
+- **An ability's 《Dull》 is paid at commit**, with every other cost (`Stack._apply_skill_source_tap_from_proxy`), not
+  at the click: the card turns only once the ability is really going on the stack, so a cancel never shows it dulling
+  and turning back (and `_clear_skill_proxy` no longer refunds a tap). Until then the source is reserved for that cost
+  (`Stack.is_reserved_for_cost` -> `_pending_dull_source`), which keeps it out of its own mana: the click
+  (`Field.on_card_grabbed`), `add_card_to_mana_conversion` and `AIAgent.pay_cost` all skip it. `flow_probe` and
+  `s_cost_probe` check it.
+- **Dull cards keep their colour**: Backups no longer grey out (`card_dull_fx._greys()` is false for every card); the
+  tilt alone reads as dull. `dull_fx_probe` checks a dull Backup stays in full colour.
+- **DRAFT: the stack as a chain** (`Stack.CHAIN_LAYOUT`, after Master Duel): my cards stand at the screen's LEFT edge,
+  the opponent's at the RIGHT, the yaw mirrored on the left; every card has its own height by its place in the WHOLE
+  chain (newest at `CHAIN_Y`, each older one `CHAIN_STEP_UP` higher, `CHAIN_STEP_BACK` back and `CHAIN_SHRINK`
+  smaller), and only the newest `CHAIN_VISIBLE` (3) are shown: older ones slide up out of the column and hide
+  (`_apply_chain_visibility`; `Card.enter_zone()` shows them again). Each card wears its chain number (1 = first on the
+  stack) outside its outer edge, level with its header (`_refresh_chain_numbers`). Off = the old fan.
+- **A Character's effect card shows its printed card**, exactly like a Summon's: the printed header and art, the
+  ability panel over the printed text box, 16 px of frame below it. The field-portrait path in
+  `stack_ability_face.gd` is removed (`configure()` lost its `portrait_code`).
+- **The Cancel discs are priority coins** (`DiscSocket.coin_ring = false`): the pass coin without its ruby ring, scaled
+  to the small stone well, stamped with an X (`Stamp.CROSS`, `CROSS_STAMP` in `priority_coin.gdshader`), Chaos/Cosmos
+  by seat like the big coin; the hit area follows (`DiscSocket.hit_radius()`). Both coins now give off the gem discs'
+  rising motes while lit.
+- **The stack matches ~/Desktop/Clips/damage frame 151** (the played card held up at the board's right edge, just
+  above the river). `Card.STACK_CARD_SCALE` 1.35 -> 2.7 (~227x387 px at 1080p; the clip's card is ~248x370); the
+  Stack node moved to x -2.83. Pose, measured on screen against the frame (`tools/shot.gd` now prints the top card's
+  corners): pitch 30 (top toward the camera), `stack_screen_yaw_degrees` -30 so the RIGHT edge is nearer (right/left
+  edge 1.053, clip 1.05 — a first pass misread the frame and turned it the other way), `stack_local_yaw_degrees` -6
+  for the clip's ~3° clockwise lean, roll 0. A new top card PUSHES the older ones to the RIGHT (`Stack.FAN_DIRECTION` +1); the top slot
+  (`Stack.top_slot()`) starts at `FAN_ANCHOR` and slides left only by the fan that would leave the wood
+  (`FAN_FREE_ROOM`), and layers step down 0.25 of the spacing (was 0.85). `STACK_HOVER_SCALE` 1.4 -> 1.15. `flow_probe`
+  checks the direction, exposed fraction and top slot; its overlapping-flights tolerance is 20% because the second
+  trigger moves the first one's slot mid-flight.
+- **The board camera zoomed out**: `BoardCameraRig` `frame_width` 9.6 (from 8.0) and `fov_deg` 22 (from 30), elevation
+  67° unchanged. The longer lens flattens the perspective like Artifact's board (far rows nearly as big as near ones).
+  Cards on the board are ~104 px wide at 1080p (from ~128).
+- The hands keep their SCREEN size: both Hand nodes re-placed in `game.tscn` (camera-space x/y kept, depth x1.38), and
+  the resting hand shows only its name-and-cost strip (`Hand.FAN_VISIBLE_FRACTION` 0.62 -> 0.42, ~98 px), leaving a
+  ~168 px band free between the Backup row and the hand for a future element. `hand_hover_probe` checks the strip
+  (85-115 px) and the band (150-190 px).
+- `Assistant.cost_readout_camera_depth` 3.0 -> 4.14 so the crystal row keeps its size under the longer lens; DamageZone
+  x re-tuned (player 3.358, opponent -3.167) so it stays 12 px right of the deck on screen.
+- **Corner layout for the zoomed-out board.** The deck (enlarged: `Card.DECK_WORLD_SCALE` 1.4, first tried at hand-card size 1.8 and reduced) and both pits
+  moved into the bottom-left corner, mostly off the wood; the pass coin, Cancel and phase engravings into the
+  bottom-right corner; the opponent's side mirrored at the top. The Damage Zone stays above the deck, pulled back to
+  the Backup row's depth (player 3.693 / -0.85, opponent -3.484 / 1.45). The pass-mode selector is pinned to the
+  screen's bottom-right corner (`corner_margin_px`). A hand spreads over at most 60% of the screen width
+  (`Hand.HAND_MAX_SCREEN_FRACTION`), so a big hand compresses between the corners; 8 cards look as before.
+- **Board re-bake** with a new first stage, `Blender/widen_board.py` -> `board_widened/`: the Blender camera is now the
+  game camera (9.6 / 67 / fov 22, lens 52.1 mm), so the projected board texture covers the whole zoomed-out view (the
+  smeared edges are gone); both wood slabs are 0.28 m longer at each end (x +-4.30, `field_drop_zone.gd` follows) and
+  the side scenery moved out with them; loose rocks around the new stations were cleared; the ground under each deck
+  is trimmed flat (6 cm under the cards, 10 cm in a band around them); the forest corner tree (it stood where the
+  opponent's deck now lies) and the canopy over the opponent's coin/Cancel were removed whole. `build_button_housing.py`
+  and `build_pit_housing.py` use the new centres; both seats re-exported.
+- The clash wind-up is ONE snap: lift, pull-back and lean happen together in `windup_seconds` 0.09 (ease-out cubic),
+  then a 0.35 s hold (`clash_cinematic.gd`; `lift_seconds` removed). It was a 0.22 s lift, then a 0.32 s overshooting
+  lean, which read as the card sliding up the screen and then tipping. Same for the unblocked player strike.
+- The wood shadow (`card_field_shadow.gd`) shows HEIGHT: above rest it slides down-left on screen (`LIGHT_FALL`,
+  `OFFSET_PER_METRE` 0.25) and stays dark (`FADE_PER_METRE` 0.2, from an effective 2.7), and a leaning card casts a
+  shorter shadow. A resting card's shadow is unchanged.
+
+### Known Issues
+- `Stack.FAN_RAISE` is declared but never applied: selecting an older stack card does not lift it. A `flow_probe`
+  check claimed it did and only passed through the old fan geometry; it was removed with the fan flip.
+- `pass_button_probe` fails 2 checks (the brass ring's light column, the resting ruby's glow / hover area). They fail
+  identically with the old camera, so they predate this camera change. Same for `keyword_icons_probe` (2: badge row
+  height on the face, regrow after a badge goes), `power_down_probe` (1: the /damage part of the readout should stay
+  untouched) and `button_probe` (SCRIPT ERROR: `face_size` no longer exists on `disc_button.gd`, test line 236).
+- The chain layout is a DRAFT: `flow_probe` fails 15 checks that still describe the old single fan (exposed fractions,
+  layer steps, "the new card pushes the previous top down"); they get rewritten once the chain is settled. No way to
+  see the hidden older links yet (browse arrows planned), and the third link's top edge overlaps the opponent's deck.
+- While paying for an ability there is no text saying what it does: the raised source card is the only cue (the cost
+  plate was mocked up and rejected; to be rethought). Hand plays still park in the stack while paid for.
+
+### Fixed
+- A black slab on the board during a clash: the clash proxies run with `PROCESS_MODE_DISABLED`, which froze their wood
+  shadow on the home slot while the card flew off. The shadow now has its own `PROCESS_MODE_ALWAYS`, and also follows on
+  `RenderingServer.frame_pre_draw`, pushing its transform straight to the renderer: tweens move the card after every
+  `_process`, so it used to be drawn a frame behind (2-3 frames off during the 2-frame charge). `block_probe` asserts
+  the shadow follows the lifted proxy.
+
+## [Unreleased] — 2026-11-20
+
+### Added
+- **Printed card back** (`assets/card_back/crystal_card_back.png`, cropped from the source art to the card's 0.715
+  ratio). `card_edge.gd` gives the edge prism's bottom cap its own UV'd surface (index 1) wearing
+  `CARD_EDGE.back_material()`, so a card seen from below (the turned-over deck, a draw's flip) shows its back, and
+  `Card._get_card_back_material()` returns the same material for a face-down card's face (opponent hand, parked
+  cards) instead of the flat grey. The texture falls back to reading the PNG from disk until the editor imports it. The material is UNSHADED like
+  the card face: lit, the ambient sky and overhead light lifted the art's black (RGB ~14) to a grey ~70.
+- `tools/make_card_back.py` rebuilds the card back from the source art: crop + resize to 858 x 1200, and the printed
+  silver frame recoloured to dark brown (a brightness ramp, bevel lines in bronze). Re-run it after changing the source.
+  It also turns the silver LATTICE lines and the frame's inner corner chamfers bronze (they read as white marks along
+  the card edges): warm-grey pixels only (`LINE_MAX_TEAL`), so the teal starry field is untouched, and never inside
+  `CRYSTAL_BOX`.
+  The brown ramp was then darkened by about a third (`DARK`/`MID`/`BRONZE` 18/40/92 from 28/62/138; the side wall in
+  `card_glass_edge.gdshader` follows): in game the frame read tan/gold and each stacked card's bevel striped the deck.
+  REVERTED to the original art (silver frame and lattice) because the brown blended into the wooden board: the
+  recolour is kept in the tool behind `RECOLOUR = False`, and the card-format side wall is back to the light card stock.
+
+### Fixed
+- Jagged card backs on the decks: the back texture had no mipmaps (imported with `mipmaps/generate=false`; now true,
+  and `card_edge._back_texture()` generates them whenever an import lacks them), so the thin frame and lattice lines
+  aliased. The edge shader is now OPAQUE (dropped the old glass `blend_mix` / `depth_draw_never`): transparent walls
+  that write no depth cut into each other in steps along a deck's sides.
+- White specks along a deck's sides: `card.tres`'s Border (1) and Back (2) surfaces had no material and drew in the
+  engine's default white, z-fighting with the edge wall and poking out at the corners (their corner radius is
+  0.0215 x 0.03 against the wall's 0.03). `card_edge._paint_printed_mesh()` paints them on the SHARED mesh (wall brown,
+  card back), so per-card overrides reset to null by the teleport/hologram fall back to it.
+- `assets/models/card.tres` rebuilt by the new `tools/build_card_mesh.tscn`
+  (`godot --headless res://tools/build_card_mesh.tscn --quit-after 60`): its outline is now exactly the side wall's
+  (`CARD_EDGE_RADIUS` 0.03, `CARD_EDGE_CORNER_STEPS` 5 -> 8, shared), replacing the old 0.0215 x 0.03 oval corners.
+  Same three surfaces in the same order; the Front's UV mapping is fitted from the previous mesh (unchanged), the
+  Back uses the bottom cap's mapping. The tool keeps the resource's UID, so `card.tscn` is untouched.
+
+### Changed
+- The opponent's hand retreats further off the top edge: `Hand.MIRRORED_VISIBLE_FRACTION` 0.45 -> 0.30, which opens a
+  ~60 px strip (1080p) between their hand and their Backups, room for a damage meter.
 
 ## [Unreleased] — 2026-11-19
 

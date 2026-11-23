@@ -29,14 +29,23 @@ const EDGE_WAVE_SHADER := preload("res://shaders/player_impact_wave.gdshader")
 
 @export_group("Choreography")
 @export var lift_height: float = 0.85
-@export var lift_seconds: float = 0.22
 @export var windup_distance: float = 0.80
-@export var windup_seconds: float = 0.32
+## LIFT, PULL-BACK AND LEAN ARE ONE SNAP (Artifact's clash, ~/Desktop/Clips/damage 630-633: ~4 frames off the board
+## into the leaning, pulled-back pose). They used to be two beats (a 0.22 s lift, then a 0.32 s overshooting lean),
+## which read as the card sliding up the screen and then tipping.
+@export var windup_seconds: float = 0.17
 @export_range(-70.0, 70.0) var windup_pitch_degrees: float = -32.0
-## A deliberate beat with no movement at the end of the pull-back. This is the "moment of nothing" before the charge.
-@export var windup_hold_seconds: float = 0.22
-@export var charge_seconds: float = 0.075
-@export var hitstop_seconds: float = 0.10
+## A deliberate beat with no movement at the end of the pull-back. This is the "moment of nothing" before the charge
+## (the clip holds ~0.4 s, 633-656). The height is read from the wood shadow, which falls further away the higher the
+## card is (card_field_shadow.gd).
+## ~/Desktop/Clips/death2: the card hangs pulled back for 6 frames (54-59) before the charge.
+## THE ARTIFACT CLIPS ARE 30 FPS (measured 2026-11-23: the on-screen clock ticks every 30 frames in death and death2),
+## so a reference frame is 1/30 s. The clash's beats were first converted at 60 fps and played twice too fast.
+@export var windup_hold_seconds: float = 0.20
+@export var charge_seconds: float = 0.13
+## A freeze at the contact point before the loser flies. 0 since 2026-11-23: the user found the pause at impact
+## "awful"; the hit carries straight into the knock-back.
+@export var hitstop_seconds: float = 0.0
 @export var recovery_seconds: float = 0.32
 ## Time spent tumbling intact before the airborne shatter.
 @export var defeat_seconds: float = 0.55
@@ -78,6 +87,79 @@ const EDGE_WAVE_SHADER := preload("res://shaders/player_impact_wave.gdshader")
 @export var gravity: float = 7.0
 @export var tumble_speed: float = 520.0
 
+@export_group("Defeat: Toss")
+## THE TOSS (~/Desktop/Clips/death2 frames 56-109): the loser is thrown back over its own side, climbing toward the
+## camera while it flips end over end about its width axis (two full turns, the spin axis drifting a little), lands
+## face up, turned, between the contact point and its slot, and only THEN breaks. See `defeat_styles` for how a death
+## is picked.
+## Flight time (reference: frames 66-96 = 1.0 s; the clip is 30 fps).
+@export var toss_seconds: float = 1.0
+## How far the card climbs TOWARD THE CAMERA (metres along the line of sight, so it grows rather than shooting up the
+## screen: world-up under the 67 degree camera reads as up-screen). With `toss_swell` this gives the reference's
+## ~1.7x on screen at the top of the climb.
+@export var toss_climb: float = 3.0
+## The small drift of the top of the climb on screen, in card heights: toward the winner and to one side (the
+## reference ends up level with, and beside, the winner).
+@export var toss_drift := Vector2(0.45, 0.55)
+## When the top of the climb is reached, as a fraction of the flight (reference: frame ~75 of 66-96).
+@export_range(0.1, 0.9, 0.01) var toss_peak_at: float = 0.33
+@export var toss_swell: float = 0.35
+## Where it lands: this fraction of the way from its own slot toward the contact point. The reference drops it back
+## by its own slot (frames 96-100); 0.35 put it near the river.
+@export_range(0.0, 1.0, 0.01) var toss_land_fraction: float = 0.08
+## How far it is turned on the board when it lands (reference: ~35 degrees), and the roll wobble on the way.
+@export var toss_yaw_degrees: float = 35.0
+@export var toss_roll_degrees: float = 16.0
+## The beat on the floor before the break.
+@export var toss_rest_seconds: float = 0.2
+
+@export_group("Defeat: Pop")
+## THE POP (~/Desktop/Clips/death frames 90-127, the blue card): the loser pops nearly STRAIGHT UP over the clash, turns
+## over ONCE (face, back, face), HANGS at the top with its back to the camera (~2x on screen), and drops back beside
+## its own slot almost straight, with a small bounce and a slow turn before it breaks. Same flight engine as the toss,
+## its own numbers.
+@export var pop_seconds: float = 0.75
+@export var pop_climb: float = 3.5
+@export var pop_drift := Vector2(1.0, 0.15)
+@export_range(0.1, 0.9, 0.01) var pop_peak_at: float = 0.42
+@export var pop_swell: float = 0.45
+@export_range(0.0, 1.0, 0.01) var pop_land_fraction: float = 0.08
+@export var pop_yaw_degrees: float = 12.0
+@export var pop_roll_degrees: float = 10.0
+## Longer than the toss: the reference lies there ~12 frames, turning slowly.
+@export var pop_rest_seconds: float = 0.4
+## The landing bounce (degrees about the flip axis) and the slow turn while it lies there.
+@export var pop_settle_degrees: float = 5.0
+@export var pop_settle_turn_degrees: float = 5.0
+
+@export_group("Defeat")
+## The deaths a clash loser picks from, uniformly, never the same one twice in a row (board-wide, `_last_defeat_style`):
+## "tumble" (random spin, shattered in the air), "toss" (death2) and "pop" (death).
+@export var defeat_styles: PackedStringArray = PackedStringArray(["tumble", "toss", "pop"])
+## Forces the next defeat's style ("toss" / "pop" / "tumble"), then clears itself. For demos and probes.
+static var next_defeat_style: String = ""
+static var _last_defeat_style: String = ""
+
+## The pop's flip, keyed off the reference frames 93..115 (u = (frame - 93) / 22): edge at 97, the back coming round
+## 98-100, HELD 101-105 (182..190) while it hangs big at the top, edge again at 108, face up at the landing (360).
+const POP_PITCH_KEYS := [
+	Vector2(0.000, 0.0), Vector2(0.091, 50.0), Vector2(0.182, 90.0), Vector2(0.273, 150.0), Vector2(0.318, 170.0),
+	Vector2(0.409, 182.0), Vector2(0.545, 190.0), Vector2(0.591, 205.0), Vector2(0.636, 235.0),
+	Vector2(0.682, 270.0), Vector2(0.727, 300.0), Vector2(0.773, 322.0), Vector2(0.864, 345.0),
+	Vector2(0.955, 357.0), Vector2(1.000, 360.0),
+]
+
+## The flip angle through the flight, keyed off the reference frames 66..96 (u = (frame - 66) / 30): face (0), edge
+## (90) at 70, the BACK held large toward the camera 72-77 (150..215), edge 79, face 81, edge 83, the back again,
+## falling, 85-90, edge 91, and face up on landing (720). Two holds where the back faces the camera make it read as a
+## thrown card rather than a spinning one.
+const TOSS_PITCH_KEYS := [
+	Vector2(0.000, 0.0), Vector2(0.067, 40.0), Vector2(0.133, 90.0), Vector2(0.200, 150.0), Vector2(0.300, 180.0),
+	Vector2(0.367, 215.0), Vector2(0.433, 270.0), Vector2(0.500, 360.0), Vector2(0.567, 450.0),
+	Vector2(0.633, 520.0), Vector2(0.733, 545.0), Vector2(0.800, 560.0), Vector2(0.867, 630.0),
+	Vector2(0.933, 690.0), Vector2(1.000, 720.0),
+]
+
 @export_group("Impact")
 @export var impact_flash_size: float = 0.65
 @export var impact_flash_seconds: float = 0.12
@@ -94,8 +176,9 @@ const EDGE_WAVE_SHADER := preload("res://shaders/player_impact_wave.gdshader")
 @export var strong_power: int = 10000
 ## Wind-up distance multiplier at strength 0 and 1.
 @export var windup_scale_range := Vector2(0.70, 1.40)
-## Charge time multiplier at strength 0 and 1 (lower = faster).
-@export var charge_scale_range := Vector2(1.70, 0.70)
+## Charge time multiplier at strength 0 and 1 (lower = faster). The weak end was 1.7: with the expo ease-in a weak card
+## then hung still for ~8 frames before it moved, which read as more waiting (death2 charges in 4 frames, 60-63).
+@export var charge_scale_range := Vector2(1.00, 0.55)
 ## How far the meeting point moves toward the weaker card, in card heights, at the largest strength gap.
 @export var impact_push: float = 0.45
 ## Knockback multiplier on a defeated card at its opponent's strength 0 and 1.
@@ -204,8 +287,10 @@ func _choreograph() -> void:
 
 	# STRAIGHT FIRST, in place: a dulled card would otherwise wind up and charge at its tilt. The cards stay straight
 	# for the whole exchange; they never turn to face each other.
-	await _run([[_proxy_a, a0, a_straight], [_proxy_b, b0, b_straight]], straighten_seconds,
-		Tween.TRANS_SINE, Tween.EASE_IN_OUT)
+	# Only when one of them IS turned: for two upright cards it was 0.16 s of nothing before every wind-up.
+	if a_straight.angle_to(a_rest) > 0.001 or b_straight.angle_to(b_rest) > 0.001:
+		await _run([[_proxy_a, a0, a_straight], [_proxy_b, b0, b_straight]], straighten_seconds,
+			Tween.TRANS_SINE, Tween.EASE_IN_OUT)
 
 	var travel: Vector3 = b0 - a0
 	travel.y = 0.0
@@ -232,14 +317,11 @@ func _choreograph() -> void:
 	a_away = a_away.normalized() if a_away.length_squared() > 0.0001 else -axis
 	b_away = b_away.normalized() if b_away.length_squared() > 0.0001 else axis
 
-	await _run([[_proxy_a, a0 + lift, a_straight], [_proxy_b, b0 + lift, b_straight]], lift_seconds,
-		Tween.TRANS_SINE, Tween.EASE_OUT)
-
-	# Wind-up: retreat away from the midpoint, leaning back about the card's own right axis.
+	# Wind-up, ONE snap: off the board, away from the midpoint, leaning back about the card's own right axis.
 	await _run([
 		[_proxy_a, a0 + lift + a_away * windup_distance * _windup_scale(_strength_a), _leaning(_proxy_a, a_straight)],
 		[_proxy_b, b0 + lift + b_away * windup_distance * _windup_scale(_strength_b), _leaning(_proxy_b, b_straight)],
-	], windup_seconds, Tween.TRANS_BACK, Tween.EASE_OUT)
+	], windup_seconds, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 
 	# The beat before the hit. No movement, no easing to distract from it; the cards are simply held back.
 	await _wait(windup_hold_seconds)
@@ -263,11 +345,11 @@ func _choreograph() -> void:
 	if _survives_a:
 		recovery.append(_start_recovery(_proxy_a, a0, a_straight, a_scale0))
 	else:
-		_start_defeat(_proxy_a, -axis, _strength_b)
+		_start_defeat(_proxy_a, -axis, _strength_b, a0, a_straight, a_scale0)
 	if _survives_b:
 		recovery.append(_start_recovery(_proxy_b, b0, b_straight, b_scale0))
 	else:
-		_start_defeat(_proxy_b, axis, _strength_a)
+		_start_defeat(_proxy_b, axis, _strength_a, b0, b_straight, b_scale0)
 	for tween in recovery:
 		await tween.finished
 	# Home again: a survivor turns back to how it rested (dulled, if it was).
@@ -363,14 +445,11 @@ func _choreograph_player_strike(hit_bottom: bool) -> void:
 		axes.append(axis.normalized() if axis.length_squared() > 0.0001 else Vector3.FORWARD)
 		contacts.append(contact)
 
-	var lifting: Array = []
 	var winding: Array = []
 	for i in count:
-		lifting.append([proxies[i], starts[i] + lift, straights[i]])
 		winding.append([proxies[i], starts[i] + lift - axes[i] * windup_distance * _windup_scale(strengths[i]),
 			_leaning(proxies[i], straights[i])])
-	await _run(lifting, lift_seconds, Tween.TRANS_SINE, Tween.EASE_OUT)
-	await _run(winding, windup_seconds, Tween.TRANS_BACK, Tween.EASE_OUT)
+	await _run(winding, windup_seconds, Tween.TRANS_CUBIC, Tween.EASE_OUT)
 	await _wait(windup_hold_seconds)
 
 	# Charge, straight: the top edge meets the player point; the faster card leaves later, so all arrive together.
@@ -574,13 +653,31 @@ func _start_recovery(proxy: Card, start_pos: Vector3, rot: Quaternion, base_scal
 	var tween: Tween = create_tween().set_parallel(true)
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_pose(tween, proxy, start_pos, rot, recovery_seconds)
+	# THE OVERSHOOT IS SIDEWAYS ONLY. Field cards rest ON the wood, so the back-ease's dip past the slot took the card
+	# UNDER the board for a few frames: the art vanished and its wood shadow showed through as a black slab. The
+	# height is clamped to the slot from here on (it runs after _pose's method in the same tween step).
+	var floor_y: float = start_pos.y
+	tween.tween_method(func(_w: float) -> void:
+		if is_instance_valid(proxy) and proxy.position.y < floor_y:
+			proxy.position.y = floor_y,
+		0.0, 1.0, recovery_seconds)
 	if base_scale != Vector3.ZERO:
 		tween.tween_property(proxy, "scale", base_scale, recovery_seconds)
 	return tween
 
 
-## `hit_by` is the winner's strength 0..1: a stronger blow throws the loser further and higher.
-func _start_defeat(proxy: Card, direction: Vector3, hit_by: float = 0.5) -> void:
+## `hit_by` is the winner's strength 0..1: a stronger blow throws the loser further and higher. `home`, `straight` and
+## `rest_scale` are the loser's slot, upright rotation and resting scale (the toss lands near the slot, face up).
+func _start_defeat(proxy: Card, direction: Vector3, hit_by: float = 0.5, home: Variant = null,
+		straight: Quaternion = Quaternion.IDENTITY, rest_scale: Vector3 = Vector3.ZERO) -> void:
+	var style: String = next_defeat_style
+	next_defeat_style = ""
+	if style.is_empty():
+		style = _pick_defeat_style()
+	_last_defeat_style = style
+	if (style == "toss" or style == "pop") and home is Vector3:
+		_start_toss(proxy, direction, hit_by, home, straight, rest_scale, _flight_profile(style))
+		return
 	var force := lerpf(knockback_scale_range.x, knockback_scale_range.y, hit_by)
 	var spin_axis: Vector3 = Vector3(
 		_rng.randf_range(-1.0, 1.0),
@@ -589,10 +686,165 @@ func _start_defeat(proxy: Card, direction: Vector3, hit_by: float = 0.5) -> void
 	if spin_axis.length_squared() < 0.0001:
 		spin_axis = Vector3.RIGHT
 	_defeated[proxy] = {
+		"style": "tumble",
 		"age": 0.0,
 		"velocity": (direction * knockback_speed + Vector3.UP * upward_impulse) * force,
 		"spin": spin_axis * deg_to_rad(tumble_speed * _rng.randf_range(0.75, 1.2) * sqrt(force)),
 	}
+
+
+## Uniform over `defeat_styles`, never the style the last defeated card used.
+func _pick_defeat_style() -> String:
+	var pool: Array = []
+	for style in defeat_styles:
+		if style != _last_defeat_style:
+			pool.append(style)
+	if pool.is_empty():
+		pool = Array(defeat_styles) if not defeat_styles.is_empty() else ["tumble"]
+	return String(pool[_rng.randi_range(0, pool.size() - 1)])
+
+
+## The numbers that make a flight a TOSS or a POP. `hang` sharpens the top of the climb (a higher power holds it
+## longer); `track` is when the card travels over the board (early for a throw, late for a pop that drops back).
+func _flight_profile(style: String) -> Dictionary:
+	if style == "pop":
+		return {"style": "pop", "keys": POP_PITCH_KEYS, "seconds": pop_seconds, "climb": pop_climb,
+			"drift": pop_drift, "peak": pop_peak_at, "swell": pop_swell, "land": pop_land_fraction,
+			"yaw": pop_yaw_degrees, "roll": pop_roll_degrees, "rest": pop_rest_seconds, "hang": 3.0,
+			"track_late": true, "settle": pop_settle_degrees, "settle_turn": pop_settle_turn_degrees}
+	return {"style": "toss", "keys": TOSS_PITCH_KEYS, "seconds": toss_seconds, "climb": toss_climb,
+		"drift": toss_drift, "peak": toss_peak_at, "swell": toss_swell, "land": toss_land_fraction,
+		"yaw": toss_yaw_degrees, "roll": toss_roll_degrees, "rest": toss_rest_seconds, "hang": 2.0,
+		"track_late": false, "settle": 0.0, "settle_turn": 0.0}
+
+
+## THE TOSS and THE POP: see their exports. Everything is a function of the flight's age (`_toss_pose`), so a frozen
+## demo can show any moment and the landing is exact: face up, on the wood, at the chosen spot and turn.
+func _start_toss(proxy: Card, direction: Vector3, hit_by: float, home: Vector3, straight: Quaternion,
+		rest_scale: Vector3, profile: Dictionary) -> void:
+	var dir: Vector3 = Vector3(direction.x, 0.0, direction.z)
+	dir = dir.normalized() if dir.length_squared() > 0.0001 else Vector3.BACK
+	var start: Vector3 = proxy.position
+	var contact_ground: Vector3 = Vector3(start.x, home.y, start.z)
+	var land: Vector3 = home.lerp(contact_ground, float(profile["land"]))
+	# A little sideways scatter, so two tosses never land on the same spot.
+	var side: Vector3 = Vector3.UP.cross(dir).normalized()
+	land += side * _rng.randf_range(-0.12, 0.12)
+	var turn_sign: float = -1.0 if _rng.randf() < 0.5 else 1.0
+	var force: float = lerpf(0.85, 1.15, hit_by)
+	# The top of the climb, relative to the ground track: along the line of sight to the camera, plus a small drift up
+	# the screen and to the side the card turns toward. Converted into this node's frame (the proxies' parent).
+	var climb_m: float = float(profile["climb"]) * force
+	var drift: Vector2 = profile["drift"]
+	var climb := Vector3.UP * climb_m
+	if _camera != null and is_instance_valid(_camera):
+		var cam_basis: Basis = global_basis.inverse() * _camera.global_transform.basis.orthonormalized()
+		# UP AND BACK OVER ITS OWN SIDE, never simply "toward the camera". For my card that is the same thing (my side is
+		# the camera's side), which is the case the reference shows; for the opponent's card "toward the camera" threw it
+		# over MY board. The mix is the board camera's own line of sight (67 degrees), so my card's flight is unchanged.
+		# The FAR side's card goes straight UP instead: "up and back" from there runs off the top of the screen (their
+		# row is already near the top edge), and straight up reads as rising toward the viewer and stays in view.
+		var elevation: float = deg_to_rad(67.0)
+		var sight: Vector3 = (Vector3.UP * sin(elevation) + dir * cos(elevation)).normalized()
+		var toward_camera: Vector3 = Vector3(cam_basis.z.x, 0.0, cam_basis.z.z)
+		var far_side: bool = dir.dot(toward_camera) <= 0.0
+		if far_side:
+			sight = Vector3.UP
+		var card_h: float = 0.6 * absf(proxy.scale.z)
+		# "Toward the winner" on screen: the throw direction reversed, flattened into the camera plane. Up the screen
+		# for my card, DOWN it for the opponent's (a fixed screen-up drift threw their card off the top edge).
+		var toward_winner: Vector3 = -dir - cam_basis.z * (-dir).dot(cam_basis.z)
+		toward_winner = toward_winner.normalized() if toward_winner.length_squared() > 0.0001 else cam_basis.y
+		var aside: Vector3 = cam_basis.z.cross(toward_winner).normalized()
+		# No drift TOWARD the winner for the far side's card: on screen that is down, over the other player's board.
+		var winner_drift: float = 0.0 if far_side else drift.x
+		climb = sight * climb_m + toward_winner * winner_drift * card_h + aside * drift.y * card_h * turn_sign
+		# THE TOP OF THE FLIGHT STAYS ON SCREEN, whatever the camera: the far side's card rising straight up left the top
+		# of a closer camera's frame for ~16 frames. Shrink the climb until its peak projects inside the frame.
+		var view: Vector2 = get_viewport().get_visible_rect().size
+		# The PEAK is the card's centre; at the top of the climb the card is drawn large, so leave room for half of it.
+		var margin: float = view.y * 0.18
+		for _step in 8:
+			var peak_world: Vector3 = global_transform * (start + climb)
+			if not _camera.is_position_behind(peak_world):
+				var px: Vector2 = _camera.unproject_position(peak_world)
+				if px.y > margin and px.y < view.y - margin and px.x > margin and px.x < view.x - margin:
+					break
+			climb *= 0.8
+	# The shadow on the wood would slide off on its own far below the card; it comes back when the card lands.
+	if proxy.field_shadow != null and is_instance_valid(proxy.field_shadow):
+		proxy.field_shadow.set_active(false)
+	_defeated[proxy] = {
+		"style": profile["style"],
+		"profile": profile,
+		"age": 0.0,
+		"start": start,
+		"land": land,
+		"climb": climb,
+		"seconds": float(profile["seconds"]),
+		# Flip about the world axis that throws the TOP edge (pointing at the winner) up and back over the loser.
+		"axis": Vector3.UP.cross(dir).normalized(),
+		"dir": dir,
+		"straight": straight,
+		"start_scale": proxy.scale,
+		"rest_scale": rest_scale if rest_scale != Vector3.ZERO else proxy.scale,
+		"yaw": deg_to_rad(float(profile["yaw"]) * _rng.randf_range(0.8, 1.15)) * turn_sign,
+		"roll": deg_to_rad(float(profile["roll"])) * (-turn_sign),
+		"turn_sign": turn_sign,
+		"landed": false,
+	}
+	_toss_pose(proxy, _defeated[proxy], 0.0)
+
+
+## The flight at fraction u (0..1, clamped); `after` is the time since it landed (the pop's bounce and slow turn).
+func _toss_pose(proxy: Card, st: Dictionary, u: float, after: float = 0.0) -> void:
+	u = clampf(u, 0.0, 1.0)
+	var profile: Dictionary = st["profile"]
+	var start: Vector3 = st["start"]
+	var land: Vector3 = st["land"]
+	var peak: float = float(profile["peak"])
+	var hang: float = float(profile["hang"])
+	# The climb toward the camera: a fast rise that eases into the top (the card hangs there, big), then an accelerating
+	# fall back onto the ground track, which it meets exactly at the landing. A higher `hang` holds the top longer.
+	var climb: float
+	if u < peak:
+		climb = 1.0 - pow(1.0 - u / peak, hang)
+	else:
+		climb = 1.0 - pow((u - peak) / (1.0 - peak), hang)
+	# Ground track, from the contact point (lifted) to the landing spot on the wood: a throw covers most of it early,
+	# a pop rises over the clash and drops back late.
+	var g: float = pow(u, 1.8) if bool(profile["track_late"]) else 1.0 - pow(1.0 - u, 1.6)
+	proxy.position = start.lerp(land, g) + (st["climb"] as Vector3) * climb
+	# Rotation: the keyed flip about the throw axis, a roll wobble about the throw direction, and the turn on the board
+	# that it lands with. On the wood the pop bounces once on its flip axis and keeps turning slowly.
+	var pitch: float = deg_to_rad(_keyed(profile["keys"], u))
+	var roll: float = float(st["roll"]) * sin(PI * u) * (1.0 - u * 0.3)
+	var yaw: float = float(st["yaw"]) * (u * u * (3.0 - 2.0 * u))
+	if after > 0.0:
+		pitch += deg_to_rad(float(profile["settle"])) * sin(after * TAU / 0.14) * exp(-after / 0.06)
+		yaw += deg_to_rad(float(profile["settle_turn"])) * float(st["turn_sign"]) \
+			* (1.0 - exp(-after / maxf(float(profile["rest"]) * 0.5, 0.01)))
+	var q: Quaternion = Quaternion(Vector3.UP, yaw) * Quaternion(st["dir"], roll) * Quaternion(st["axis"], pitch) \
+		* (st["straight"] as Quaternion)
+	proxy.quaternion = q.normalized()
+	# Size: back to the resting size quickly (the charge squashed or swelled it), then the swell toward the camera.
+	var base: Vector3 = (st["start_scale"] as Vector3).lerp(st["rest_scale"], clampf(u / 0.15, 0.0, 1.0))
+	proxy.scale = base * (1.0 + float(profile["swell"]) * climb * (1.0 - smoothstep(0.85, 1.0, u)))
+
+
+## Monotone-ish smooth interpolation through (u, value) keys: smoothstep inside each span keeps every key exact.
+static func _keyed(keys: Array, u: float) -> float:
+	if u <= keys[0].x:
+		return keys[0].y
+	for i in range(1, keys.size()):
+		var b: Vector2 = keys[i]
+		if u <= b.x:
+			var a: Vector2 = keys[i - 1]
+			var k: float = (u - a.x) / maxf(b.x - a.x, 0.0001)
+			# Blend linear and smoothstep: pure smoothstep stops dead at every key, pure linear kinks.
+			var s: float = lerpf(k, k * k * (3.0 - 2.0 * k), 0.5)
+			return lerpf(a.y, b.y, s)
+	return keys[keys.size() - 1].y
 
 
 func _process(delta: float) -> void:
@@ -603,6 +855,19 @@ func _process(delta: float) -> void:
 			_defeated.erase(proxy)
 			continue
 		var state: Dictionary = _defeated[proxy]
+		if state.has("profile"):
+			state["age"] = float(state["age"]) + delta
+			var flight: float = float(state["seconds"])
+			_toss_pose(proxy, state, float(state["age"]) / flight, maxf(0.0, float(state["age"]) - flight))
+			if not bool(state["landed"]) and float(state["age"]) >= flight:
+				state["landed"] = true
+				if proxy.field_shadow != null and is_instance_valid(proxy.field_shadow):
+					proxy.field_shadow.set_active(true)
+			# On the wood: the beat, then it breaks where it lies.
+			if float(state["age"]) >= flight + float(state["profile"]["rest"]):
+				_shatter_defeated(proxy, Vector3.ZERO, Vector3.ZERO)
+				_defeated.erase(proxy)
+			continue
 		var velocity: Vector3 = state["velocity"]
 		velocity.y -= gravity * delta
 		state["velocity"] = velocity

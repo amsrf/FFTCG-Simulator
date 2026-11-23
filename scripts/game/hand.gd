@@ -448,9 +448,15 @@ const FAN_MAX_TILT_DEGREES := 12.0
 ## decides how big the hand LOOKS, and it is measured against the card's own height, so it has to be read together with
 ## the card's size: 45% of a 180 px card was an 82 px strip and read as "I can barely see the cards". At 80% of a 225 px
 ## card the band is ~180 px, which keeps the whole cost strip and most of the art above the edge.
-const FAN_VISIBLE_FRACTION := 0.62
+## 0.34 (2026-11-21, from 0.62): with the zoomed-out camera the resting hand shows only the name-and-cost strip
+## (~80 px at 1080p), so a ~195 px band stays free between the Backup row and the hand for a future element. The
+## cards keep their old SCREEN size (the Hand nodes moved with the camera); hovering still brings a card up whole.
+## 0.42 (same day, the user: "raise the player hand a bit"): ~98 px showing, the band ~168 px.
+const FAN_VISIBLE_FRACTION := 0.42
 ## The opponent's hand shows less, which lifts it off their Backup row: at 0.62 its lower edge touched their Backups.
-const MIRRORED_VISIBLE_FRACTION := 0.45
+## 0.30 (was 0.45): retreated further so a strip opens between their hand and their Backups. The cards are face down,
+## so the thinner band hides nothing the player could read.
+const MIRRORED_VISIBLE_FRACTION := 0.30
 ## How much lower the outermost card sits than the middle one, as a fraction of a card's HEIGHT. The drop is this times
 ## `r * r`, where `r` is the card's offset from the middle over half the row — so it is a `t * t` curve, symmetric by
 ## construction, and it can never exceed this fraction however big the hand gets. THE MIDDLE IS HIGHEST.
@@ -505,7 +511,8 @@ func spacing() -> float:
 	var n: int = cards.size()
 	if n <= 1:
 		return card_width * step_fraction
-	var fit: float = maxf(card_width * 0.2, _available_width() - card_width - FAN_SIDE_MARGIN * 2.0) / float(n - 1)
+	var room: float = minf(_available_width() - FAN_SIDE_MARGIN * 2.0, _max_row_width())
+	var fit: float = maxf(card_width * 0.2, room - card_width) / float(n - 1)
 	return minf(card_width * step_fraction, fit)
 
 ## Pixels per metre at `world_pos`, for a displacement PERPENDICULAR to the view axis.
@@ -526,11 +533,21 @@ func _px_per_metre_at(world_pos: Vector3) -> float:
 
 ## How much of the board the camera can see across, in metres, AT THIS HAND'S DEPTH. The hand's
 ## `fits` test is in screen terms because that is where "off the side of the screen" means anything.
+## The share of the screen width the row's OUTER EDGES may span, centred (2026-11-21). The deck and pits now sit in the
+## bottom-left corner and the pass coin + pass-mode selector in the bottom-right (mirrored at the top for the opponent),
+## so a big hand compresses inside x ~384..1536 at 1080p instead of running under them. An 8-card hand at full step
+## (~1160 px) tightens by under 1%, so the usual hand looks as before.
+const HAND_MAX_SCREEN_FRACTION := 0.60
+
 func _available_width() -> float:
 	var view: Vector2 = get_viewport().get_visible_rect().size
 	# In THIS node's units: the Hand is scaled (Card.HAND_CONTAINER_SCALE) and spacing() compares against card_width,
 	# which is local.
 	return view.x / maxf(_px_per_metre_at(global_position), 0.001) / maxf(global_basis.get_scale().x, 0.001)
+
+## The widest the row may be, outer edge to outer edge, in this node's units (see HAND_MAX_SCREEN_FRACTION).
+func _max_row_width() -> float:
+	return _available_width() * HAND_MAX_SCREEN_FRACTION
 
 ## The LEAN of a card in the fan, in radians — this is the card's rotation.y, and against the arc it sits on it is
 ## NEGATED: a card's up axis is its local -Z, so its arc position and its tilt run opposite ways. Flip only one of the

@@ -85,7 +85,9 @@ func _ready() -> void:
 	hand.toggle_effect_card_selection(sacrifice)
 	stack._on_choose_card_finished(true)
 	_report("after Discard", stack, stack.skill_activation_proxy, source)
-	_expect(stack.s_cost_selected_card == sacrifice, "the s cost is recorded")
+	# Aerith's ability has no mana cost and no target, so the confirmed discard was the last step: it committed.
+	_expect(not stack.skill_mana_deferred_until_target_confirm and not sacrifice in hand.cards,
+		"the confirmed discard commits the ability at once (no second Confirm)")
 
 	# TAP THE FORWARDS NOW, so the untap is observable. Left untapped they are already upright, and "still untapped after
 	# the effect" would pass without the effect doing anything — which is exactly how a missing untap slipped through.
@@ -97,9 +99,6 @@ func _ready() -> void:
 	print("[SkillFlow] tapped %d player Forward(s) before the effect resolves" % tapped_before)
 	_expect(tapped_before > 0, "there is at least one player Forward to watch untap")
 
-	# THE CONFIRM. This is the press that is supposed to commit and start the resolution.
-	stack.confirm_skill_without_target_then_priority()
-	_report("after Confirm", stack, stack.skill_activation_proxy, source)
 	_expect(not sacrifice in hand.cards, "the s-cost card is discarded from hand")
 
 	# --- THE HUMAN PATH, which is where the report actually is ----------------------------------------------

@@ -11,7 +11,7 @@ const SECOND_MAIN_IMPRINT := "II"
 const ATTACK_PHASE_IMPRINT := "⚔"
 
 # Matches the stamp values in priority_coin.gdshader.
-enum Stamp { CRYSTAL, SECOND_MAIN, CROSSED_SWORDS }
+enum Stamp { CRYSTAL, SECOND_MAIN, CROSSED_SWORDS, CROSS }
 
 const AXLE_Y := 0.027
 const TURN_LIFT := 0.083

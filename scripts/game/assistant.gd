@@ -33,7 +33,9 @@ const PRIORITY_COIN := preload("res://scripts/ui/priority_coin.gd")
 ## How far from the camera the row floats, metres. The board camera (BoardCameraRig, PERSPECTIVE at runtime, fov 30)
 ## sits ~8 m from the board, so 3.0 keeps the row and its backing panel far above every card. Being perspective, this
 ## also sets the row's on-screen size: ~670 px per metre at 3.0 on a 1080 p screen.
-@export var cost_readout_camera_depth: float = 3.0
+## 4.14 (2026-11-21, from 3.0): the lens went from fov 30 to 22, which enlarges anything at a fixed depth by
+## tan(15)/tan(11) = 1.38; the row moved back by the same factor so it keeps its size (~670 px per metre again).
+@export var cost_readout_camera_depth: float = 4.14
 ## The crystal's height in metres. Not "the source art's pixel size" any more: the badge row this replaced drew
 ## 26 px icons at 0.14 m so they would not be upscaled, but a crystal is a 3D object whose facets have to stay
 ## legible at gameplay distance. It has been 0.14 -> 0.26 -> 0.34 -> 0.42 -> 0.26, and 0.18 since the row moved to the

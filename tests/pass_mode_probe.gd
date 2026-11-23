@@ -80,10 +80,12 @@ func _ready() -> void:
 		var cam: Camera3D = get_viewport().get_camera_3d()
 		var disc: Vector2 = cam.unproject_position(socket.global_position)
 		var view: Vector2 = get_viewport().get_visible_rect().size
-		var centre_x: float = panel.position.x + panel.size.x * 0.5
-		_expect(panel.visible and absf(centre_x - disc.x) < 4.0 or panel.position.x <= 8.5 \
-				or panel.position.x + panel.size.x >= view.x - 8.5,
-			"centred under the disc (selector x %.0f, disc x %.0f)" % [centre_x, disc.x])
+		# 2026-11-21: pinned to the screen's BOTTOM-RIGHT CORNER (the coin moved down into that corner).
+		var margin: float = float(selector.get("corner_margin_px"))
+		_expect(panel.visible and absf(panel.position.x + panel.size.x - (view.x - margin)) < 1.0
+				and absf(panel.position.y + panel.size.y - (view.y - margin)) < 1.0,
+			"pinned to the bottom-right corner (right %.0f, bottom %.0f of %s)" % [
+				panel.position.x + panel.size.x, panel.position.y + panel.size.y, str(view)])
 		_expect(panel.position.y > disc.y and panel.position.y + panel.size.y <= view.y,
 			"below the disc and on screen (top %.0f, disc %.0f, view %.0f)" % [panel.position.y, disc.y, view.y])
 		_game.set("pass_mode", "pass_all")

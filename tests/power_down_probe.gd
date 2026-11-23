@@ -14,6 +14,7 @@ extends Node
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const DRAIN := preload("res://scripts/vfx/power_down_drain.gd")
+const EFFECT_CONTEXT := preload("res://scripts/effects/effect_context.gd")
 const DISPLAY := preload("res://scripts/cards/power_display.gd")
 
 var _checks: int = 0
@@ -84,6 +85,8 @@ func _ready() -> void:
 	_expect(label != null and label.text.begins_with("5000/"), "the Forward shows 5000")
 	var rest_scale: Vector3 = num.scale
 	var rest_modulate: Color = num.modulate
+	# The /damage part has a colour of its own (amber), so it is compared with ITSELF at rest, not with the number.
+	var dmg_rest_modulate: Color = dmg.modulate
 
 	# --- A LOSS: the drain, not the swords. ---
 	card.add_power_modifier("probe:a", -2000)
@@ -114,8 +117,9 @@ func _ready() -> void:
 	_expect(_param(card, "drain_amount") < 0.001, "but a non-lethal one never turns the whole card cold")
 	_expect(num.scale.y < rest_scale.y * 0.85, "the power number deflates (%.2fx)" % (num.scale.y / rest_scale.y))
 	_expect(num.modulate.r > num.modulate.b + 0.4, "and turns red (%s)" % num.modulate)
-	_expect(dmg.scale.is_equal_approx(Vector3.ONE) and dmg.modulate.is_equal_approx(rest_modulate),
-		"only the POWER number deflates: the /damage part is untouched")
+	_expect(dmg.scale.is_equal_approx(Vector3.ONE) and dmg.modulate.is_equal_approx(dmg_rest_modulate),
+		"only the POWER number deflates: the /damage part is untouched (scale %s, modulate %s, rest %s)" % [
+			dmg.scale, dmg.modulate, dmg_rest_modulate])
 	var mid: int = int(label.text.split("/")[0])
 	_expect(mid < 5000 and mid >= 3000, "the count is under way (%d)" % mid)
 
@@ -195,6 +199,19 @@ func _ready() -> void:
 	await _frames()
 	_expect(_count_named(_game, "HeldCard") == 0 and _count_named(Vfx, "CounterShard") == 0
 		and _count_named(Vfx, "PowerDownDrain") == 0, "and everything is gone once the queue is idle")
+
+	# --- LETHAL BY AN ABILITY (Kain 1-127: "It loses 5000 power"): EffectContext.power_change() must apply rule 12.4.4
+	# itself. It once lowered the power and stopped, leaving the Forward on the field at 0 for the rest of the turn.
+	var victim := _forward(5000)
+	await _wait(1.0)
+	Vfx.clear_events()
+	var ctx = EFFECT_CONTEXT.new(_game, victim, "test")
+	ctx.power_change([victim], -5000)
+	_expect(victim.current_zone == Card.Zone.GRAVEYARD and not victim.broken,
+		"an ABILITY's -5000 on a 5000 Forward puts it in the Break Zone at once (rule 12.4.4)")
+	_expect(Vfx.get_events().map(func(e): return e.kind).has(VfxEvent.Kind.DRAINED), "presented as the drain death")
+	await Vfx.idle()
+	await _frames()
 
 	# --- LETHAL: drained to its damage (a break). ---
 	var hurt := _forward(5000)

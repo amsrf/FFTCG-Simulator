@@ -1,6 +1,6 @@
 extends Node
-## How a dull card LOOKS (scripts/cards/card_dull_fx.gd): a Backup's art greys and dims with the tap (a Forward keeps
-## its colour); the Active Phase untap runs as a left-to-right wave with a light sweep, while the RULES untap every card
+## How a dull card LOOKS (scripts/cards/card_dull_fx.gd): it only TILTS - no card greys or dims any more, Backups
+## included (the user's call, 2026-11-21); the Active Phase untap runs as a left-to-right wave with a light sweep, while the RULES untap every card
 ## at once.
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
@@ -40,17 +40,16 @@ func _ready() -> void:
 	await _wait(0.4)
 	_expect(_param(card, "dull_amount") < 0.01, "an active card is drawn in full colour")
 	card.tap()
-	await _wait(0.1)
-	var mid: float = card.dull_fx.dull_amount
-	await _wait(0.35)
-	_expect(mid > 0.0 and mid < 1.0, "dulling EASES the grey in (%.2f part-way)" % mid)
-	_expect(absf(_param(card, "dull_amount") - 1.0) < 0.01, "and a dull card is greyed and dimmed (dull_amount 1)")
+	var brightest := INF
+	for _i in range(10):
+		await _wait(0.05)
+		brightest = minf(brightest, 1.0 - _param(card, "dull_amount"))
+	_expect(card.tapped and brightest > 0.99, "a dull Backup keeps its colour all the way through the tap (dim never above %.2f)" % (1.0 - brightest))
 	card.untap()
 	await _wait(0.45)
-	_expect(_param(card, "dull_amount") < 0.01, "untapping brings the colour back")
 	card.tap()
 	card.enter_zone(Card.Zone.GRAVEYARD)
-	_expect(_param(card, "dull_amount") < 0.01, "a card leaving the field drops the dim at once")
+	_expect(_param(card, "dull_amount") < 0.01, "a card leaving the field carries no dim")
 	card.enter_zone(Card.Zone.FIELD)
 	card.untap()
 	await _wait(0.4)
@@ -62,7 +61,7 @@ func _ready() -> void:
 		await _wait(0.4)
 		fwd.tap()
 		await _wait(0.45)
-		_expect(fwd.tapped and _param(fwd, "dull_amount") < 0.01, "a dull Forward keeps its colour (only Backups grey out)")
+		_expect(fwd.tapped and _param(fwd, "dull_amount") < 0.01, "a dull Forward keeps its colour too")
 		fwd.untap()
 		await _wait(0.4)
 

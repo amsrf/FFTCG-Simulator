@@ -7,7 +7,7 @@ const RIVER_SHADER := preload("res://shaders/board_river.gdshader")
 const SURFACE_SHADER := preload("res://shaders/board_surface.gdshader")
 ## Multiplies the baked board (wood, stone, river). 1.0 = the texture as baked; lower = a darker scene.
 ## The cards are unshaded and unaffected, so they keep their contrast against it.
-@export_range(0.2, 1.0, 0.01) var brightness: float = 0.78:
+@export_range(0.2, 1.0, 0.01) var brightness: float = 1.0:
 	set(value):
 		brightness = value
 		_apply_brightness()

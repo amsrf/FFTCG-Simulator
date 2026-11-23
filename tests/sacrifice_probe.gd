@@ -16,6 +16,15 @@ var _game: Node = null
 var _field = null
 
 
+class RefusingAgent extends MockAgent:
+	var asked := false
+
+	func choose_sacrifice(_player_id: int, _candidates: Array) -> Card:
+		asked = true
+		await _settle()
+		return null
+
+
 func _expect(ok: bool, what: String) -> void:
 	_checks += 1
 	if ok:
@@ -62,27 +71,27 @@ func _ready() -> void:
 	var backups_before: int = _field.get_back_cards_for("player").size()
 	var stack_node = _game.get("stack")
 
-	# BACKING OUT COSTS NOTHING. FFTCG pays every cost together: the sacrifice is only PICKED during activation, so
-	# cancelling before Confirm must leave every Backup where it was.
-	_field.call("begin_skill_activation", mystic, 0)
-	for _i in range(6):
+	# BACKING OUT COSTS NOTHING. Refusing the sacrifice picker (Cancel) aborts the activation before any cost is paid.
+	var refuser := RefusingAgent.new()
+	refuser.bind(_game)
+	_game.set("player_agent", refuser)
+	await _field.begin_skill_activation(mystic, 0)
+	for _i in range(3):
 		await get_tree().process_frame
-	_expect(_field.get_back_cards_for("player").size() == backups_before,
-		"picking the sacrifice does not pay it yet")
-	stack_node.call("_clear_skill_proxy")
-	await get_tree().process_frame
+	_expect(refuser.asked, "the owner is asked which Backup to sacrifice")
 	_expect(_field.get_back_cards_for("player").size() == backups_before
 		and _game.get("player").graveyard.graveyard_cards.is_empty(),
-		"cancelling the activation loses nothing")
+		"cancelling the sacrifice picker loses nothing")
+	_expect(stack_node.stack_length() == 0 and stack_node.get("skill_activation_proxy") == null,
+		"and leaves nothing on the stack")
 
-	# CONFIRMING commits every cost at once. (A real cancel goes through the UI, which also restores free play.)
+	# PICKING IT IS THE LAST COST, so the activation commits at once (no second Confirm: the user rejected that), and
+	# the Backup leaves exactly when the ability goes on the stack, never before.
+	_game.set("player_agent", mock)
 	GlobalVariables.refresh_mode()
 	_game.set("priority_holder", 1)
 	_expect(_field.can_activate_now(mystic), "after the cancel the ability can be activated again")
-	_field.call("begin_skill_activation", mystic, 0)
-	for _i in range(6):
-		await get_tree().process_frame
-	stack_node.call("confirm_skill_without_target_then_priority")
+	await _field.begin_skill_activation(mystic, 0)
 	for _i in range(3):
 		await get_tree().process_frame
 	var backups_after: int = _field.get_back_cards_for("player").size()

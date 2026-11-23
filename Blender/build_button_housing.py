@@ -12,8 +12,8 @@ is carved stone, flush with the housing.
   always on its stone face; the forward disc lights only while the opponent has
   priority.
 
-Built on top of board_landmarks.blend (the board the game exports); the source
-file is never modified.
+Built on top of board_widened.blend (widen_board.py: the wider wood, the game camera, the cleared corners); the
+source file is never modified.
 
     blender --background --python Blender/build_button_housing.py
 """
@@ -22,14 +22,16 @@ from mathutils import Vector, Matrix
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'button_housing'); os.makedirs(OUT, exist_ok=True)
-bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, 'board_landmarks', 'board_landmarks.blend'))
+bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, 'board_widened', 'board_widened.blend'))
 scene = bpy.context.scene
 scene.cycles.samples = 48
 
 # ---- Dimensions (Blender units; camera looks back along -y, so -x is screen RIGHT, +y screen DOWN) ----
-BIG_C = Vector((-3.08, 1.64, 0.0))      # straddles the volcanic slab's front edge (y = 1.72)
+# 2026-11-21: down into the bottom-right corner for the zoomed-out camera, mostly off the wood (front edge y = 1.72);
+# game.tscn's LocalForward / LocalCancel are these mapped (x, z, -y).
+BIG_C = Vector((-3.59, 1.93, 0.0))
 BIG_R = 0.30                            # disc radius
-SMALL_C = Vector((-2.52, 1.42, 0.0))    # up and toward the board from the big one
+SMALL_C = Vector((-3.03, 1.71, 0.0))    # up and toward the board from the big one (same offset as before)
 SMALL_R = 0.17
 RIM = 0.085                             # stone wall around each well
 BRIDGE_W = 0.36                         # width of the stone web joining the two drums

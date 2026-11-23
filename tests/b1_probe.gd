@@ -31,7 +31,7 @@ class PickAgent extends Agent:
 		else:
 			game.assistant.on_target_cancel()
 
-	func choose_discard(_player_id: int, cards: Array) -> Card:
+	func choose_discard(_player_id: int, cards: Array, _required: bool = false) -> Card:
 		return cards[0] if not cards.is_empty() else null
 
 	func confirm_optional(_player_id: int, _prompt: String) -> bool:

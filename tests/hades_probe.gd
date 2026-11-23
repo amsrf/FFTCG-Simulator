@@ -18,7 +18,7 @@ const SEPHIROTH := 44   # cost 4, so the discard takes this one and the returned
 
 ## Discards the FIRST card instead of the cheapest, so the test can keep the returned Backup in hand.
 class FirstCardAgent extends Agent:
-	func choose_discard(_player_id: int, cards: Array) -> Card:
+	func choose_discard(_player_id: int, cards: Array, _required: bool = false) -> Card:
 		await _settle()
 		return cards[0] if not cards.is_empty() else null
 

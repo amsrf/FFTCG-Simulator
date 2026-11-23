@@ -26,9 +26,10 @@ bpy.ops.wm.open_mainfile(filepath=os.path.join(HERE, 'board_filled_pockets', 'bo
 scene = bpy.context.scene
 
 # ---- Dimensions (Blender units). Pit centres/radii must match game.tscn (see the docstring). ----
-BIG_C = Vector((2.76, 1.62, 0.0))       # Break Zone pit: straddles the volcanic slab's front edge (y = 1.72)
+# 2026-11-21: beside the (hand-card-sized) deck in the bottom-left corner, off the wood (front edge y = 1.72).
+BIG_C = Vector((2.92, 2.12, 0.0))       # Break Zone pit: right of the deck and lower on screen
 BIG_R = 0.21
-SMALL_C = Vector((2.40, 1.30, 0.0))     # Removed pit: up and to the right of it on screen
+SMALL_C = Vector((2.54, 1.80, 0.0))     # Removed pit: up and to the right of it on screen
 SMALL_R = 0.16
 RIM = 0.07                              # stone wall around each well (the buttons' 0.085 would touch the deck)
 GAP = 0.016                             # well clearance around the Godot pit drum

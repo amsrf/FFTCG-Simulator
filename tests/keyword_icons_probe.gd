@@ -4,6 +4,7 @@ extends Node
 
 const GAME_SCENE := preload("res://scenes/game/game.tscn")
 const TEST_GROUNDS := preload("res://scripts/core/test_grounds.gd")
+const ICONS := preload("res://scripts/cards/card_keyword_icons.gd")
 
 var _checks: int = 0
 var _fails: int = 0
@@ -36,7 +37,11 @@ func _ready() -> void:
 	var face: Vector2 = card._card_face_size()
 	var fs: MeshInstance3D = icons.badge("first_strike")
 	_expect(fs != null and fs.position.x < -face.x * 0.25, "a lone badge sits at the LEFT of the face (x %.3f)" % fs.position.x)
-	_expect(fs.position.z > face.y * 0.30, "along the BOTTOM of the face (z %.3f of half-height %.3f)" % [fs.position.z, face.y * 0.5])
+	# Since the raised field cards the bottom of the face is the power band, so the row sits JUST ABOVE that band.
+	var band_top: float = face.y * (0.5 - ICONS.FIELD_CARD_FACE.BAND_FRACTION)
+	var fs_bottom: float = fs.position.z + (fs.mesh as PlaneMesh).size.y * 0.5
+	_expect(fs_bottom <= band_top and fs_bottom > band_top - face.x * 0.08,
+		"along the bottom of the face, just above the power band (badge bottom %.3f, band top %.3f)" % [fs_bottom, band_top])
 	var half: float = (fs.mesh as PlaneMesh).size.x * 0.5
 	_expect(fs.position.x - half > -face.x * 0.5 and fs.position.z + half < face.y * 0.5, "and wholly inside the card")
 	_expect(fs.get_parent().get_parent() == card.hand_mesh, "the row rides on HandMesh (follows the damage recoil)")
@@ -69,7 +74,7 @@ func _ready() -> void:
 	card.status_effects.erase("block_disabled")
 	card.refresh_status_visuals()
 	await get_tree().process_frame
-	_expect(is_equal_approx((fs.mesh as PlaneMesh).size.x, face.x * 0.23), "and grow back to full size when one goes")
+	_expect(is_equal_approx((fs.mesh as PlaneMesh).size.x, face.x * ICONS.ICON_FRACTION), "and grow back to full size when one goes")
 	card.status_effects.erase("unbreakable")
 	card.refresh_status_visuals()
 	await get_tree().process_frame

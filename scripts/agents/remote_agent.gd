@@ -172,7 +172,7 @@ func choose_number(_o: int, _minimum: int, _maximum: int, _prompt: String = "Cho
 	await _settle(); return _as_int(await _result("choose_number"))
 func choose_mana_color(_o: int, _card: Card, _options: Array) -> String:
 	await _settle(); return str(await _result("choose_mana_color"))
-func choose_discard(_o: int, _cards: Array) -> Card:
+func choose_discard(_o: int, _cards: Array, _required: bool = false) -> Card:
 	await _settle(); var card = await _result("choose_discard"); return card if card is Card else null
 func choose_skill(_p: int, _card: Card, _skills: Array, _usable: Array = []) -> int:
 	await _settle(); return _as_int(await _result("choose_skill"))

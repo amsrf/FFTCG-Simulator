@@ -84,6 +84,26 @@ const BREAK_C := 12      # Zack, fire Forward
 const BLACK_MAGE := 10   # Black Mage: 《火》《Dull》, put itself into the Break Zone: 4000 damage to a Forward
 
 
+static func power_entries() -> Dictionary:
+	## POWER ENTRIES vs the AI (power_entry_burst.gd). Both hands hold cost 5-6 Forwards and both boards are full of CHEAP
+	## cards, so every big play lands with the burst and the shake and throws its neighbours, and a cheap card visibly
+	## jumps higher than a heavy one. You: Fire, five active Fire Backups (5 CP a turn; discard a hand card for 2 more).
+	## The AI: Water, the same, and it plays its big cards on its own turns.
+	var cfg: Dictionary = _base()
+	cfg["preset"] = "ground_power_entries"
+	cfg["opponent_type"] = "ai"
+	# Garland 6, Jecht 15 (cost 5), Auron 1, Cloud 187 (cost 6; Cloud is 1 cheaper per Category VII Forward you
+	# control: Tifa and Red XIII are), and a Squire to discard for CP.
+	cfg["player_hand"] = [6, 15, 1, 187, 26]
+	# Cost 1-2 cards: Tifa, Red XIII and the Backups Evoker, Red Mage, Ranger, Black Mage, Chocobo Chick.
+	cfg["player_field"] = [{"id": 16}, {"id": 29}, {"id": 11}, {"id": 3}, {"id": 8}, {"id": 10}, {"id": 19}]
+	# Cecil 162, Agrias 151, Vaan 154 (cost 5), Tidus 213 (cost 6), and a Knight for the AI to discard.
+	cfg["opponent_hand"] = [162, 151, 154, 213, 166]
+	# Cost 1-2 cards: Gordon, Viking and the Backups Evoker, Scholar, Geomancer, Ovelia, Lenne.
+	cfg["opponent_field"] = [{"id": 160}, {"id": 167}, {"id": 159}, {"id": 157}, {"id": 169}, {"id": 156}, {"id": 215}]
+	return cfg
+
+
 static func clean() -> Dictionary:
 	## An empty board and no hands: the blank slate, for when a mechanic needs a setup built by hand.
 	var cfg: Dictionary = _base()
@@ -399,6 +419,10 @@ const GROUNDS := {
 		"title": "Ground: Break a card",
 		"blurb": "Press B to break your first Forward; Shift+B breaks the opponent's first Forward. Uses the real break path and the card shatter animation.",
 	},
+	"power_entries": {
+		"title": "Ground: Power entries (vs AI)",
+		"blurb": "Cost 5-6 Forwards in both hands, cheap cards all over both boards. Every big play shakes the board and throws its neighbours; the cheap ones jump highest. The AI plays its own on its turns.",
+	},
 	"clean": {
 		"title": "Ground: Empty board",
 		"blurb": "No cards in play, no hands, seeded decks. A blank slate for setting things up by hand.",
@@ -471,6 +495,8 @@ static func config(name: String) -> Dictionary:
 			return break_cards()
 		"tribute":
 			return tribute()
+		"power_entries":
+			return power_entries()
 		"clean":
 			return clean()
 		"mill":
@@ -528,6 +554,7 @@ const CATEGORY_OF := {
 	"tribute": "Zones",
 	"mill": "Zones",
 	"clean": "Sandbox",
+	"power_entries": "Sandbox",
 }
 const CATEGORY_ORDER := ["Combat", "Abilities & Targeting", "Card Effects", "Zones", "Sandbox"]
 

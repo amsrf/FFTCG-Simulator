@@ -75,8 +75,13 @@ func _ready() -> void:
 	# Forwards that enter afterwards arrive dull.
 	var late: Card = _play_live(ZACK, "player")
 	_expect(late.is_on_field() and late.tapped, "a Forward entering after Ultimecia enters dull")
+	# Every Backup enters dull by rule 5.2.3.1.1.3, so "unaffected" is asked of Ultimecia's own hook: given an ACTIVE
+	# Backup, it must leave it alone.
 	var backup: Card = _play_live(CHEMIST, "player")
-	_expect(backup.is_on_field() and not backup.tapped, "a Backup entering afterwards is unaffected")
+	_expect(backup.is_on_field() and backup.tapped, "a Backup entering afterwards enters dull (the Backup rule)")
+	backup.untap()
+	ult.effect().on_character_enter(backup, ult.make_effect_context("static"))
+	_expect(not backup.tapped, "Ultimecia's entry rule leaves a Backup alone")
 
 	# The exclusion is by NAME and is global: an opponent's Ultimecia is not dulled by ours.
 	var theirs: Card = _play_live(ULTIMECIA, "opponent")

@@ -5,7 +5,7 @@ uniform vec2 focus_centre = vec2(0.0, 0.29);   // the play area's centre (the ri
 uniform vec2 focus_half = vec2(1.9, 1.25);     // full-brightness rounded rect, half-extents
 uniform float focus_corner = 0.9;
 uniform float edge_falloff = 1.8;              // metres past the rect to reach full darkening
-uniform float edge_darkness : hint_range(0.0, 1.0) = 0.5;
+uniform float edge_darkness : hint_range(0.0, 1.0) = 0.05;
 
 float board_edge_shade(vec2 world_xz) {
 	vec2 q = abs(world_xz - focus_centre) - focus_half + vec2(focus_corner);
@@ -17,8 +17,12 @@ float board_edge_shade(vec2 world_xz) {
 // edge darkening above, so the eye stays on the play area and the scenery at the screen edges sinks into shadow.
 // Board and river only (both include this): cards, the hand and UI are not darkened. Elliptical in screen space,
 // corrected for the aspect so it is round-cornered rather than stretched.
-uniform float vignette_strength : hint_range(0.0, 1.0) = 0.18;
-uniform float vignette_start : hint_range(0.0, 1.5) = 0.85;   // distance from the centre where it begins (1 = edge)
+// NEGATIVE = a corner LIFT: the corners' darkness is mostly baked into the board texture (dark basalt, the render's
+// falloff), so on 2026-11-22 the user's "brighter corners" took a gentle boost here rather than less darkening.
+// Later the same day: "make the edges of the view darker" -> back to a real falloff that starts further in (0.65), so the
+// middle of each EDGE darkens too, not only the corners (0.45 from 0.85 was "way too dark").
+uniform float vignette_strength : hint_range(-0.5, 1.0) = 0.3;
+uniform float vignette_start : hint_range(0.0, 1.5) = 0.65;   // distance from the centre where it begins (1 = edge)
 uniform float vignette_end : hint_range(0.5, 2.0) = 1.35;     // where it reaches full strength (corners ~1.25)
 
 float board_vignette(vec2 screen_uv, vec2 viewport_size) {
